@@ -29,6 +29,7 @@ create table if not exists properties (
   ref text not null,
   titulo text not null,
   tipo text,
+  operacion text default 'Venta', -- Venta | Arriendo
   precio text,
   area text,
   habitaciones int,
@@ -104,14 +105,16 @@ from organizations o,
 where o.whatsapp_phone_id = 'DEMO_PHONE_ID'
   and not exists (select 1 from advisors x where x.org_id = o.id);
 
-insert into properties (org_id, ref, titulo, tipo, precio, area, habitaciones, banos, garaje, estrato, administracion, zona, ciudad, descripcion, caracteristicas, link, disponible)
+insert into properties (org_id, ref, titulo, tipo, operacion, precio, area, habitaciones, banos, garaje, estrato, administracion, zona, ciudad, descripcion, caracteristicas, link, disponible)
 select o.id, p.*
 from organizations o,
 (values
-  ('AP001', 'Apartamento moderno El Poblado', 'Apartamento', '$1.200.000', '80m2', 3, 2, 1, 5, '$350.000', 'El Poblado', 'Medellin', 'Apartamento remodelado con cocina integral y balcon con vista a la ciudad.', 'Conjunto cerrado, piscina, gimnasio', 'https://paraiso.com/ap001', true),
-  ('AP002', 'Apartaestudio Laureles amoblado', 'Apartaestudio', '$850.000', '45m2', 1, 1, 0, 4, '$200.000', 'Laureles', 'Medellin', 'Apartaestudio totalmente amoblado ideal para ejecutivos o estudiantes.', 'Amoblado, internet incluido, vigilancia 24h', 'https://paraiso.com/ap002', true),
-  ('CA001', 'Casa campestre El Retiro', 'Casa', '$3.500.000', '250m2', 4, 3, 2, 6, '$600.000', 'El Retiro', 'Antioquia', 'Hermosa casa campestre con jardin privado y vista a las montanas.', 'Jardin, chimenea, cuarto de servicio, BBQ', 'https://paraiso.com/ca001', true),
-  ('AP003', 'Apto Envigado cerca metro', 'Apartamento', '$980.000', '65m2', 2, 2, 1, 4, '$280.000', 'Envigado', 'Antioquia', 'Apartamento bien ubicado a 5 minutos del metro de Envigado.', 'Parqueadero cubierto, conjunto cerrado', 'https://paraiso.com/ap003', false)
-) as p(ref, titulo, tipo, precio, area, habitaciones, banos, garaje, estrato, administracion, zona, ciudad, descripcion, caracteristicas, link, disponible)
+  ('AP001', 'Apartamento Moderno en Sabaneta - Iluminado con Vista Verde', 'Apartamento', 'Venta', '$460.000.000', '65m2', 2, 2, 1, 4, '$290.000', 'El Carmelo, Sabaneta', 'Antioquia', 'Apartamento muy iluminado con vista a zona verde, ubicado cerca del parque principal de Sabaneta, con facil acceso a transporte publico y centros comerciales.', 'Porteria 24 horas, gimnasio, piscina, zona humeda, parque infantil', 'https://info.wasi.co/apartamento-venta-el-carmelo-sabaneta/9755676', true),
+  ('AP002', 'Apartamento con Balcon en Envigado - Loma del Esmeraldal', 'Apartamento', 'Venta', '$520.000.000', '82m2', 3, 2, 1, 5, '$380.000', 'Loma del Esmeraldal, Envigado', 'Antioquia', 'Apartamento con balcon y vista panoramica al valle, cocina integral y espacios amplios, a minutos de la Via Las Palmas y centros comerciales de Envigado.', 'Porteria 24 horas, piscina, turco, salon social, sendero ecologico', 'https://info.wasi.co/apartamento-venta-esmeraldal-envigado/9761234', true),
+  ('AP003', 'Apartamento en Arriendo Sabaneta - Cerca al Parque', 'Apartamento', 'Arriendo', '$2.200.000', '70m2', 3, 2, 1, 4, '$310.000 (incluida en el canon)', 'Calle del Banco, Sabaneta', 'Antioquia', 'Apartamento comodo y bien distribuido a tres cuadras del parque principal de Sabaneta, rodeado de restaurantes, comercio y transporte publico.', 'Porteria 24 horas, gimnasio, salon social, juegos infantiles', 'https://info.wasi.co/apartamento-arriendo-sabaneta/9748821', true),
+  ('AE001', 'Apartaestudio Amoblado en Laureles - Ideal Ejecutivos', 'Apartaestudio', 'Arriendo', '$1.850.000', '45m2', 1, 1, 0, 4, '$220.000', 'Laureles, Medellin', 'Antioquia', 'Apartaestudio totalmente amoblado en el corazon de Laureles, a pasos de la Segunda Avenida, con internet incluido y listo para estrenar.', 'Amoblado, internet incluido, porteria 24 horas, lavanderia comunal', 'https://info.wasi.co/apartaestudio-arriendo-laureles-medellin/9752210', true),
+  ('CA001', 'Casa Campestre en La Estrella - Sector Suramerica', 'Casa', 'Venta', '$780.000.000', '210m2', 4, 3, 2, 5, '$450.000', 'Suramerica, La Estrella', 'Antioquia', 'Casa campestre en unidad cerrada con jardin privado, chimenea y vista a las montanas, a 10 minutos de la estacion La Estrella del metro.', 'Unidad cerrada, jardin privado, chimenea, BBQ, cuarto de servicio', 'https://info.wasi.co/casa-venta-la-estrella-antioquia/9739987', true),
+  ('AP004', 'Apartamento en Venta Envigado - Cerca al Metro', 'Apartamento', 'Venta', '$395.000.000', '62m2', 2, 2, 1, 4, '$265.000', 'Centro, Envigado', 'Antioquia', 'Apartamento bien ubicado a 5 minutos de la estacion Envigado del metro, sector tradicional con todo el comercio a la mano.', 'Parqueadero cubierto, porteria 24 horas, conjunto cerrado', 'https://info.wasi.co/apartamento-venta-envigado-centro/9744456', false)
+) as p(ref, titulo, tipo, operacion, precio, area, habitaciones, banos, garaje, estrato, administracion, zona, ciudad, descripcion, caracteristicas, link, disponible)
 where o.whatsapp_phone_id = 'DEMO_PHONE_ID'
 on conflict (org_id, ref) do nothing;
