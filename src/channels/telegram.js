@@ -45,7 +45,7 @@ router.post("/telegram", async (req, res) => {
       source: "telegram",
     });
 
-    await sendTelegram(chatId, reply);
+    if (reply) await sendTelegram(chatId, reply);
     if (transfer) {
       // En demo la alerta se envia al mismo chat, marcada, para que se vea el flujo
       await sendTelegram(chatId, `🔔 [ALERTA QUE RECIBE EL ASESOR]\n\n${transfer.advisorAlert}`);

@@ -73,7 +73,7 @@ router.post("/webhook", async (req, res) => {
       source: "whatsapp",
     });
 
-    await sendWhatsApp(org, userPhone, reply);
+    if (reply) await sendWhatsApp(org, userPhone, reply);
     if (transfer) {
       await sendWhatsApp(org, transfer.advisorPhone, transfer.advisorAlert);
     }
@@ -83,3 +83,4 @@ router.post("/webhook", async (req, res) => {
 });
 
 module.exports = router;
+module.exports.sendWhatsApp = sendWhatsApp;

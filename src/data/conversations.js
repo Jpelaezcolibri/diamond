@@ -5,7 +5,7 @@ async function findOrCreate(orgId, leadId) {
   if (!supabase) {
     let conv = memory.conversations.find((c) => c.lead_id === leadId);
     if (!conv) {
-      conv = { id: memory.uid(), org_id: orgId, lead_id: leadId, estado: "activa", last_activity_at: Date.now() };
+      conv = { id: memory.uid(), org_id: orgId, lead_id: leadId, estado: "activa", modo: "bot", last_activity_at: Date.now() };
       memory.conversations.push(conv);
     }
     conv.last_activity_at = Date.now();
@@ -68,4 +68,17 @@ async function resetForLead(leadId) {
   if (error) throw error;
 }
 
-module.exports = { findOrCreate, appendMessage, getRecentMessages, resetForLead };
+// Cambia el modo de atencion de una conversacion: 'bot' (Sofi) | 'humano' (asesor via CRM)
+async function setModo(conversationId, modo) {
+  if (!supabase) {
+    const conv = memory.conversations.find((c) => c.id === conversationId);
+    if (conv) conv.modo = modo;
+    return conv;
+  }
+  const { data, error } = await supabase
+    .from("conversations").update({ modo }).eq("id", conversationId).select().single();
+  if (error) throw error;
+  return data;
+}
+
+module.exports = { findOrCreate, appendMessage, getRecentMessages, resetForLead, setModo };

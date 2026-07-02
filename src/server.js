@@ -12,6 +12,7 @@ app.use(express.json());
 
 app.use(whatsapp);
 app.use(telegram);
+app.use(require("./api/crm"));
 
 app.get("/", (req, res) => {
   res.json({ ok: true, service: "bot-inmobiliario", mode: config.supabaseUrl ? "supabase" : "demo-memoria" });

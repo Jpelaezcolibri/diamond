@@ -33,6 +33,11 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp" }) {
   const conv = await conversations.findOrCreate(org.id, lead.id);
   await conversations.appendMessage(conv.id, "user", text);
 
+  // Conversacion tomada por un asesor desde el CRM: guardar el mensaje y callar a Sofi
+  if (conv.modo === "humano") {
+    return { reply: null, lead, transfer: null };
+  }
+
   const history = await conversations.getRecentMessages(conv.id, HISTORY_LIMIT);
   const messages = history.map((m) => ({ role: m.role, content: m.content }));
 
