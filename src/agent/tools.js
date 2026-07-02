@@ -1,5 +1,6 @@
 const properties = require("../data/properties");
 const leads = require("../data/leads");
+const advisors = require("../data/advisors");
 const { computeScore, isQualified } = require("./qualification");
 const { buildClientLink } = require("../notifications/advisor");
 
@@ -39,13 +40,19 @@ const TOOL_DEFINITIONS = [
   {
     name: "transferir_a_asesor",
     description:
-      "Transfiere el cliente al asesor humano. Usala cuando el cliente pida explicitamente hablar con una persona/asesor, o cuando el lead este calificado y acepte ser contactado. El sistema alertara automaticamente al asesor con el resumen del lead.",
+      "Transfiere el cliente al asesor humano especializado. Usala cuando el cliente pida explicitamente hablar con una persona/asesor, o cuando el lead este calificado y acepte ser contactado. El sistema alertara automaticamente al asesor de la especialidad correcta con el resumen del lead.",
     input_schema: {
       type: "object",
       properties: {
         motivo: { type: "string", description: "Motivo breve de la transferencia" },
+        especialidad: {
+          type: "string",
+          enum: ["venta", "arriendo", "vehiculos", "otro"],
+          description:
+            "A que asesor va el cliente segun lo que busca: venta (compra de propiedad), arriendo, vehiculos (carros/motos), u otro para todo lo demas",
+        },
       },
-      required: ["motivo"],
+      required: ["motivo", "especialidad"],
     },
   },
 ];
@@ -88,9 +95,17 @@ async function executeTool(name, input, ctx) {
   }
 
   if (name === "transferir_a_asesor") {
-    ctx.transfer = { motivo: input.motivo || "Cliente solicito asesor" };
-    const link = buildClientLink(ctx.org, ctx.lead, ctx.propertyInteres);
-    return `Transferencia registrada. El asesor ${ctx.org.advisor_name || ""} ya fue alertado con el resumen del cliente. En tu respuesta despidete brevemente e incluye este link EXACTO para que el cliente hable directo con el asesor:\n${link}`;
+    const especialidad =
+      input.especialidad ||
+      (ctx.propertyInteres?.operacion || "").toLowerCase() ||
+      "venta";
+    const advisor = await advisors.findForTransfer(ctx.org, especialidad);
+    if (!advisor) {
+      return "No hay asesor configurado para esta organizacion. Pide disculpas y dile al cliente que pronto lo contactaran.";
+    }
+    ctx.transfer = { motivo: input.motivo || "Cliente solicito asesor", advisor, especialidad };
+    const link = buildClientLink(advisor, ctx.lead, ctx.propertyInteres);
+    return `Transferencia registrada al asesor de ${especialidad}: ${advisor.name}. Ya fue alertado con el resumen del cliente. En tu respuesta despidete brevemente e incluye este link EXACTO para que el cliente hable directo con el asesor:\n${link}`;
   }
 
   return `Herramienta desconocida: ${name}`;

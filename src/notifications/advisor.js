@@ -1,16 +1,21 @@
 // Link wa.me para que el cliente contacte al asesor con contexto prellenado
-function buildClientLink(org, lead, propertyInteres) {
+function buildClientLink(advisor, lead, propertyInteres) {
   const ref = propertyInteres?.link || lead.property_ref_origen;
-  const texto = ref
-    ? `Hola, estoy interesado en esta propiedad: ${ref}`
-    : "Hola, estoy interesado en una propiedad";
-  return `https://wa.me/${org.advisor_phone}?text=${encodeURIComponent(texto)}`;
+  let texto;
+  if (advisor.especialidad === "vehiculos") {
+    texto = "Hola, estoy interesado en un vehiculo";
+  } else if (ref) {
+    texto = `Hola, estoy interesado en esta propiedad: ${ref}`;
+  } else {
+    texto = "Hola, estoy interesado en una propiedad";
+  }
+  return `https://wa.me/${advisor.phone}?text=${encodeURIComponent(texto)}`;
 }
 
 // Mensaje de alerta que recibe el asesor cuando un lead es transferido
-function buildAdvisorAlert(org, lead, motivo, propertyInteres) {
+function buildAdvisorAlert(org, lead, motivo, propertyInteres, especialidad) {
   const lines = [
-    `Nuevo lead ${org.name}!`,
+    `Nuevo lead ${org.name}!${especialidad ? ` (${especialidad})` : ""}`,
     `Cliente: ${lead.nombre || "Sin nombre"}`,
     `Numero: +${lead.phone}`,
     lead.presupuesto && `Presupuesto: ${lead.presupuesto}`,

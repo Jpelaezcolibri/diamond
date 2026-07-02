@@ -103,10 +103,13 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp" }) {
   let transfer = null;
   if (ctx.transfer) {
     Object.assign(lead, await leads.update(lead.id, { estado: "transferido" }));
+    const advisor = ctx.transfer.advisor;
     transfer = {
       motivo: ctx.transfer.motivo,
-      advisorPhone: org.advisor_phone,
-      advisorAlert: buildAdvisorAlert(org, lead, ctx.transfer.motivo, ctx.propertyInteres),
+      especialidad: ctx.transfer.especialidad,
+      advisorName: advisor.name,
+      advisorPhone: advisor.phone,
+      advisorAlert: buildAdvisorAlert(org, lead, ctx.transfer.motivo, ctx.propertyInteres, ctx.transfer.especialidad),
     };
   }
 

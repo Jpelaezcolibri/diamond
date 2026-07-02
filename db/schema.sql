@@ -13,6 +13,16 @@ create table if not exists organizations (
   created_at timestamptz not null default now()
 );
 
+create table if not exists advisors (
+  id uuid primary key default gen_random_uuid(),
+  org_id uuid not null references organizations(id) on delete cascade,
+  name text not null,
+  phone text not null,
+  especialidad text not null default 'venta', -- venta | arriendo | vehiculos | otro
+  activo boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
 create table if not exists properties (
   id uuid primary key default gen_random_uuid(),
   org_id uuid not null references organizations(id) on delete cascade,
@@ -73,14 +83,26 @@ create table if not exists messages (
 );
 
 create index if not exists idx_properties_org on properties(org_id) where disponible;
+create index if not exists idx_advisors_org on advisors(org_id) where activo;
 create index if not exists idx_leads_org_phone on leads(org_id, phone);
 create index if not exists idx_conversations_lead on conversations(lead_id);
 create index if not exists idx_messages_conversation on messages(conversation_id, created_at);
 
 -- ── Seed demo: Paraiso Inmobiliario ──────────────────────────────
 insert into organizations (name, whatsapp_phone_id, advisor_phone, advisor_name)
-values ('Paraiso Inmobiliario', 'DEMO_PHONE_ID', '573028536489', 'Asesor Paraiso')
+values ('Diamond', 'DEMO_PHONE_ID', '573028536489', 'Asesor Diamond')
 on conflict (whatsapp_phone_id) do nothing;
+
+insert into advisors (org_id, name, phone, especialidad)
+select o.id, a.*
+from organizations o,
+(values
+  ('Asesor de Ventas Diamond', '573028536489', 'venta'),
+  ('Asesora de Arriendos Diamond', '573000000002', 'arriendo'),
+  ('Asesor de Vehiculos Diamond', '573000000003', 'vehiculos')
+) as a(name, phone, especialidad)
+where o.whatsapp_phone_id = 'DEMO_PHONE_ID'
+  and not exists (select 1 from advisors x where x.org_id = o.id);
 
 insert into properties (org_id, ref, titulo, tipo, precio, area, habitaciones, banos, garaje, estrato, administracion, zona, ciudad, descripcion, caracteristicas, link, disponible)
 select o.id, p.*

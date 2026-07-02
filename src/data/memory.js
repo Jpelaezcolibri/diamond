@@ -6,12 +6,12 @@ const uid = () => `mem_${++seq}`;
 
 const demoOrg = {
   id: uid(),
-  name: "Paraiso Inmobiliario",
+  name: "Diamond",
   whatsapp_phone_id: "DEMO_PHONE_ID",
   whatsapp_token: null,
   verify_token: null,
   advisor_phone: "573028536489",
-  advisor_name: "Asesor Paraiso",
+  advisor_name: "Asesor Diamond",
   status: "active",
 };
 
@@ -24,9 +24,16 @@ const properties = [
   { ref: "AP004", titulo: "Apartamento en Venta Envigado - Cerca al Metro", tipo: "Apartamento", operacion: "Venta", precio: "$395.000.000", area: "62m2", habitaciones: 2, banos: 2, garaje: 1, estrato: 4, administracion: "$265.000", zona: "Centro, Envigado", ciudad: "Antioquia", descripcion: "Apartamento bien ubicado a 5 minutos de la estacion Envigado del metro, sector tradicional con todo el comercio a la mano.", caracteristicas: "Parqueadero cubierto, porteria 24 horas, conjunto cerrado", link: "https://info.wasi.co/apartamento-venta-envigado-centro/9744456", disponible: false },
 ].map((p) => ({ id: uid(), org_id: demoOrg.id, ...p }));
 
+const advisors = [
+  { id: uid(), org_id: demoOrg.id, name: "Asesor de Ventas Diamond", phone: "573028536489", especialidad: "venta", activo: true },
+  { id: uid(), org_id: demoOrg.id, name: "Asesora de Arriendos Diamond", phone: "573000000002", especialidad: "arriendo", activo: true },
+  { id: uid(), org_id: demoOrg.id, name: "Asesor de Vehiculos Diamond", phone: "573000000003", especialidad: "vehiculos", activo: true },
+];
+
 const db = {
   organizations: [demoOrg],
   properties,
+  advisors,
   leads: [],
   conversations: [],
   messages: [],
