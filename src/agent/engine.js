@@ -16,7 +16,7 @@ const REF_PATTERN = /\b([A-Z]{2}\d{3})\b/;
 
 // Procesa un mensaje entrante de cualquier canal.
 // Devuelve { reply, lead, transfer } — transfer: { motivo, advisorAlert } si aplico.
-async function procesarMensaje({ org, phone, text, source = "whatsapp" }) {
+async function procesarMensaje({ org, phone, text, source = "whatsapp", messageExtras = {} }) {
   const lead = await leads.findOrCreate(org.id, phone, source);
 
   // Deep link / click-to-WhatsApp: la primera mencion de una ref queda como origen
@@ -31,11 +31,11 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp" }) {
   }
 
   const conv = await conversations.findOrCreate(org.id, lead.id);
-  await conversations.appendMessage(conv.id, "user", text);
+  await conversations.appendMessage(conv.id, "user", text, messageExtras);
 
   // Conversacion tomada por un asesor desde el CRM: guardar el mensaje y callar a Sofi
   if (conv.modo === "humano") {
-    return { reply: null, lead, transfer: null };
+    return { reply: null, lead, transfer: null, assistantMessageId: null };
   }
 
   const history = await conversations.getRecentMessages(conv.id, HISTORY_LIMIT);
@@ -45,6 +45,11 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp" }) {
   if (lead.property_ref_origen) {
     const origen = await properties.findByRef(org.id, lead.property_ref_origen);
     if (origen?.disponible) ctx.propertyInteres = origen;
+    // La propiedad de origen define el tablero del lead (compra/alquiler)
+    if (origen && (!lead.categoria || lead.categoria === "otros")) {
+      const categoria = (origen.operacion || "").toLowerCase() === "arriendo" ? "alquiler" : "compra";
+      Object.assign(lead, await leads.update(lead.id, { categoria }));
+    }
   }
 
   const system = buildSystemPrompt({ org, lead, qualified: isQualified(lead) });
@@ -103,7 +108,7 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp" }) {
   }
   reply = reply || "Disculpa, no pude procesar tu mensaje. ¿Puedes intentarlo de nuevo? 🙏";
 
-  await conversations.appendMessage(conv.id, "assistant", reply);
+  const assistantMsg = await conversations.appendMessage(conv.id, "assistant", reply);
 
   let transfer = null;
   if (ctx.transfer) {
@@ -118,7 +123,7 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp" }) {
     };
   }
 
-  return { reply, lead, transfer };
+  return { reply, lead, transfer, assistantMessageId: assistantMsg?.id || null };
 }
 
 module.exports = { procesarMensaje };

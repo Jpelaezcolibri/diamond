@@ -7,7 +7,7 @@ async function findOrCreate(orgId, phone, source = "whatsapp") {
     if (!lead) {
       lead = {
         id: memory.uid(), org_id: orgId, phone, nombre: null, presupuesto: null,
-        zona_interes: null, tipo_interes: null, urgencia: null, forma_pago: null, score: 0,
+        zona_interes: null, tipo_interes: null, urgencia: null, forma_pago: null, categoria: "otros", score: 0,
         estado: "nuevo", property_ref_origen: null, source,
       };
       memory.leads.push(lead);

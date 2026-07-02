@@ -26,14 +26,34 @@ async function findOrCreate(orgId, leadId) {
   return data;
 }
 
-async function appendMessage(conversationId, role, content) {
+// extras: { type, media_url, media_mime, wa_message_id, reply_to_id }
+async function appendMessage(conversationId, role, content, extras = {}) {
   if (!supabase) {
-    memory.messages.push({ id: memory.uid(), conversation_id: conversationId, role, content, created_at: Date.now() });
-    return;
+    const msg = { id: memory.uid(), conversation_id: conversationId, role, content, ...extras, created_at: Date.now() };
+    memory.messages.push(msg);
+    return msg;
   }
-  const { error } = await supabase
-    .from("messages").insert({ conversation_id: conversationId, role, content });
+  const { data, error } = await supabase
+    .from("messages")
+    .insert({ conversation_id: conversationId, role, content, ...extras })
+    .select()
+    .single();
   if (error) throw error;
+  return data;
+}
+
+// Guarda el id de Meta (wamid) de un mensaje enviado, para poder citarlo despues
+async function setWaMessageId(messageId, waMessageId) {
+  if (!supabase || !waMessageId) return;
+  await supabase.from("messages").update({ wa_message_id: waMessageId }).eq("id", messageId);
+}
+
+// Busca un mensaje local por el wamid de Meta (para resolver respuestas citadas)
+async function findByWaMessageId(waMessageId) {
+  if (!supabase || !waMessageId) return null;
+  const { data } = await supabase
+    .from("messages").select("id").eq("wa_message_id", waMessageId).maybeSingle();
+  return data;
 }
 
 // Ultimos N mensajes en orden cronologico, para el historial de Claude
@@ -81,4 +101,4 @@ async function setModo(conversationId, modo) {
   return data;
 }
 
-module.exports = { findOrCreate, appendMessage, getRecentMessages, resetForLead, setModo };
+module.exports = { findOrCreate, appendMessage, getRecentMessages, resetForLead, setModo, setWaMessageId, findByWaMessageId };

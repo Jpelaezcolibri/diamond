@@ -79,6 +79,14 @@ async function executeTool(name, input, ctx) {
   if (name === "registrar_dato_lead") {
     const updated = await leads.update(ctx.lead.id, { [input.campo]: input.valor });
     Object.assign(ctx.lead, updated);
+    // El tipo de interes define el tablero del lead (compra/alquiler)
+    if (input.campo === "tipo_interes") {
+      const v = input.valor.toLowerCase();
+      const categoria = /arriendo|alquil|rentar/.test(v) ? "alquiler" : /venta|compra/.test(v) ? "compra" : null;
+      if (categoria && categoria !== ctx.lead.categoria) {
+        Object.assign(ctx.lead, await leads.update(ctx.lead.id, { categoria }));
+      }
+    }
     const score = computeScore(ctx.lead);
     const qualified = isQualified(ctx.lead);
     await leads.update(ctx.lead.id, {
@@ -104,6 +112,11 @@ async function executeTool(name, input, ctx) {
       return "No hay asesor configurado para esta organizacion. Pide disculpas y dile al cliente que pronto lo contactaran.";
     }
     ctx.transfer = { motivo: input.motivo || "Cliente solicito asesor", advisor, especialidad };
+    const catMap = { venta: "compra", arriendo: "alquiler" };
+    const categoria = catMap[especialidad] || "otros";
+    if (categoria !== ctx.lead.categoria) {
+      Object.assign(ctx.lead, await leads.update(ctx.lead.id, { categoria }));
+    }
     const link = buildClientLink(advisor, ctx.lead, ctx.propertyInteres);
     return `Transferencia registrada al asesor de ${especialidad}: ${advisor.name}. Ya fue alertado con el resumen del cliente. En tu respuesta despidete brevemente e incluye este link EXACTO para que el cliente hable directo con el asesor:\n${link}`;
   }
