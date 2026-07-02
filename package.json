@@ -3,6 +3,9 @@
   "version": "2.0.0",
   "description": "Agente inmobiliario multi-tenant por WhatsApp con Claude + Supabase",
   "main": "src/server.js",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
