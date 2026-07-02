@@ -12,22 +12,26 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-3">
+      <header className="flex items-center justify-between border-b border-[#c9a24b]/30 bg-[#0b1526] px-6 py-2.5">
         <div className="flex items-center gap-6">
-          <span className="text-lg font-bold">💎 Diamond</span>
+          <span className="flex items-center gap-2">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="Diamond" className="h-9 w-9 rounded-lg" />
+            <span className="text-lg font-bold tracking-wide text-[#c9a24b]">DIAMOND</span>
+          </span>
           <nav className="flex gap-4 text-sm">
-            <Link href="/inbox" className="text-slate-600 hover:text-slate-900">
+            <Link href="/inbox" className="text-slate-300 hover:text-[#c9a24b]">
               Inbox
             </Link>
-            <Link href="/kanban" className="text-slate-600 hover:text-slate-900">
+            <Link href="/kanban" className="text-slate-300 hover:text-[#c9a24b]">
               Kanban
             </Link>
-            <Link href="/leads" className="text-slate-600 hover:text-slate-900">
+            <Link href="/leads" className="text-slate-300 hover:text-[#c9a24b]">
               Leads
             </Link>
           </nav>
         </div>
-        <div className="flex items-center gap-3 text-sm text-slate-500">
+        <div className="flex items-center gap-3 text-sm text-slate-400">
           <span>{user.email}</span>
           <LogoutButton />
         </div>

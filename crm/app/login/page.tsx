@@ -27,14 +27,15 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center p-4">
+    <main className="flex min-h-screen items-center justify-center bg-[#0b1526] p-4">
       <form
         onSubmit={handleSubmit}
-        className="w-full max-w-sm space-y-4 rounded-2xl border border-slate-200 bg-white p-8 shadow-sm"
+        className="w-full max-w-sm space-y-4 rounded-2xl border border-[#c9a24b]/30 bg-[#0e1b30] p-8 shadow-xl"
       >
         <div className="text-center">
-          <h1 className="text-2xl font-bold">💎 Diamond CRM</h1>
-          <p className="mt-1 text-sm text-slate-500">Inbox del agente Sofi</p>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="Diamond Inmobiliaria" className="mx-auto w-48 rounded-xl" />
+          <p className="mt-3 text-sm text-[#c9a24b]">CRM · Inbox del agente Sofi</p>
         </div>
         <input
           type="email"
@@ -42,7 +43,7 @@ export default function LoginPage() {
           placeholder="Correo"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
+          className="w-full rounded-lg border border-slate-600 bg-[#0b1526] px-3 py-2 text-sm text-white outline-none placeholder:text-slate-400 focus:border-[#c9a24b]"
         />
         <input
           type="password"
@@ -50,13 +51,13 @@ export default function LoginPage() {
           placeholder="Contraseña"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
+          className="w-full rounded-lg border border-slate-600 bg-[#0b1526] px-3 py-2 text-sm text-white outline-none placeholder:text-slate-400 focus:border-[#c9a24b]"
         />
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p className="text-sm text-red-400">{error}</p>}
         <button
           type="submit"
           disabled={loading}
-          className="w-full rounded-lg bg-slate-900 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50"
+          className="w-full rounded-lg bg-[#c9a24b] py-2 text-sm font-semibold text-[#0b1526] hover:bg-[#dbb55e] disabled:opacity-50"
         >
           {loading ? "Entrando..." : "Entrar"}
         </button>
