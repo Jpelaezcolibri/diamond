@@ -70,6 +70,9 @@ Ver [.env.example](.env.example). Claves: `ANTHROPIC_API_KEY` (requerida), `SUPA
 
 ## Estado actual de infraestructura (jul 2026)
 
-- Número producción Meta: Diamond +57 304 4653609, phone_number_id `1218037454725710`, WABA `1702397800906189`.
-- Número de prueba Meta: +1 555 637-5987, phone_number_id `1077632778765817`.
-- Pendientes recurrentes: token permanente (System User `bot-admin` en Business Suite), webhook suscrito al campo `messages`, Supabase en producción, deploy Railway + Vercel, importador de propiedades desde API de Wasi.
+- **Bot en producción**: https://diamond-production-a713.up.railway.app (Railway, auto-deploy desde main)
+- **CRM en producción**: https://diamondinmobiliaria.vercel.app (Vercel, root directory `crm/`, auto-deploy desde main; el proyecto Vercel se llama `project-x0n55` en el team `adminia`)
+- **Número producción Meta**: Diamond +57 304 4653609, phone_number_id `1218037454725710`, WABA `1702397800906189`, token permanente del System User `bot-admin`, webhook apuntando a Railway (override a nivel WABA vía API).
+- **Número de prueba Meta**: +1 555 637-5987, phone_number_id `1077632778765817`.
+- **Inventario**: 39 propiedades reales importadas del Excel Wasi (`scripts/import_excel.py`); precios/títulos se sincronizan con `python scripts/sync_wasi_public.py` (páginas públicas de info.wasi.co).
+- **Pendientes**: conexión API oficial de Wasi (`id_company` + `wasi_token`), teléfonos reales de asesores de arriendos/vehículos en tabla `advisors`, corregir en Wasi el precio de la ref 9921388 ($1.550.000 → $1.550.000.000), verificación de empresa en Meta.
