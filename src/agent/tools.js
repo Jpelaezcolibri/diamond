@@ -3,6 +3,7 @@ const leads = require("../data/leads");
 const advisors = require("../data/advisors");
 const { computeScore, isQualified } = require("./qualification");
 const { buildClientLink } = require("../notifications/advisor");
+const { LEGAL_TOPICS, LEGAL_DISCLAIMER } = require("./knowledge");
 
 const TOOL_DEFINITIONS = [
   {
@@ -35,6 +36,30 @@ const TOOL_DEFINITIONS = [
         valor: { type: "string", description: "El valor tal como lo expreso el cliente" },
       },
       required: ["campo", "valor"],
+    },
+  },
+  {
+    name: "consultar_guia_legal",
+    description:
+      "Consulta la guia legal e hipotecaria VERIFICADA de la inmobiliaria (normativa colombiana). Usala SIEMPRE que el cliente pregunte por temas legales, de arriendo, impuestos, gastos de compraventa, credito hipotecario o subsidios — ANTES de responder. Responde UNICAMENTE con la informacion que devuelve esta herramienta: si el tema no esta cubierto, dile al cliente que ese punto lo confirma el asesor.",
+    input_schema: {
+      type: "object",
+      properties: {
+        tema: {
+          type: "string",
+          enum: [
+            "arrendamiento",
+            "compraventa_proceso",
+            "gastos_impuestos",
+            "credito_hipotecario",
+            "subsidios",
+            "derechos_garantias",
+          ],
+          description:
+            "arrendamiento: Ley 820, canon, incrementos, terminacion. compraventa_proceso: promesa, escritura, registro, paz y salvos. gastos_impuestos: notaria, registro, retenciones. credito_hipotecario: financiacion, requisitos, leasing. subsidios: programas de vivienda vigentes. derechos_garantias: arras, vicios ocultos, compra sobre planos.",
+        },
+      },
+      required: ["tema"],
     },
   },
   {
@@ -105,6 +130,14 @@ async function executeTool(name, input, ctx) {
         ? "El lead esta CALIFICADO: ofrece conectarlo con el asesor humano."
         : "El lead aun no califica: sigue averiguando presupuesto, urgencia o preferencias de forma natural."
     }`;
+  }
+
+  if (name === "consultar_guia_legal") {
+    const topic = LEGAL_TOPICS[input.tema];
+    if (!topic) {
+      return "Tema no cubierto por la guia. Dile al cliente que ese punto especifico se lo confirma el asesor con el abogado de la inmobiliaria, y ofrece transferirlo.";
+    }
+    return `${topic.contenido}\n\n${LEGAL_DISCLAIMER}`;
   }
 
   if (name === "transferir_a_asesor") {
