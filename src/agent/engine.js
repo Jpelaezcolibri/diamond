@@ -22,11 +22,11 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
   // Deep link / click-to-WhatsApp: la primera mencion de una ref queda como origen
   const refMatch = text.toUpperCase().match(REF_PATTERN);
   if (refMatch && !lead.property_ref_origen) {
-    Object.assign(lead, await leads.update(lead.id, {
-      property_ref_origen: refMatch[1],
-      estado: lead.estado === "nuevo" ? "en_conversacion" : lead.estado,
-    }));
-  } else if (lead.estado === "nuevo") {
+    Object.assign(lead, await leads.update(lead.id, { property_ref_origen: refMatch[1] }));
+  }
+  // Un lead recien creado entra al kanban en "nuevo"; pasa a "en_conversacion"
+  // cuando vuelve a escribir (segunda interaccion en adelante)
+  if (!lead._isNew && lead.estado === "nuevo") {
     Object.assign(lead, await leads.update(lead.id, { estado: "en_conversacion" }));
   }
 

@@ -70,6 +70,11 @@ async function executeTool(name, input, ctx) {
     }
     const disponibles = results.filter((p) => p.disponible);
     if (disponibles.length > 0 && !ctx.propertyInteres) ctx.propertyInteres = disponibles[0];
+    // Las propiedades que busca definen su tablero (compra/alquiler) aunque no haya dado ref
+    if (disponibles.length > 0 && (!ctx.lead.categoria || ctx.lead.categoria === "otros")) {
+      const categoria = (disponibles[0].operacion || "").toLowerCase() === "arriendo" ? "alquiler" : "compra";
+      Object.assign(ctx.lead, await leads.update(ctx.lead.id, { categoria }));
+    }
     if (results.length === 0) {
       return "No se encontraron propiedades con esos criterios en el inventario.";
     }

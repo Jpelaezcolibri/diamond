@@ -11,6 +11,7 @@ async function findOrCreate(orgId, phone, source = "whatsapp") {
         estado: "nuevo", property_ref_origen: null, source,
       };
       memory.leads.push(lead);
+      lead._isNew = true; // recien creado: se queda en "nuevo" hasta que vuelva a escribir
     }
     return lead;
   }
@@ -21,6 +22,7 @@ async function findOrCreate(orgId, phone, source = "whatsapp") {
   const { data, error } = await supabase
     .from("leads").insert({ org_id: orgId, phone, source }).select().single();
   if (error) throw error;
+  data._isNew = true; // recien creado: se queda en "nuevo" hasta que vuelva a escribir
   return data;
 }
 
