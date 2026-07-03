@@ -8,7 +8,7 @@ Sistema completo de generación de clientes vía Meta Ads para venta, alquiler t
 |---|---|---|---|
 | 1 | [Investigación de Mercado — Medellín](01-investigacion-mercado.md) | Comunas, estratos, oferta/demanda, regulación rentas cortas, ingreso, velocidad de venta/alquiler | ✅ Completado |
 | 2 | [Buyer Personas y Segmentación](02-buyer-personas-segmentacion.md) | Perfiles por producto (venta/alquiler/renta corta), segmentación Meta Ads detallada con el porqué de cada segmento | ✅ Completado |
-| 3 | Playbook de Meta Ads | Curso completo desde Business Manager hasta escalamiento, paso a paso, estructura de campañas por producto | Pendiente |
+| 3 | [Playbook de Meta Ads](03-meta-ads-playbook.md) | Curso completo desde Business Manager hasta escalamiento, paso a paso, estructura de campañas por producto | ✅ Completado |
 | 4 | Biblioteca de Creativos | Tipos de video/foto, guiones, copywriting (AIDA/PAS/BAB/4U), frameworks por formato | Pendiente |
 | 5 | CRM, Embudo y Automatizaciones | Flujo lead→cierre, automatizaciones WhatsApp/email, lead scoring, integración con el CRM Diamond ya construido | Pendiente |
 | 6 | Manual de Ventas y SOPs | Procedimientos estándar: calificación, visita, negociación, cierre, postventa, referidos | Pendiente |
@@ -21,6 +21,12 @@ Cada documento distingue explícitamente:
 - **Dato verificado** (con fuente) — cifras de Medellín, funcionamiento actual de Meta Ads.
 - **Principio extraído** de inmobiliarias de lujo (Sotheby's, Compass, SERHANT, etc.) — nunca una copia de sus anuncios, sino el porqué detrás de lo que funciona, adaptado a Medellín.
 - **Recomendación del equipo** — la síntesis aplicada a Diamond.
+
+## Plantillas reutilizables (knowledge white-label)
+
+Documentos independientes de Diamond, listos para reutilizar con cualquier cliente inmobiliario futuro cambiando solo los datos entre `[CORCHETES]`:
+
+- [Guía de Lanzamiento de Campaña en Meta Ads](plantillas/guia-lanzamiento-meta-ads.md)
 
 ## Cómo usar este playbook
 
