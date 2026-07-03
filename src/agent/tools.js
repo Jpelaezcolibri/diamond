@@ -12,7 +12,7 @@ const TOOL_DEFINITIONS = [
     input_schema: {
       type: "object",
       properties: {
-        ref: { type: "string", description: "Referencia exacta de la propiedad, ej AP001" },
+        ref: { type: "string", description: "Referencia exacta de la propiedad (codigo Wasi), ej 9702941" },
         zona: { type: "string", description: "Zona o ciudad de interes, ej El Poblado, Medellin" },
         tipo: { type: "string", description: "Tipo de propiedad: Apartamento, Casa, Apartaestudio" },
         precio_max: { type: "integer", description: "Precio maximo en pesos, ej 1200000" },

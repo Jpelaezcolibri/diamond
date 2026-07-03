@@ -12,7 +12,8 @@ const client = new Anthropic({ apiKey: config.anthropicApiKey });
 
 const MAX_TOOL_ITERATIONS = 5;
 const HISTORY_LIMIT = 12;
-const REF_PATTERN = /\b([A-Z]{2}\d{3})\b/;
+// Referencias: codigo Wasi de 6-8 digitos (ej 9702941) o formato legacy AA000
+const REF_PATTERN = /\b([A-Z]{2}\d{3}|\d{6,8})\b/;
 
 // Procesa un mensaje entrante de cualquier canal.
 // Devuelve { reply, lead, transfer } — transfer: { motivo, advisorAlert } si aplico.
