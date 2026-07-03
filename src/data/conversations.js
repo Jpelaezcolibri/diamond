@@ -1,12 +1,18 @@
 const supabase = require("./supabase");
 const memory = require("./memory");
 
-async function findOrCreate(orgId, leadId) {
+// phoneNumberId: numero de WhatsApp (phone_number_id de Meta) por el que entro
+// el mensaje actual. Se guarda/actualiza en la conversacion para que las
+// respuestas (bot o asesor) salgan siempre por el mismo numero — asi conviven
+// varios numeros de publicidad bajo la misma organizacion sin cruzarse.
+async function findOrCreate(orgId, leadId, phoneNumberId) {
   if (!supabase) {
     let conv = memory.conversations.find((c) => c.lead_id === leadId);
     if (!conv) {
-      conv = { id: memory.uid(), org_id: orgId, lead_id: leadId, estado: "activa", modo: "bot", last_activity_at: Date.now() };
+      conv = { id: memory.uid(), org_id: orgId, lead_id: leadId, estado: "activa", modo: "bot", whatsapp_phone_id: phoneNumberId || null, last_activity_at: Date.now() };
       memory.conversations.push(conv);
+    } else if (phoneNumberId) {
+      conv.whatsapp_phone_id = phoneNumberId;
     }
     conv.last_activity_at = Date.now();
     return conv;
@@ -16,12 +22,15 @@ async function findOrCreate(orgId, leadId) {
     .order("created_at", { ascending: false }).limit(1).maybeSingle();
   if (findError) throw findError;
   if (existing) {
-    await supabase.from("conversations")
-      .update({ last_activity_at: new Date().toISOString() }).eq("id", existing.id);
-    return existing;
+    const updates = { last_activity_at: new Date().toISOString() };
+    if (phoneNumberId && phoneNumberId !== existing.whatsapp_phone_id) updates.whatsapp_phone_id = phoneNumberId;
+    const { data: updated, error } = await supabase
+      .from("conversations").update(updates).eq("id", existing.id).select().single();
+    if (error) throw error;
+    return updated;
   }
   const { data, error } = await supabase
-    .from("conversations").insert({ org_id: orgId, lead_id: leadId }).select().single();
+    .from("conversations").insert({ org_id: orgId, lead_id: leadId, whatsapp_phone_id: phoneNumberId || null }).select().single();
   if (error) throw error;
   return data;
 }

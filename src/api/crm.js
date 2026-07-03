@@ -48,7 +48,10 @@ router.post("/api/conversations/:id/send", async (req, res) => {
     if (!conv) return res.status(404).json({ error: "Conversacion no encontrada" });
 
     const contextWaId = await contextWaIdFor(replyToId);
-    const wamid = await sendWhatsApp(conv.organizations, conv.leads.phone, text.trim(), { contextWaId });
+    const wamid = await sendWhatsApp(conv.organizations, conv.leads.phone, text.trim(), {
+      contextWaId,
+      fromPhoneId: conv.whatsapp_phone_id,
+    });
     await conversations.appendMessage(conv.id, "assistant", text.trim(), {
       wa_message_id: wamid,
       reply_to_id: replyToId || null,
@@ -78,13 +81,14 @@ router.post("/api/conversations/:id/media", upload.single("file"), async (req, r
     const contextWaId = await contextWaIdFor(req.body?.replyToId);
 
     // 1. Subir a Meta y enviar al cliente
-    const mediaId = await uploadMediaToMeta(conv.organizations, req.file.buffer, mime, req.file.originalname);
+    const mediaId = await uploadMediaToMeta(conv.organizations, req.file.buffer, mime, req.file.originalname, conv.whatsapp_phone_id);
     const wamid = await sendWhatsAppMedia(conv.organizations, conv.leads.phone, {
       type: waType,
       mediaId,
       caption,
       contextWaId,
       filename: req.file.originalname,
+      fromPhoneId: conv.whatsapp_phone_id,
     });
 
     // 2. Persistir en Storage para verlo en el CRM

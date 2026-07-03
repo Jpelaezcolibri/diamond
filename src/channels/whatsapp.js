@@ -7,16 +7,20 @@ const { procesarMensaje } = require("../agent/engine");
 
 const router = express.Router();
 
-function credsFor(org) {
+// overridePhoneId: phone_number_id explicito (el numero por el que entro la
+// conversacion) — tiene prioridad sobre el numero por defecto de la org, para
+// que la respuesta salga siempre por el mismo numero que recibio el mensaje.
+function credsFor(org, overridePhoneId) {
   const token = org.whatsapp_token || config.whatsapp.token;
-  const phoneId = org.whatsapp_phone_id !== "DEMO_PHONE_ID" ? org.whatsapp_phone_id : config.whatsapp.phoneId;
+  const phoneId = overridePhoneId || (org.whatsapp_phone_id !== "DEMO_PHONE_ID" ? org.whatsapp_phone_id : config.whatsapp.phoneId);
   return { token, phoneId };
 }
 
 // Envia texto. opts.contextWaId: wamid del mensaje que se esta respondiendo (cita).
+// opts.fromPhoneId: numero de origen explicito (ver credsFor).
 // Devuelve el wamid del mensaje enviado (o null).
 async function sendWhatsApp(org, to, text, opts = {}) {
-  const { token, phoneId } = credsFor(org);
+  const { token, phoneId } = credsFor(org, opts.fromPhoneId);
   if (!token || !phoneId) {
     console.warn("[whatsapp] Sin token/phoneId configurado — mensaje no enviado:", text.slice(0, 80));
     return null;
@@ -42,8 +46,8 @@ async function sendWhatsApp(org, to, text, opts = {}) {
 }
 
 // Sube un archivo a Meta y devuelve el media_id
-async function uploadMediaToMeta(org, buffer, mime, filename = "archivo") {
-  const { token, phoneId } = credsFor(org);
+async function uploadMediaToMeta(org, buffer, mime, filename = "archivo", fromPhoneId) {
+  const { token, phoneId } = credsFor(org, fromPhoneId);
   const form = new FormData();
   form.append("messaging_product", "whatsapp");
   form.append("file", new Blob([buffer], { type: mime }), filename);
@@ -58,8 +62,8 @@ async function uploadMediaToMeta(org, buffer, mime, filename = "archivo") {
 }
 
 // Envia un mensaje multimedia (image | audio | document). Devuelve wamid.
-async function sendWhatsAppMedia(org, to, { type, mediaId, caption, contextWaId, filename }) {
-  const { token, phoneId } = credsFor(org);
+async function sendWhatsAppMedia(org, to, { type, mediaId, caption, contextWaId, filename, fromPhoneId }) {
+  const { token, phoneId } = credsFor(org, fromPhoneId);
   const media = { id: mediaId };
   if (caption && type === "image") media.caption = caption;
   if (type === "document" && filename) media.filename = filename;
@@ -171,16 +175,17 @@ router.post("/webhook", async (req, res) => {
       text: userText,
       source: "whatsapp",
       messageExtras: extras,
+      phoneNumberId,
     });
 
     if (reply) {
-      const wamid = await sendWhatsApp(org, userPhone, reply);
+      const wamid = await sendWhatsApp(org, userPhone, reply, { fromPhoneId: phoneNumberId });
       if (wamid && assistantMessageId) {
         await conversations.setWaMessageId(assistantMessageId, wamid);
       }
     }
     if (transfer) {
-      await sendWhatsApp(org, transfer.advisorPhone, transfer.advisorAlert);
+      await sendWhatsApp(org, transfer.advisorPhone, transfer.advisorAlert, { fromPhoneId: phoneNumberId });
     }
   } catch (e) {
     console.error("[whatsapp] Error procesando webhook:", e);

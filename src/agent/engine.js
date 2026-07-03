@@ -17,7 +17,7 @@ const REF_PATTERN = /\b([A-Z]{2}\d{3}|\d{6,8})\b/;
 
 // Procesa un mensaje entrante de cualquier canal.
 // Devuelve { reply, lead, transfer } — transfer: { motivo, advisorAlert } si aplico.
-async function procesarMensaje({ org, phone, text, source = "whatsapp", messageExtras = {} }) {
+async function procesarMensaje({ org, phone, text, source = "whatsapp", messageExtras = {}, phoneNumberId = null }) {
   const lead = await leads.findOrCreate(org.id, phone, source);
 
   // Deep link / click-to-WhatsApp: la primera mencion de una ref queda como origen
@@ -31,7 +31,7 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
     Object.assign(lead, await leads.update(lead.id, { estado: "en_conversacion" }));
   }
 
-  const conv = await conversations.findOrCreate(org.id, lead.id);
+  const conv = await conversations.findOrCreate(org.id, lead.id, phoneNumberId);
   await conversations.appendMessage(conv.id, "user", text, messageExtras);
 
   // Conversacion tomada por un asesor desde el CRM: guardar el mensaje y callar a Sofi
