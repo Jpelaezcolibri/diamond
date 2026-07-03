@@ -28,6 +28,10 @@ Documentos independientes de Diamond, listos para reutilizar con cualquier clien
 
 - [Guía de Lanzamiento de Campaña en Meta Ads](plantillas/guia-lanzamiento-meta-ads.md)
 
+## Recursos operativos de Diamond (específicos, no plantilla)
+
+- [Links de WhatsApp por propiedad](links-whatsapp-inventario.md) — tabla con el link de Wasi y el link de WhatsApp (con el código precargado) de cada propiedad activa del inventario real. Regenerar cuando cambie el inventario.
+
 ## Cómo usar este playbook
 
 - Si eres asesor nuevo: empieza por el Doc 6 (Manual de Ventas) y el Doc 2 (para entender a quién le hablas).
