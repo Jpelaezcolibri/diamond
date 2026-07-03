@@ -1,11 +1,18 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { isSuperAdmin } from "@/lib/auth";
 import { ESTADO_COLORS, type Conversation } from "@/lib/types";
+import LeadDeleteButton from "@/components/lead-delete-button";
 
 export const dynamic = "force-dynamic";
 
 export default async function InboxPage() {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const admin = isSuperAdmin(user);
+
   const { data } = await supabase
     .from("conversations")
     .select("*, leads(*)")
@@ -25,10 +32,10 @@ export default async function InboxPage() {
       )}
       <ul className="space-y-2">
         {conversations.map((c) => (
-          <li key={c.id}>
+          <li key={c.id} className="flex items-center gap-2">
             <Link
               href={`/inbox/${c.id}`}
-              className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-4 hover:border-slate-400"
+              className="flex flex-1 items-center justify-between rounded-xl border border-slate-200 bg-white p-4 hover:border-slate-400"
             >
               <div>
                 <p className="font-medium">
@@ -51,6 +58,9 @@ export default async function InboxPage() {
                 <span className="text-sm font-semibold text-slate-700">{c.leads?.score ?? 0}</span>
               </div>
             </Link>
+            {admin && c.leads?.id && (
+              <LeadDeleteButton leadId={c.leads.id} nombre={c.leads.nombre || `+${c.leads.phone}`} />
+            )}
           </li>
         ))}
       </ul>
