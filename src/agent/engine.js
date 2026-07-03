@@ -56,7 +56,7 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
 
   let response = await client.messages.create({
     model: config.claudeModel,
-    max_tokens: 1024,
+    max_tokens: 2048,
     system,
     messages,
     tools: TOOL_DEFINITIONS,
@@ -83,7 +83,7 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
 
     response = await client.messages.create({
       model: config.claudeModel,
-      max_tokens: 1024,
+      max_tokens: 2048,
       system,
       messages,
       tools: TOOL_DEFINITIONS,
@@ -99,7 +99,7 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
     console.warn("[engine] Respuesta vacia del modelo — reintentando");
     response = await client.messages.create({
       model: config.claudeModel,
-      max_tokens: 1024,
+      max_tokens: 2048,
       system,
       messages,
       tools: TOOL_DEFINITIONS,
