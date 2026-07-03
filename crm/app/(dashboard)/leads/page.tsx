@@ -1,10 +1,17 @@
 import { createClient } from "@/lib/supabase/server";
+import { isSuperAdmin } from "@/lib/auth";
 import { ESTADO_COLORS, type Lead } from "@/lib/types";
+import LeadDeleteButton from "@/components/lead-delete-button";
 
 export const dynamic = "force-dynamic";
 
 export default async function LeadsPage() {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const admin = isSuperAdmin(user);
+
   const { data } = await supabase
     .from("leads")
     .select("*")
@@ -25,10 +32,11 @@ export default async function LeadsPage() {
               <th className="px-4 py-3">Teléfono</th>
               <th className="px-4 py-3">Score</th>
               <th className="px-4 py-3">Estado</th>
+              <th className="px-4 py-3">Tablero</th>
               <th className="px-4 py-3">Propiedad</th>
               <th className="px-4 py-3">Forma de pago</th>
               <th className="px-4 py-3">Urgencia</th>
-              <th className="px-4 py-3">Presupuesto</th>
+              {admin && <th className="px-4 py-3"></th>}
             </tr>
           </thead>
           <tbody>
@@ -42,15 +50,20 @@ export default async function LeadsPage() {
                     {l.estado}
                   </span>
                 </td>
+                <td className="px-4 py-3 capitalize">{l.categoria || "otros"}</td>
                 <td className="px-4 py-3">{l.property_ref_origen || "—"}</td>
                 <td className="px-4 py-3">{l.forma_pago || "—"}</td>
                 <td className="px-4 py-3">{l.urgencia || "—"}</td>
-                <td className="px-4 py-3">{l.presupuesto || "—"}</td>
+                {admin && (
+                  <td className="px-4 py-3 text-right">
+                    <LeadDeleteButton leadId={l.id} nombre={l.nombre || `+${l.phone}`} />
+                  </td>
+                )}
               </tr>
             ))}
             {leads.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
+                <td colSpan={admin ? 9 : 8} className="px-4 py-8 text-center text-slate-500">
                   Sin leads todavía.
                 </td>
               </tr>

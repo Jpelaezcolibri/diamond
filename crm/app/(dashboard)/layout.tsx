@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { isSuperAdmin } from "@/lib/auth";
 import LogoutButton from "@/components/logout-button";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -9,6 +10,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
+  const admin = isSuperAdmin(user);
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -29,6 +31,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
             <Link href="/leads" className="text-slate-300 hover:text-[#c9a24b]">
               Leads
             </Link>
+            {admin && (
+              <Link href="/usuarios" className="text-slate-300 hover:text-[#c9a24b]">
+                Usuarios
+              </Link>
+            )}
           </nav>
         </div>
         <div className="flex items-center gap-3 text-sm text-slate-400">
