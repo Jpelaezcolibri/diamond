@@ -1,8 +1,7 @@
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { isSuperAdmin } from "@/lib/auth";
-import { ESTADO_COLORS, type Conversation } from "@/lib/types";
-import LeadDeleteButton from "@/components/lead-delete-button";
+import { type Conversation } from "@/lib/types";
+import InboxList from "@/components/inbox-list";
 
 export const dynamic = "force-dynamic";
 
@@ -21,49 +20,29 @@ export default async function InboxPage() {
     .limit(100);
 
   const conversations = (data || []) as Conversation[];
+  const nuevos = conversations.filter((c) => c.leads?.estado === "nuevo").length;
+  const calificados = conversations.filter((c) => c.leads?.estado === "calificado").length;
+  const humano = conversations.filter((c) => c.modo === "humano").length;
+
+  const stats = [
+    { label: "Conversaciones activas", value: conversations.length, color: "text-slate-900" },
+    { label: "Nuevos", value: nuevos, color: "text-slate-600" },
+    { label: "Calificados", value: calificados, color: "text-amber-600" },
+    { label: "Asesor al mando", value: humano, color: "text-purple-600" },
+  ];
 
   return (
     <div className="mx-auto max-w-3xl p-6">
-      <h1 className="mb-4 text-xl font-bold">Inbox</h1>
-      {conversations.length === 0 && (
-        <p className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">
-          Sin conversaciones todavía. Cuando un cliente le escriba a Sofi, aparecerá aquí.
-        </p>
-      )}
-      <ul className="space-y-2">
-        {conversations.map((c) => (
-          <li key={c.id} className="flex items-center gap-2">
-            <Link
-              href={`/inbox/${c.id}`}
-              className="flex flex-1 items-center justify-between rounded-xl border border-slate-200 bg-white p-4 hover:border-slate-400"
-            >
-              <div>
-                <p className="font-medium">
-                  {c.leads?.nombre || `+${c.leads?.phone}`}
-                  {c.modo === "humano" && (
-                    <span className="ml-2 rounded-full bg-purple-100 px-2 py-0.5 text-xs text-purple-700">
-                      asesor al mando
-                    </span>
-                  )}
-                </p>
-                <p className="text-sm text-slate-500">
-                  {c.leads?.property_ref_origen ? `Propiedad ${c.leads.property_ref_origen} · ` : ""}
-                  {c.leads?.forma_pago || c.leads?.tipo_interes || "sin datos aún"}
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className={`rounded-full px-2 py-0.5 text-xs ${ESTADO_COLORS[c.leads?.estado] || "bg-slate-100"}`}>
-                  {c.leads?.estado}
-                </span>
-                <span className="text-sm font-semibold text-slate-700">{c.leads?.score ?? 0}</span>
-              </div>
-            </Link>
-            {admin && c.leads?.id && (
-              <LeadDeleteButton leadId={c.leads.id} nombre={c.leads.nombre || `+${c.leads.phone}`} />
-            )}
-          </li>
+      <h1 className="mb-5 text-2xl font-bold text-slate-900">Inbox</h1>
+      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {stats.map((s) => (
+          <div key={s.label} className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+            <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
+            <p className="text-xs text-slate-500">{s.label}</p>
+          </div>
         ))}
-      </ul>
+      </div>
+      <InboxList conversations={conversations} admin={admin} />
     </div>
   );
 }
