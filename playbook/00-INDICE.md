@@ -7,7 +7,7 @@ Sistema completo de generación de clientes vía Meta Ads para venta, alquiler t
 | # | Documento | Contenido | Estado |
 |---|---|---|---|
 | 1 | [Investigación de Mercado — Medellín](01-investigacion-mercado.md) | Comunas, estratos, oferta/demanda, regulación rentas cortas, ingreso, velocidad de venta/alquiler | ✅ Completado |
-| 2 | [Buyer Personas y Segmentación](02-buyer-personas-segmentacion.md) | Perfiles por producto (venta/alquiler/renta corta), segmentación Meta Ads detallada con el porqué de cada segmento | En construcción |
+| 2 | [Buyer Personas y Segmentación](02-buyer-personas-segmentacion.md) | Perfiles por producto (venta/alquiler/renta corta), segmentación Meta Ads detallada con el porqué de cada segmento | ✅ Completado |
 | 3 | Playbook de Meta Ads | Curso completo desde Business Manager hasta escalamiento, paso a paso, estructura de campañas por producto | Pendiente |
 | 4 | Biblioteca de Creativos | Tipos de video/foto, guiones, copywriting (AIDA/PAS/BAB/4U), frameworks por formato | Pendiente |
 | 5 | CRM, Embudo y Automatizaciones | Flujo lead→cierre, automatizaciones WhatsApp/email, lead scoring, integración con el CRM Diamond ya construido | Pendiente |
