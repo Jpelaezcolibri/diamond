@@ -1,9 +1,23 @@
 const supabase = require("./supabase");
 const memory = require("./memory");
 
+// Palabras utiles de una zona de busqueda: fuera articulos y conectores,
+// para que "El Poblado" encuentre "Poblado" y "Loma del Chocho" encuentre "Chocho"
+const STOPWORDS = new Set(["el", "la", "los", "las", "de", "del", "en", "sector", "barrio", "zona"]);
+function zonaTokens(zona) {
+  return String(zona)
+    .toLowerCase()
+    .split(/[^a-záéíóúñü]+/i)
+    .filter((w) => w.length >= 3 && !STOPWORDS.has(w));
+}
+
 function matchesFilters(p, f) {
   if (f.ref && p.ref.toUpperCase() !== f.ref.toUpperCase()) return false;
-  if (f.zona && !`${p.zona} ${p.ciudad}`.toLowerCase().includes(f.zona.toLowerCase())) return false;
+  if (f.zona) {
+    const haystack = `${p.zona} ${p.ciudad}`.toLowerCase();
+    const tokens = zonaTokens(f.zona);
+    if (tokens.length > 0 && !tokens.some((t) => haystack.includes(t))) return false;
+  }
   if (f.tipo && !p.tipo.toLowerCase().includes(f.tipo.toLowerCase())) return false;
   if (f.habitaciones_min && p.habitaciones < f.habitaciones_min) return false;
   if (f.precio_max) {
@@ -22,7 +36,13 @@ async function search(orgId, filters = {}, limit = 5) {
   }
   let query = supabase.from("properties").select("*").eq("org_id", orgId).eq("disponible", true);
   if (filters.ref) query = query.ilike("ref", filters.ref);
-  if (filters.zona) query = query.or(`zona.ilike.%${filters.zona}%,ciudad.ilike.%${filters.zona}%`);
+  if (filters.zona) {
+    const tokens = zonaTokens(filters.zona);
+    if (tokens.length > 0) {
+      const ors = tokens.flatMap((t) => [`zona.ilike.%${t}%`, `ciudad.ilike.%${t}%`]);
+      query = query.or(ors.join(","));
+    }
+  }
   if (filters.tipo) query = query.ilike("tipo", `%${filters.tipo}%`);
   if (filters.habitaciones_min) query = query.gte("habitaciones", filters.habitaciones_min);
   const { data, error } = await query.limit(limit * 2);
