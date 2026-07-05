@@ -38,13 +38,29 @@ export async function connectionsRoutes(app: FastifyInstance) {
   });
 
   app.get("/api/v1/meta/oauth/callback", async (request, reply) => {
-    const query = z.object({ code: z.string(), state: z.string() }).safeParse(request.query);
-    if (!query.success) {
-      reply.code(400).send({ error: "invalid_callback", issues: query.error.issues });
+    const query = z
+      .object({
+        code: z.string().optional(),
+        state: z.string().optional(),
+        // Meta redirige con estos parametros cuando el dialogo falla o el
+        // usuario cancela (ej. error 100 "Invalid Scopes" en apps Business).
+        error: z.string().optional(),
+        error_code: z.string().optional(),
+        error_message: z.string().optional(),
+        error_description: z.string().optional()
+      })
+      .safeParse(request.query);
+
+    const q = query.success ? query.data : {};
+    if (!q.code || !q.state || q.error || q.error_code) {
+      const reason = q.error_message ?? q.error_description ?? q.error ?? "callback_incompleto";
+      request.log.error({ error: q.error, errorCode: q.error_code, reason }, "Meta devolvio error en el callback de OAuth");
+      reply.redirect(`${env.CRM_URL}/marketing/configuracion?connect=error&reason=${encodeURIComponent(reason.slice(0, 200))}`);
       return;
     }
+
     try {
-      const { returnUrl } = await completeOAuthCallback(query.data.state, query.data.code);
+      const { returnUrl } = await completeOAuthCallback(q.state, q.code);
       const separator = returnUrl.includes("?") ? "&" : "?";
       reply.redirect(`${returnUrl}${separator}connect=ok`);
     } catch (err) {

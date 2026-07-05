@@ -29,12 +29,17 @@ export default function MetaConnect({ orgId, connections }: { orgId: string; con
   const router = useRouter();
   const searchParams = useSearchParams();
   const connectResult = searchParams.get("connect");
+  const connectReason = searchParams.get("reason");
 
   const [accounts, setAccounts] = useState<AccountSummary[] | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(
-    connectResult === "ok" ? "Conexión con Meta exitosa. Elegí qué cuentas usar." : connectResult === "error" ? "No se pudo completar la conexión con Meta." : null
+    connectResult === "ok"
+      ? "Conexión con Meta exitosa. Elegí qué cuentas usar."
+      : connectResult === "error"
+        ? `No se pudo completar la conexión con Meta.${connectReason ? ` Detalle: ${connectReason}` : ""}`
+        : null
   );
 
   useEffect(() => {

@@ -7,14 +7,32 @@ function callbackUrl(): string {
   return `${env.DMAP_PUBLIC_URL}/api/v1/meta/oauth/callback`;
 }
 
-/** Dialogo de login: reusa la MISMA Meta App de WhatsApp/Sofi — nunca se crea una app nueva (ver ARCHITECTURE.md #8). */
-export function buildOAuthDialogUrl(orgId: string, returnUrl: string): { url: string } {
+/**
+ * Dialogo de login: reusa la MISMA Meta App de WhatsApp/Sofi — nunca se crea
+ * una app nueva (ver ARCHITECTURE.md #8).
+ *
+ * Las apps de tipo Business (como la de Sofi) NO aceptan permisos via `scope`
+ * en el dialogo clasico (error 100 "Invalid Scopes", visto en produccion
+ * 2026-07-05): exigen "Facebook Login for Business" con una configuracion
+ * (config_id) creada en el dashboard de la app. Si META_LOGIN_CONFIG_ID esta
+ * configurado se usa config_id; si no, se cae al scope clasico (apps Consumer).
+ */
+export function buildOAuthDialogUrl(
+  orgId: string,
+  returnUrl: string,
+  configId: string | undefined = env.META_LOGIN_CONFIG_ID
+): { url: string } {
   const { state } = createSignedState(orgId, returnUrl);
   const url = new URL(`https://www.facebook.com/${GRAPH_API_VERSION}/dialog/oauth`);
   url.searchParams.set("client_id", env.META_APP_ID);
   url.searchParams.set("redirect_uri", callbackUrl());
   url.searchParams.set("state", state);
-  url.searchParams.set("scope", META_OAUTH_SCOPES.join(","));
+  url.searchParams.set("response_type", "code");
+  if (configId) {
+    url.searchParams.set("config_id", configId);
+  } else {
+    url.searchParams.set("scope", META_OAUTH_SCOPES.join(","));
+  }
   return { url: url.toString() };
 }
 

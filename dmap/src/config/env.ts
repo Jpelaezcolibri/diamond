@@ -23,6 +23,10 @@ const envSchema = z.object({
 
   META_APP_ID: z.string().min(1),
   META_APP_SECRET: z.string().min(1),
+  // Requerido para apps Meta de tipo Business (Facebook Login for Business):
+  // id de la configuracion creada en el dashboard de la app. Sin el, el
+  // dialogo OAuth usa `scope` clasico (solo funciona en apps Consumer).
+  META_LOGIN_CONFIG_ID: z.string().optional(),
 
   DMAP_PUBLIC_URL: z.string().url(),
   CRM_URL: z.string().url()

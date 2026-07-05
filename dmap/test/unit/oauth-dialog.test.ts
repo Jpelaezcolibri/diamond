@@ -31,4 +31,12 @@ describe("buildOAuthDialogUrl", () => {
     expect(payload.orgId).toBe("org-42");
     expect(payload.returnUrl).toBe("https://crm.example.com/marketing");
   });
+
+  it("con config_id (Facebook Login for Business) usa config_id y NO scope — apps Business rechazan scope con error 100", () => {
+    const { url } = buildOAuthDialogUrl("org-1", "https://crm.example.com", "1234567890");
+    const params = new URL(url).searchParams;
+    expect(params.get("config_id")).toBe("1234567890");
+    expect(params.get("scope")).toBeNull();
+    expect(params.get("response_type")).toBe("code");
+  });
 });
