@@ -108,6 +108,7 @@ function toCanonicalProperty(property: PropertyRow, fetched: WasiPublicFetchResu
   return {
     ref: property.ref,
     titulo: parsed?.titulo ?? property.titulo,
+    tipo: property.tipo,
     operacion: (parsed?.operacion as "Venta" | "Arriendo" | null) ?? (property.operacion as "Venta" | "Arriendo" | null),
     precio,
     descripcion: property.descripcion,

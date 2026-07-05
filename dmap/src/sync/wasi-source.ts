@@ -4,6 +4,7 @@ import { z } from "zod";
 export const canonicalPropertySchema = z.object({
   ref: z.string(),
   titulo: z.string().nullable(),
+  tipo: z.string().nullable().default(null),
   operacion: z.enum(["Venta", "Arriendo"]).nullable(),
   precio: z.string().nullable(),
   descripcion: z.string().nullable().default(null),

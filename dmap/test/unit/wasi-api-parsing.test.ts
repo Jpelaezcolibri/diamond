@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   extractImages,
   extractPropertyEntries,
+  normalizeArea,
   normalizeOperacionYPrecio,
   toCanonicalProperty,
   wasiApiPropertySchema
@@ -51,8 +52,13 @@ const REAL_SEARCH_RESPONSE = {
       url_big: "https://image.wasi.co/eyJi...",
       url_original: "https://images.wasi.co/inmuebles/87331420260630055622.jpeg"
     },
+    // Forma REAL verificada en produccion: las fotos (llaves numericas)
+    // vienen MEZCLADAS con metadata del album (`id` del gallery). Ese `id`
+    // suelto fue el que rompio el primer sync (zod esperaba un objeto) y el
+    // que dejo sin imagenes al segundo (se interpreto como "foto unica").
     galleries: [
       {
+        id: 9471716,
         "0": {
           id: 343370878,
           filename: "87331420260630055622.jpeg",
@@ -173,6 +179,14 @@ describe("extractImages", () => {
     expect(imageKeys).toEqual(["343370878", "343370880", "343370881"]);
   });
 
+  it("ignora la metadata del album (id suelto en galleries[0]) — bug real que dejo 61 propiedades sin fotos (2026-07-05)", () => {
+    const raw = wasiApiPropertySchema.parse(REAL_SEARCH_RESPONSE["0"]);
+    const { imageKeys } = extractImages(raw);
+    // El id del gallery (9471716) NO debe aparecer como si fuera una foto.
+    expect(imageKeys).not.toContain("9471716");
+    expect(imageKeys).toHaveLength(3);
+  });
+
   it("cae a main_image si no hay galleries", () => {
     const raw = wasiApiPropertySchema.parse({
       id_property: 2,
@@ -182,18 +196,59 @@ describe("extractImages", () => {
     expect(imageUrls).toEqual(["https://images.wasi.co/inmuebles/solo.jpeg"]);
   });
 
+  it("cae a main_image si galleries[0] solo trae metadata (sin llaves numericas)", () => {
+    const raw = wasiApiPropertySchema.parse({
+      id_property: 4,
+      main_image: { id: 77, url_original: "https://images.wasi.co/inmuebles/fallback.jpeg" },
+      galleries: [{ id: 555 }]
+    });
+    const { imageUrls } = extractImages(raw);
+    expect(imageUrls).toEqual(["https://images.wasi.co/inmuebles/fallback.jpeg"]);
+  });
+
   it("devuelve listas vacias si no hay ninguna imagen", () => {
     const raw = wasiApiPropertySchema.parse({ id_property: 3 });
     expect(extractImages(raw)).toEqual({ imageKeys: [], imageUrls: [] });
   });
+});
 
-  it("con UNA sola foto, galleries[0] es la imagen directamente (sin indexado por posicion) — bug real encontrado en produccion 2026-07-05", () => {
-    const raw = wasiApiPropertySchema.parse({
-      id_property: 4,
-      galleries: [{ id: 555, filename: "unica.jpeg", position: 1, url_original: "https://images.wasi.co/inmuebles/unica.jpeg" }]
-    });
-    const { imageKeys, imageUrls } = extractImages(raw);
-    expect(imageUrls).toEqual(["https://images.wasi.co/inmuebles/unica.jpeg"]);
-    expect(imageKeys).toEqual(["555"]);
+describe("normalizeArea", () => {
+  it("usa area cuando es valida", () => {
+    const raw = wasiApiPropertySchema.parse({ id_property: 1, area: "186", built_area: "186", unit_area_label: "M2" });
+    expect(normalizeArea(raw)).toBe("186m2");
+  });
+
+  it("cae a built_area cuando area viene vacia — caso real id=9861538 (area='' built='160')", () => {
+    const raw = wasiApiPropertySchema.parse({ id_property: 1, area: "", built_area: "160", unit_area_label: "M2" });
+    expect(normalizeArea(raw)).toBe("160m2");
+  });
+
+  it("prefiere el primer candidato >= 10 (area='2' typo, built='80' correcto)", () => {
+    const raw = wasiApiPropertySchema.parse({ id_property: 1, area: "2", built_area: "80", unit_area_label: "M2" });
+    expect(normalizeArea(raw)).toBe("80m2");
+  });
+
+  it("si ningun candidato llega a 10, usa el primero > 0 (dato malo en Wasi, mejor eso que nada)", () => {
+    const raw = wasiApiPropertySchema.parse({ id_property: 1, area: "2", built_area: "2", unit_area_label: "M2" });
+    expect(normalizeArea(raw)).toBe("2m2");
+  });
+
+  it("devuelve null si no hay ningun area", () => {
+    const raw = wasiApiPropertySchema.parse({ id_property: 1, area: "", built_area: "", private_area: "" });
+    expect(normalizeArea(raw)).toBeNull();
+  });
+});
+
+describe("tipo desde el catalogo /property-type/all", () => {
+  it("mapea id_property_type al nombre del catalogo", () => {
+    const raw = wasiApiPropertySchema.parse({ id_property: 1, id_property_type: 2 });
+    const types = new Map([[1, "Casa"], [2, "Apartamento"]]);
+    expect(toCanonicalProperty(raw, types).tipo).toBe("Apartamento");
+  });
+
+  it("tipo null si el id no esta en el catalogo o no hay catalogo", () => {
+    const raw = wasiApiPropertySchema.parse({ id_property: 1, id_property_type: 99 });
+    expect(toCanonicalProperty(raw, new Map()).tipo).toBeNull();
+    expect(toCanonicalProperty(raw).tipo).toBeNull();
   });
 });

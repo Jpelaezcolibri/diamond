@@ -32,6 +32,7 @@ type WasiImage = z.infer<typeof wasiImageSchema>;
 export const wasiApiPropertySchema = z
   .object({
     id_property: z.union([z.number(), z.string()]),
+    id_property_type: z.union([z.number(), z.string()]).nullable().optional(),
     title: z.string().nullable().optional(),
     reference: z.string().nullable().optional(),
     for_sale: z.union([z.string(), z.boolean()]).optional(),
@@ -42,6 +43,8 @@ export const wasiApiPropertySchema = z
     rent_price_label: z.string().nullable().optional(),
     observations: z.string().nullable().optional(),
     area: z.union([z.string(), z.number()]).nullable().optional(),
+    built_area: z.union([z.string(), z.number()]).nullable().optional(),
+    private_area: z.union([z.string(), z.number()]).nullable().optional(),
     unit_area_label: z.string().nullable().optional(),
     bedrooms: z.union([z.string(), z.number()]).nullable().optional(),
     bathrooms: z.union([z.string(), z.number()]).nullable().optional(),
@@ -49,19 +52,18 @@ export const wasiApiPropertySchema = z
     city_label: z.string().nullable().optional(),
     link: z.string().nullable().optional(),
     main_image: wasiImageSchema.nullable().optional(),
-    // Peculiaridad de la API (inconsistente entre propiedades, verificado
-    // 2026-07-05): con 2+ fotos, `galleries[0]` es un objeto indexado por
-    // posicion ("0","1",...); con UNA sola foto, `galleries[0]` es el objeto
-    // de esa imagen directamente (sin el nivel de indexado). z.unknown() en
-    // el valor para aceptar ambas formas — la distincion real se hace en
-    // extractImages(), no aqui.
+    // Peculiaridad de la API (verificada contra produccion): `galleries` es un
+    // array con UN solo elemento, que es un objeto con las fotos en llaves
+    // numericas ("0","1",...) MEZCLADAS con metadata del album (`id`, etc.).
+    // Por eso el valor es z.unknown(): la extraccion real (solo llaves
+    // numericas) vive en extractImages().
     galleries: z.array(z.record(z.string(), z.unknown())).optional()
   })
   .passthrough();
 
 export type WasiApiProperty = z.infer<typeof wasiApiPropertySchema>;
 
-/** Extrae las entradas de propiedad (llaves numericas) de la respuesta de /property/search. */
+/** Extrae las entradas con llave numerica ("0","1",...) de una respuesta estilo Wasi (ignora total/status/metadata). */
 export function extractPropertyEntries(raw: unknown): unknown[] {
   if (!raw || typeof raw !== "object") return [];
   return Object.entries(raw as Record<string, unknown>)
@@ -89,29 +91,46 @@ export function normalizeOperacionYPrecio(p: WasiApiProperty): { operacion: "Ven
   return { operacion: null, precio: null };
 }
 
+/**
+ * Wasi trae tres campos de area y cualquiera puede venir vacio o con un typo
+ * ("" o "2" con built_area correcto — casos reales de esta cuenta). Se toma
+ * el primero >= 10 m2; si ninguno alcanza, el primero > 0; si no hay nada,
+ * null. Verificado 2026-07-05: id=9861538 tiene area="" y built_area="160".
+ */
+export function normalizeArea(p: WasiApiProperty): string | null {
+  const candidates = [p.area, p.built_area, p.private_area]
+    .map(toNumberOrNull)
+    .filter((n): n is number => n !== null && n > 0);
+  if (candidates.length === 0) return null;
+  const value = candidates.find((n) => n >= 10) ?? candidates[0]!;
+  const unit = (p.unit_area_label ?? "M2").toLowerCase();
+  return `${value}${unit}`;
+}
+
 function parseWasiImage(raw: unknown): WasiImage | null {
+  if (!raw || typeof raw !== "object") return null;
   const parsed = wasiImageSchema.safeParse(raw);
   return parsed.success ? parsed.data : null;
 }
 
 /**
- * `galleries[0]` es el (unico) contenedor, pero su forma depende de cuantas
- * fotos tiene la propiedad: con 2+, es un diccionario indexado por posicion
- * ("0","1",...); con 1 sola, es la imagen misma (sin el nivel de indexado).
- * Se distingue mirando si el contenedor tiene un `id` propio (numero/string):
- * eso solo pasa en el caso de una imagen directa, nunca en un diccionario
- * indexado por posicion. Se ordena por `position` y se usa `url_original`
- * (CDN directo, sin proxy de resize).
+ * `galleries[0]` mezcla las fotos (llaves numericas "0","1",...) con metadata
+ * del album (`id` del gallery, etc.) — descubierto en produccion: el primer
+ * intento asumio que un `id` directo significaba "una sola foto" y dejo las
+ * 61 propiedades nuevas sin imagenes. Solo se toman las llaves numericas,
+ * ordenadas por `position`, usando `url_original` (CDN directo, sin proxy).
  */
 export function extractImages(p: WasiApiProperty): { imageKeys: string[]; imageUrls: string[] } {
   const container = p.galleries?.[0] as Record<string, unknown> | undefined;
   let images: WasiImage[] = [];
 
   if (container) {
-    const isSingleImage = typeof container.id === "number" || typeof container.id === "string";
-    const rawImages = isSingleImage ? [container] : Object.values(container);
-    images = rawImages.map(parseWasiImage).filter((img): img is WasiImage => img !== null);
-  } else if (p.main_image) {
+    images = Object.entries(container)
+      .filter(([key]) => /^\d+$/.test(key))
+      .map(([, value]) => parseWasiImage(value))
+      .filter((img): img is WasiImage => img !== null);
+  }
+  if (images.length === 0 && p.main_image) {
     images = [p.main_image];
   }
 
@@ -121,18 +140,21 @@ export function extractImages(p: WasiApiProperty): { imageKeys: string[]; imageU
   return { imageKeys, imageUrls };
 }
 
-export function toCanonicalProperty(raw: WasiApiProperty): CanonicalProperty {
+export type PropertyTypeMap = Map<number, string>;
+
+export function toCanonicalProperty(raw: WasiApiProperty, propertyTypes: PropertyTypeMap = new Map()): CanonicalProperty {
   const { operacion, precio } = normalizeOperacionYPrecio(raw);
   const { imageKeys, imageUrls } = extractImages(raw);
-  const area = raw.area != null ? `${raw.area}${(raw.unit_area_label ?? "").toLowerCase()}` : null;
+  const typeId = toNumberOrNull(raw.id_property_type);
 
   return {
     ref: raw.reference?.trim() || String(raw.id_property),
     titulo: raw.title ?? null,
+    tipo: (typeId !== null ? propertyTypes.get(typeId) : null) ?? null,
     operacion,
     precio,
     descripcion: raw.observations ?? null,
-    area,
+    area: normalizeArea(raw),
     habitaciones: toNumberOrNull(raw.bedrooms),
     banos: toNumberOrNull(raw.bathrooms),
     zona: raw.zone_label ?? null,
@@ -143,11 +165,26 @@ export function toCanonicalProperty(raw: WasiApiProperty): CanonicalProperty {
   };
 }
 
+const wasiPropertyTypeSchema = z
+  .object({
+    id_property_type: z.union([z.number(), z.string()]),
+    nombre: z.string().optional(),
+    name: z.string().optional()
+  })
+  .passthrough();
+
+/** Un link de propiedad gestionada por Wasi (pagina publica vieja o sitio inmo.co nuevo). */
+function isWasiManagedLink(link: string | null): boolean {
+  return Boolean(link && /info\.wasi\.co|\.inmo\.co/.test(link));
+}
+
 /**
  * Fuente oficial (api.wasi.co) — a diferencia de wasi-public, puede
- * DESCUBRIR propiedades nuevas (propertyId null -> evento 'created' real,
- * no solo refresco). Se activa cambiando org_marketing_settings.sync_source
- * a 'wasi_api', sin tocar codigo.
+ * DESCUBRIR propiedades nuevas (propertyId null -> evento 'created' real) y
+ * DETECTAR retiros: como ve el inventario completo, toda propiedad Wasi de
+ * la org que ya no aparezca en el listado se reporta `gone` (vendida o
+ * despublicada) para que sync.service la marque no disponible. Se activa
+ * cambiando org_marketing_settings.sync_source a 'wasi_api', sin tocar codigo.
  */
 export class WasiApiSource implements WasiSource {
   readonly kind = "wasi_api" as const;
@@ -162,37 +199,83 @@ export class WasiApiSource implements WasiSource {
     const idCompany = decryptSecret(settings.wasi_id_company_enc);
     const wasiToken = decryptSecret(settings.wasi_token_enc);
 
-    const existingByRef = new Map((await listPropertiesByOrg(orgId)).map((p) => [p.ref, p.id]));
-    const candidates: SyncCandidate[] = [];
-    let skip = 0;
-
-    for (;;) {
-      const url = new URL(`${WASI_API_BASE}/property/search`);
+    const query = async (path: string, params: Record<string, string>): Promise<unknown> => {
+      const url = new URL(`${WASI_API_BASE}${path}`);
       url.searchParams.set("id_company", idCompany);
       url.searchParams.set("wasi_token", wasiToken);
-      url.searchParams.set("take", String(PAGE_SIZE));
-      url.searchParams.set("skip", String(skip));
-
+      for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
       const response = await fetch(url);
       if (!response.ok) {
-        throw new Error(`Wasi API respondio ${response.status} en property/search`);
+        throw new Error(`Wasi API respondio ${response.status} en ${path}`);
       }
-      const body = await response.json();
-      const entries = extractPropertyEntries(body).map((entry) => wasiApiPropertySchema.parse(entry));
-      if (entries.length === 0) break;
+      return response.json();
+    };
 
-      for (const raw of entries) {
-        const data = toCanonicalProperty(raw);
-        candidates.push({
-          propertyId: existingByRef.get(data.ref) ?? null,
-          wasiId: String(raw.id_property),
-          gone: false,
-          data
-        });
+    // Catalogo de tipos (id -> "Apartamento", "Casa", ...) para poblar properties.tipo.
+    const propertyTypes: PropertyTypeMap = new Map();
+    try {
+      const typesBody = await query("/property-type/all", {});
+      for (const entry of extractPropertyEntries(typesBody)) {
+        const parsed = wasiPropertyTypeSchema.safeParse(entry);
+        if (!parsed.success) continue;
+        const id = toNumberOrNull(parsed.data.id_property_type);
+        const nombre = parsed.data.nombre ?? parsed.data.name;
+        if (id !== null && nombre) propertyTypes.set(id, nombre);
       }
+    } catch {
+      // El catalogo es un enriquecimiento: si falla, el sync sigue sin tipo.
+    }
 
-      skip += PAGE_SIZE;
-      if (entries.length < PAGE_SIZE) break;
+    const fetchPaginated = async (extraParams: Record<string, string>): Promise<WasiApiProperty[]> => {
+      const results: WasiApiProperty[] = [];
+      let skip = 0;
+      for (;;) {
+        const body = await query("/property/search", { take: String(PAGE_SIZE), skip: String(skip), ...extraParams });
+        const entries = extractPropertyEntries(body).map((entry) => wasiApiPropertySchema.parse(entry));
+        if (entries.length === 0) break;
+        results.push(...entries);
+        skip += PAGE_SIZE;
+        if (entries.length < PAGE_SIZE) break;
+      }
+      return results;
+    };
+
+    // Dos pasadas (venta y arriendo) unidas por id: verificado en produccion
+    // que la busqueda con for_sale=true trae solo ventas; los arriendos que
+    // el cliente cargue despues llegan por la pasada for_rent=true.
+    const seenIds = new Set<string>();
+    const allProperties: WasiApiProperty[] = [];
+    const passes: Record<string, string>[] = [{ for_sale: "true" }, { for_rent: "true" }];
+    for (const pass of passes) {
+      for (const property of await fetchPaginated(pass)) {
+        const id = String(property.id_property);
+        if (seenIds.has(id)) continue;
+        seenIds.add(id);
+        allProperties.push(property);
+      }
+    }
+
+    const existing = await listPropertiesByOrg(orgId);
+    const existingByRef = new Map(existing.map((p) => [p.ref, p.id]));
+
+    const candidates: SyncCandidate[] = allProperties.map((raw) => {
+      const data = toCanonicalProperty(raw, propertyTypes);
+      return {
+        propertyId: existingByRef.get(data.ref) ?? null,
+        wasiId: String(raw.id_property),
+        gone: false,
+        data
+      };
+    });
+
+    // Retiros: propiedades Wasi de la org, aun disponibles, que ya no estan
+    // en el inventario de la API (vendidas o despublicadas en Wasi).
+    const fetchedRefs = new Set(candidates.map((c) => c.data!.ref));
+    for (const property of existing) {
+      if (!property.disponible) continue;
+      if (fetchedRefs.has(property.ref)) continue;
+      if (!isWasiManagedLink(property.link)) continue;
+      candidates.push({ propertyId: property.id, wasiId: null, gone: true, data: null });
     }
 
     return candidates;

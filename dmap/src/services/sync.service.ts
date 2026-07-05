@@ -79,7 +79,7 @@ async function processCandidate(orgId: string, syncRunId: string, candidate: Syn
       org_id: orgId,
       ref: data.ref,
       titulo: data.titulo ?? data.ref,
-      tipo: null,
+      tipo: data.tipo,
       operacion: data.operacion,
       precio: data.precio,
       area: data.area,
@@ -125,6 +125,26 @@ async function processCandidate(orgId: string, syncRunId: string, candidate: Syn
   const diff = diffPropertySnapshot(previous, snapshot);
 
   const patch: Record<string, unknown> = {};
+  if (!isNew && previous === null) {
+    // Primera sincronizacion de una propiedad que YA existia en la tabla
+    // (ej. importada por Excel o el scraper viejo): la fila puede estar
+    // desactualizada respecto a Wasi sin que el diff lo note (el diff compara
+    // snapshots de la fuente, no la fila). Refresh completo de los campos
+    // que el sync gobierna, para reconciliar la fila con la fuente.
+    patch.titulo = data.titulo ?? data.ref;
+    patch.tipo = data.tipo;
+    patch.operacion = data.operacion;
+    patch.precio = data.precio;
+    patch.descripcion = data.descripcion;
+    patch.area = data.area;
+    patch.habitaciones = data.habitaciones;
+    patch.banos = data.banos;
+    patch.zona = data.zona;
+    patch.ciudad = data.ciudad;
+    patch.link = data.link;
+    patch.disponible = true;
+    if (data.imageUrls.length > 0) patch.images = data.imageUrls;
+  }
   for (const event of diff.events) {
     if (event.changeType === "price_changed") patch.precio = data.precio;
     if (event.changeType === "status_changed") patch.disponible = snapshot.disponible;
