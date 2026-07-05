@@ -23,7 +23,7 @@ export default async function MarketingDashboardPage() {
     return <p className="text-slate-500">No hay ninguna organización configurada todavía.</p>;
   }
 
-  const [{ data: novedades }, { data: drafts }, { data: proximas }, { data: lastSync }] = await Promise.all([
+  const [{ data: novedades }, { count: novedadesTotal }, { data: drafts }, { data: proximas }, { data: lastSync }] = await Promise.all([
     supabase
       .from("property_change_events")
       .select("*, properties(ref,titulo,zona,ciudad,operacion,precio,images)")
@@ -31,6 +31,11 @@ export default async function MarketingDashboardPage() {
       .eq("processed", false)
       .order("created_at", { ascending: false })
       .limit(20),
+    supabase
+      .from("property_change_events")
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", orgId)
+      .eq("processed", false),
     supabase
       .from("publications")
       .select("*, properties(ref,titulo)")
@@ -75,7 +80,14 @@ export default async function MarketingDashboardPage() {
       </section>
 
       <section>
-        <h2 className="mb-3 text-lg font-semibold text-slate-900">Novedades del inventario</h2>
+        <div className="mb-3 flex items-baseline justify-between">
+          <h2 className="text-lg font-semibold text-slate-900">Novedades del inventario</h2>
+          {(novedadesTotal ?? 0) > novedadesRows.length && (
+            <span className="text-xs text-slate-500">
+              Mostrando las {novedadesRows.length} más recientes de {novedadesTotal} pendientes
+            </span>
+          )}
+        </div>
         {novedadesRows.length === 0 ? (
           <p className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
             Sin novedades pendientes. Cuando Wasi tenga una propiedad nueva o un cambio de precio, aparecerá aquí.

@@ -12,6 +12,7 @@ import { createPublication, getPublicationById, updatePublicationContent } from 
 import { createPublicationAssets, type CreateAssetInput } from "../repositories/publication-assets.repo.js";
 import { recordPublicationEvent } from "../repositories/publication-events.repo.js";
 import { recordContentGeneration } from "../repositories/content-generations.repo.js";
+import { markChangeEventsProcessedForProperty } from "../repositories/sync.repo.js";
 
 export interface GenerateDraftResult {
   publicationId: string;
@@ -148,6 +149,8 @@ export async function generateDraftForProperty(
     actor,
     detail: { source: "generation.service", styleVariant, propertyRef: property.ref }
   });
+
+  await markChangeEventsProcessedForProperty(orgId, propertyId);
 
   return { publicationId: publication.id };
 }

@@ -80,3 +80,23 @@ export async function markChangeEventProcessed(id: number): Promise<void> {
   const { error } = await getSupabase().from("property_change_events").update({ processed: true }).eq("id", id);
   if (error) throw new Error(`markChangeEventProcessed: ${error.message}`);
 }
+
+/**
+ * Resuelve las novedades pendientes de una propiedad (creada/precio/fotos/
+ * descripcion cambiados) cuando se genera una publicacion para ella — sin
+ * esto "Novedades del inventario" en el CRM nunca se vacia, incluso despues
+ * de generar contenido (bug real 2026-07-05: 100 novedades acumuladas,
+ * dashboard truncando a 20 sin avisar). No toca eventos `removed`: esos son
+ * informativos (propiedad vendida/retirada) y no se resuelven generando
+ * una publicacion nueva.
+ */
+export async function markChangeEventsProcessedForProperty(orgId: string, propertyId: string): Promise<void> {
+  const { error } = await getSupabase()
+    .from("property_change_events")
+    .update({ processed: true })
+    .eq("org_id", orgId)
+    .eq("property_id", propertyId)
+    .eq("processed", false)
+    .neq("change_type", "removed");
+  if (error) throw new Error(`markChangeEventsProcessedForProperty: ${error.message}`);
+}
