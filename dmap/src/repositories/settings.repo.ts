@@ -26,9 +26,20 @@ export async function updateOrgMarketingSettings(
   orgId: string,
   patch: Partial<Omit<OrgMarketingSettingsRow, "org_id">>
 ): Promise<void> {
+  // Los DEFAULTS solo aplican si la fila no existe: mezclar DEFAULTS sobre
+  // una fila existente borraba las credenciales de Wasi (null en DEFAULTS)
+  // en cualquier guardado parcial desde el CRM — bug real (2026-07-05).
+  const { data: existing, error: readError } = await getSupabase()
+    .from("org_marketing_settings")
+    .select()
+    .eq("org_id", orgId)
+    .maybeSingle();
+  if (readError) throw new Error(`updateOrgMarketingSettings (read): ${readError.message}`);
+
+  const base = (existing as OrgMarketingSettingsRow | null) ?? { org_id: orgId, ...DEFAULTS };
   const { error } = await getSupabase()
     .from("org_marketing_settings")
-    .upsert({ org_id: orgId, ...DEFAULTS, ...patch });
+    .upsert({ ...base, org_id: orgId, ...patch });
   if (error) throw new Error(`updateOrgMarketingSettings: ${error.message}`);
 }
 
