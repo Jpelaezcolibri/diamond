@@ -24,6 +24,12 @@ export async function listTargetsByPublication(publicationId: string): Promise<P
   return (data as PublicationTargetRow[]) ?? [];
 }
 
+export async function getPublicationTargetById(id: string): Promise<PublicationTargetRow | null> {
+  const { data, error } = await getSupabase().from("publication_targets").select().eq("id", id).maybeSingle();
+  if (error) throw new Error(`getPublicationTargetById: ${error.message}`);
+  return (data as PublicationTargetRow) ?? null;
+}
+
 /**
  * Claim atomico: solo una fila cambia a 'publishing' aunque dos workers
  * intenten tomar el mismo target a la vez (ver ARCHITECTURE.md #7 / #10).

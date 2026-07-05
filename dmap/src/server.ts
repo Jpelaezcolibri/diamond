@@ -6,6 +6,7 @@ import { healthRoutes } from "./api/health.js";
 import { syncRoutes } from "./api/sync.routes.js";
 import { generationRoutes } from "./api/generation.routes.js";
 import { connectionsRoutes } from "./api/connections.routes.js";
+import { publicationsRoutes } from "./api/publications.routes.js";
 
 export function buildServer() {
   const app = Fastify({
@@ -18,10 +19,11 @@ export function buildServer() {
   app.register(syncRoutes);
   app.register(generationRoutes);
   app.register(connectionsRoutes);
+  app.register(publicationsRoutes);
 
-  // Las rutas de negocio restantes (publications, templates, brand) se
-  // registran incrementalmente en los WP siguientes, cada una detras del
-  // middleware apiKeyAuth ya instalado arriba.
+  // Las rutas restantes (templates, brand, analytics) se registran
+  // incrementalmente en los WP siguientes, cada una detras del middleware
+  // apiKeyAuth ya instalado arriba.
 
   return app;
 }

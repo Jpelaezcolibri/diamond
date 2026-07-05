@@ -76,6 +76,24 @@ export async function schedulePublication(id: string, scheduledAt: string, timez
   if (error) throw new Error(`schedulePublication: ${error.message}`);
 }
 
+/**
+ * Claim atomico approved|scheduled -> publishing: solo el primer target que
+ * arranca mueve el status de la publicacion, aunque varios targets de la
+ * misma publicacion empiecen casi al mismo tiempo (mismo patron que
+ * claimTargetForPublishing en publication-targets.repo.ts).
+ */
+export async function claimPublicationForPublishing(id: string): Promise<PublicationRow | null> {
+  const { data, error } = await getSupabase()
+    .from("publications")
+    .update({ status: "publishing", updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .in("status", ["approved", "scheduled"])
+    .select()
+    .maybeSingle();
+  if (error) throw new Error(`claimPublicationForPublishing: ${error.message}`);
+  return (data as PublicationRow) ?? null;
+}
+
 export async function listPublicationsByOrgAndStatus(orgId: string, status?: PublicationStatus): Promise<PublicationRow[]> {
   let query = getSupabase().from("publications").select().eq("org_id", orgId);
   if (status) query = query.eq("status", status);
