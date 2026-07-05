@@ -62,7 +62,7 @@ export const diamond = {
       "apartamentos en venta Medellín",
       "casas en venta Colombia",
     ],
-    baseUrl: "https://dimanondweb.vercel.app",
+    baseUrl: "https://diamondinmobiliaria.com",
   },
 
   home: {
