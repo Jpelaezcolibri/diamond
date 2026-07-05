@@ -84,9 +84,9 @@ export const diamond = {
         id: "trust",
         type: "trust-bar",
         enabled: true,
-        // Ajustar con cifras reales de Diamond cuando esten disponibles.
         metrics: [
-          { value: 39, suffix: "+", label: "Propiedades disponibles" },
+          // El conteo se resuelve en vivo desde la base (value = respaldo si falla).
+          { value: 96, suffix: "+", label: "Propiedades disponibles", source: "properties_count" },
           { value: 24, suffix: "/7", label: "Atención por WhatsApp" },
           { value: 1, suffix: " min", label: "Tiempo de respuesta" },
         ],

@@ -38,7 +38,18 @@ export const TrustBarSectionSchema = z.object({
   ...base,
   type: z.literal("trust-bar"),
   metrics: z
-    .array(z.object({ value: z.number(), prefix: z.string().optional(), suffix: z.string().optional(), label: z.string() }))
+    .array(
+      z.object({
+        value: z.number(),
+        prefix: z.string().optional(),
+        suffix: z.string().optional(),
+        label: z.string(),
+        // "properties_count": el valor se reemplaza en runtime por el conteo
+        // real de propiedades disponibles (value queda como respaldo si la
+        // consulta falla). Evita numeros hardcodeados desactualizados.
+        source: z.enum(["properties_count"]).optional(),
+      })
+    )
     .min(2)
     .max(4),
 });
