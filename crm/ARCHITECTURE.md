@@ -67,3 +67,15 @@ bot-inmobiliario/
 - Notificaciones push/email al asesor cuando hay transferencia (el MVP usa la alerta de WhatsApp existente).
 - Multi-tenant en el CRM (schema listo, UI después).
 - Plantillas de mensajes (HSM) para reabrir conversaciones fuera de la ventana de 24h.
+
+## Módulo Marketing (DMAP)
+
+`app/(dashboard)/marketing/` consume el microservicio DMAP (`dmap/`, ver [dmap/ARCHITECTURE.md](../dmap/ARCHITECTURE.md)) con el mismo patrón que el bot: lecturas directas a Supabase (`publications`, `publication_assets`, `publication_events`, `sync_runs`, `property_change_events`, `social_connections`), mutaciones vía proxy server-side en `app/api/marketing/*` (mismo patrón que `app/api/send` ↔ bot) usando `lib/dmap.ts`.
+
+Variables de entorno adicionales (agregar a `.env.local`, nunca commitear):
+```
+DMAP_API_URL=http://localhost:3010     # o la URL de Railway en producción
+DMAP_API_KEY=                          # debe coincidir con DMAP_API_KEY del servicio dmap/
+```
+
+Solo visible para usuarios con rol `admin` (nav condicional en `app/(dashboard)/layout.tsx`, guard en `app/(dashboard)/marketing/layout.tsx`).

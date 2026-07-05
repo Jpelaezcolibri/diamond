@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { publicationService } from "../services/publication.service.js";
-import { getPublicationById, schedulePublication } from "../repositories/publications.repo.js";
+import { getPublicationById, schedulePublication, updatePublicationContent } from "../repositories/publications.repo.js";
 import {
   createPublicationTargets,
   listTargetsByPublication
@@ -9,6 +9,8 @@ import {
 import { getConnectionById } from "../repositories/social-connections.repo.js";
 import { enqueuePublish } from "../queue/queues.js";
 import { FatalError } from "../lib/errors.js";
+import { regenerateCopyForPublication } from "../services/generation.service.js";
+import { STYLE_VARIANTS } from "../config/constants.js";
 
 function actorFromRequest(request: { headers: Record<string, unknown> }): string {
   const actorId = request.headers["x-actor-id"];
@@ -35,7 +37,68 @@ const publishNowBodySchema = z.object({
   connectionIds: z.array(z.string().uuid()).min(1)
 });
 
+const updateContentBodySchema = z.object({
+  copyFacebook: z.string().min(1).optional(),
+  copyInstagram: z.string().min(1).optional(),
+  tituloComercial: z.string().min(1).optional(),
+  descripcionComercial: z.string().min(1).optional(),
+  metaTitle: z.string().min(1).optional(),
+  metaDescription: z.string().min(1).optional(),
+  hashtags: z.array(z.string()).optional(),
+  cta: z.string().min(1).optional()
+});
+
+const regenerateBodySchema = z.object({ styleVariant: z.enum(STYLE_VARIANTS) });
+
 export async function publicationsRoutes(app: FastifyInstance) {
+  app.patch("/api/v1/publications/:id", async (request, reply) => {
+    const params = z.object({ id: z.string().uuid() }).safeParse(request.params);
+    const body = updateContentBodySchema.safeParse(request.body);
+    if (!params.success || !body.success) {
+      reply.code(400).send({ error: "invalid_request", issues: [...(params.error?.issues ?? []), ...(body.error?.issues ?? [])] });
+      return;
+    }
+    try {
+      const publication = await getPublicationById(params.data.id);
+      if (!publication) {
+        reply.code(404).send({ error: "not_found" });
+        return;
+      }
+      if (publication.status !== "draft") {
+        reply.code(409).send({ error: "not_editable", message: "Solo se puede editar una publicacion en 'draft'" });
+        return;
+      }
+      await updatePublicationContent(publication.id, {
+        copy_facebook: body.data.copyFacebook,
+        copy_instagram: body.data.copyInstagram,
+        titulo_comercial: body.data.tituloComercial,
+        descripcion_comercial: body.data.descripcionComercial,
+        meta_title: body.data.metaTitle,
+        meta_description: body.data.metaDescription,
+        hashtags: body.data.hashtags,
+        cta: body.data.cta
+      });
+      reply.send({ ok: true });
+    } catch (err) {
+      reply.code(502).send({ error: "update_failed", message: (err as Error).message });
+    }
+  });
+
+  app.post("/api/v1/publications/:id/regenerate", async (request, reply) => {
+    const params = z.object({ id: z.string().uuid() }).safeParse(request.params);
+    const body = regenerateBodySchema.safeParse(request.body);
+    if (!params.success || !body.success) {
+      reply.code(400).send({ error: "invalid_request", issues: [...(params.error?.issues ?? []), ...(body.error?.issues ?? [])] });
+      return;
+    }
+    try {
+      await regenerateCopyForPublication(params.data.id, body.data.styleVariant);
+      reply.send({ ok: true });
+    } catch (err) {
+      reply.code(502).send({ error: "regenerate_failed", message: (err as Error).message });
+    }
+  });
+
   app.post("/api/v1/publications/:id/approve", async (request, reply) => {
     const params = z.object({ id: z.string().uuid() }).safeParse(request.params);
     if (!params.success) {

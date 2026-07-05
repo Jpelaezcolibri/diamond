@@ -8,7 +8,7 @@ import { resolveBrandProfile, type BrandProfile } from "../creatives/brand.js";
 import { renderCreative, type CreativeInput } from "../creatives/renderer.js";
 import { uploadCreative } from "../creatives/storage.js";
 import { getPropertyById, type PropertyRow } from "../repositories/properties.repo.js";
-import { createPublication } from "../repositories/publications.repo.js";
+import { createPublication, getPublicationById, updatePublicationContent } from "../repositories/publications.repo.js";
 import { createPublicationAssets, type CreateAssetInput } from "../repositories/publication-assets.repo.js";
 import { recordPublicationEvent } from "../repositories/publication-events.repo.js";
 import { recordContentGeneration } from "../repositories/content-generations.repo.js";
@@ -150,4 +150,51 @@ export async function generateDraftForProperty(
   });
 
   return { publicationId: publication.id };
+}
+
+/**
+ * "Regenerar en estilo X" desde el Content Studio: vuelve a generar SOLO el
+ * copy (mantiene los creatives/fotos ya renderizados) — un texto nuevo no
+ * suele requerir cambiar la foto elegida. Solo valido mientras la
+ * publicacion sigue en 'draft'.
+ */
+export async function regenerateCopyForPublication(publicationId: string, styleVariant: StyleVariant): Promise<void> {
+  const publication = await getPublicationById(publicationId);
+  if (!publication) throw new FatalError(`Publicacion ${publicationId} no existe`);
+  if (publication.status !== "draft") {
+    throw new FatalError(`Solo se puede regenerar una publicacion en 'draft' (esta en '${publication.status}')`);
+  }
+  if (!publication.property_id) throw new FatalError(`Publicacion ${publicationId} no tiene propiedad asociada`);
+
+  const property = await getPropertyById(publication.property_id);
+  if (!property) throw new FatalError(`Propiedad ${publication.property_id} no existe`);
+
+  const brand = await resolveBrandProfile(publication.org_id);
+  const copyResult = await generateCopy(buildPropertyCopyInput(property), styleVariant, { name: brand.name });
+
+  await recordContentGeneration({
+    org_id: publication.org_id,
+    property_id: property.id,
+    publication_id: publicationId,
+    kind: "copy",
+    style_variant: styleVariant,
+    model: env.CLAUDE_MODEL,
+    prompt_version: copyResult.promptVersion,
+    input: buildPropertyCopyInput(property),
+    output: copyResult.output,
+    tokens_in: copyResult.tokensIn,
+    tokens_out: copyResult.tokensOut
+  });
+
+  await updatePublicationContent(publicationId, {
+    style_variant: styleVariant,
+    copy_facebook: copyResult.output.copy_facebook,
+    copy_instagram: copyResult.output.copy_instagram,
+    titulo_comercial: copyResult.output.titulo_comercial,
+    descripcion_comercial: copyResult.output.descripcion_comercial,
+    meta_title: copyResult.output.meta_title,
+    meta_description: copyResult.output.meta_description,
+    hashtags: copyResult.output.hashtags,
+    cta: copyResult.output.cta
+  });
 }
