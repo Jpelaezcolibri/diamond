@@ -252,7 +252,7 @@ async function executeTool(name, input, ctx) {
         console.warn("[tools] No se pudo persistir intencion (revisar migracion leads.intencion):", e.message);
       }
     }
-    const link = buildClientLink(advisor, ctx.lead, ctx.propertyInteres);
+    const link = buildClientLink(advisor, ctx.lead, ctx.propertyInteres, ctx.cita);
     return `Transferencia registrada al asesor de ${especialidad}: ${advisor.name}. Ya fue alertado con el resumen del cliente. En tu respuesta despidete brevemente e incluye este link EXACTO para que el cliente hable directo con el asesor:\n${link}`;
   }
 

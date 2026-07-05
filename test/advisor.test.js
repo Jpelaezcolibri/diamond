@@ -37,6 +37,34 @@ test("VEHICULOS: el link es de vehiculos", () => {
   assert.match(texto, /vehiculo/i);
 });
 
+test("CON CITA: el link confirma la visita con dia y hora, NO 'interesado en la propiedad'", () => {
+  // Pedido explicito del usuario: si el cliente ya agendo, el mensaje debe ser
+  // "quiero confirmar la visita para el dia ... a la hora ...".
+  const lead = { nombre: "Ana Gomez", intencion: "comprar", property_ref_origen: "9702941" };
+  const cita = { descripcion: "el jueves a las 8", tipo: "visita", fecha_hora: "2026-07-09T08:00:00-05:00" };
+  const texto = decodeURIComponent(buildClientLink(ventaAdvisor, lead, null, cita).split("text=")[1]);
+  assert.match(texto, /quiero confirmar la visita/i);
+  assert.match(texto, /9 de julio/); // dia legible en espanol (zona America/Bogota)
+  assert.match(texto, /8:00/); // hora local Colombia
+  assert.doesNotMatch(texto, /interesado en esta propiedad/i);
+});
+
+test("CON CITA sin fecha parseable: el link usa la descripcion del cliente", () => {
+  const lead = { nombre: "Ana" };
+  const cita = { descripcion: "manana en la manana", tipo: "llamada", fecha_hora: null };
+  const texto = decodeURIComponent(buildClientLink(ventaAdvisor, lead, null, cita).split("text=")[1]);
+  assert.match(texto, /quiero confirmar la llamada: manana en la manana/i);
+});
+
+test("CON CITA en lead.cita (persistida): tambien confirma sin pasarla explicita", () => {
+  const lead = {
+    nombre: "Ana",
+    cita: { descripcion: "viernes 3pm", tipo: "visita", fecha_hora: "2026-07-10T15:00:00-05:00" },
+  };
+  const texto = decodeURIComponent(buildClientLink(ventaAdvisor, lead).split("text=")[1]);
+  assert.match(texto, /quiero confirmar la visita/i);
+});
+
 // --- buildAdvisorAlert ---
 
 test("VENDEDOR: la alerta marca que quiere VENDER y no muestra 'propiedad de interes'", () => {
@@ -58,6 +86,22 @@ test("La cita (dia y hora) llega al asesor en la alerta", () => {
   const cita = { descripcion: "manana a las 8 am", tipo: "asesoria", fecha_hora: "2026-07-05T08:00:00-05:00" };
   const alert = buildAdvisorAlert(org, lead, "Quiere vender", null, "venta", cita);
   assert.match(alert, /Cita solicitada: manana a las 8 am \(asesoria\)/);
+});
+
+test("CON CITA con fecha: la alerta incluye link de Google Calendar para el asesor", () => {
+  const lead = { nombre: "Ana Gomez", phone: "573001112233", score: 80 };
+  const cita = { descripcion: "jueves 8am", tipo: "visita", fecha_hora: "2026-07-09T08:00:00-05:00" };
+  const alert = buildAdvisorAlert(org, lead, "Calificado", null, "venta", cita);
+  assert.match(alert, /Agendar en tu calendario: https:\/\/calendar\.google\.com\/calendar\/render/);
+  assert.match(alert, /20260709T130000Z/); // 8am Bogota = 13:00 UTC (inicio del evento)
+});
+
+test("CON CITA sin fecha parseable: la alerta NO incluye link de calendario", () => {
+  const lead = { nombre: "Ana", phone: "573001112233", score: 80 };
+  const cita = { descripcion: "algun dia de estos", tipo: "llamada", fecha_hora: null };
+  const alert = buildAdvisorAlert(org, lead, "Calificado", null, "venta", cita);
+  assert.doesNotMatch(alert, /calendar\.google\.com/);
+  assert.match(alert, /Cita solicitada: algun dia de estos/);
 });
 
 test("COMPRADOR con propiedad de interes: la alerta la muestra", () => {

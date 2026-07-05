@@ -6,14 +6,51 @@ const INTENCION_LABEL = {
   vehiculos: "pregunta por vehiculos",
 };
 
+// Palabra para el tipo de cita en los mensajes ("la visita", "la llamada"...).
+const CITA_TIPO_LABEL = {
+  visita: "la visita",
+  llamada: "la llamada",
+  asesoria: "la asesoría",
+};
+
+// Fecha/hora legible en Colombia a partir del ISO de la cita.
+// Devuelve null si el ISO no es parseable (se cae a la descripcion del cliente).
+function formatCitaFechaHora(fechaHoraIso) {
+  if (!fechaHoraIso) return null;
+  const date = new Date(fechaHoraIso);
+  if (isNaN(date.getTime())) return null;
+  const fecha = new Intl.DateTimeFormat("es-CO", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    timeZone: "America/Bogota",
+  }).format(date);
+  const hora = new Intl.DateTimeFormat("es-CO", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+    timeZone: "America/Bogota",
+  }).format(date);
+  return { fecha, hora };
+}
+
 // Link wa.me para que el cliente contacte al asesor con contexto prellenado.
 // El texto depende de la INTENCION: un vendedor no debe llegar con un mensaje
 // de "estoy interesado en esta propiedad" apuntando al inmueble por el que entro.
-function buildClientLink(advisor, lead, propertyInteres) {
+// Si hay CITA agendada, el mensaje confirma la cita (dia y hora), no el interes:
+// el cliente ya paso esa etapa con Sofi.
+function buildClientLink(advisor, lead, propertyInteres, cita) {
   const intencion = lead.intencion;
   const saludo = lead.nombre ? `Hola, soy ${lead.nombre}. ` : "Hola, ";
+  const citaObj = cita || lead.cita;
   let texto;
-  if (intencion === "vender") {
+  if (citaObj && (citaObj.fecha_hora || citaObj.descripcion)) {
+    const tipoLabel = CITA_TIPO_LABEL[citaObj.tipo] || "la cita";
+    const fechaHora = formatCitaFechaHora(citaObj.fecha_hora);
+    texto = fechaHora
+      ? `${saludo}quiero confirmar ${tipoLabel} para el ${fechaHora.fecha} a las ${fechaHora.hora}`
+      : `${saludo}quiero confirmar ${tipoLabel}: ${citaObj.descripcion}`;
+  } else if (intencion === "vender") {
     texto = `${saludo}quiero vender mi propiedad con ustedes`;
   } else if (advisor.especialidad === "vehiculos" || intencion === "vehiculos") {
     texto = `${saludo}estoy interesado en un vehiculo`;
@@ -32,6 +69,28 @@ function formatCita(cita) {
   if (!cita || !cita.descripcion) return null;
   const tipo = cita.tipo ? ` (${cita.tipo})` : "";
   return `Cita solicitada: ${cita.descripcion}${tipo}`;
+}
+
+// Link "agregar a Google Calendar" para el asesor (sincronizacion de calendario
+// sin OAuth: un tap y la cita queda en su calendario, duracion 1 hora).
+function buildCalendarLink(cita, lead) {
+  const fechaHora = cita && cita.fecha_hora ? new Date(cita.fecha_hora) : null;
+  if (!fechaHora || isNaN(fechaHora.getTime())) return null;
+  const toBasic = (d) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+  const start = toBasic(fechaHora);
+  const end = toBasic(new Date(fechaHora.getTime() + 60 * 60 * 1000));
+  const tipo = cita.tipo ? cita.tipo.charAt(0).toUpperCase() + cita.tipo.slice(1) : "Cita";
+  const title = `${tipo} — ${lead.nombre || "Cliente"} (+${lead.phone})`;
+  const details = [cita.descripcion, lead.property_ref_origen && `Propiedad: ${lead.property_ref_origen}`]
+    .filter(Boolean)
+    .join("\n");
+  const url = new URL("https://calendar.google.com/calendar/render");
+  url.searchParams.set("action", "TEMPLATE");
+  url.searchParams.set("text", title);
+  url.searchParams.set("dates", `${start}/${end}`);
+  url.searchParams.set("details", details);
+  url.searchParams.set("ctz", "America/Bogota");
+  return url.toString();
 }
 
 // Mensaje de alerta que recibe el asesor cuando un lead es transferido.
@@ -54,6 +113,7 @@ function buildAdvisorAlert(org, lead, motivo, propertyInteres, especialidad, cit
     lead.forma_pago && `Forma de pago: ${lead.forma_pago}`,
     `Score: ${lead.score}/100`,
     formatCita(citaObj),
+    citaObj && buildCalendarLink(citaObj, lead) && `Agendar en tu calendario: ${buildCalendarLink(citaObj, lead)}`,
     // Para un vendedor, el inmueble de origen es por donde entro (contexto), no lo
     // que quiere: nunca lo presentes como "propiedad de interes".
     esVendedor
