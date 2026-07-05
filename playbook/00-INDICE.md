@@ -27,6 +27,7 @@ Cada documento distingue explícitamente:
 Documentos independientes de Diamond, listos para reutilizar con cualquier cliente inmobiliario futuro cambiando solo los datos entre `[CORCHETES]`:
 
 - [Guía de Lanzamiento de Campaña en Meta Ads](plantillas/guia-lanzamiento-meta-ads.md)
+- [Prompt Maestro — Landing Page Inmobiliaria](plantillas/prompt-master-landing-inmobiliaria.md)
 
 ## Recursos operativos de Diamond (específicos, no plantilla)
 

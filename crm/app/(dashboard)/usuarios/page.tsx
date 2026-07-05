@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { isSuperAdmin } from "@/lib/auth";
+import { isAdmin } from "@/lib/auth";
 import UserManager from "@/components/user-manager";
 
 export const dynamic = "force-dynamic";
@@ -10,7 +10,7 @@ export default async function UsuariosPage() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user || !isSuperAdmin(user)) redirect("/inbox");
+  if (!user || !isAdmin(user)) redirect("/inbox");
 
   return (
     <div className="mx-auto max-w-4xl p-6">

@@ -1,4 +1,14 @@
 node_modules/
 .env
+.env.local
 *.log
 .DS_Store
+
+.vercel
+
+# Estado local del agente y artefactos de herramientas
+.claude/
+.playwright-mcp/
+__pycache__/
+*.pyc
+dbg.log

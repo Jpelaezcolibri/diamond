@@ -24,16 +24,17 @@ const TOOL_DEFINITIONS = [
   {
     name: "registrar_dato_lead",
     description:
-      "Registra un dato del cliente en la base de datos. Usala cada vez que el cliente revele su nombre, presupuesto, zona de interes, tipo de propiedad que busca o urgencia (cuando necesita mudarse). Registrar estos datos es clave para calificar el lead.",
+      "Registra un dato del cliente en la base de datos. Usala cada vez que el cliente revele su nombre, presupuesto, zona de interes, tipo de propiedad, urgencia, forma de pago o su INTENCION (si quiere comprar, arrendar o vender). Registrar estos datos es clave para calificar y para que el asesor reciba el mensaje correcto.",
     input_schema: {
       type: "object",
       properties: {
         campo: {
           type: "string",
-          enum: ["nombre", "presupuesto", "zona_interes", "tipo_interes", "urgencia", "forma_pago"],
-          description: "El dato a registrar. forma_pago: como piensa pagar el cliente (credito hipotecario, recursos propios, mixto)",
+          enum: ["nombre", "presupuesto", "zona_interes", "tipo_interes", "urgencia", "forma_pago", "intencion"],
+          description:
+            "El dato a registrar. forma_pago: como piensa pagar (credito hipotecario, recursos propios, mixto). intencion: que quiere hacer el cliente — 'comprar', 'arrendar' o 'vender' (registrala APENAS quede claro, sobre todo 'vender' cuando el cliente sea un propietario que quiere entregar su inmueble).",
         },
-        valor: { type: "string", description: "El valor tal como lo expreso el cliente" },
+        valor: { type: "string", description: "El valor tal como lo expreso el cliente. Para intencion usa exactamente: comprar, arrendar o vender." },
       },
       required: ["campo", "valor"],
     },
@@ -63,9 +64,35 @@ const TOOL_DEFINITIONS = [
     },
   },
   {
+    name: "agendar_cita",
+    description:
+      "Registra la cita o preferencia de contacto del cliente con el asesor (dia y hora). Usala cuando el cliente indique cuando quiere que lo contacten, cuando quiere visitar un inmueble, o cuando agenda una asesoria (ej para vender). Deja la cita lista y estructurada para el asesor. Llamala ANTES de transferir_a_asesor cuando el cliente ya dio dia/hora, para que el asesor reciba todo junto.",
+    input_schema: {
+      type: "object",
+      properties: {
+        descripcion: {
+          type: "string",
+          description: "La preferencia tal como la dijo el cliente, ej 'manana a las 8 am', 'el jueves en la tarde', 'este fin de semana'",
+        },
+        fecha_hora_iso: {
+          type: "string",
+          description:
+            "Fecha y hora en formato ISO 8601 con zona horaria de Colombia (-05:00), calculada a partir de la fecha y hora ACTUAL que se te indica en el contexto. Ej '2026-07-05T08:00:00-05:00'. Si el cliente fue vago (ej 'la otra semana') y no puedes fijar una hora exacta, omite este campo.",
+        },
+        tipo: {
+          type: "string",
+          enum: ["llamada", "visita", "asesoria"],
+          description:
+            "llamada: el asesor lo contacta por telefono/WhatsApp. visita: ir a ver un inmueble. asesoria: reunion para vender o recibir asesoria.",
+        },
+      },
+      required: ["descripcion"],
+    },
+  },
+  {
     name: "transferir_a_asesor",
     description:
-      "Transfiere el cliente al asesor humano especializado. Usala cuando el cliente pida explicitamente hablar con una persona/asesor, o cuando el lead este calificado y acepte ser contactado. El sistema alertara automaticamente al asesor de la especialidad correcta con el resumen del lead.",
+      "Transfiere el cliente al asesor humano especializado. Usala cuando el cliente pida explicitamente hablar con una persona/asesor, o cuando el lead este calificado y acepte ser contactado. El sistema alertara automaticamente al asesor de la especialidad correcta con el resumen del lead. Si el cliente ya dio dia/hora, llama primero agendar_cita.",
     input_schema: {
       type: "object",
       properties: {
@@ -74,10 +101,16 @@ const TOOL_DEFINITIONS = [
           type: "string",
           enum: ["venta", "arriendo", "vehiculos", "otro"],
           description:
-            "A que asesor va el cliente segun lo que busca: venta (compra de propiedad), arriendo, vehiculos (carros/motos), u otro para todo lo demas",
+            "A que asesor va el cliente (define quien lo atiende): venta (tanto compra como VENTA de propiedad del cliente), arriendo, vehiculos (carros/motos), u otro para todo lo demas",
+        },
+        intencion: {
+          type: "string",
+          enum: ["comprar", "arrendar", "vender", "vehiculos", "otro"],
+          description:
+            "Que quiere hacer el cliente (define el mensaje que recibe el asesor): comprar o arrendar (busca inmueble), vender (quiere que la inmobiliaria venda SU propiedad), vehiculos, u otro. IMPORTANTE: si el cliente quiere vender su propiedad usa 'vender' con especialidad 'venta'.",
         },
       },
-      required: ["motivo", "especialidad"],
+      required: ["motivo", "especialidad", "intencion"],
     },
   },
 ];
@@ -107,6 +140,25 @@ async function executeTool(name, input, ctx) {
   }
 
   if (name === "registrar_dato_lead") {
+    // Intencion (comprar/arrendar/vender): columna nueva, persistencia best-effort
+    // para no romper si la migracion aun no corrio. En memoria siempre, para que
+    // el link y la alerta al asesor salgan con el encuadre correcto.
+    if (input.campo === "intencion") {
+      const v = input.valor.toLowerCase();
+      const intencion = /vend|consign/.test(v) ? "vender" : /arriendo|arrend|alquil|rentar|renta/.test(v) ? "arrendar" : "comprar";
+      ctx.lead.intencion = intencion;
+      try {
+        Object.assign(ctx.lead, await leads.update(ctx.lead.id, { intencion }));
+      } catch (e) {
+        console.warn("[tools] No se pudo persistir intencion (revisar migracion leads.intencion):", e.message);
+      }
+      return `Intencion registrada: ${intencion}. ${
+        intencion === "vender"
+          ? "El cliente es un PROPIETARIO que quiere vender: no le ofrezcas inventario para comprar; conectalo con el asesor de ventas (intencion vender)."
+          : "Sigue asesorando segun lo que busca."
+      }`;
+    }
+
     const updated = await leads.update(ctx.lead.id, { [input.campo]: input.valor });
     Object.assign(ctx.lead, updated);
     // El tipo de interes define el tablero del lead (compra/alquiler)
@@ -132,6 +184,28 @@ async function executeTool(name, input, ctx) {
     }`;
   }
 
+  if (name === "agendar_cita") {
+    const cita = {
+      descripcion: input.descripcion,
+      fecha_hora: input.fecha_hora_iso || null,
+      tipo: input.tipo || "llamada",
+      estado: "solicitada",
+      creada_at: new Date().toISOString(),
+    };
+    // En memoria: la cita viaja al asesor en la alerta aunque la persistencia falle.
+    ctx.cita = cita;
+    ctx.lead.cita = cita;
+    // Persistencia best-effort: si la columna `cita` aun no existe (migracion
+    // pendiente) no rompas la conversacion — el seam para el calendario queda
+    // igual, solo se activa cuando la migracion corra.
+    try {
+      Object.assign(ctx.lead, await leads.update(ctx.lead.id, { cita }));
+    } catch (e) {
+      console.warn("[tools] No se pudo persistir la cita (revisar migracion leads.cita):", e.message);
+    }
+    return `Cita registrada: ${cita.descripcion}${cita.fecha_hora ? ` (${cita.fecha_hora})` : ""} — tipo ${cita.tipo}. Cuando transfieras al asesor la vera en la alerta. Confirma al cliente con calidez, repitiendo el dia y la hora, y deja claro el siguiente paso.`;
+  }
+
   if (name === "consultar_guia_legal") {
     const topic = LEGAL_TOPICS[input.tema];
     if (!topic) {
@@ -141,7 +215,14 @@ async function executeTool(name, input, ctx) {
   }
 
   if (name === "transferir_a_asesor") {
+    // La intencion (registrada antes con registrar_dato_lead, mas deliberada y
+    // confiable) MANDA sobre la especialidad que adivine el modelo aqui: evita
+    // enrutamientos absurdos, ej. mandar un vendedor al asesor de vehiculos.
+    const intencion = ctx.lead.intencion || input.intencion || (input.especialidad === "vehiculos" ? "vehiculos" : null);
+    if (intencion) ctx.lead.intencion = intencion;
+    const ESP_POR_INTENCION = { vender: "venta", comprar: "venta", arrendar: "arriendo", vehiculos: "vehiculos" };
     const especialidad =
+      ESP_POR_INTENCION[intencion] ||
       input.especialidad ||
       (ctx.propertyInteres?.operacion || "").toLowerCase() ||
       "venta";
@@ -151,9 +232,25 @@ async function executeTool(name, input, ctx) {
     }
     ctx.transfer = { motivo: input.motivo || "Cliente solicito asesor", advisor, especialidad };
     const catMap = { venta: "compra", arriendo: "alquiler" };
-    const categoria = catMap[especialidad] || "otros";
-    if (categoria !== ctx.lead.categoria) {
-      Object.assign(ctx.lead, await leads.update(ctx.lead.id, { categoria }));
+    // Un vendedor no es del tablero "compra": su categoria es "otros" (captacion).
+    const categoria = intencion === "vender" ? "otros" : catMap[especialidad] || "otros";
+    const patch = {};
+    if (categoria !== ctx.lead.categoria) patch.categoria = categoria;
+    // Si el asesor tiene login en el CRM, el lead queda bajo su owner al instante.
+    if (advisor.auth_user_id && !ctx.lead.owner_id) {
+      patch.owner_id = advisor.auth_user_id;
+      patch.owner_assigned_at = new Date().toISOString();
+    }
+    if (Object.keys(patch).length > 0) {
+      Object.assign(ctx.lead, await leads.update(ctx.lead.id, patch));
+    }
+    // Persistencia best-effort de la intencion (columna nueva, migracion pendiente).
+    if (intencion) {
+      try {
+        Object.assign(ctx.lead, await leads.update(ctx.lead.id, { intencion }));
+      } catch (e) {
+        console.warn("[tools] No se pudo persistir intencion (revisar migracion leads.intencion):", e.message);
+      }
     }
     const link = buildClientLink(advisor, ctx.lead, ctx.propertyInteres);
     return `Transferencia registrada al asesor de ${especialidad}: ${advisor.name}. Ya fue alertado con el resumen del cliente. En tu respuesta despidete brevemente e incluye este link EXACTO para que el cliente hable directo con el asesor:\n${link}`;

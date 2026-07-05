@@ -5,11 +5,23 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { ESTADO_COLORS, ESTADO_LABELS, ESTADO_DOT, relativeTime, type Conversation } from "@/lib/types";
+import type { TeamMember } from "@/lib/team";
 import Avatar from "./avatar";
 import ScoreBadge from "./score-badge";
+import OwnerBadge from "./owner-badge";
 import LeadDeleteButton from "./lead-delete-button";
 
-export default function InboxList({ conversations, admin }: { conversations: Conversation[]; admin: boolean }) {
+export default function InboxList({
+  conversations,
+  admin,
+  roster,
+  currentUserId,
+}: {
+  conversations: Conversation[];
+  admin: boolean;
+  roster: Record<string, TeamMember>;
+  currentUserId: string;
+}) {
   const router = useRouter();
   const [toast, setToast] = useState<string | null>(null);
 
@@ -81,6 +93,16 @@ export default function InboxList({ conversations, admin }: { conversations: Con
                   </div>
                 </div>
               </Link>
+              {c.leads?.id && (
+                <OwnerBadge
+                  leadId={c.leads.id}
+                  ownerId={c.leads.owner_id}
+                  ownerAssignedAt={c.leads.owner_assigned_at}
+                  roster={roster}
+                  currentUserId={currentUserId}
+                  admin={admin}
+                />
+              )}
               {admin && c.leads?.id && (
                 <div className="opacity-0 transition group-hover:opacity-100">
                   <LeadDeleteButton leadId={c.leads.id} nombre={c.leads.nombre || `+${c.leads.phone}`} />

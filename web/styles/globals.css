@@ -1,0 +1,113 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ---------------------------------------------------------------------------
+   REF Design Tokens.
+   Los valores de marca (--ref-*) los inyecta el layout desde la config del
+   tenant (lib/theme.ts). Aqui solo se mapean a utilidades de Tailwind 4:
+   cambiar de tenant NUNCA requiere recompilar CSS.
+--------------------------------------------------------------------------- */
+@theme inline {
+  /* Color — marca por tenant */
+  --color-background: var(--ref-background);
+  --color-foreground: var(--ref-foreground);
+  --color-surface: var(--ref-surface);
+  --color-primary: var(--ref-primary);
+  --color-primary-foreground: var(--ref-primary-foreground);
+  --color-accent: var(--ref-accent);
+  --color-accent-foreground: var(--ref-accent-foreground);
+  /* Variante de accent segura para texto (AA 4.5:1) — ver lib/contrast.ts.
+     Usar SIEMPRE que el accent se lea como texto (eyebrows, labels); el
+     token "accent" original queda para bordes, badges e iconos decorativos. */
+  --color-accent-strong: var(--ref-accent-text);
+  --color-muted: var(--ref-muted);
+  --color-line: var(--ref-border);
+
+  /* Color — fijos de plataforma. Verde WhatsApp oscurecido vs. el oficial
+     (#1FAF5E) para que el texto blanco del botón cumpla AA (4.5:1;
+     el original daba 2.86:1). Sigue leyéndose como "verde WhatsApp". */
+  --color-whatsapp: #188648;
+  --color-whatsapp-foreground: #ffffff;
+  --color-danger: #b3261e;
+
+  /* Tipografia por tenant (config/fonts.ts) */
+  --font-heading: var(--font-heading), ui-serif, Georgia, serif;
+  --font-body: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+
+  /* Radius por tenant */
+  --radius-brand: var(--ref-radius);
+  --radius-brand-lg: calc(var(--ref-radius) * 1.5);
+
+  /* Espaciado de secciones (ritmo editorial) */
+  --spacing-section: clamp(5rem, 10vw, 9rem);
+  --spacing-section-sm: clamp(3rem, 6vw, 5rem);
+
+  /* Elevacion: SOLO estas dos sombras en todo el framework */
+  --shadow-card: 0 1px 2px rgb(16 16 18 / 0.04), 0 8px 24px rgb(16 16 18 / 0.06);
+  --shadow-overlay: 0 12px 48px rgb(16 16 18 / 0.18);
+
+  /* Motion */
+  --ease-out-expo: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@layer base {
+  * {
+    border-color: var(--ref-border);
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--ref-background);
+    color: var(--ref-foreground);
+    font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-heading), ui-serif, Georgia, serif;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  ::selection {
+    background-color: var(--ref-accent);
+    color: var(--ref-accent-foreground);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ref-accent);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer utilities {
+  /* Numeros tabulares para precios y metricas */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* En el detalle de propiedad la barra CTA movil reemplaza al FAB */
+body:has(main[data-hide-fab]) [data-fab] {
+  display: none;
+}

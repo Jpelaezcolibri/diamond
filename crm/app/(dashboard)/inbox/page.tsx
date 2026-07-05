@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
-import { isSuperAdmin } from "@/lib/auth";
+import { isAdmin } from "@/lib/auth";
+import { getTeamRoster } from "@/lib/team";
 import { type Conversation } from "@/lib/types";
 import InboxList from "@/components/inbox-list";
 
@@ -10,14 +11,17 @@ export default async function InboxPage() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  const admin = isSuperAdmin(user);
+  const admin = isAdmin(user);
 
-  const { data } = await supabase
-    .from("conversations")
-    .select("*, leads(*)")
-    .eq("estado", "activa")
-    .order("last_activity_at", { ascending: false })
-    .limit(100);
+  const [{ data }, roster] = await Promise.all([
+    supabase
+      .from("conversations")
+      .select("*, leads(*)")
+      .eq("estado", "activa")
+      .order("last_activity_at", { ascending: false })
+      .limit(100),
+    getTeamRoster(),
+  ]);
 
   const conversations = (data || []) as Conversation[];
   const nuevos = conversations.filter((c) => c.leads?.estado === "nuevo").length;
@@ -42,7 +46,7 @@ export default async function InboxPage() {
           </div>
         ))}
       </div>
-      <InboxList conversations={conversations} admin={admin} />
+      <InboxList conversations={conversations} admin={admin} roster={roster} currentUserId={user?.id || ""} />
     </div>
   );
 }

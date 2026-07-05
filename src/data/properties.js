@@ -4,6 +4,18 @@ const memory = require("./memory");
 // Palabras utiles de una zona de busqueda: fuera articulos y conectores,
 // para que "El Poblado" encuentre "Poblado" y "Loma del Chocho" encuentre "Chocho"
 const STOPWORDS = new Set(["el", "la", "los", "las", "de", "del", "en", "sector", "barrio", "zona"]);
+
+// Palabras geograficas GENERICAS: describen un tipo de accidente o urbanizacion,
+// no identifican una zona concreta. En Medellin hay decenas de "lomas" (Loma del
+// Indio en El Poblado, Loma del Chocho en Envigado, Loma de los Balsos...): un
+// match solo por "loma" es un falso positivo que ubica al cliente en el sitio
+// equivocado. Si el query trae ademas un nombre distintivo, estas no cuentan
+// como coincidencia por si solas.
+const GENERIC_GEO = new Set([
+  "loma", "lomas", "alto", "altos", "bajo", "bajos", "vereda", "parcelacion",
+  "conjunto", "urbanizacion", "unidad", "ciudadela", "cerro", "parque", "via",
+]);
+
 function zonaTokens(zona) {
   return String(zona)
     .toLowerCase()
@@ -11,11 +23,19 @@ function zonaTokens(zona) {
     .filter((w) => w.length >= 3 && !STOPWORDS.has(w));
 }
 
+// Tokens que SI identifican la zona. Si hay alguno distintivo (no generico), el
+// match exige uno de esos; los genericos ("loma") no bastan. Si TODOS son
+// genericos, se usan tal cual como ultimo recurso.
+function distinctiveTokens(tokens) {
+  const distinctive = tokens.filter((t) => !GENERIC_GEO.has(t));
+  return distinctive.length > 0 ? distinctive : tokens;
+}
+
 function matchesFilters(p, f) {
   if (f.ref && p.ref.toUpperCase() !== f.ref.toUpperCase()) return false;
   if (f.zona) {
     const haystack = `${p.zona} ${p.ciudad}`.toLowerCase();
-    const tokens = zonaTokens(f.zona);
+    const tokens = distinctiveTokens(zonaTokens(f.zona));
     if (tokens.length > 0 && !tokens.some((t) => haystack.includes(t))) return false;
   }
   if (f.tipo && !p.tipo.toLowerCase().includes(f.tipo.toLowerCase())) return false;
@@ -37,7 +57,7 @@ async function search(orgId, filters = {}, limit = 5) {
   let query = supabase.from("properties").select("*").eq("org_id", orgId).eq("disponible", true);
   if (filters.ref) query = query.ilike("ref", filters.ref);
   if (filters.zona) {
-    const tokens = zonaTokens(filters.zona);
+    const tokens = distinctiveTokens(zonaTokens(filters.zona));
     if (tokens.length > 0) {
       const ors = tokens.flatMap((t) => [`zona.ilike.%${t}%`, `ciudad.ilike.%${t}%`]);
       query = query.or(ors.join(","));
@@ -67,4 +87,4 @@ async function findByRef(orgId, ref) {
   return data;
 }
 
-module.exports = { search, findByRef };
+module.exports = { search, findByRef, matchesFilters, zonaTokens, distinctiveTokens };

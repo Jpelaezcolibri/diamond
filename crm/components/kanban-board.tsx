@@ -14,10 +14,26 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { CATEGORIAS, ESTADOS, ESTADO_LABELS, ESTADO_COLUMN_THEME, scoreTemperature, type Lead } from "@/lib/types";
+import type { TeamMember } from "@/lib/team";
 import Avatar from "./avatar";
 import ScoreBadge from "./score-badge";
+import OwnerBadge from "./owner-badge";
 
-function LeadCard({ lead, convId, dragging = false }: { lead: Lead; convId?: string; dragging?: boolean }) {
+function LeadCard({
+  lead,
+  convId,
+  dragging = false,
+  roster,
+  currentUserId,
+  admin,
+}: {
+  lead: Lead;
+  convId?: string;
+  dragging?: boolean;
+  roster: Record<string, TeamMember>;
+  currentUserId: string;
+  admin: boolean;
+}) {
   const t = scoreTemperature(lead.score);
   return (
     <div
@@ -35,34 +51,74 @@ function LeadCard({ lead, convId, dragging = false }: { lead: Lead; convId?: str
           lead.tipo_interes ||
           "sin datos"}
       </p>
-      {convId && (
-        <Link
-          href={`/inbox/${convId}`}
-          className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-emerald-700 hover:underline"
-          onPointerDown={(e) => e.stopPropagation()}
-        >
-          Ver chat →
-        </Link>
-      )}
+      <div className="mt-2 flex items-center justify-between gap-2">
+        <OwnerBadge
+          leadId={lead.id}
+          ownerId={lead.owner_id}
+          ownerAssignedAt={lead.owner_assigned_at}
+          roster={roster}
+          currentUserId={currentUserId}
+          admin={admin}
+        />
+        {convId && (
+          <Link
+            href={`/inbox/${convId}`}
+            className="shrink-0 text-xs font-medium text-emerald-700 hover:underline"
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            Ver chat →
+          </Link>
+        )}
+      </div>
     </div>
   );
 }
 
-function DraggableCard({ lead, convId }: { lead: Lead; convId?: string }) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: lead.id });
+function DraggableCard({
+  lead,
+  convId,
+  editable,
+  roster,
+  currentUserId,
+  admin,
+}: {
+  lead: Lead;
+  convId?: string;
+  editable: boolean;
+  roster: Record<string, TeamMember>;
+  currentUserId: string;
+  admin: boolean;
+}) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: lead.id, disabled: !editable });
   return (
     <div
       ref={setNodeRef}
-      {...listeners}
+      {...(editable ? listeners : {})}
       {...attributes}
-      className={`cursor-grab touch-none active:cursor-grabbing ${isDragging ? "opacity-30" : ""}`}
+      className={`touch-none ${editable ? "cursor-grab active:cursor-grabbing" : "cursor-default opacity-90"} ${
+        isDragging ? "opacity-30" : ""
+      }`}
     >
-      <LeadCard lead={lead} convId={convId} />
+      <LeadCard lead={lead} convId={convId} roster={roster} currentUserId={currentUserId} admin={admin} />
     </div>
   );
 }
 
-function Column({ estado, leads, convByLead }: { estado: string; leads: Lead[]; convByLead: Record<string, string> }) {
+function Column({
+  estado,
+  leads,
+  convByLead,
+  roster,
+  currentUserId,
+  admin,
+}: {
+  estado: string;
+  leads: Lead[];
+  convByLead: Record<string, string>;
+  roster: Record<string, TeamMember>;
+  currentUserId: string;
+  admin: boolean;
+}) {
   const { setNodeRef, isOver } = useDroppable({ id: estado });
   const theme = ESTADO_COLUMN_THEME[estado] || ESTADO_COLUMN_THEME.nuevo;
   return (
@@ -78,7 +134,15 @@ function Column({ estado, leads, convByLead }: { estado: string; leads: Lead[]; 
       </p>
       <div className="flex flex-1 flex-col gap-2 overflow-y-auto">
         {leads.map((l) => (
-          <DraggableCard key={l.id} lead={l} convId={convByLead[l.id]} />
+          <DraggableCard
+            key={l.id}
+            lead={l}
+            convId={convByLead[l.id]}
+            editable={admin || !l.owner_id || l.owner_id === currentUserId}
+            roster={roster}
+            currentUserId={currentUserId}
+            admin={admin}
+          />
         ))}
         {leads.length === 0 && (
           <p className="rounded-xl border border-dashed border-slate-300/70 bg-white/50 p-4 text-center text-xs text-slate-400">
@@ -93,17 +157,27 @@ function Column({ estado, leads, convByLead }: { estado: string; leads: Lead[]; 
 export default function KanbanBoard({
   initialLeads,
   convByLead,
+  admin,
+  roster,
+  currentUserId,
 }: {
   initialLeads: Lead[];
   convByLead: Record<string, string>;
+  admin: boolean;
+  roster: Record<string, TeamMember>;
+  currentUserId: string;
 }) {
   const [leads, setLeads] = useState<Lead[]>(initialLeads);
   const [tab, setTab] = useState<string>("compra");
+  const [onlyMine, setOnlyMine] = useState(false);
   const [active, setActive] = useState<Lead | null>(null);
   const [error, setError] = useState<string | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
-  const visibles = useMemo(() => leads.filter((l) => (l.categoria || "otros") === tab), [leads, tab]);
+  const visibles = useMemo(
+    () => leads.filter((l) => (l.categoria || "otros") === tab && (!onlyMine || l.owner_id === currentUserId)),
+    [leads, tab, onlyMine, currentUserId]
+  );
   const byEstado = useMemo(() => {
     const map: Record<string, Lead[]> = {};
     ESTADOS.forEach((e) => (map[e] = []));
@@ -124,7 +198,17 @@ export default function KanbanBoard({
     if (!lead || lead.estado === estado) return;
 
     const previo = lead.estado;
-    setLeads((prev) => prev.map((l) => (l.id === leadId ? { ...l, estado } : l)));
+    const previoOwner = lead.owner_id;
+    const previoOwnerAt = lead.owner_assigned_at;
+    // Los admins no se auto-asignan al mover; los demas reclaman el lead si estaba libre.
+    const claims = !admin && !lead.owner_id;
+    setLeads((prev) =>
+      prev.map((l) =>
+        l.id === leadId
+          ? { ...l, estado, ...(claims ? { owner_id: currentUserId, owner_assigned_at: new Date().toISOString() } : {}) }
+          : l
+      )
+    );
     setError(null);
 
     const res = await fetch("/api/leads/estado", {
@@ -133,14 +217,17 @@ export default function KanbanBoard({
       body: JSON.stringify({ leadId, estado }),
     });
     if (!res.ok) {
-      setLeads((prev) => prev.map((l) => (l.id === leadId ? { ...l, estado: previo } : l)));
-      setError("No se pudo mover el lead");
+      setLeads((prev) =>
+        prev.map((l) => (l.id === leadId ? { ...l, estado: previo, owner_id: previoOwner, owner_assigned_at: previoOwnerAt } : l))
+      );
+      const body = await res.json().catch(() => ({}));
+      setError(body.error || "No se pudo mover el lead");
     }
   }
 
   return (
     <div className="flex h-[calc(100vh-57px)] flex-col bg-slate-50 p-4">
-      <div className="mb-4 flex items-center gap-2">
+      <div className="mb-4 flex flex-wrap items-center gap-2">
         {CATEGORIAS.map((c) => (
           <button
             key={c.key}
@@ -155,16 +242,34 @@ export default function KanbanBoard({
             </span>
           </button>
         ))}
+        <button
+          onClick={() => setOnlyMine((v) => !v)}
+          className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+            onlyMine ? "border-[#c9a24b] bg-[#c9a24b]/10 text-[#8a6a1f]" : "border-slate-200 bg-white text-slate-500 hover:bg-slate-100"
+          }`}
+        >
+          Mis leads
+        </button>
         {error && <span className="ml-3 text-xs text-red-600">{error}</span>}
       </div>
 
       <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
         <div className="flex flex-1 gap-3 overflow-x-auto pb-2">
           {ESTADOS.map((estado) => (
-            <Column key={estado} estado={estado} leads={byEstado[estado] || []} convByLead={convByLead} />
+            <Column
+              key={estado}
+              estado={estado}
+              leads={byEstado[estado] || []}
+              convByLead={convByLead}
+              roster={roster}
+              currentUserId={currentUserId}
+              admin={admin}
+            />
           ))}
         </div>
-        <DragOverlay>{active ? <LeadCard lead={active} dragging /> : null}</DragOverlay>
+        <DragOverlay>
+          {active ? <LeadCard lead={active} dragging roster={roster} currentUserId={currentUserId} admin={admin} /> : null}
+        </DragOverlay>
       </DndContext>
     </div>
   );

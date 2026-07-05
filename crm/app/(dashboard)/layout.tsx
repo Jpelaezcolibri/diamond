@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { isSuperAdmin } from "@/lib/auth";
+import { isAdmin } from "@/lib/auth";
 import LogoutButton from "@/components/logout-button";
 import NavLink from "@/components/nav-link";
 
@@ -11,7 +11,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
-  const admin = isSuperAdmin(user);
+  const admin = isAdmin(user);
 
   const { count: alertCount } = await supabase
     .from("leads")

@@ -13,6 +13,8 @@ export type Lead = {
   estado: string;
   property_ref_origen: string | null;
   source: string;
+  owner_id: string | null;
+  owner_assigned_at: string | null;
   created_at: string;
   updated_at: string;
 };

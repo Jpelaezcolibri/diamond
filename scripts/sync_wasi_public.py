@@ -1,7 +1,9 @@
-# Sincroniza precio, titulo y operacion de cada propiedad contra su pagina
-# publica de info.wasi.co (puente mientras se conecta la API oficial de Wasi).
+# Sincroniza precio, titulo, operacion e IMAGENES de cada propiedad contra su
+# pagina publica de info.wasi.co (puente mientras se conecta la API oficial).
+# Las fotos se sirven via el proxy image.wasi.co/<base64(payload)>; se decodifica
+# el payload de los thumbnails (156px) y se re-encodea a 1600px para la landing.
 # Uso: python scripts/sync_wasi_public.py
-import os, re, json, time, sys
+import os, re, json, time, sys, base64
 import urllib.request, urllib.error, urllib.parse
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -34,22 +36,60 @@ def api(method, path, body=None):
         raw = r.read()
         return json.loads(raw) if raw else None
 
+IMG_WIDTH = 1600  # ancho pedido al proxy para la landing
+
+def extract_images(html):
+    """Claves de fotos del inmueble (en orden de galeria) re-encodeadas a 1600px."""
+    keys, seen = [], set()
+    for b64 in re.findall(r"https://image\.wasi\.co/([A-Za-z0-9+/=]+)", html):
+        try:
+            payload = json.loads(base64.b64decode(b64 + "=" * (-len(b64) % 4)))
+        except Exception:
+            continue
+        key = payload.get("key", "")
+        # Solo fotos del inmueble (descarta logos/iconos de la plantilla Wasi)
+        if not key.startswith("inmuebles/") or key in seen:
+            continue
+        seen.add(key)
+        keys.append(key)
+    urls = []
+    for key in keys:
+        new_payload = {
+            "bucket": "staticw",
+            "key": key,
+            "edits": {"normalise": True, "rotate": 0, "resize": {"width": IMG_WIDTH, "fit": "inside"}},
+        }
+        b64 = base64.b64encode(json.dumps(new_payload).encode()).decode()
+        urls.append(f"https://image.wasi.co/{b64}")
+    return urls
+
 def fetch_wasi(url):
     # URLs con tildes o espacios: codificar el path
     url = urllib.parse.quote(url.strip(), safe=":/?&=")
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-    html = urllib.request.urlopen(req, timeout=30).read().decode("utf-8", "ignore")
+    try:
+        html = urllib.request.urlopen(req, timeout=30).read().decode("utf-8", "ignore")
+    except urllib.error.HTTPError as e:
+        # 404/410 = propiedad vendida o eliminada en Wasi → marcar no disponible.
+        if e.code in (404, 410):
+            return {"gone": True}
+        raise
     precio_m = re.search(r'Precio\s+(venta|renta)\s*<p class="pr1">\s*(\$[\d.]+)', html)
     title_m = re.search(r"<title>(.*?)</title>", html, re.S)
     return {
+        "gone": False,
+        # Si la regex de precio deja de matchear, Wasi cambió el HTML: avisar
+        # (no fallar en silencio dejando datos congelados).
+        "precio_regex_ok": precio_m is not None,
         "operacion": ("Arriendo" if precio_m and precio_m.group(1) == "renta" else "Venta") if precio_m else None,
         "precio": precio_m.group(2) if precio_m else None,
         "titulo": title_m.group(1).strip() if title_m else None,
+        "images": extract_images(html),
     }
 
 def main():
-    props = api("GET", "properties?select=id,ref,precio,titulo,operacion,link&link=ilike.*info.wasi.co*&disponible=eq.true&limit=500")
-    cambios, errores = 0, 0
+    props = api("GET", "properties?select=id,ref,precio,titulo,operacion,images,link&link=ilike.*info.wasi.co*&disponible=eq.true&limit=500")
+    cambios, errores, retiradas = 0, 0, 0
     for p in props:
         try:
             wasi = fetch_wasi(p["link"])
@@ -57,6 +97,16 @@ def main():
             print(f"  ! {p['ref']}: no se pudo leer la pagina ({e})")
             errores += 1
             continue
+        # Propiedad vendida/eliminada en Wasi → retirar del catalogo publico.
+        if wasi.get("gone"):
+            api("PATCH", f"properties?id=eq.{p['id']}", {"disponible": False})
+            print(f"  - {p['ref']}: retirada (404/410 en Wasi, ya no disponible)")
+            retiradas += 1
+            time.sleep(0.4)
+            continue
+        # Wasi cambio el HTML: la regex de precio no matcheo. Avisar para revisar.
+        if not wasi.get("precio_regex_ok"):
+            print(f"  ! {p['ref']}: precio no encontrado (¿Wasi cambio el HTML?) — revisar regex")
         update = {}
         if wasi["precio"] and wasi["precio"] != p["precio"]:
             # Guardian: una VENTA por menos de $50 millones es casi seguro un
@@ -70,15 +120,18 @@ def main():
             update["titulo"] = wasi["titulo"]
         if wasi["operacion"] and wasi["operacion"] != p["operacion"]:
             update["operacion"] = wasi["operacion"]
+        if wasi["images"] and wasi["images"] != (p.get("images") or []):
+            update["images"] = wasi["images"]
         if update:
             api("PATCH", f"properties?id=eq.{p['id']}", update)
             detalle = ", ".join(
-                f"{k}: {p[k]} -> {v}" for k, v in update.items()
+                f"images: {len(v)} fotos" if k == "images" else f"{k}: {p[k]} -> {v}"
+                for k, v in update.items()
             )
             print(f"  * {p['ref']}: {detalle}")
             cambios += 1
         time.sleep(0.4)
-    print(f"\nSincronizadas: {len(props)} | actualizadas: {cambios} | errores: {errores}")
+    print(f"\nSincronizadas: {len(props)} | actualizadas: {cambios} | retiradas: {retiradas} | errores: {errores}")
 
 if __name__ == "__main__":
     main()
