@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getDefaultOrgId, PUBLICATION_STATUS_COLORS, PUBLICATION_STATUS_LABELS, STYLE_VARIANT_LABELS, type PublicationRow } from "@/lib/marketing";
+import GenerarPublicacion from "@/components/marketing/generar-publicacion";
 
 export const dynamic = "force-dynamic";
 
@@ -19,10 +20,13 @@ export default async function PublicacionesPage() {
   const publications = (data || []) as (PublicationRow & { properties: { ref: string; titulo: string; zona: string | null } | null })[];
 
   return (
-    <div>
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <GenerarPublicacion orgId={orgId} />
+      </div>
       {publications.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center text-sm text-slate-500">
-          Todavía no se ha generado ninguna publicación. Andá al Dashboard y generá una desde una novedad del inventario.
+          Todavía no se ha generado ninguna publicación. Elegí una propiedad arriba o generá una desde una novedad del inventario.
         </p>
       ) : (
         <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
