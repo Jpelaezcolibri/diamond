@@ -1,5 +1,6 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { getDefaultOrgId } from "@/lib/marketing";
+import { getDefaultOrgId, PUBLICATION_STATUS_LABELS, type PublicationStatus } from "@/lib/marketing";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +21,40 @@ interface TargetWithContext {
   platform: "facebook" | "instagram";
   permalink: string | null;
   publications: { titulo_comercial: string | null; properties: { ref: string } | null } | null;
+}
+
+interface RemovedEventRow {
+  id: number;
+  property_id: string | null;
+  created_at: string;
+  properties: { ref: string; titulo: string; zona: string | null; ciudad: string | null; precio: string | null; operacion: string | null } | null;
+}
+
+interface RelatedPublicationRow {
+  id: string;
+  property_id: string | null;
+  status: PublicationStatus;
+}
+
+/**
+ * Meta/Facebook Insights no tiene ningun concepto de "propiedad vendida" —
+ * eso solo lo sabe Wasi. Esta seccion cruza los retiros que ya detecta el
+ * sync (property_change_events change_type='removed') con las
+ * publicaciones activas de esa propiedad, para avisar si sigue habiendo
+ * publicidad corriendo sobre algo que ya no esta disponible.
+ */
+function activePromoBadge(statuses: PublicationStatus[]): { label: string; color: string } {
+  if (statuses.length === 0) return { label: "Sin publicidad asociada", color: "bg-slate-100 text-slate-500" };
+  if (statuses.some((s) => s === "published" || s === "partially_published")) {
+    return { label: "Publicado — revisar", color: "bg-red-100 text-red-700" };
+  }
+  if (statuses.some((s) => s === "scheduled" || s === "publishing")) {
+    return { label: "Programado — revisar", color: "bg-amber-100 text-amber-700" };
+  }
+  if (statuses.some((s) => s === "approved" || s === "draft")) {
+    return { label: "Pendiente de aprobar", color: "bg-blue-100 text-blue-700" };
+  }
+  return { label: "Sin publicidad activa", color: "bg-slate-100 text-slate-500" };
 }
 
 export default async function AnalyticsPage() {
@@ -58,6 +93,32 @@ export default async function AnalyticsPage() {
     totals.comments += m.comments ?? 0;
     totals.shares += m.shares ?? 0;
     totals.clicks += m.clicks ?? 0;
+  }
+
+  // Propiedades vendidas/retiradas de Wasi (change_type='removed', detectado por el sync)
+  // cruzadas con sus publicaciones activas, para avisar si hay que bajar un anuncio.
+  const { data: removedEventsData } = await supabase
+    .from("property_change_events")
+    .select("id, property_id, created_at, properties(ref,titulo,zona,ciudad,precio,operacion)")
+    .eq("org_id", orgId)
+    .eq("change_type", "removed")
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  const removedEvents = (removedEventsData || []) as unknown as RemovedEventRow[];
+  const removedPropertyIds = removedEvents.map((e) => e.property_id).filter((id): id is string => Boolean(id));
+
+  const publicationsByProperty = new Map<string, RelatedPublicationRow[]>();
+  if (removedPropertyIds.length > 0) {
+    const { data: relatedPublications } = await supabase
+      .from("publications")
+      .select("id, property_id, status")
+      .in("property_id", removedPropertyIds)
+      .neq("status", "archived");
+    for (const p of (relatedPublications || []) as RelatedPublicationRow[]) {
+      if (!p.property_id) continue;
+      publicationsByProperty.set(p.property_id, [...(publicationsByProperty.get(p.property_id) || []), p]);
+    }
   }
 
   return (
@@ -116,6 +177,59 @@ export default async function AnalyticsPage() {
           </table>
         </div>
       )}
+
+      <section>
+        <h2 className="mb-1 text-lg font-semibold text-slate-900">Propiedades vendidas / retiradas de Wasi</h2>
+        <p className="mb-3 text-sm text-slate-500">
+          Meta no sabe si una propiedad se vendió — esto viene del sync con Wasi. Si una propiedad retirada sigue con
+          publicidad activa, bájala desde su Content Studio.
+        </p>
+        {removedEvents.length === 0 ? (
+          <p className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
+            Ninguna propiedad se ha retirado de Wasi todavía (o el sync no se ha ejecutado).
+          </p>
+        ) : (
+          <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+                  <th className="px-4 py-3">Propiedad</th>
+                  <th className="px-4 py-3">Retirada</th>
+                  <th className="px-4 py-3">Publicidad</th>
+                </tr>
+              </thead>
+              <tbody>
+                {removedEvents.map((e) => {
+                  const related = e.property_id ? publicationsByProperty.get(e.property_id) || [] : [];
+                  const badge = activePromoBadge(related.map((r) => r.status));
+                  const firstActive = related[0];
+                  return (
+                    <tr key={e.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
+                      <td className="px-4 py-3">
+                        <p className="font-medium text-slate-900">{e.properties?.titulo || "Propiedad sin título"}</p>
+                        <p className="text-xs text-slate-500">
+                          {e.properties?.ref} {e.properties?.zona ? `· ${e.properties.zona}` : ""}{" "}
+                          {e.properties?.precio ? `· ${e.properties.precio}` : ""}
+                        </p>
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">{new Date(e.created_at).toLocaleDateString("es-CO")}</td>
+                      <td className="px-4 py-3">
+                        {firstActive ? (
+                          <Link href={`/marketing/publicaciones/${firstActive.id}`} className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${badge.color} hover:underline`}>
+                            {badge.label} ({PUBLICATION_STATUS_LABELS[firstActive.status]})
+                          </Link>
+                        ) : (
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${badge.color}`}>{badge.label}</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </div>
   );
 }
