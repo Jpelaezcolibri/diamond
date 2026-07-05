@@ -8,9 +8,10 @@ Guía para Claude Code al trabajar en este repositorio.
 
 - **Bot** (raíz): Node.js + Express + Claude SDK. Deploy: Railway.
 - **CRM** (`crm/`): Next.js 16 + React 19 + Shadcn/ui + Tailwind 4. Deploy: Vercel (root directory `crm/`).
+- **DMAP** (`dmap/`): microservicio de marketing automation ("Diamond Growth Engine") — Node 22 + TypeScript + Fastify + BullMQ/Redis. Deploy: Railway (segundo servicio, root directory `dmap/`). En construcción por work packages, ver [dmap/ARCHITECTURE.md](dmap/ARCHITECTURE.md).
 - **Datos**: Supabase compartida (única fuente de verdad). Sin `SUPABASE_URL` el bot corre en modo DEMO (memoria, se pierde al reiniciar).
 
-Leer [ARCHITECTURE.md](ARCHITECTURE.md) (bot) y [crm/ARCHITECTURE.md](crm/ARCHITECTURE.md) (CRM) antes de cambios estructurales.
+Leer [ARCHITECTURE.md](ARCHITECTURE.md) (bot), [crm/ARCHITECTURE.md](crm/ARCHITECTURE.md) (CRM) y [dmap/ARCHITECTURE.md](dmap/ARCHITECTURE.md) (DMAP) antes de cambios estructurales.
 
 ## Comandos
 
