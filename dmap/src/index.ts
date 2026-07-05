@@ -2,7 +2,8 @@ import { env } from "./config/env.js";
 import { logger } from "./lib/logger.js";
 import { buildServer } from "./server.js";
 import { startSyncWorker } from "./queue/workers/sync.worker.js";
-import { reconcileSyncSchedules } from "./scheduler/schedules.js";
+import { startTokenRefreshWorker } from "./queue/workers/token-refresh.worker.js";
+import { reconcileSyncSchedules, reconcileTokenRefreshSchedules } from "./scheduler/schedules.js";
 
 async function main() {
   const app = buildServer();
@@ -12,18 +13,22 @@ async function main() {
   // solo se pierde el procesamiento en background — mismo principio de
   // degradacion elegante que el bot en modo DEMO sin Supabase.
   let syncWorker: Awaited<ReturnType<typeof startSyncWorker>> | null = null;
+  let tokenRefreshWorker: Awaited<ReturnType<typeof startTokenRefreshWorker>> | null = null;
   try {
     syncWorker = startSyncWorker();
+    tokenRefreshWorker = startTokenRefreshWorker();
     await reconcileSyncSchedules();
-    logger.info("Cola y scheduler de sync inicializados");
+    await reconcileTokenRefreshSchedules();
+    logger.info("Colas y schedulers inicializados (sync, token-refresh)");
   } catch (err) {
-    logger.warn({ err }, "No se pudo inicializar la cola de sync (¿Redis no disponible?) — el API sigue activo");
+    logger.warn({ err }, "No se pudieron inicializar las colas (¿Redis no disponible?) — el API sigue activo");
   }
 
   const shutdown = async (signal: string) => {
     logger.info({ signal }, "Apagando dmap...");
     await app.close();
     if (syncWorker) await syncWorker.close();
+    if (tokenRefreshWorker) await tokenRefreshWorker.close();
     process.exit(0);
   };
   process.on("SIGINT", () => void shutdown("SIGINT"));

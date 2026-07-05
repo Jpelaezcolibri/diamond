@@ -32,3 +32,18 @@ export const STYLE_VARIANTS = [
 ] as const;
 
 export type StyleVariant = (typeof STYLE_VARIANTS)[number];
+
+/** Scopes adicionales sobre la Meta App existente de WhatsApp — ver dmap/ARCHITECTURE.md #8. */
+export const META_OAUTH_SCOPES = [
+  "pages_show_list",
+  "pages_manage_posts",
+  "pages_read_engagement",
+  "read_insights",
+  "instagram_basic",
+  "instagram_content_publish",
+  "instagram_manage_insights",
+  "business_management"
+] as const;
+
+/** Dias de vida restante del user token por debajo de los cuales se re-exchange proactivamente (~60d de vida total). */
+export const META_TOKEN_REFRESH_THRESHOLD_DAYS = 15;
