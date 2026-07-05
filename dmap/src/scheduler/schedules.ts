@@ -1,6 +1,6 @@
 import { getQueue, QUEUE_NAMES, jobIds } from "../queue/queues.js";
 import { listOrgIdsWithMarketingEnabled, getOrgMarketingSettings } from "../repositories/settings.repo.js";
-import { TOKEN_REFRESH_INTERVAL_DAYS } from "../config/constants.js";
+import { METRICS_INTERVAL_HOURS, TOKEN_REFRESH_INTERVAL_DAYS } from "../config/constants.js";
 import { logger } from "../lib/logger.js";
 
 /**
@@ -42,5 +42,23 @@ export async function reconcileTokenRefreshSchedules(): Promise<void> {
       }
     );
     logger.info({ orgId }, "Token-refresh repetible registrado");
+  }
+}
+
+/** Reconciliar la recoleccion de metricas cada METRICS_INTERVAL_HOURS (ver ARCHITECTURE.md #5). */
+export async function reconcileMetricsSchedules(): Promise<void> {
+  const orgIds = await listOrgIdsWithMarketingEnabled();
+  const queue = getQueue(QUEUE_NAMES.metrics);
+
+  for (const orgId of orgIds) {
+    await queue.add(
+      "metrics",
+      { orgId },
+      {
+        jobId: jobIds.metrics(orgId),
+        repeat: { every: METRICS_INTERVAL_HOURS * 60 * 60_000 }
+      }
+    );
+    logger.info({ orgId }, "Metrics repetible registrado");
   }
 }

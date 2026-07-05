@@ -21,6 +21,7 @@ export default async function MarketingLayout({ children }: { children: React.Re
         <NavLink href="/marketing/calendario">Calendario</NavLink>
         <NavLink href="/marketing/cola">Cola</NavLink>
         <NavLink href="/marketing/plantillas">Plantillas</NavLink>
+        <NavLink href="/marketing/analytics">Analytics</NavLink>
         <NavLink href="/marketing/configuracion">Configuración</NavLink>
       </nav>
       {children}
