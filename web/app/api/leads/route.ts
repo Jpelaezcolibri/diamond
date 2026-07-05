@@ -122,7 +122,15 @@ export async function POST(request: Request) {
     if (error) console.error("[REF] Error insertando lead");
   }
 
-  await trackLead({ context: values.context, propertyRef: values.propertyRef });
+  await trackLead({
+    context: values.context,
+    propertyRef: values.propertyRef || undefined,
+    eventId: values.eventId || undefined,
+    phone,
+    clientIp: clientIp(request),
+    userAgent: request.headers.get("user-agent") ?? undefined,
+    sourceUrl: request.headers.get("referer") ?? undefined,
+  });
 
   return NextResponse.json({ ok: true, whatsappUrl, saved: true });
 }

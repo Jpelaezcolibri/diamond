@@ -7,6 +7,7 @@ import { ThemeProvider } from "@/components/shared/theme-provider";
 import { Header } from "@/components/navigation/header";
 import { Footer } from "@/components/layout/footer";
 import { WhatsAppFab } from "@/components/navigation/whatsapp-fab";
+import { MetaPixel } from "@/components/shared/meta-pixel";
 import { generalWhatsAppUrl } from "@/lib/whatsapp";
 import { organizationJsonLd } from "@/lib/seo";
 import { JsonLd } from "@/components/shared/json-ld";
@@ -38,6 +39,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <style id="ref-theme" dangerouslySetInnerHTML={{ __html: fonts.css + buildThemeCss(config.theme) }} />
       </head>
       <body className="flex min-h-svh flex-col">
+        {config.integrations.metaPixelId ? <MetaPixel pixelId={config.integrations.metaPixelId} /> : null}
         <JsonLd data={organizationJsonLd(config)} />
         <NuqsAdapter>
           <ThemeProvider mode={config.theme.darkMode}>

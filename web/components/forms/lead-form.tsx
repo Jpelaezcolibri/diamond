@@ -5,6 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowRight, CheckCircle2, LoaderCircle } from "lucide-react";
 import { LeadFormSchema, type LeadFormValues } from "@/lib/lead-schema";
+import { trackPixelLead } from "@/lib/pixel";
 import { Button } from "@/components/design-system/button";
 import { Input, NativeSelect } from "@/components/design-system/input";
 import { cn } from "@/lib/utils";
@@ -68,14 +69,17 @@ export function LeadForm({ context, propertyRef, className }: LeadFormProps) {
 
   async function onSubmit(values: LeadFormValues) {
     setStatus("sending");
+    // Mismo event_id para el Pixel (cliente) y CAPI (servidor): Meta deduplica.
+    const eventId = crypto.randomUUID();
     try {
       const res = await fetch("/api/leads", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...values, _ts: renderedAt.current }),
+        body: JSON.stringify({ ...values, eventId, _ts: renderedAt.current }),
       });
       const data = (await res.json()) as { ok: boolean; whatsappUrl?: string };
       if (!res.ok || !data.ok) throw new Error("request failed");
+      trackPixelLead(eventId, { context, propertyRef });
       setStatus("success");
       if (data.whatsappUrl) {
         window.location.href = data.whatsappUrl;

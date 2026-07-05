@@ -10,13 +10,13 @@ export const diamond = {
 
   brand: {
     name: "Diamond Inmobiliaria",
-    tagline: "Propiedades seleccionadas en Medellín y el resto de Antioquia",
+    tagline: "Propiedades seleccionadas en Medellín y toda Colombia",
     logo: { light: "/logo.png", dark: "/logo.png", alt: "Logo Diamond Inmobiliaria" },
     monogram: "D",
-    // Inventario real: Medellín/Valle de Aburrá (Envigado, Sabaneta, La Estrella,
-    // Caldas), oriente (Llano Grande), occidente (Urrao, Sopetrán, San Jerónimo)
-    // y un outlier en Manizales — no limitar el copy al sur del Valle de Aburrá.
-    city: "Medellín y Antioquia",
+    // Marca con alcance nacional (decisión comercial del propietario). El
+    // inventario hoy se concentra en Antioquia (Medellín/Valle de Aburrá,
+    // oriente y occidente), con presencia en otras zonas del país.
+    city: "Medellín y toda Colombia",
     country: "Colombia",
   },
 
@@ -52,15 +52,15 @@ export const diamond = {
 
   seo: {
     titleTemplate: "%s · Diamond Inmobiliaria",
-    defaultTitle: "Diamond Inmobiliaria · Propiedades en Medellín y Antioquia",
+    defaultTitle: "Diamond Inmobiliaria · Propiedades en Medellín y toda Colombia",
     description:
-      "Casas, apartamentos y fincas seleccionadas en Medellín, el Valle de Aburrá, oriente y occidente antioqueño. Atención inmediata por WhatsApp.",
+      "Casas, apartamentos y fincas seleccionadas en Medellín y toda Colombia. Propiedades verificadas y atención inmediata por WhatsApp.",
     keywords: [
       "inmobiliaria Medellín",
-      "inmobiliaria Antioquia",
-      "apartamentos en venta Envigado",
-      "casas en venta Sabaneta",
-      "finca raíz Antioquia",
+      "inmobiliaria Colombia",
+      "finca raíz Colombia",
+      "apartamentos en venta Medellín",
+      "casas en venta Colombia",
     ],
     baseUrl: "https://dimanondweb.vercel.app",
   },
@@ -72,9 +72,9 @@ export const diamond = {
         type: "hero",
         enabled: true,
         eyebrow: "Diamond Inmobiliaria",
-        title: "Encuentra tu próximo hogar en Medellín y toda Antioquia",
+        title: "El hogar que mereces, en toda Colombia",
         subtitle:
-          "Propiedades verificadas en el Valle de Aburrá, oriente y occidente antioqueño. Te acompañamos de la búsqueda a las llaves.",
+          "Desde Medellín para todo el país: propiedades verificadas y acompañamiento real en cada paso.",
         image:
           "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=2400&auto=format&fit=crop",
         imageAlt: "Casa moderna con jardín al atardecer",
@@ -97,7 +97,7 @@ export const diamond = {
         enabled: true,
         eyebrow: "Selección",
         title: "Propiedades destacadas",
-        subtitle: "Una curaduría de nuestro inventario en Medellín y Antioquia.",
+        subtitle: "Una curaduría de nuestro inventario en Medellín y toda Colombia.",
         count: 6,
       },
       {
@@ -190,7 +190,7 @@ export const diamond = {
 
   catalog: {
     title: "Propiedades",
-    subtitle: "Inventario disponible en Medellín, el Valle de Aburrá y el resto de Antioquia.",
+    subtitle: "Inventario disponible en Medellín y toda Colombia.",
     pageSize: 12,
     defaultOperacion: "todas",
   },
@@ -222,5 +222,6 @@ export const diamond = {
   },
 
   features: { map: false, aiAssistant: false, comparator: false },
-  integrations: {},
+  // Pixel ID via env: se pega en Vercel sin tocar codigo. Vacio = Pixel apagado.
+  integrations: { metaPixelId: process.env.NEXT_PUBLIC_META_PIXEL_ID },
 } satisfies TenantConfigInput;

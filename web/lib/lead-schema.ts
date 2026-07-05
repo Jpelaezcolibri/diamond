@@ -24,6 +24,13 @@ export const LeadFormSchema = z.object({
     .or(z.literal("")),
   /** Contexto de origen para saber que formulario convirtio. */
   context: z.enum(["home", "property", "seller"]).default("home"),
+  /** event_id compartido Pixel <-> CAPI (dedup). UUID generado en el cliente. */
+  eventId: z
+    .string()
+    .trim()
+    .regex(/^[A-Za-z0-9-]{8,64}$/)
+    .optional()
+    .or(z.literal("")),
   /** Honeypot: los humanos no lo ven; si llega con valor, es un bot.
    *  No se valida con max(0): el handler responde 200 fake, sin señal al bot. */
   _gotcha: z.string().max(500).optional(),

@@ -32,6 +32,8 @@ experiencia completa.
 | `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Lectura pública del catálogo (RLS `disponible=true`). |
 | `SUPABASE_SERVICE_ROLE_KEY` | SOLO servidor — escribe leads en `/api/leads`. |
 | `TENANT_ORG_ID` | UUID de `organizations.id` del tenant (Diamond: `1f502f7c-8465-4d7c-be05-ebf353a1c035`). |
+| `NEXT_PUBLIC_META_PIXEL_ID` | ID del Pixel de Meta. Vacío = tracking apagado (no-op). |
+| `META_CAPI_ACCESS_TOKEN` | Token de Conversions API (Events Manager → Configuración). SOLO servidor. |
 
 ## Puesta en producción (ya ejecutado para Diamond)
 
