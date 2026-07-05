@@ -28,7 +28,7 @@ export const diamond = {
       sellerMessage: "Hola, quiero vender mi propiedad con ustedes",
     },
     socials: {
-      instagram: "https://www.instagram.com/diamontinvestlux/",
+      instagram: "https://www.instagram.com/diamondinmobiliarialux/",
       facebook: "https://web.facebook.com/profile.php?id=61590636426343",
     },
   },
