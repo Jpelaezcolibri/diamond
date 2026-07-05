@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { STYLE_VARIANT_LABELS } from "@/lib/marketing";
+import Link from "next/link";
+import { PUBLICATION_STATUS_LABELS, PUBLICATION_STATUS_COLORS, STYLE_VARIANT_LABELS, type PublicationStatus } from "@/lib/marketing";
 
 const STYLE_VARIANTS = Object.keys(STYLE_VARIANT_LABELS);
 
@@ -25,6 +26,8 @@ export default function NovedadCard({
   zona,
   precio,
   createdAt,
+  existingPublication,
+  readOnly,
 }: {
   orgId: string;
   propertyId: string | null;
@@ -34,6 +37,10 @@ export default function NovedadCard({
   zona?: string | null;
   precio?: string | null;
   createdAt: string;
+  /** Si la propiedad ya tiene una publicacion activa (no archivada), se muestra en vez del boton "Generar" — evita duplicar contenido. */
+  existingPublication?: { id: string; status: string } | null;
+  /** Novedades informativas (ej. retiradas del catalogo) no ofrecen generar contenido nuevo. */
+  readOnly?: boolean;
 }) {
   const router = useRouter();
   const [styleVariant, setStyleVariant] = useState("lujo");
@@ -52,7 +59,7 @@ export default function NovedadCard({
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(body.error || body.message || "No se pudo generar la publicación");
+        setError(body.message || body.error || "No se pudo generar la publicación");
         return;
       }
       router.push(`/marketing/publicaciones/${body.publicationId}`);
@@ -78,26 +85,41 @@ export default function NovedadCard({
 
       {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
 
-      <div className="mt-3 flex items-center gap-2">
-        <select
-          value={styleVariant}
-          onChange={(e) => setStyleVariant(e.target.value)}
-          className="rounded-lg border border-slate-300 px-2 py-1 text-xs"
-        >
-          {STYLE_VARIANTS.map((v) => (
-            <option key={v} value={v}>
-              {STYLE_VARIANT_LABELS[v]}
-            </option>
-          ))}
-        </select>
-        <button
-          onClick={handleGenerate}
-          disabled={loading || !propertyId}
-          className="rounded-lg bg-[#c9a24b] px-3 py-1 text-xs font-medium text-[#0b1526] transition hover:bg-[#c9a24b]/90 disabled:opacity-50"
-        >
-          {loading ? "Generando…" : "Generar publicación"}
-        </button>
-      </div>
+      {readOnly ? null : existingPublication ? (
+        <div className="mt-3 flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2">
+          <span
+            className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+              PUBLICATION_STATUS_COLORS[existingPublication.status as PublicationStatus] ?? "bg-slate-100 text-slate-700"
+            }`}
+          >
+            {PUBLICATION_STATUS_LABELS[existingPublication.status as PublicationStatus] ?? existingPublication.status}
+          </span>
+          <Link href={`/marketing/publicaciones/${existingPublication.id}`} className="text-xs font-medium text-[#0b1526] underline">
+            Ver publicación
+          </Link>
+        </div>
+      ) : (
+        <div className="mt-3 flex items-center gap-2">
+          <select
+            value={styleVariant}
+            onChange={(e) => setStyleVariant(e.target.value)}
+            className="rounded-lg border border-slate-300 px-2 py-1 text-xs"
+          >
+            {STYLE_VARIANTS.map((v) => (
+              <option key={v} value={v}>
+                {STYLE_VARIANT_LABELS[v]}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={handleGenerate}
+            disabled={loading || !propertyId}
+            className="rounded-lg bg-[#c9a24b] px-3 py-1 text-xs font-medium text-[#0b1526] transition hover:bg-[#c9a24b]/90 disabled:opacity-50"
+          >
+            {loading ? "Generando…" : "Generar publicación"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { getDefaultOrgId, PUBLICATION_STATUS_LABELS, type PublicationRow, type PropertyChangeEventRow, type SyncRunRow } from "@/lib/marketing";
-import NovedadCard from "@/components/marketing/novedad-card";
+import NovedadesSection from "@/components/marketing/novedades-section";
 import SyncButton from "@/components/marketing/sync-button";
 import Link from "next/link";
 
@@ -23,19 +23,44 @@ export default async function MarketingDashboardPage() {
     return <p className="text-slate-500">No hay ninguna organización configurada todavía.</p>;
   }
 
-  const [{ data: novedades }, { count: novedadesTotal }, { data: drafts }, { data: proximas }, { data: lastSync }] = await Promise.all([
+  const novedadSelect = "*, properties(ref,titulo,zona,ciudad,operacion,precio,images)";
+  const [
+    { data: pendientes },
+    { count: pendientesTotal },
+    { data: retiradas },
+    { count: retiradasTotal },
+    { data: drafts },
+    { data: proximas },
+    { data: lastSync },
+  ] = await Promise.all([
     supabase
       .from("property_change_events")
-      .select("*, properties(ref,titulo,zona,ciudad,operacion,precio,images)")
+      .select(novedadSelect)
       .eq("org_id", orgId)
       .eq("processed", false)
+      .neq("change_type", "removed")
       .order("created_at", { ascending: false })
       .limit(20),
     supabase
       .from("property_change_events")
       .select("id", { count: "exact", head: true })
       .eq("org_id", orgId)
-      .eq("processed", false),
+      .eq("processed", false)
+      .neq("change_type", "removed"),
+    supabase
+      .from("property_change_events")
+      .select(novedadSelect)
+      .eq("org_id", orgId)
+      .eq("processed", false)
+      .eq("change_type", "removed")
+      .order("created_at", { ascending: false })
+      .limit(20),
+    supabase
+      .from("property_change_events")
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", orgId)
+      .eq("processed", false)
+      .eq("change_type", "removed"),
     supabase
       .from("publications")
       .select("*, properties(ref,titulo)")
@@ -53,12 +78,29 @@ export default async function MarketingDashboardPage() {
     supabase.from("sync_runs").select("*").eq("org_id", orgId).order("started_at", { ascending: false }).limit(1).maybeSingle(),
   ]);
 
-  const novedadesRows = (novedades || []) as (PropertyChangeEventRow & {
+  type NovedadWithProperty = PropertyChangeEventRow & {
     properties: { ref: string; titulo: string; zona: string | null; ciudad: string | null; operacion: string | null; precio: string | null; images: string[] } | null;
-  })[];
+  };
+  const pendientesRows = (pendientes || []) as NovedadWithProperty[];
+  const retiradasRows = (retiradas || []) as NovedadWithProperty[];
   const draftRows = (drafts || []) as (PublicationRow & { properties: { ref: string; titulo: string } | null })[];
   const proximasRows = (proximas || []) as (PublicationRow & { properties: { ref: string; titulo: string } | null })[];
   const syncRun = lastSync as SyncRunRow | null;
+
+  // Propiedades con novedad "pendiente" que ya tienen una publicacion activa
+  // (cualquier estado menos "archived"): evita el boton "Generar publicacion"
+  // para no duplicar contenido de una propiedad que ya se esta promocionando.
+  const pendientePropertyIds = [...new Set(pendientesRows.map((n) => n.property_id).filter((id): id is string => Boolean(id)))];
+  const { data: activePublications } =
+    pendientePropertyIds.length > 0
+      ? await supabase
+          .from("publications")
+          .select("id,property_id,status")
+          .eq("org_id", orgId)
+          .in("property_id", pendientePropertyIds)
+          .neq("status", "archived")
+      : { data: [] as { id: string; property_id: string; status: string }[] };
+  const publicationByPropertyId = new Map((activePublications || []).map((p) => [p.property_id, { id: p.id, status: p.status }]));
 
   return (
     <div className="space-y-8">
@@ -79,37 +121,32 @@ export default async function MarketingDashboardPage() {
         <SyncButton orgId={orgId} />
       </section>
 
-      <section>
-        <div className="mb-3 flex items-baseline justify-between">
-          <h2 className="text-lg font-semibold text-slate-900">Novedades del inventario</h2>
-          {(novedadesTotal ?? 0) > novedadesRows.length && (
-            <span className="text-xs text-slate-500">
-              Mostrando las {novedadesRows.length} más recientes de {novedadesTotal} pendientes
-            </span>
-          )}
-        </div>
-        {novedadesRows.length === 0 ? (
-          <p className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
-            Sin novedades pendientes. Cuando Wasi tenga una propiedad nueva o un cambio de precio, aparecerá aquí.
-          </p>
-        ) : (
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            {novedadesRows.map((n) => (
-              <NovedadCard
-                key={n.id}
-                orgId={orgId}
-                propertyId={n.property_id}
-                changeLabel={CHANGE_TYPE_LABELS[n.change_type] || n.change_type}
-                propertyRef={n.properties?.ref || "—"}
-                titulo={n.properties?.titulo || "Propiedad sin título"}
-                zona={n.properties?.zona}
-                precio={n.properties?.precio}
-                createdAt={n.created_at}
-              />
-            ))}
-          </div>
-        )}
-      </section>
+      <NovedadesSection
+        orgId={orgId}
+        pendientes={pendientesRows.map((n) => ({
+          id: n.id,
+          propertyId: n.property_id,
+          changeLabel: CHANGE_TYPE_LABELS[n.change_type] || n.change_type,
+          propertyRef: n.properties?.ref || "—",
+          titulo: n.properties?.titulo || "Propiedad sin título",
+          zona: n.properties?.zona ?? null,
+          precio: n.properties?.precio ?? null,
+          createdAt: n.created_at,
+          existingPublication: n.property_id ? publicationByPropertyId.get(n.property_id) ?? null : null,
+        }))}
+        pendientesTotal={pendientesTotal ?? 0}
+        retiradas={retiradasRows.map((n) => ({
+          id: n.id,
+          propertyId: n.property_id,
+          changeLabel: CHANGE_TYPE_LABELS[n.change_type] || n.change_type,
+          propertyRef: n.properties?.ref || "—",
+          titulo: n.properties?.titulo || "Propiedad sin título",
+          zona: n.properties?.zona ?? null,
+          precio: n.properties?.precio ?? null,
+          createdAt: n.created_at,
+        }))}
+        retiradasTotal={retiradasTotal ?? 0}
+      />
 
       <section>
         <h2 className="mb-3 text-lg font-semibold text-slate-900">Borradores pendientes de aprobación</h2>
