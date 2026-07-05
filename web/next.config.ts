@@ -6,13 +6,15 @@ import path from "node:path";
 // (Next inyecta el bootstrap de hidratación inline; el theme del tenant y
 // framer-motion inyectan estilos inline). Aun así bloquea scripts externos,
 // framing y exfiltración. Upgrade futuro: CSP basada en nonces.
+// Meta Pixel: script desde connect.facebook.net; el evento viaja como imagen
+// (facebook.com/tr) o beacon/XHR, por eso va en img-src Y connect-src.
 const csp = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://connect.facebook.net",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https://*.wasi.co https://images.unsplash.com",
+  "img-src 'self' data: blob: https://*.wasi.co https://images.unsplash.com https://www.facebook.com",
   "font-src 'self' data:",
-  "connect-src 'self' https://*.supabase.co",
+  "connect-src 'self' https://*.supabase.co https://www.facebook.com https://connect.facebook.net",
   "form-action 'self'",
   "frame-ancestors 'none'",
   "base-uri 'self'",
