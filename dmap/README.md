@@ -19,7 +19,7 @@ Ver [.env.example](.env.example). Todas son requeridas (falla al arrancar si fal
 
 ## Estado (Fase 1 — completa)
 
-Los 10 work packages de Fase 1 (ver [ARCHITECTURE.md §15](ARCHITECTURE.md#15-plan-de-implementacion-fase-1)) están implementados y probados (typecheck + build + ~97 tests unitarios/integración en verde):
+Los 10 work packages de Fase 1 (ver [ARCHITECTURE.md §15](ARCHITECTURE.md#15-plan-de-implementacion-fase-1)) están implementados y probados (typecheck + build + 112 tests unitarios/integración en verde):
 
 | WP | Contenido |
 |---|---|
@@ -37,7 +37,7 @@ Los 10 work packages de Fase 1 (ver [ARCHITECTURE.md §15](ARCHITECTURE.md#15-pl
 
 ### Pendientes externos (no bloquean la Fase 1)
 
-- **Credenciales de la API oficial de Wasi** (`id_company` + `wasi_token`): mientras no lleguen, `org_marketing_settings.sync_source` se mantiene en `wasi_public` (scraper de páginas públicas, ya funcional).
+- ~~Credenciales de la API oficial de Wasi~~ — **obtenidas y verificadas el 2026-07-05** contra la cuenta real de Diamond ("Paraíso Inmobiliario", `id_company=12212160`, 96 propiedades). `wasi-api.source.ts` ya refleja la forma real de la respuesta (muy distinta de lo asumido antes de tener acceso — ver ARCHITECTURE.md §5). Falta un solo paso para activarla: guardar las credenciales desde `/marketing/configuracion` en el CRM (se cifran server-side, `PUT /api/v1/settings`) y cambiar `syncSource` a `wasi_api`.
 - **App Review de Meta**: solo se necesita para onboardear inmobiliarias terceras (Diamond funciona en modo desarrollador de la app, sin necesidad de review).
 - **Migración `db/migrations/2026-07-05_dmap.sql` aplicada en Supabase**: correrla en el SQL Editor antes de usar el sistema contra datos reales (nunca se aplica automáticamente, mismo criterio que el resto de `db/migrations/`).
 - **Redis provisionado** (addon de Railway): sin él, el API sigue respondiendo pero la cola/scheduler no procesan jobs (degradación elegante, ver `src/index.ts`).

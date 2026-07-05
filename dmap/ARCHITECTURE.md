@@ -128,7 +128,7 @@ dmap/
 │   │   └── registry.ts            # plataforma → adapter
 │   ├── sync/
 │   │   ├── wasi-source.ts         # interfaz WasiSource → CanonicalProperty
-│   │   ├── wasi-api.source.ts     # api.wasi.co/v1 (pendiente id_company + wasi_token)
+│   │   ├── wasi-api.source.ts     # api.wasi.co/v1 (credenciales reales verificadas 2026-07-05)
 │   │   ├── wasi-public.source.ts  # port TS de scripts/sync_wasi_public.py (fallback activo)
 │   │   └── hash.ts                # hashing canónico de contenido e imágenes
 │   ├── ai/
@@ -466,9 +466,9 @@ sequenceDiagram
 **Detalles clave:**
 
 - **Dos fuentes detrás de la misma interfaz** `WasiSource`:
-  - `wasi-api.source.ts` — API oficial: `GET https://api.wasi.co/v1/property/search?id_company=…&wasi_token=…&take=100&skip=…` (paginado) + `GET /property/get/{id}` para detalle. **Credenciales pendientes del cliente** (`id_company` + `wasi_token`, cifradas en `org_marketing_settings`).
-  - `wasi-public.source.ts` — port TypeScript del scraper actual [scripts/sync_wasi_public.py](../scripts/sync_wasi_public.py): fetch de la página pública por `properties.link`, extracción de precio/título/operación, decodificación base64 de las URLs `image.wasi.co/[b64]` y re-encode a 1600px. **Es la fuente activa por defecto** — nada de la Fase 1 espera por las credenciales.
-  - Se cambia de fuente flipping `org_marketing_settings.sync_source`, sin tocar código.
+  - `wasi-api.source.ts` — API oficial: `GET https://api.wasi.co/v1/property/search?id_company=…&wasi_token=…&take=100&skip=…` (paginado). **Credenciales reales obtenidas y verificadas 2026-07-05** contra la cuenta de producción de Diamond ("Paraíso Inmobiliario", `id_company=12212160`, 96 propiedades). La forma real de la respuesta difiere bastante de lo asumido antes de tener acceso: el payload es un objeto con las propiedades en llaves numéricas (`"0"`, `"1"`, …) más `total`/`status` como hermanos, no `{data:[...]}`; el precio/operación viene de `for_sale`/`for_rent` + `sale_price_label`/`rent_price_label`, no de un campo `operation`/`price` genérico; las fotos vienen en `galleries[0]` (un único objeto indexado por posición) con `url_original` como CDN directo sin necesidad de reconstruir el proxy de resize. `wasi-api.source.ts` ya refleja esta forma real, con tests contra un fixture capturado de la API (`test/unit/wasi-api-parsing.test.ts`).
+  - `wasi-public.source.ts` — port TypeScript del scraper actual [scripts/sync_wasi_public.py](../scripts/sync_wasi_public.py): fetch de la página pública por `properties.link`, extracción de precio/título/operación, decodificación base64 de las URLs `image.wasi.co/[b64]` y re-encode a 1600px. Fuente por defecto mientras `org_marketing_settings.sync_source` no se cambie a `wasi_api` — nada de la Fase 1 dependió de las credenciales para avanzar.
+  - Se cambia de fuente vía `PUT /api/v1/settings {syncSource}` (o desde `/marketing/configuracion` en el CRM), sin tocar código. Las credenciales (`id_company`+`wasi_token`) se envían por ese mismo endpoint y se cifran server-side antes de guardarse — nunca se guardan ni se devuelven en texto plano.
 - **Hashing**: `content_hash = sha256(canonicalJSON({precio, operacion, titulo, descripcion, disponible, area, habitaciones, banos, zona}))` con claves ordenadas. `images_hash = sha256(imageKeys.join('|'))` usando las **keys de imagen de Wasi**, no las URLs proxy (que embeben parámetros de tamaño y cambiarían sin que cambie la foto).
 - **Qué dispara generación automática**: solo `created` (y `photos_changed` si el flag está activo). Cambios de precio/estado **no** generan contenido solos: aparecen como "Novedades" en el Dashboard de Marketing y un humano decide "Generar publicación" con un click. Coherente con la regla "nunca sin aprobación".
 - Todo run queda en `sync_runs`; errores por propiedad no abortan el run (se acumulan en `stats.errors`).
@@ -798,7 +798,7 @@ LOG_LEVEL=info
 | **WP8** | CRM: sección Marketing completa + Content Studio | L | WP5–7 |
 | **WP9** | Analytics + README/runbook + demo E2E | M | posts de prueba publicados |
 
-Paralelizables tras WP1: WP2, WP3/4 y WP6. **Nada de la Fase 1 espera por las credenciales de Wasi ni por App Review.**
+Paralelizables tras WP1: WP2, WP3/4 y WP6. **Nada de la Fase 1 esperó por las credenciales de Wasi ni por App Review** (las credenciales de Wasi llegaron y se verificaron el 2026-07-05, después de completada la Fase 1; solo faltaba flippear `sync_source`).
 
 **Criterio de cierre de Fase 1** (demo end-to-end): (1) sync detecta propiedad nueva → aparece en Novedades; (2) "Generar publicación (lujo)" → draft en vivo; (3) Studio: editar copy, cambiar portada, regenerar como "inversionista"; (4) aprobar → programar +15 min a FB+IG; (5) la Cola pasa programado→publicando→publicado; (6) posts reales visibles en Facebook e Instagram; (7) al día siguiente Analytics muestra alcance/likes/comentarios.
 

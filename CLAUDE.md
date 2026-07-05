@@ -8,7 +8,7 @@ Guía para Claude Code al trabajar en este repositorio.
 
 - **Bot** (raíz): Node.js + Express + Claude SDK. Deploy: Railway.
 - **CRM** (`crm/`): Next.js 16 + React 19 + Shadcn/ui + Tailwind 4. Deploy: Vercel (root directory `crm/`).
-- **DMAP** (`dmap/`): microservicio de marketing automation ("Diamond Growth Engine") — Node 22 + TypeScript + Fastify + BullMQ/Redis. Deploy: Railway (segundo servicio, root directory `dmap/`). Fase 1 completa en código (WP0–WP9, ~97 tests); pendiente de deploy real (Redis, migración SQL, credenciales). Ver [dmap/ARCHITECTURE.md](dmap/ARCHITECTURE.md) y [dmap/README.md](dmap/README.md).
+- **DMAP** (`dmap/`): microservicio de marketing automation ("Diamond Growth Engine") — Node 22 + TypeScript + Fastify + BullMQ/Redis. Deploy: Railway (segundo servicio, root directory `dmap/`). Fase 1 completa en código (WP0–WP9, 112 tests); credenciales reales de la API de Wasi ya verificadas (2026-07-05). Pendiente de deploy real (Redis, migración SQL). Ver [dmap/ARCHITECTURE.md](dmap/ARCHITECTURE.md) y [dmap/README.md](dmap/README.md).
 - **Datos**: Supabase compartida (única fuente de verdad). Sin `SUPABASE_URL` el bot corre en modo DEMO (memoria, se pierde al reiniciar).
 
 Leer [ARCHITECTURE.md](ARCHITECTURE.md) (bot), [crm/ARCHITECTURE.md](crm/ARCHITECTURE.md) (CRM) y [dmap/ARCHITECTURE.md](dmap/ARCHITECTURE.md) (DMAP) antes de cambios estructurales.
@@ -76,5 +76,6 @@ Ver [.env.example](.env.example). Claves: `ANTHROPIC_API_KEY` (requerida), `SUPA
 - **Número producción Meta**: Diamond +57 304 4653609, phone_number_id `1218037454725710`, WABA `1702397800906189`, token permanente del System User `bot-admin`, webhook apuntando a Railway (override a nivel WABA vía API).
 - **Número de prueba Meta**: +1 555 637-5987, phone_number_id `1077632778765817`.
 - **Inventario**: 39 propiedades reales importadas del Excel Wasi (`scripts/import_excel.py`); precios/títulos se sincronizan con `python scripts/sync_wasi_public.py` (páginas públicas de info.wasi.co).
-- **Pendientes**: conexión API oficial de Wasi (`id_company` + `wasi_token`), teléfonos reales de asesores de arriendos/vehículos en tabla `advisors`, corregir en Wasi el precio de la ref 9921388 ($1.550.000 → $1.550.000.000), verificación de empresa en Meta.
+- **Pendientes**: teléfonos reales de asesores de arriendos/vehículos en tabla `advisors`, corregir en Wasi el precio de la ref 9921388 ($1.550.000 → $1.550.000.000), verificación de empresa en Meta.
+- **API oficial de Wasi**: credenciales reales obtenidas y verificadas (`id_company=12212160`, cuenta "Paraíso Inmobiliario", 96 propiedades). Para activarla en DMAP: guardarlas desde `/marketing/configuracion` en el CRM (se cifran server-side) y cambiar la fuente de sync a `wasi_api`.
 - **DMAP**: código de Fase 1 completo (ver `dmap/README.md`). Para ponerlo a correr de verdad falta: aplicar `db/migrations/2026-07-05_dmap.sql` en el SQL Editor de Supabase, crear el servicio en Railway (root directory `dmap/`) + addon de Redis, y completar la conexión OAuth con Meta desde `/marketing/configuracion` en el CRM.
