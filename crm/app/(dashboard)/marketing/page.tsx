@@ -88,7 +88,7 @@ export default async function MarketingDashboardPage() {
                 orgId={orgId}
                 propertyId={n.property_id}
                 changeLabel={CHANGE_TYPE_LABELS[n.change_type] || n.change_type}
-                ref={n.properties?.ref || "—"}
+                propertyRef={n.properties?.ref || "—"}
                 titulo={n.properties?.titulo || "Propiedad sin título"}
                 zona={n.properties?.zona}
                 precio={n.properties?.precio}

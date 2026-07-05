@@ -20,7 +20,7 @@ export default function NovedadCard({
   orgId,
   propertyId,
   changeLabel,
-  ref: propertyRef,
+  propertyRef,
   titulo,
   zona,
   precio,
@@ -29,7 +29,7 @@ export default function NovedadCard({
   orgId: string;
   propertyId: string | null;
   changeLabel: string;
-  ref: string;
+  propertyRef: string;
   titulo: string;
   zona?: string | null;
   precio?: string | null;
