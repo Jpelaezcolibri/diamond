@@ -2,6 +2,7 @@ import { getDefaultBrandProfile } from "../repositories/brand-profiles.repo.js";
 import type { BrandProfileRow } from "../repositories/types.js";
 
 export interface BrandProfile {
+  id: string | null;
   name: string;
   logoUrl: string | null;
   colors: { primary: string; accent: string; text: string };
@@ -11,6 +12,7 @@ export interface BrandProfile {
 
 /** Brand por defecto de Diamond — respaldo si brand_profiles aun no esta poblada para la org. */
 const DIAMOND_FALLBACK: BrandProfile = {
+  id: null,
   name: "Diamond",
   logoUrl: null,
   colors: { primary: "#0b1526", accent: "#c9a24b", text: "#ffffff" },
@@ -20,6 +22,7 @@ const DIAMOND_FALLBACK: BrandProfile = {
 
 function toBrandProfile(row: BrandProfileRow): BrandProfile {
   return {
+    id: row.id,
     name: row.name,
     logoUrl: row.logo_url,
     colors: row.colors,
