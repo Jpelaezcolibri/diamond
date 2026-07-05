@@ -1,17 +1,5 @@
-import { describe, expect, it, beforeAll } from "vitest";
-
-beforeAll(() => {
-  process.env.DMAP_API_KEY ??= "test-api-key-0123456789";
-  process.env.DMAP_ENCRYPTION_KEY ??= Buffer.alloc(32, 7).toString("base64");
-  process.env.REDIS_URL ??= "redis://localhost:6379";
-  process.env.SUPABASE_URL ??= "https://example.supabase.co";
-  process.env.SUPABASE_SERVICE_KEY ??= "service-key";
-  process.env.ANTHROPIC_API_KEY ??= "sk-ant-test";
-  process.env.META_APP_ID ??= "123456";
-  process.env.META_APP_SECRET ??= "secret";
-  process.env.DMAP_PUBLIC_URL ??= "http://localhost:3010";
-  process.env.CRM_URL ??= "http://localhost:3000";
-});
+import { describe, expect, it } from "vitest";
+import { PublicationService } from "../../src/services/publication.service.js";
 
 /** Fakes en memoria: el servicio no debe tocar la red en estos tests. */
 function makeFakes(initialStatus: string | null) {
@@ -38,7 +26,6 @@ function makeFakes(initialStatus: string | null) {
 
 describe("PublicationService.transition", () => {
   it("aplica una transicion valida y registra un evento", async () => {
-    const { PublicationService } = await import("../../src/services/publication.service.js");
     const fakes = makeFakes("draft");
     const service = new PublicationService(fakes.statusPort, fakes.eventsPort);
 
@@ -59,7 +46,6 @@ describe("PublicationService.transition", () => {
   });
 
   it("rechaza una transicion invalida y no escribe evento", async () => {
-    const { PublicationService } = await import("../../src/services/publication.service.js");
     const fakes = makeFakes("draft");
     const service = new PublicationService(fakes.statusPort, fakes.eventsPort);
 
@@ -69,7 +55,6 @@ describe("PublicationService.transition", () => {
   });
 
   it("rechaza si la publicacion no existe", async () => {
-    const { PublicationService } = await import("../../src/services/publication.service.js");
     const fakes = makeFakes(null);
     const service = new PublicationService(fakes.statusPort, fakes.eventsPort);
 
@@ -77,7 +62,6 @@ describe("PublicationService.transition", () => {
   });
 
   it("es el unico camino: dos transiciones consecutivas mantienen la auditoria completa", async () => {
-    const { PublicationService } = await import("../../src/services/publication.service.js");
     const fakes = makeFakes("draft");
     const service = new PublicationService(fakes.statusPort, fakes.eventsPort);
 

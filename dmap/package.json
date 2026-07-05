@@ -23,7 +23,6 @@
     "dotenv": "^16.6.1",
     "fastify": "^5.2.0",
     "fastify-type-provider-zod": "^4.0.2",
-    "ioredis": "^5.4.2",
     "pino": "^9.5.0",
     "pino-pretty": "^13.0.0",
     "satori": "^0.12.1",

@@ -3,6 +3,7 @@ import { env } from "./config/env.js";
 import { logger } from "./lib/logger.js";
 import { apiKeyAuth } from "./api/auth.js";
 import { healthRoutes } from "./api/health.js";
+import { syncRoutes } from "./api/sync.routes.js";
 
 export function buildServer() {
   const app = Fastify({
@@ -12,8 +13,9 @@ export function buildServer() {
   app.addHook("onRequest", apiKeyAuth);
 
   app.register(healthRoutes);
+  app.register(syncRoutes);
 
-  // Las rutas de negocio (publications, generation, connections, sync,
+  // Las rutas de negocio restantes (publications, generation, connections,
   // templates, brand) se registran incrementalmente en los WP siguientes,
   // cada una detras del middleware apiKeyAuth ya instalado arriba.
 
