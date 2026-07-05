@@ -186,4 +186,14 @@ describe("extractImages", () => {
     const raw = wasiApiPropertySchema.parse({ id_property: 3 });
     expect(extractImages(raw)).toEqual({ imageKeys: [], imageUrls: [] });
   });
+
+  it("con UNA sola foto, galleries[0] es la imagen directamente (sin indexado por posicion) — bug real encontrado en produccion 2026-07-05", () => {
+    const raw = wasiApiPropertySchema.parse({
+      id_property: 4,
+      galleries: [{ id: 555, filename: "unica.jpeg", position: 1, url_original: "https://images.wasi.co/inmuebles/unica.jpeg" }]
+    });
+    const { imageKeys, imageUrls } = extractImages(raw);
+    expect(imageUrls).toEqual(["https://images.wasi.co/inmuebles/unica.jpeg"]);
+    expect(imageKeys).toEqual(["555"]);
+  });
 });

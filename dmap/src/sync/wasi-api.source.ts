@@ -49,9 +49,13 @@ export const wasiApiPropertySchema = z
     city_label: z.string().nullable().optional(),
     link: z.string().nullable().optional(),
     main_image: wasiImageSchema.nullable().optional(),
-    // Peculiaridad de la API: `galleries` es un array con UN solo elemento,
-    // que a su vez es un objeto indexado por posicion ("0","1",...).
-    galleries: z.array(z.record(z.string(), wasiImageSchema)).optional()
+    // Peculiaridad de la API (inconsistente entre propiedades, verificado
+    // 2026-07-05): con 2+ fotos, `galleries[0]` es un objeto indexado por
+    // posicion ("0","1",...); con UNA sola foto, `galleries[0]` es el objeto
+    // de esa imagen directamente (sin el nivel de indexado). z.unknown() en
+    // el valor para aceptar ambas formas — la distincion real se hace en
+    // extractImages(), no aqui.
+    galleries: z.array(z.record(z.string(), z.unknown())).optional()
   })
   .passthrough();
 
@@ -85,14 +89,31 @@ export function normalizeOperacionYPrecio(p: WasiApiProperty): { operacion: "Ven
   return { operacion: null, precio: null };
 }
 
-/** `galleries[0]` es el (unico) contenedor indexado; se ordena por `position` y se usa `url_original` (CDN directo, sin proxy de resize). */
+function parseWasiImage(raw: unknown): WasiImage | null {
+  const parsed = wasiImageSchema.safeParse(raw);
+  return parsed.success ? parsed.data : null;
+}
+
+/**
+ * `galleries[0]` es el (unico) contenedor, pero su forma depende de cuantas
+ * fotos tiene la propiedad: con 2+, es un diccionario indexado por posicion
+ * ("0","1",...); con 1 sola, es la imagen misma (sin el nivel de indexado).
+ * Se distingue mirando si el contenedor tiene un `id` propio (numero/string):
+ * eso solo pasa en el caso de una imagen directa, nunca en un diccionario
+ * indexado por posicion. Se ordena por `position` y se usa `url_original`
+ * (CDN directo, sin proxy de resize).
+ */
 export function extractImages(p: WasiApiProperty): { imageKeys: string[]; imageUrls: string[] } {
-  const container = p.galleries?.[0];
-  const images: WasiImage[] = container
-    ? Object.values(container)
-    : p.main_image
-      ? [p.main_image]
-      : [];
+  const container = p.galleries?.[0] as Record<string, unknown> | undefined;
+  let images: WasiImage[] = [];
+
+  if (container) {
+    const isSingleImage = typeof container.id === "number" || typeof container.id === "string";
+    const rawImages = isSingleImage ? [container] : Object.values(container);
+    images = rawImages.map(parseWasiImage).filter((img): img is WasiImage => img !== null);
+  } else if (p.main_image) {
+    images = [p.main_image];
+  }
 
   const sorted = [...images].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
   const imageKeys = sorted.map((img) => (img.id != null ? String(img.id) : img.filename)).filter((k): k is string => Boolean(k));
