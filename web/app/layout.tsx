@@ -29,6 +29,9 @@ export const metadata: Metadata = {
     locale: "es_CO",
     type: "website",
   },
+  ...(config.integrations.metaDomainVerification
+    ? { other: { "facebook-domain-verification": config.integrations.metaDomainVerification } }
+    : {}),
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

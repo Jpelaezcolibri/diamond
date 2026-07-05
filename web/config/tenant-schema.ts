@@ -215,6 +215,8 @@ export const TenantConfigSchema = z.object({
   integrations: z
     .object({
       metaPixelId: z.string().optional(),
+      /** Contenido de <meta name="facebook-domain-verification">. Publico, fijo por tenant. */
+      metaDomainVerification: z.string().optional(),
     })
     .default({}),
 });

@@ -223,5 +223,9 @@ export const diamond = {
 
   features: { map: false, aiAssistant: false, comparator: false },
   // Pixel ID via env: se pega en Vercel sin tocar codigo. Vacio = Pixel apagado.
-  integrations: { metaPixelId: process.env.NEXT_PUBLIC_META_PIXEL_ID },
+  integrations: {
+    metaPixelId: process.env.NEXT_PUBLIC_META_PIXEL_ID,
+    // Verificacion del dominio diamondinmobiliaria.com en Meta (Vertice Studio).
+    metaDomainVerification: "42evdyqf11w2jr91ddlmomeih3d5so",
+  },
 } satisfies TenantConfigInput;
