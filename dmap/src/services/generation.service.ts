@@ -7,11 +7,12 @@ import { generateCopy, type CopywriterOutput } from "../ai/copywriter.js";
 import type { CopywriterPropertyInput } from "../ai/prompts/copywriter.v1.js";
 import { isGptImageConfigured } from "../ai/gpt-image.js";
 import { resolveBrandProfile, type BrandProfile } from "../creatives/brand.js";
+import { prepareCarouselPhoto } from "../creatives/compose.js";
 import { renderCreative, type CreativeInput } from "../creatives/renderer.js";
 import { generateAiCreative } from "../creatives/ai-engine.js";
 import { uploadCreative } from "../creatives/storage.js";
 import { getPropertyById, type PropertyRow } from "../repositories/properties.repo.js";
-import { createPublication, getPublicationById, updatePublicationContent } from "../repositories/publications.repo.js";
+import { createPublication, getPublicationById, updatePublicationContent, updatePublicationKind } from "../repositories/publications.repo.js";
 import { createPublicationAssets, type CreateAssetInput } from "../repositories/publication-assets.repo.js";
 import { recordPublicationEvent } from "../repositories/publication-events.repo.js";
 import { recordContentGeneration } from "../repositories/content-generations.repo.js";
@@ -240,6 +241,63 @@ export async function produceAsset(
   };
 }
 
+/** Deps inyectables para testear el armado del carrusel sin red. */
+export interface CarouselDeps {
+  fetchFn?: typeof fetch;
+  prepare?: typeof prepareCarouselPhoto;
+  upload?: typeof uploadCreative;
+}
+
+/**
+ * Slides del carrusel a partir de las fotos reales rankeadas (sin el cover:
+ * el creative IA ya protagoniza esa foto y va de slide 1). Cada foto se
+ * recorta a 1080x1080 y se sube al bucket (Meta exige URL publica; ademas
+ * unifica el ratio de todos los hijos del carrusel). Una foto que falle se
+ * omite con warn — un slide menos no debe tumbar la generacion completa.
+ */
+export async function produceCarouselSlides(
+  orgId: string,
+  publicationId: string,
+  carouselPhotoUrls: string[],
+  altText: string,
+  deps: CarouselDeps = {}
+): Promise<CreateAssetInput[]> {
+  const fetchFn = deps.fetchFn ?? fetch;
+  const prepare = deps.prepare ?? prepareCarouselPhoto;
+  const upload = deps.upload ?? uploadCreative;
+
+  const slides = await Promise.all(
+    carouselPhotoUrls.map(async (url, i): Promise<CreateAssetInput | null> => {
+      const position = i + 1; // position 0 es el cover creative
+      try {
+        const response = await fetchFn(url);
+        if (!response.ok) throw new Error(`descarga fallo con status ${response.status}`);
+        const source = Buffer.from(await response.arrayBuffer());
+        const rendered = await prepare(source);
+        const uploaded = await upload(orgId, publicationId, "carousel", position, rendered.buffer);
+        return {
+          publication_id: publicationId,
+          role: "carousel",
+          position,
+          source_image_url: url,
+          storage_path: uploaded.storagePath,
+          public_url: uploaded.publicUrl,
+          width: rendered.width,
+          height: rendered.height,
+          format: rendered.format,
+          alt_text: altText,
+          selected_by: "ai"
+        };
+      } catch (err) {
+        logger.warn({ err, url, publicationId, position }, "Slide de carrusel fallo — se publica sin este");
+        return null;
+      }
+    })
+  );
+
+  return slides.filter((s): s is CreateAssetInput => s !== null);
+}
+
 /**
  * Pipeline completo de generacion (ver dmap/ARCHITECTURE.md #6): selecciona
  * fotos -> genera copy -> renderiza creatives -> crea la publicacion en
@@ -266,6 +324,14 @@ export async function generateDraftForProperty(
     throw new FatalError(`Propiedad ${property.ref}: ninguna foto es utilizable (todas oscuras o invalidas)`);
   }
 
+  // Fotos reales para el carrusel, sin la del cover (el creative IA ya la
+  // protagoniza como slide 1). Con al menos una foto extra la publicacion
+  // sale en carrusel — el formato con mas engagement en FB/IG para
+  // inmuebles (varias fotos = varios espacios); si la propiedad solo tiene
+  // una foto utilizable, degrada a single_image como antes.
+  const carouselPhotoUrls = assets.carousel.filter((url) => url !== assets.cover);
+  const kind = carouselPhotoUrls.length > 0 ? ("carousel" as const) : ("single_image" as const);
+
   const copyResult = await generateCopy(buildPropertyCopyInput(property), styleVariant, { name: brand.name });
 
   await recordContentGeneration({
@@ -284,7 +350,7 @@ export async function generateDraftForProperty(
   const publication = await createPublication({
     org_id: orgId,
     property_id: propertyId,
-    kind: "single_image",
+    kind,
     style_variant: styleVariant,
     copy_facebook: copyResult.output.copy_facebook,
     copy_instagram: copyResult.output.copy_instagram,
@@ -298,17 +364,30 @@ export async function generateDraftForProperty(
     created_by: actorUserId(actor)
   });
 
-  // Cover y story EN PARALELO: con el motor IA cada rol puede tomar 1-2 min
-  // (GPT Image + critico x hasta 2 rondas) — en serie duplicaria la espera
-  // del boton "Publicar" del CRM.
+  // Cover, story y slides del carrusel EN PARALELO: con el motor IA cada
+  // rol puede tomar 1-2 min (GPT Image + critico x hasta 2 rondas) — en
+  // serie duplicaria la espera del boton "Publicar" del CRM. Los slides
+  // solo son sharp + upload, no agregan latencia perceptible.
   const engine = await resolveCreativeEngine(orgId);
-  const [cover, story] = await Promise.all([
+  const [cover, story, extraSlides] = await Promise.all([
     produceAsset(engine, brand, property, copyResult.output, styleVariant, assets.cover, "ig_feed", orgId, publication.id, "cover"),
-    produceAsset(engine, brand, property, copyResult.output, styleVariant, assets.story, "ig_story", orgId, publication.id, "story")
+    produceAsset(engine, brand, property, copyResult.output, styleVariant, assets.story, "ig_story", orgId, publication.id, "story"),
+    produceCarouselSlides(orgId, publication.id, carouselPhotoUrls, copyResult.output.alt_text_cover)
   ]);
   const thumbnailAsset: CreateAssetInput = { ...cover.asset, role: "thumbnail" };
+  // Slide 0 del carrusel = el cover creative (misma imagen, rol distinto):
+  // el post arranca con la pieza disenada y sigue con las fotos limpias.
+  const carouselAssets: CreateAssetInput[] =
+    kind === "carousel" && extraSlides.length > 0 ? [{ ...cover.asset, role: "carousel", position: 0 }, ...extraSlides] : [];
 
-  await createPublicationAssets([cover.asset, story.asset, thumbnailAsset]);
+  await createPublicationAssets([cover.asset, story.asset, thumbnailAsset, ...carouselAssets]);
+
+  // Todas las fotos extra fallaron (descarga/upload): un carrusel de un solo
+  // slide no es carrusel — volver la publicacion a single_image para que el
+  // publisher use el cover como siempre.
+  if (kind === "carousel" && extraSlides.length === 0) {
+    await updatePublicationKind(publication.id, "single_image");
+  }
 
   await recordPublicationEvent({
     publication_id: publication.id,
@@ -320,6 +399,8 @@ export async function generateDraftForProperty(
       source: "generation.service",
       styleVariant,
       propertyRef: property.ref,
+      kind: carouselAssets.length > 0 ? "carousel" : "single_image",
+      carouselSlides: carouselAssets.length,
       creative: {
         engine,
         cover: cover.meta,

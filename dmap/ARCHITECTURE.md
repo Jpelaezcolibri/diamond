@@ -532,6 +532,8 @@ Post-proceso determinista (`creatives/compose.ts`, sharp): el **logo real nunca 
 
 Fallback: ante **cualquier** fallo de OpenAI (sin `OPENAI_API_KEY`, sin créditos, timeout, 5xx) el asset cae automáticamente a la plantilla satori (por asset, no por publicación) con la razón registrada en `detail.creative`. Cada corrida IA queda en `content_generations` (`kind='image_generation'`) con prompt maestro, rondas, scores y costo estimado. Config por org: `org_marketing_settings.creative_engine` (selector en `/marketing/configuracion` del CRM).
 
+**Carrusel por defecto (2026-07-06):** las publicaciones con más de una foto utilizable salen con `kind='carousel'` — el formato con más engagement en FB/IG (benchmarks 2026: ~4× vs imagen única; en inmuebles cada slide muestra un espacio). Slide 0 = el cover creative (la pieza diseñada abre el post); slides 1..N = las fotos reales del ranking (hasta 6 extra) recortadas a 1080×1080 con sharp (`compose.prepareCarouselPhoto` — todos los hijos con el mismo ratio, IG recorta el carrusel al ratio del primero) y subidas al bucket como `publication_assets(role='carousel', position)`. Un slide que falle (descarga/upload) se omite con warn; si fallan **todas** las fotos extra, la publicación se degrada a `single_image` (`updatePublicationKind`). Con una sola foto utilizable el flujo queda igual que antes (single_image).
+
 ---
 
 ## 7. Flujo de aprobación y publicación (Social Publisher)
@@ -594,6 +596,8 @@ interface SocialProvider {
 | IG estado de container | `GET /{creation_id}?fields=status_code` |
 | IG cuota | `GET /{ig_id}/content_publishing_limit?fields=quota_usage,config` (~50 posts/24h; carrusel cuenta 1) |
 | Permalinks | `GET /{post_id}?fields=permalink_url` · media IG `?fields=permalink` |
+
+**Caption (`buildCaption`, publish.service):** `copy_{platform}` + CTA + **bloque de contacto determinístico** + hashtags. El bloque de contacto se arma en código (no en el copywriter, para que nunca falte): link a la ficha de la landing (`LANDING_BASE_URL` + slug idéntico a `web/lib/slug.ts`) y link `wa.me` a Sofi (`CONTACT_WHATSAPP_NUMBER`) con el mensaje pre-llenado "Hola Sofi, me interesa la propiedad {ref}" — el bot detecta la ref (`REF_PATTERN`) y la guarda como origen del lead. Los hashtags pasan por `normalizeHashtags` (prefija `#`, quita espacios, dedup) tanto al parsear el copywriter como al armar el caption (cubre filas viejas guardadas sin `#`). Nota: en IG los links del caption no son clicables (limitación de la plataforma); en FB sí.
 
 **Prevención de publicaciones duplicadas (tres capas):**
 

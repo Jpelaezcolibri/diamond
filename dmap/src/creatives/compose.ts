@@ -31,6 +31,21 @@ export async function prepareSourceForEdit(sourceBuffer: Buffer, gptSize: string
 }
 
 /**
+ * Foto real -> slide de carrusel: recorte cuadrado 1080x1080 (mismo ratio
+ * que el cover IA, que va de slide 1 — IG recorta todos los hijos de un
+ * carrusel al ratio del primero, mantenerlos iguales evita sorpresas) sin
+ * texto ni logo: las fotos limpias son el contenido del carrusel.
+ */
+export async function prepareCarouselPhoto(sourceBuffer: Buffer): Promise<RenderedCreative> {
+  const size = CREATIVE_SIZES.ig_feed;
+  const buffer = await sharp(sourceBuffer)
+    .resize({ width: size.width, height: size.height, fit: "cover", position: "attention" })
+    .jpeg({ quality: 90 })
+    .toBuffer();
+  return { buffer, width: size.width, height: size.height, format: "jpeg" };
+}
+
+/**
  * Logo real arriba-izquierda (~8% del ancho, margen 4%) + resize al tamano
  * Meta final. logoBuffer null -> solo resize (el motor sigue sin logo y lo
  * anota, no aborta).

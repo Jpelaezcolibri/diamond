@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import sharp from "sharp";
-import { prepareSourceForEdit, composeLogoAndResize } from "../../src/creatives/compose.js";
+import { prepareCarouselPhoto, prepareSourceForEdit, composeLogoAndResize } from "../../src/creatives/compose.js";
 
 /**
  * Pipeline real de sharp con buffers sinteticos (sin red): recorte al ratio
@@ -33,6 +33,22 @@ describe("prepareSourceForEdit", () => {
   it("rechaza un tamano invalido", async () => {
     const source = await syntheticJpeg(100, 100);
     await expect(prepareSourceForEdit(source, "invalido")).rejects.toThrow(/Tamano GPT invalido/);
+  });
+});
+
+describe("prepareCarouselPhoto", () => {
+  it("recorta cualquier foto al cuadrado 1080x1080 del carrusel (mismo ratio que el cover IA)", async () => {
+    const horizontal = await syntheticJpeg(2400, 1600);
+    const vertical = await syntheticJpeg(900, 1600);
+    for (const source of [horizontal, vertical]) {
+      const result = await prepareCarouselPhoto(source);
+      expect(result.width).toBe(1080);
+      expect(result.height).toBe(1080);
+      expect(result.format).toBe("jpeg");
+      const meta = await sharp(result.buffer).metadata();
+      expect(meta.width).toBe(1080);
+      expect(meta.height).toBe(1080);
+    }
   });
 });
 

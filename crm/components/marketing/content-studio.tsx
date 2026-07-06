@@ -71,6 +71,11 @@ export default function ContentStudio({
 
   const cover = assets.find((a) => a.role === "cover");
   const story = assets.find((a) => a.role === "story");
+  // Slides del carrusel (position 0 = el mismo cover creative; se muestran
+  // solo los siguientes para no repetir la portada en el preview).
+  const carouselSlides = assets
+    .filter((a) => a.role === "carousel" && a.position > 0 && a.public_url)
+    .sort((a, b) => a.position - b.position);
 
   // Motor IA de creativos: si el critico no aprobo alguna pieza, el evento
   // draft trae detail.creative.needsReview con score y problemas — la
@@ -223,6 +228,24 @@ export default function ContentStudio({
           {cover?.public_url && (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={cover.public_url} alt={cover.alt_text || "Portada"} className="w-full rounded-xl border border-slate-200" />
+          )}
+          {carouselSlides.length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-xs font-medium text-slate-500">
+                Carrusel · {carouselSlides.length + 1} fotos (la portada abre el carrusel)
+              </p>
+              <div className="grid grid-cols-3 gap-1.5">
+                {carouselSlides.map((slide) => (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    key={slide.id}
+                    src={slide.public_url!}
+                    alt={slide.alt_text || `Foto ${slide.position + 1} del carrusel`}
+                    className="aspect-square w-full rounded-lg border border-slate-200 object-cover"
+                  />
+                ))}
+              </div>
+            </div>
           )}
           {story?.public_url && (
             // eslint-disable-next-line @next/next/no-img-element

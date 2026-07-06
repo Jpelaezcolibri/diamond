@@ -68,6 +68,15 @@ export async function updatePublicationContent(
   if (error) throw new Error(`updatePublicationContent: ${error.message}`);
 }
 
+/** Degradar carousel -> single_image cuando todas las fotos extra fallaron (ver generation.service). */
+export async function updatePublicationKind(id: string, kind: PublicationRow["kind"]): Promise<void> {
+  const { error } = await getSupabase()
+    .from("publications")
+    .update({ kind, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw new Error(`updatePublicationKind: ${error.message}`);
+}
+
 export async function schedulePublication(id: string, scheduledAt: string, timezone: string): Promise<void> {
   const { error } = await getSupabase()
     .from("publications")

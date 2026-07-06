@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import { actorUserId, buildCreativeBaseData, buildPropertyCopyInput, produceAsset } from "../../src/services/generation.service.js";
+import {
+  actorUserId,
+  buildCreativeBaseData,
+  buildPropertyCopyInput,
+  produceAsset,
+  produceCarouselSlides
+} from "../../src/services/generation.service.js";
 import type { PropertyRow } from "../../src/repositories/properties.repo.js";
 import type { BrandProfile } from "../../src/creatives/brand.js";
 import type { CopywriterOutput } from "../../src/ai/copywriter.js";
@@ -181,5 +187,59 @@ describe("produceAsset (seleccion de motor + fallback)", () => {
     const directorInput = deps.aiCreative.mock.calls[0]![1];
     expect(directorInput.format).toBe("story");
     expect(result.meta.approved).toBe(false);
+  });
+});
+
+describe("produceCarouselSlides", () => {
+  const okResponse = () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) }) as unknown as Response;
+
+  function makeDeps() {
+    return {
+      fetchFn: vi.fn(async () => okResponse()),
+      prepare: vi.fn(async () => ({ buffer: Buffer.from("jpg"), width: 1080, height: 1080, format: "jpeg" as const })),
+      upload: vi.fn(async (_org: string, pub: string, role: string, position: number) => ({
+        storagePath: `org-1/${pub}/${role}-${position}.jpg`,
+        publicUrl: `https://storage.example.com/org-1/${pub}/${role}-${position}.jpg`
+      }))
+    };
+  }
+
+  it("genera un slide por foto, con position desde 1 (0 es el cover creative)", async () => {
+    const deps = makeDeps();
+    const slides = await produceCarouselSlides(
+      "org-1",
+      "pub-1",
+      ["https://image.wasi.co/b", "https://image.wasi.co/c"],
+      "Foto de la propiedad",
+      deps
+    );
+    expect(slides).toHaveLength(2);
+    expect(slides.map((s) => s.position)).toEqual([1, 2]);
+    expect(slides.every((s) => s.role === "carousel")).toBe(true);
+    expect(slides[0]!.public_url).toContain("carousel-1.jpg");
+    expect(slides[1]!.source_image_url).toBe("https://image.wasi.co/c");
+  });
+
+  it("una foto que falla se omite sin tumbar los demas slides (y conserva su position original)", async () => {
+    const deps = makeDeps();
+    deps.fetchFn.mockImplementationOnce(async () => ({ ok: false, status: 404 }) as unknown as Response);
+    const slides = await produceCarouselSlides(
+      "org-1",
+      "pub-1",
+      ["https://image.wasi.co/rota", "https://image.wasi.co/c"],
+      "Foto",
+      deps
+    );
+    expect(slides).toHaveLength(1);
+    expect(slides[0]!.position).toBe(2);
+    expect(slides[0]!.source_image_url).toBe("https://image.wasi.co/c");
+  });
+
+  it("sin fotos extra devuelve vacio sin llamar red ni storage", async () => {
+    const deps = makeDeps();
+    const slides = await produceCarouselSlides("org-1", "pub-1", [], "Foto", deps);
+    expect(slides).toEqual([]);
+    expect(deps.fetchFn).not.toHaveBeenCalled();
+    expect(deps.upload).not.toHaveBeenCalled();
   });
 });
