@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { generateMasterPrompt } from "../../src/ai/creative-director.js";
-import { buildCreativeDirectorPrompt, type CreativeDirectorInput } from "../../src/ai/prompts/creative-director.v1.js";
+import { buildCreativeDirectorPrompt, type CreativeDirectorInput } from "../../src/ai/prompts/creative-director.v2.js";
 
 const input: CreativeDirectorInput = {
   property: {
@@ -29,14 +29,24 @@ const validOutput = {
 };
 
 describe("buildCreativeDirectorPrompt", () => {
-  it("incluye las reglas duras: foto real, sin logo, max 7 palabras, paleta Diamond", () => {
+  it("incluye las reglas duras: foto real, sin logo, max 7 palabras, acentos Diamond", () => {
     const prompt = buildCreativeDirectorPrompt(input);
     expect(prompt).toMatch(/PROHIBIDO reemplazar/);
     expect(prompt).toMatch(/NO incluya ningun logo/);
     expect(prompt).toMatch(/max 7 palabras/);
     expect(prompt).toContain("#D4AF37");
-    expect(prompt).toContain("#0D1117");
+    expect(prompt).toContain("#1A1F2B"); // acento, no fondo dominante
     expect(prompt).toMatch(/Canva/);
+  });
+
+  it("v2: rol de disenador senior, referencias de clase mundial y regla anti-oscuridad", () => {
+    const prompt = buildCreativeDirectorPrompt(input);
+    expect(prompt).toMatch(/DISENADOR GRAFICO SENIOR/);
+    expect(prompt).toMatch(/Sotheby/);
+    expect(prompt).toMatch(/ANTI-OSCURIDAD/);
+    expect(prompt).toMatch(/BRILLANTE/);
+    expect(prompt).toContain("65%"); // foto luminosa protagonista >=65%
+    expect(prompt).toMatch(/UNA SOLA VEZ/); // precio sin duplicar
   });
 
   it("incluye los datos reales de la propiedad y el estilo con su audiencia", () => {
@@ -61,7 +71,7 @@ describe("generateMasterPrompt", () => {
 
     expect(result.output.master_prompt).toBe(validOutput.master_prompt);
     expect(result.output.headline).toBe("Vive el lujo de Las Palmas");
-    expect(result.promptVersion).toBe("creative-director.v1");
+    expect(result.promptVersion).toBe("creative-director.v2");
     expect(caller).toHaveBeenCalledTimes(1);
   });
 

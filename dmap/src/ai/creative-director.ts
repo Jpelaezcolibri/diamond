@@ -6,7 +6,7 @@ import {
   buildCreativeDirectorPrompt,
   CREATIVE_DIRECTOR_PROMPT_VERSION,
   type CreativeDirectorInput
-} from "./prompts/creative-director.v1.js";
+} from "./prompts/creative-director.v2.js";
 
 /**
  * Agente 1 — Director Creativo (Claude). Nunca disena: construye el prompt
