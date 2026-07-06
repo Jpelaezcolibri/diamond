@@ -23,13 +23,28 @@ export function getQueue(name: QueueName): Queue {
   return queue;
 }
 
-/** jobId deterministico: BullMQ rechaza un job con un id ya existente — primera capa anti-duplicados (ver ARCHITECTURE.md #7/#10). */
+/**
+ * jobId deterministico: BullMQ rechaza un job con un id ya existente —
+ * primera capa anti-duplicados (ver ARCHITECTURE.md #7/#10).
+ *
+ * OJO con los ":" — BullMQ exige que un jobId personalizado, si contiene
+ * ":", tenga EXACTAMENTE 3 partes al separarlo por ":" (compatibilidad con
+ * el formato legado de repeatables, ver node_modules/bullmq/dist/cjs/classes/job.js);
+ * si no, lanza "Custom Id cannot contain :". Bug real 2026-07-06:
+ * `publish:${targetId}` en el primer intento tenia solo 2 partes y tumbaba
+ * el primer intento de publicar/programar — los reintentos (3 partes, con
+ * sufijo ":r{n}") no fallaban, lo que oculto el bug. `generate` ya tenia 3
+ * partes por casualidad; `sync`/`metrics`/`tokenRefresh` con 2 partes solo
+ * "funcionan" hoy porque siempre se usan con `repeat` (otro camino interno
+ * de BullMQ) — para no dejar esa excepcion fragil, todos usan "_" en vez de
+ * ":" como separador salvo donde ya cumplian la regla de 3 partes.
+ */
 export const jobIds = {
-  sync: (orgId: string) => `sync:${orgId}`,
+  sync: (orgId: string) => `sync_${orgId}`,
   generate: (propertyId: string, styleVariant: string) => `content.generate:${propertyId}:${styleVariant}`,
-  publish: (targetId: string, attempt = 0) => (attempt === 0 ? `publish:${targetId}` : `publish:${targetId}:r${attempt}`),
-  metrics: (orgId: string) => `metrics:${orgId}`,
-  tokenRefresh: (orgId: string) => `token-refresh:${orgId}`
+  publish: (targetId: string, attempt = 0) => `publish:${targetId}:r${attempt}`,
+  metrics: (orgId: string) => `metrics_${orgId}`,
+  tokenRefresh: (orgId: string) => `token_refresh_${orgId}`
 };
 
 export async function enqueueSync(orgId: string, delayMs = 0): Promise<void> {
