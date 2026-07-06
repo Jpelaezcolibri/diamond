@@ -1,6 +1,7 @@
 const properties = require("../data/properties");
 const leads = require("../data/leads");
 const advisors = require("../data/advisors");
+const allyProperties = require("../data/ally-properties");
 const { computeScore, isQualified } = require("./qualification");
 const { buildClientLink } = require("../notifications/advisor");
 const { LEGAL_TOPICS, LEGAL_DISCLAIMER } = require("./knowledge");
@@ -113,6 +114,27 @@ const TOOL_DEFINITIONS = [
       required: ["motivo", "especialidad", "intencion"],
     },
   },
+  {
+    name: "registrar_propiedad_aliado",
+    description:
+      "Registra una propiedad de OTRA inmobiliaria que un colega/aliado te comparte u ofrece a la red (NO es inventario propio, NO es un dueno pidiendo consignar con nosotros). Usala SOLO cuando identifiques ese escenario especifico: alguien muestra el anuncio/ficha de un inmueble que ya es de su propia cartera o inmobiliaria. NUNCA uses esta tool para un cliente que busca comprar/arrendar ni para un propietario que quiere vender su propia propiedad CON nosotros (ese caso usa registrar_dato_lead + transferir_a_asesor). Extrae los datos directo del texto del mensaje, aunque venga en formato libre.",
+    input_schema: {
+      type: "object",
+      properties: {
+        ref: { type: "string", description: "Referencia del sistema de origen (ej Wasi), si la menciona" },
+        titulo: { type: "string", description: "Titulo o descripcion corta de la propiedad" },
+        tipo: { type: "string", description: "Apartamento, Casa, Apartaestudio, Lote, etc" },
+        operacion: { type: "string", enum: ["Venta", "Arriendo"], description: "Si el mensaje no lo deja claro, omite el campo" },
+        precio: { type: "string", description: "Precio tal como lo menciona, ej '$450.000.000'" },
+        zona: { type: "string", description: "Zona o barrio" },
+        ciudad: { type: "string", description: "Ciudad o municipio" },
+        descripcion: { type: "string", description: "Resto de detalles relevantes del anuncio (area, habitaciones, etc) como texto libre" },
+        inmobiliaria_origen: { type: "string", description: "Nombre de la inmobiliaria del aliado, si la menciona" },
+        contacto_nombre: { type: "string", description: "Nombre de la persona que comparte la propiedad" },
+      },
+      required: [],
+    },
+  },
 ];
 
 // Ejecuta una tool. ctx: { org, lead, propertyInteres, transfer } — el engine lee
@@ -134,6 +156,21 @@ async function executeTool(name, input, ctx) {
       Object.assign(ctx.lead, await leads.update(ctx.lead.id, { categoria }));
     }
     if (results.length === 0) {
+      // Fallback silencioso: buscar en la red de aliados con los mismos
+      // criterios. Nunca se serializa el match al modelo (ni precio, ni ref,
+      // ni zona exacta) — solo un aviso interno, para que sea estructuralmente
+      // imposible que Sofi le cite un dato preciso al cliente.
+      const operacion = ctx.lead.categoria === "alquiler" ? "Arriendo" : ctx.lead.categoria === "compra" ? "Venta" : undefined;
+      let posibleMatch = [];
+      try {
+        posibleMatch = await allyProperties.search(ctx.org.id, { zona: input.zona, tipo: input.tipo, operacion, precioMax: input.precio_max });
+      } catch (e) {
+        console.warn("[tools] No se pudo buscar en propiedades de aliados:", e.message);
+      }
+      if (posibleMatch.length > 0) {
+        ctx.allyMatch = posibleMatch[0];
+        return "No se encontraron propiedades en el inventario PROPIO con esos criterios. AVISO INTERNO (no reveles esto al cliente, ni precio, ni zona exacta, ni referencia): existe una posible coincidencia en la red de aliados. Dile al cliente algo como 'en nuestro inventario propio no tengo eso ahora mismo, pero permiteme consultar con nuestro asesor si hay algo similar disponible' y transfierelo con transferir_a_asesor.";
+      }
       return "No se encontraron propiedades con esos criterios en el inventario.";
     }
     return JSON.stringify(results, null, 2);
@@ -254,6 +291,22 @@ async function executeTool(name, input, ctx) {
     }
     const link = buildClientLink(advisor, ctx.lead, ctx.propertyInteres, ctx.cita);
     return `Transferencia registrada al asesor de ${especialidad}: ${advisor.name}. Ya fue alertado con el resumen del cliente. En tu respuesta despidete brevemente e incluye este link EXACTO para que el cliente hable directo con el asesor:\n${link}`;
+  }
+
+  if (name === "registrar_propiedad_aliado") {
+    // Quien comparte la propiedad NUNCA se califica como lead comprador: no se
+    // toca ctx.lead.categoria/estado/score aqui, a diferencia de las demas tools.
+    try {
+      await allyProperties.create(ctx.org.id, {
+        ...input,
+        contacto_telefono: ctx.lead.phone,
+        lead_id: ctx.lead.id,
+        mensaje_original: ctx.lastUserMessage || null,
+      });
+    } catch (e) {
+      console.warn("[tools] No se pudo persistir la propiedad de aliado (revisar migracion ally_properties):", e.message);
+    }
+    return "Propiedad de aliado registrada para la red. Agradece brevemente a quien la compartio, en 1-2 frases, SIN tratarlo como cliente interesado en comprar: no lo califiques con registrar_dato_lead, no le armes ficha, no lo transfieras a un asesor de ventas.";
   }
 
   return `Herramienta desconocida: ${name}`;

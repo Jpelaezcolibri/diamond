@@ -93,8 +93,23 @@ function buildCalendarLink(cita, lead) {
   return url.toString();
 }
 
+// Detalle de una posible coincidencia en la red de aliados para la alerta del
+// asesor — nunca se le muestra al cliente, solo aqui. El asesor DEBE confirmar
+// disponibilidad antes de ofrecerla (la propiedad puede ya no estar disponible).
+function formatAllyMatch(allyMatch) {
+  if (!allyMatch) return null;
+  const tipo = allyMatch.tipo || "Propiedad";
+  const zona = allyMatch.zona ? ` en ${allyMatch.zona}` : "";
+  const precio = allyMatch.precio ? `, ${allyMatch.precio}` : "";
+  const ref = allyMatch.ref ? ` (ref ${allyMatch.ref})` : "";
+  const contacto = allyMatch.contacto_nombre || "sin nombre";
+  const inmobiliaria = allyMatch.inmobiliaria_origen || "inmobiliaria sin especificar";
+  const telefono = allyMatch.contacto_telefono ? `, tel +${allyMatch.contacto_telefono}` : "";
+  return `Posible match en red de aliados: ${tipo}${zona}${precio}${ref} — contacto: ${contacto} (${inmobiliaria})${telefono}. CONFIRMA disponibilidad antes de ofrecerla al cliente.`;
+}
+
 // Mensaje de alerta que recibe el asesor cuando un lead es transferido.
-function buildAdvisorAlert(org, lead, motivo, propertyInteres, especialidad, cita) {
+function buildAdvisorAlert(org, lead, motivo, propertyInteres, especialidad, cita, allyMatch) {
   const intencion = lead.intencion;
   const esVendedor = intencion === "vender";
   const encabezadoIntencion = INTENCION_LABEL[intencion];
@@ -123,6 +138,7 @@ function buildAdvisorAlert(org, lead, motivo, propertyInteres, especialidad, cit
         : lead.property_ref_origen
           ? `Propiedad de origen: ${lead.property_ref_origen}`
           : "Consulta general",
+    formatAllyMatch(allyMatch),
     `Motivo: ${motivo}`,
     "Contactar a la brevedad.",
   ].filter(Boolean);

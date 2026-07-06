@@ -37,6 +37,7 @@ const db = {
   leads: [],
   conversations: [],
   messages: [],
+  allyProperties: [],
   uid,
 };
 

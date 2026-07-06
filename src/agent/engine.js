@@ -101,7 +101,7 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
     }
   }
 
-  const ctx = { org, lead, propertyInteres: null, transfer: null, cita: null };
+  const ctx = { org, lead, propertyInteres: null, transfer: null, cita: null, allyMatch: null, lastUserMessage: text };
   if (lead.property_ref_origen) {
     const origen = await properties.findByRef(org.id, lead.property_ref_origen);
     if (origen?.disponible) ctx.propertyInteres = origen;
@@ -114,6 +114,9 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
 
   const system = buildSystemPrompt({ org, lead, qualified: isQualified(lead), now: nowInBogota() });
 
+  const extractText = (r) =>
+    r.content.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
+
   let response = await client.messages.create({
     model: config.claudeModel,
     max_tokens: 2048,
@@ -122,9 +125,18 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
     tools: TOOL_DEFINITIONS,
   });
 
+  // Claude puede escribir texto conversacional EN EL MISMO turno en que llama
+  // una tool (ej. agradecer a un aliado no depende del resultado de guardarlo)
+  // — ese texto se acumula aqui por cada turno, en vez de leerse solo de la
+  // ultima respuesta del loop, para no perderlo (bug real 2026-07-06: Sofi
+  // quedaba en blanco al reconocer una propiedad de aliado).
+  const textParts = [];
   let iterations = 0;
   while (response.stop_reason === "tool_use" && iterations < MAX_TOOL_ITERATIONS) {
     iterations++;
+    const text = extractText(response);
+    if (text) textParts.push(text);
+
     const toolUseBlocks = response.content.filter((b) => b.type === "tool_use");
     messages.push({ role: "assistant", content: response.content });
 
@@ -150,12 +162,13 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
     });
   }
 
-  const extractText = (r) =>
-    r.content.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
+  const finalText = extractText(response);
+  if (finalText) textParts.push(finalText);
+  let reply = textParts.join("\n").trim();
 
-  let reply = extractText(response);
   if (!reply && response.stop_reason !== "tool_use") {
-    // Respuesta vacia transitoria: reintentar una vez antes de rendirse
+    // Respuesta vacia transitoria (sin texto en ningun turno): reintentar una
+    // vez antes de rendirse.
     console.warn("[engine] Respuesta vacia del modelo — reintentando");
     response = await client.messages.create({
       model: config.claudeModel,
@@ -179,7 +192,7 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
       especialidad: ctx.transfer.especialidad,
       advisorName: advisor.name,
       advisorPhone: advisor.phone,
-      advisorAlert: buildAdvisorAlert(org, lead, ctx.transfer.motivo, ctx.propertyInteres, ctx.transfer.especialidad, ctx.cita),
+      advisorAlert: buildAdvisorAlert(org, lead, ctx.transfer.motivo, ctx.propertyInteres, ctx.transfer.especialidad, ctx.cita, ctx.allyMatch),
     };
   }
 

@@ -20,6 +20,11 @@ const noVende = [
   "cuanto vale ese apartamento en venta?", // comprador preguntando por una venta
   "me interesa la propiedad AP001",
   "tienes algo en la loma del indio?",
+  // Regresion: un colega compartiendo una propiedad de OTRA inmobiliaria no es
+  // un propietario pidiendo consignar (ver reglas 37-40 de prompts.js).
+  "les comparto esta propiedad que tengo en mi inmobiliaria",
+  "miren este apartamento en venta, referencia 10128030 en Wasi",
+  "Natalia Velez, Paraiso inmobiliaria — apartamento en venta en Guatape",
 ];
 
 test("detecta intencion de vender en frases explicitas de propietario", () => {

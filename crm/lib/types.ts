@@ -32,6 +32,51 @@ export type Conversation = {
   leads: Lead;
 };
 
+// Propiedad de OTRA inmobiliaria que un colega/aliado comparte a la red — NO
+// es inventario propio (ver ARCHITECTURE.md, tabla ally_properties). Sofi la
+// captura sola; el asesor confirma disponibilidad desde /aliados antes de
+// que se use para ofrecerla a un cliente.
+export type AllyProperty = {
+  id: string;
+  org_id: string;
+  ref: string | null;
+  titulo: string | null;
+  tipo: string | null;
+  operacion: "Venta" | "Arriendo" | null;
+  precio: string | null;
+  zona: string | null;
+  ciudad: string | null;
+  descripcion: string | null;
+  inmobiliaria_origen: string | null;
+  contacto_nombre: string | null;
+  contacto_telefono: string | null;
+  lead_id: string | null;
+  mensaje_original: string | null;
+  estado: "pendiente" | "confirmada" | "no_disponible" | "expirada";
+  confirmada_por: string | null;
+  confirmada_at: string | null;
+  notas: string | null;
+  expires_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export const ALLY_ESTADOS = ["pendiente", "confirmada", "no_disponible", "expirada"] as const;
+
+export const ALLY_ESTADO_LABELS: Record<string, string> = {
+  pendiente: "Pendiente de revisión",
+  confirmada: "Confirmada disponible",
+  no_disponible: "Ya no disponible",
+  expirada: "Expirada",
+};
+
+export const ALLY_ESTADO_COLORS: Record<string, string> = {
+  pendiente: "bg-amber-100 text-amber-800",
+  confirmada: "bg-emerald-100 text-emerald-700",
+  no_disponible: "bg-red-100 text-red-700",
+  expirada: "bg-slate-100 text-slate-500",
+};
+
 export type Message = {
   id: string;
   conversation_id: string;
