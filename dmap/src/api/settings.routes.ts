@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { getOrgMarketingSettings, updateOrgMarketingSettings } from "../repositories/settings.repo.js";
 import { encryptSecret } from "../security/crypto.js";
+import { reconcileSyncSchedules } from "../scheduler/schedules.js";
 
 /** Nunca devolver wasi_id_company_enc/wasi_token_enc — solo si hay credenciales guardadas o no. */
 function toPublicSettings(settings: Awaited<ReturnType<typeof getOrgMarketingSettings>>) {
@@ -57,6 +58,13 @@ export async function settingsRoutes(app: FastifyInstance) {
         ...(wasiIdCompany && { wasi_id_company_enc: encryptSecret(wasiIdCompany) }),
         ...(wasiToken && { wasi_token_enc: encryptSecret(wasiToken) })
       });
+      // Sin esto, un cambio de "cada cuantos minutos" desde el CRM se guarda
+      // en la DB pero el repeatable de BullMQ sigue con el intervalo viejo
+      // hasta el proximo reinicio del servicio (reconcileSyncSchedules solo
+      // corria al boot) — bug real reportado por el usuario (2026-07-05).
+      if (rest.syncIntervalMinutes !== undefined) {
+        await reconcileSyncSchedules();
+      }
       const updated = await getOrgMarketingSettings(orgId);
       reply.send(toPublicSettings(updated));
     } catch (err) {

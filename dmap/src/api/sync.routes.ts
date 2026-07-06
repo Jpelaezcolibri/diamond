@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { runSync } from "../services/sync.service.js";
 import { getSupabase } from "../repositories/supabase.js";
+import { getQueue, QUEUE_NAMES } from "../queue/queues.js";
 
 const runBodySchema = z.object({ orgId: z.string().uuid() });
 
@@ -38,5 +39,18 @@ export async function syncRoutes(app: FastifyInstance) {
       return;
     }
     reply.send({ runs: data });
+  });
+
+  /** Diagnostico: cadencia real registrada en BullMQ (ver schedules.ts sobre repeatables huerfanos/duplicados). */
+  app.get("/api/v1/sync/schedules", async (_request, reply) => {
+    const repeatables = await getQueue(QUEUE_NAMES.sync).getRepeatableJobs();
+    reply.send({
+      schedules: repeatables.map((r) => ({
+        id: r.id,
+        everyMs: r.every,
+        everyMinutes: r.every ? Number(r.every) / 60_000 : null,
+        next: r.next ? new Date(r.next).toISOString() : null
+      }))
+    });
   });
 }
