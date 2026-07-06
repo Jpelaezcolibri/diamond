@@ -4,7 +4,8 @@ import {
   buildCreativeBaseData,
   buildPropertyCopyInput,
   produceAsset,
-  produceCarouselSlides
+  produceCarouselSlides,
+  regenerateCreativeForPublication
 } from "../../src/services/generation.service.js";
 import type { PropertyRow } from "../../src/repositories/properties.repo.js";
 import type { BrandProfile } from "../../src/creatives/brand.js";
@@ -241,5 +242,14 @@ describe("produceCarouselSlides", () => {
     expect(slides).toEqual([]);
     expect(deps.fetchFn).not.toHaveBeenCalled();
     expect(deps.upload).not.toHaveBeenCalled();
+  });
+});
+
+describe("regenerateCreativeForPublication (guards)", () => {
+  // El resto del flujo (carga de pub/property/brand/assets + reemplazo de
+  // imagen) toca Supabase y se valida E2E, igual que generateDraftForProperty.
+  // El guard de notas vacias corre ANTES de cualquier IO, asi que se testea puro.
+  it("rechaza notas vacias sin tocar red", async () => {
+    await expect(regenerateCreativeForPublication("pub-1", "cover", "   ", "user:x")).rejects.toThrow(/notas/i);
   });
 });

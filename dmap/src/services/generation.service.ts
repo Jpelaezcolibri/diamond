@@ -13,12 +13,12 @@ import { generateAiCreative } from "../creatives/ai-engine.js";
 import { uploadCreative } from "../creatives/storage.js";
 import { getPropertyById, type PropertyRow } from "../repositories/properties.repo.js";
 import { createPublication, getPublicationById, updatePublicationContent, updatePublicationKind } from "../repositories/publications.repo.js";
-import { createPublicationAssets, type CreateAssetInput } from "../repositories/publication-assets.repo.js";
+import { createPublicationAssets, listAssetsByPublication, updateAssetsImageAtPosition0, type CreateAssetInput } from "../repositories/publication-assets.repo.js";
 import { recordPublicationEvent } from "../repositories/publication-events.repo.js";
 import { recordContentGeneration } from "../repositories/content-generations.repo.js";
 import { markChangeEventsProcessedForProperty } from "../repositories/sync.repo.js";
 import { getOrgMarketingSettings } from "../repositories/settings.repo.js";
-import type { CreativeEngine } from "../repositories/types.js";
+import type { CreativeEngine, PublicationAssetRow } from "../repositories/types.js";
 
 export interface GenerateDraftResult {
   publicationId: string;
@@ -462,4 +462,166 @@ export async function regenerateCopyForPublication(publicationId: string, styleV
     hashtags: copyResult.output.hashtags,
     cta: copyResult.output.cta
   });
+}
+
+export type RegenerableRole = "cover" | "story";
+
+export interface RegenerateCreativeResult {
+  role: RegenerableRole;
+  score: number;
+  approved: boolean;
+  rounds: number;
+  problemas: string[];
+}
+
+export interface RegenerateCreativeDeps {
+  aiCreative?: typeof generateAiCreative;
+  upload?: typeof uploadCreative;
+  recordGeneration?: typeof recordContentGeneration;
+  recordEvent?: typeof recordPublicationEvent;
+  now?: () => number;
+}
+
+/**
+ * "Regenerar creativo con notas" desde el Content Studio: el humano actua
+ * como tercer director y escribe los cambios que quiere (ej "quita el overlay
+ * oscuro, agranda el precio"); se re-corre el motor IA sobre la MISMA foto,
+ * inyectando esas notas con prioridad en el prompt. Solo motor IA (la
+ * plantilla no interpreta instrucciones) y solo en 'draft'. Reemplaza la
+ * imagen del rol (y sus copias: thumbnail y slide 0 del carrusel comparten
+ * el archivo de la portada). El registro y el evento no son criticos: si
+ * fallan, el creativo regenerado NO se descarta.
+ */
+export async function regenerateCreativeForPublication(
+  publicationId: string,
+  role: RegenerableRole,
+  userNotes: string,
+  actor: string,
+  deps: RegenerateCreativeDeps = {}
+): Promise<RegenerateCreativeResult> {
+  const notes = userNotes.trim();
+  if (!notes) throw new FatalError("Las notas para regenerar el creativo no pueden estar vacias");
+
+  const publication = await getPublicationById(publicationId);
+  if (!publication) throw new FatalError(`Publicacion ${publicationId} no existe`);
+  if (publication.status !== "draft") {
+    throw new FatalError(`Solo se puede regenerar el creativo de una publicacion en 'draft' (esta en '${publication.status}')`);
+  }
+  if (!publication.property_id) throw new FatalError(`Publicacion ${publicationId} no tiene propiedad asociada`);
+
+  const engine = await resolveCreativeEngine(publication.org_id);
+  if (engine !== "ai") {
+    throw new FatalError("Regenerar el creativo con notas requiere el motor IA (activa OPENAI_API_KEY y el motor 'ai' en Configuracion)");
+  }
+
+  const property = await getPropertyById(publication.property_id);
+  if (!property) throw new FatalError(`Propiedad ${publication.property_id} no existe`);
+
+  const brand = await resolveBrandProfile(publication.org_id);
+
+  const assets = await listAssetsByPublication(publicationId);
+  const current = assets.find((a) => a.role === role && a.position === 0);
+  if (!current?.source_image_url) {
+    throw new FatalError(`La publicacion no tiene un asset '${role}' con foto fuente para regenerar`);
+  }
+
+  const styleVariant = (publication.style_variant ?? "premium") as StyleVariant;
+  const sizeKey: GptImageSizeKey = role === "story" ? "ig_story" : "ig_feed";
+  const format = role === "story" ? ("story" as const) : ("feed" as const);
+
+  const aiCreative = deps.aiCreative ?? generateAiCreative;
+  const upload = deps.upload ?? uploadCreative;
+  const recordGeneration = deps.recordGeneration ?? recordContentGeneration;
+  const recordEvent = deps.recordEvent ?? recordPublicationEvent;
+  const now = deps.now ?? Date.now;
+
+  const ai = await aiCreative(
+    brand,
+    {
+      property: buildPropertyCopyInput(property),
+      styleVariant,
+      tituloComercial: publication.titulo_comercial ?? property.titulo,
+      cta: publication.cta ?? "",
+      format,
+      brand: { name: brand.name }
+    },
+    current.source_image_url,
+    sizeKey,
+    {},
+    notes
+  );
+
+  const uploaded = await upload(publication.org_id, publicationId, role, 0, ai.buffer);
+  // Cache-bust: uploadCreative sobreescribe el mismo path (upsert), asi que
+  // sin cambiar la URL el CDN/navegador seguiria mostrando la version vieja.
+  const bustedUrl = `${uploaded.publicUrl}?v=${now()}`;
+
+  // La portada se reusa como thumbnail y como slide 0 del carrusel (mismo
+  // archivo): actualizarlos juntos evita que queden desincronizados.
+  const rolesToUpdate: PublicationAssetRow["role"][] = role === "cover" ? ["cover", "thumbnail", "carousel"] : ["story"];
+  await updateAssetsImageAtPosition0(publicationId, rolesToUpdate, {
+    storage_path: uploaded.storagePath,
+    public_url: bustedUrl,
+    width: ai.width,
+    height: ai.height,
+    format: ai.format
+  });
+
+  const problemas = ai.approved ? [] : (ai.rounds[ai.rounds.length - 1]?.problemas.slice(0, 6) ?? []);
+
+  try {
+    await recordGeneration({
+      org_id: publication.org_id,
+      property_id: property.id,
+      publication_id: publicationId,
+      kind: "image_generation",
+      style_variant: styleVariant,
+      model: env.GPT_IMAGE_MODEL,
+      prompt_version: ai.promptVersion,
+      input: { role, sizeKey, regenerated: true, userNotes: notes, sourceImageUrl: current.source_image_url, masterPrompt: ai.masterPrompt, headline: ai.headline },
+      output: {
+        approved: ai.approved,
+        finalScore: ai.finalScore,
+        roundsUsed: ai.rounds.length,
+        rounds: ai.rounds,
+        logoApplied: ai.logoApplied,
+        storagePath: uploaded.storagePath,
+        estimatedCostUsd: Number((ai.rounds.length * COST_PER_GPT_IMAGE_USD).toFixed(2))
+      },
+      tokens_in: ai.tokensIn,
+      tokens_out: ai.tokensOut
+    });
+  } catch (err) {
+    logger.warn({ err, publicationId, role }, "No se pudo registrar la regeneracion IA en content_generations");
+  }
+
+  const meta: CreativeMeta = {
+    engine: "ai",
+    score: ai.finalScore,
+    approved: ai.approved,
+    rounds: ai.rounds.length,
+    ...(ai.approved ? {} : { problemas })
+  };
+  try {
+    // Evento draft->draft (auditoria): el Content Studio deriva el estado
+    // "Revisar creativo" tomando, por rol, el meta del evento mas reciente
+    // que lo menciona — asi una regeneracion aprobada limpia el aviso viejo.
+    await recordEvent({
+      publication_id: publicationId,
+      org_id: publication.org_id,
+      from_status: "draft",
+      to_status: "draft",
+      actor,
+      detail: {
+        source: "regenerate-creative",
+        regeneratedRole: role,
+        userNotes: notes,
+        creative: { [role]: meta }
+      }
+    });
+  } catch (err) {
+    logger.warn({ err, publicationId, role }, "No se pudo registrar el evento de regeneracion");
+  }
+
+  return { role, score: ai.finalScore, approved: ai.approved, rounds: ai.rounds.length, problemas };
 }

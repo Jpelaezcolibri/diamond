@@ -9,7 +9,7 @@ import {
 import { getConnectionById } from "../repositories/social-connections.repo.js";
 import { enqueuePublish } from "../queue/queues.js";
 import { FatalError } from "../lib/errors.js";
-import { regenerateCopyForPublication } from "../services/generation.service.js";
+import { regenerateCopyForPublication, regenerateCreativeForPublication } from "../services/generation.service.js";
 import { STYLE_VARIANTS } from "../config/constants.js";
 
 function actorFromRequest(request: { headers: Record<string, unknown> }): string {
@@ -49,6 +49,10 @@ const updateContentBodySchema = z.object({
 });
 
 const regenerateBodySchema = z.object({ styleVariant: z.enum(STYLE_VARIANTS) });
+const regenerateCreativeBodySchema = z.object({
+  role: z.enum(["cover", "story"]),
+  notes: z.string().trim().min(1, "Escribe los cambios que quieres").max(1000)
+});
 
 export async function publicationsRoutes(app: FastifyInstance) {
   app.patch("/api/v1/publications/:id", async (request, reply) => {
@@ -96,6 +100,24 @@ export async function publicationsRoutes(app: FastifyInstance) {
       reply.send({ ok: true });
     } catch (err) {
       reply.code(502).send({ error: "regenerate_failed", message: (err as Error).message });
+    }
+  });
+
+  // Regenerar el CREATIVO (imagen) con notas del humano — motor IA sobre la
+  // misma foto, inyectando las instrucciones con prioridad. Puede tardar
+  // 1-2 min (GPT Image + critico x hasta 2 rondas).
+  app.post("/api/v1/publications/:id/regenerate-creative", async (request, reply) => {
+    const params = z.object({ id: z.string().uuid() }).safeParse(request.params);
+    const body = regenerateCreativeBodySchema.safeParse(request.body);
+    if (!params.success || !body.success) {
+      reply.code(400).send({ error: "invalid_request", issues: [...(params.error?.issues ?? []), ...(body.error?.issues ?? [])] });
+      return;
+    }
+    try {
+      const result = await regenerateCreativeForPublication(params.data.id, body.data.role, body.data.notes, actorFromRequest(request));
+      reply.send(result);
+    } catch (err) {
+      reply.code(502).send({ error: "regenerate_creative_failed", message: (err as Error).message });
     }
   });
 

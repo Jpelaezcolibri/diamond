@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import sharp from "sharp";
-import { generateAiCreative, type AiEngineDeps } from "../../src/creatives/ai-engine.js";
+import { composeRoundPrompt, generateAiCreative, type AiEngineDeps } from "../../src/creatives/ai-engine.js";
 import type { BrandProfile } from "../../src/creatives/brand.js";
 import type { CreativeDirectorInput } from "../../src/ai/prompts/creative-director.v1.js";
 
@@ -169,5 +169,51 @@ describe("generateAiCreative", () => {
 
     expect(result.approved).toBe(true);
     expect(result.logoApplied).toBe(false);
+  });
+
+  it("userNotes: las instrucciones del humano viajan al prompt de GPT desde la ronda 1", async () => {
+    const { deps, imageEditor } = makeDeps({ scores: [88] });
+
+    await generateAiCreative(
+      brand,
+      directorInput,
+      "https://img.example/x.jpg",
+      "ig_feed",
+      deps,
+      "Quita el overlay oscuro y agranda el precio"
+    );
+
+    const firstPrompt = imageEditor.mock.calls[0]![0].prompt as string;
+    expect(firstPrompt).toContain("ART DIRECTOR NOTES");
+    expect(firstPrompt).toContain("Quita el overlay oscuro y agranda el precio");
+  });
+
+  it("userNotes + correccion del critico coexisten en la ronda 2", async () => {
+    const { deps, imageEditor } = makeDeps({ scores: [60, 85] });
+
+    await generateAiCreative(brand, directorInput, "https://img.example/x.jpg", "ig_feed", deps, "Usa un tono mas calido");
+
+    const secondPrompt = imageEditor.mock.calls[1]![0].prompt as string;
+    expect(secondPrompt).toContain("ART DIRECTOR NOTES");
+    expect(secondPrompt).toContain("Usa un tono mas calido");
+    expect(secondPrompt).toContain("MANDATORY CORRECTIONS");
+    expect(secondPrompt).toContain("agranda el precio");
+  });
+});
+
+describe("composeRoundPrompt", () => {
+  it("sin notas ni correcciones devuelve el prompt maestro tal cual", () => {
+    expect(composeRoundPrompt("MASTER", undefined, [])).toBe("MASTER");
+    expect(composeRoundPrompt("MASTER", "   ", [])).toBe("MASTER"); // notas en blanco se ignoran
+  });
+
+  it("incluye notas del humano y correcciones del critico como bloques separados", () => {
+    const out = composeRoundPrompt("MASTER", "menos texto", ["agranda el precio", "sube el contraste"]);
+    expect(out).toContain("MASTER");
+    expect(out).toContain("ART DIRECTOR NOTES");
+    expect(out).toContain("menos texto");
+    expect(out).toContain("MANDATORY CORRECTIONS");
+    expect(out).toContain("- agranda el precio");
+    expect(out.indexOf("ART DIRECTOR NOTES")).toBeLessThan(out.indexOf("MANDATORY CORRECTIONS"));
   });
 });

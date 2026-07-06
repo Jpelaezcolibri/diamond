@@ -75,12 +75,33 @@ async function toCriticBase64(buffer: Buffer): Promise<string> {
   return resized.toString("base64");
 }
 
+/**
+ * Compone el prompt de una ronda: prompt maestro del director + (opcional)
+ * notas del humano + (opcional) correcciones del critico de la ronda previa.
+ * Las notas del humano se mantienen en TODAS las rondas (son la voluntad del
+ * cliente, no un feedback puntual) y tienen prioridad sobre los defaults de
+ * estilo cuando choquen.
+ */
+export function composeRoundPrompt(masterPrompt: string, userNotes: string | undefined, criticInstructions: string[]): string {
+  let prompt = masterPrompt;
+  if (userNotes && userNotes.trim()) {
+    prompt += `\n\nART DIRECTOR NOTES (from the human client — MANDATORY, honor these exactly; they OVERRIDE the style defaults wherever they conflict):\n${userNotes.trim()}`;
+  }
+  if (criticInstructions.length > 0) {
+    prompt += `\n\nMANDATORY CORRECTIONS FROM PREVIOUS ROUND (a senior art director rejected the last attempt — fix ALL of these):\n- ${criticInstructions.join("\n- ")}`;
+  }
+  return prompt;
+}
+
 export async function generateAiCreative(
   brand: BrandProfile,
   directorInput: CreativeDirectorInput,
   sourceImageUrl: string,
   sizeKey: GptImageSizeKey,
-  deps: AiEngineDeps = {}
+  deps: AiEngineDeps = {},
+  /** Instrucciones del humano (Content Studio) — se inyectan en TODAS las
+   *  rondas con prioridad sobre el estilo. undefined = generacion normal. */
+  userNotes?: string
 ): Promise<AiCreativeResult> {
   const director = deps.director ?? generateMasterPrompt;
   const imageEditor = deps.imageEditor ?? editImage;
@@ -111,7 +132,7 @@ export async function generateAiCreative(
   // 3. Loop generar -> componer -> criticar.
   const rounds: AiCreativeRound[] = [];
   let best: { composed: Awaited<ReturnType<typeof composeLogoAndResize>>; score: number } | null = null;
-  let prompt = directed.output.master_prompt;
+  let prompt = composeRoundPrompt(directed.output.master_prompt, userNotes, []);
 
   for (let round = 1; round <= AI_ENGINE_MAX_ROUNDS; round++) {
     const generated = await imageEditor({
@@ -148,7 +169,7 @@ export async function generateAiCreative(
     }
 
     if (round < AI_ENGINE_MAX_ROUNDS && critique.output.instrucciones_de_mejora.length > 0) {
-      prompt = `${directed.output.master_prompt}\n\nMANDATORY CORRECTIONS FROM PREVIOUS ROUND (a senior art director rejected the last attempt — fix ALL of these):\n- ${critique.output.instrucciones_de_mejora.join("\n- ")}`;
+      prompt = composeRoundPrompt(directed.output.master_prompt, userNotes, critique.output.instrucciones_de_mejora);
     }
   }
 

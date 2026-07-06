@@ -20,6 +20,26 @@ export async function listAssetsByPublication(publicationId: string): Promise<Pu
   return (data as PublicationAssetRow[]) ?? [];
 }
 
+/**
+ * Reemplaza la imagen de los assets del rol dado en position 0 (regenerar
+ * creativo desde el Content Studio). Se pasan varios roles porque la portada
+ * se reusa como thumbnail y como slide 0 del carrusel — apuntan al mismo
+ * archivo, hay que actualizarlos juntos para que no queden desincronizados.
+ */
+export async function updateAssetsImageAtPosition0(
+  publicationId: string,
+  roles: PublicationAssetRow["role"][],
+  fields: Pick<PublicationAssetRow, "storage_path" | "public_url" | "width" | "height" | "format">
+): Promise<void> {
+  const { error } = await getSupabase()
+    .from("publication_assets")
+    .update(fields)
+    .eq("publication_id", publicationId)
+    .in("role", roles)
+    .eq("position", 0);
+  if (error) throw new Error(`updateAssetsImageAtPosition0: ${error.message}`);
+}
+
 export async function reorderAssets(updates: Array<{ id: string; position: number; role?: PublicationAssetRow["role"] }>): Promise<void> {
   for (const u of updates) {
     const patch: Record<string, unknown> = { position: u.position };
