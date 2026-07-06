@@ -21,6 +21,10 @@ const config = {
     token: process.env.WHATSAPP_TOKEN || "",
     phoneId: process.env.WHATSAPP_PHONE_ID || "",
   },
+
+  // Landing (web/): Sofi y el link para el asesor apuntan aqui en vez del
+  // link externo de Wasi/inmo.co (ver src/lib/slug.js).
+  landingBaseUrl: process.env.LANDING_BASE_URL || "https://diamondinmobiliaria.com",
 };
 
 if (!config.anthropicApiKey) {

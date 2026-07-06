@@ -1,5 +1,16 @@
 const supabase = require("./supabase");
 const memory = require("./memory");
+const config = require("../config");
+const { buildSlug } = require("../lib/slug");
+
+// El "link" que ve el cliente (ficha de Sofi, mensaje al asesor) debe ser
+// SIEMPRE el de la landing propia, nunca el de Wasi/inmo.co (que trae la
+// columna `link` tal cual desde el sync) — evita mandar trafico y marca a
+// un dominio de terceros. Mismo algoritmo de slug que web/lib/slug.ts.
+function withLandingLink(p) {
+  if (!p) return p;
+  return { ...p, link: `${config.landingBaseUrl}/propiedades/${buildSlug(p.titulo, p.ref)}` };
+}
 
 // Palabras utiles de una zona de busqueda: fuera articulos y conectores,
 // para que "El Poblado" encuentre "Poblado" y "Loma del Chocho" encuentre "Chocho"
@@ -52,7 +63,8 @@ async function search(orgId, filters = {}, limit = 5) {
   if (!supabase) {
     return memory.properties
       .filter((p) => p.org_id === orgId && p.disponible && matchesFilters(p, filters))
-      .slice(0, limit);
+      .slice(0, limit)
+      .map(withLandingLink);
   }
   let query = supabase.from("properties").select("*").eq("org_id", orgId).eq("disponible", true);
   if (filters.ref) query = query.ilike("ref", filters.ref);
@@ -69,13 +81,14 @@ async function search(orgId, filters = {}, limit = 5) {
   if (error) throw error;
   // precio es texto — el filtro de precio se aplica en codigo
   const result = filters.precio_max ? data.filter((p) => matchesFilters(p, { precio_max: filters.precio_max })) : data;
-  return result.slice(0, limit);
+  return result.slice(0, limit).map(withLandingLink);
 }
 
 // Busca por referencia exacta, incluidas las no disponibles (para informar que ya no esta)
 async function findByRef(orgId, ref) {
   if (!supabase) {
-    return memory.properties.find((p) => p.org_id === orgId && p.ref.toUpperCase() === ref.toUpperCase()) || null;
+    const found = memory.properties.find((p) => p.org_id === orgId && p.ref.toUpperCase() === ref.toUpperCase()) || null;
+    return withLandingLink(found);
   }
   const { data, error } = await supabase
     .from("properties")
@@ -84,7 +97,7 @@ async function findByRef(orgId, ref) {
     .ilike("ref", ref)
     .maybeSingle();
   if (error) throw error;
-  return data;
+  return withLandingLink(data);
 }
 
-module.exports = { search, findByRef, matchesFilters, zonaTokens, distinctiveTokens };
+module.exports = { search, findByRef, matchesFilters, zonaTokens, distinctiveTokens, withLandingLink };
