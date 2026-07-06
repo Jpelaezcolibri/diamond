@@ -1,6 +1,6 @@
 import { getQueue, QUEUE_NAMES, jobIds } from "../queue/queues.js";
 import { listOrgIdsWithMarketingEnabled, getOrgMarketingSettings } from "../repositories/settings.repo.js";
-import { METRICS_INTERVAL_HOURS, TOKEN_REFRESH_INTERVAL_DAYS } from "../config/constants.js";
+import { COGNITIVE_REBUILD_CRON, METRICS_INTERVAL_HOURS, TOKEN_REFRESH_INTERVAL_DAYS } from "../config/constants.js";
 import { logger } from "../lib/logger.js";
 
 /**
@@ -62,6 +62,29 @@ export async function reconcileTokenRefreshSchedules(): Promise<void> {
       }
     );
     logger.info({ orgId }, "Token-refresh repetible registrado");
+  }
+}
+
+/**
+ * Batch nocturno del DCE: regenera los Property Contexts stale/failed de cada
+ * org (politica del usuario 2026-07-06: el sync solo marca stale; la
+ * regeneracion con costo va en lote de madrugada, en el timezone de la org).
+ */
+export async function reconcileCognitiveSchedules(): Promise<void> {
+  const orgIds = await listOrgIdsWithMarketingEnabled();
+  const queue = getQueue(QUEUE_NAMES.cognitive);
+
+  for (const orgId of orgIds) {
+    const settings = await getOrgMarketingSettings(orgId);
+    await queue.add(
+      "rebuild-stale",
+      { orgId },
+      {
+        jobId: jobIds.cognitiveRebuild(orgId),
+        repeat: { pattern: COGNITIVE_REBUILD_CRON, tz: settings.timezone }
+      }
+    );
+    logger.info({ orgId, cron: COGNITIVE_REBUILD_CRON, tz: settings.timezone }, "Rebuild nocturno de contextos registrado");
   }
 }
 

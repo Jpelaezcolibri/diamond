@@ -4,7 +4,7 @@ export interface RecordContentGenerationInput {
   org_id: string;
   property_id?: string | null;
   publication_id?: string | null;
-  kind: "copy" | "image_analysis" | "image_generation";
+  kind: "copy" | "image_analysis" | "image_generation" | "property_context";
   style_variant?: string | null;
   model?: string;
   prompt_version?: string;

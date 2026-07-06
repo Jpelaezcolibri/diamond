@@ -33,12 +33,22 @@ const STYLE_GUIDANCE: Record<StyleVariant, string> = {
  * Construye el prompt de copywriting — ver dmap/ARCHITECTURE.md #6.
  * La instruccion explicita de variar estructura/gancho/CTA es lo que evita
  * plantillas repetitivas entre corridas (requisito del usuario).
+ *
+ * `cognitiveBrief` (opcional) es el brief del Diamond Cognitive Engine
+ * (cognitive/application/briefs.ts): cuando existe, el copy se escribe para
+ * el buyer persona/emocion inferidos en vez del estilo generico. Sin el, el
+ * prompt es identico al flujo legacy.
  */
-export function buildCopyPrompt(property: CopywriterPropertyInput, styleVariant: StyleVariant, brand: BrandVoiceInput): string {
+export function buildCopyPrompt(
+  property: CopywriterPropertyInput,
+  styleVariant: StyleVariant,
+  brand: BrandVoiceInput,
+  cognitiveBrief?: string
+): string {
   return `Eres un copywriter inmobiliario experto para ${brand.name}, una inmobiliaria en Colombia.
 
 Genera contenido de marketing para esta propiedad, en estilo "${styleVariant}": ${STYLE_GUIDANCE[styleVariant]}
-
+${cognitiveBrief ? `\n${cognitiveBrief}\nCuando el contexto estrategico y el estilo generico choquen, manda el contexto estrategico.\n` : ""}
 Propiedad:
 - Referencia: ${property.ref}
 - Titulo actual: ${property.titulo ?? "sin titulo"}

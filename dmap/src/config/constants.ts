@@ -44,6 +44,13 @@ export const LOGO_WIDTH_RATIO = 0.08;
 /** Estimado para el historial de costos en content_generations (no facturado). */
 export const COST_PER_GPT_IMAGE_USD = 0.17;
 
+// ── Diamond Cognitive Engine (DCE) ───────────────────────────────────────
+/** Estimado para cost_usd en property_contexts (precio Sonnet, no facturado). */
+export const CLAUDE_COST_PER_MTOK_IN_USD = 3;
+export const CLAUDE_COST_PER_MTOK_OUT_USD = 15;
+/** Hora local (org_marketing_settings.timezone) del batch nocturno que regenera contextos stale/failed. */
+export const COGNITIVE_REBUILD_CRON = "0 3 * * *";
+
 export const STYLE_VARIANTS = [
   "lujo",
   "familiar",

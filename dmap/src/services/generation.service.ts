@@ -19,6 +19,9 @@ import { recordContentGeneration } from "../repositories/content-generations.rep
 import { markChangeEventsProcessedForProperty } from "../repositories/sync.repo.js";
 import { getOrgMarketingSettings } from "../repositories/settings.repo.js";
 import type { CreativeEngine, PublicationAssetRow } from "../repositories/types.js";
+import { getReadyContext } from "../cognitive/repositories/property-context.repo.js";
+import { copywriterBriefFromContext, directorBriefFromContext } from "../cognitive/application/briefs.js";
+import type { PropertyContext } from "../cognitive/domain/property-context.js";
 
 export interface GenerateDraftResult {
   publicationId: string;
@@ -52,6 +55,20 @@ export function buildPropertyCopyInput(property: PropertyRow): CopywriterPropert
     descripcion: property.descripcion,
     caracteristicas: property.caracteristicas
   };
+}
+
+/**
+ * Property Context del DCE listo para consumir, o null. Null significa flujo
+ * legacy identico al de siempre: el contexto ENRIQUECE la generacion pero
+ * nunca la bloquea ni la tumba (ni siquiera si Supabase falla al leerlo).
+ */
+export async function loadCognitiveContext(orgId: string, propertyId: string): Promise<PropertyContext | null> {
+  try {
+    return await getReadyContext(orgId, propertyId);
+  } catch (err) {
+    logger.warn({ err, orgId, propertyId }, "DCE: no se pudo leer el Property Context — generacion sin contexto");
+    return null;
+  }
 }
 
 /** Datos comunes a todos los tamanos de creative para esta propiedad — separado para poder testearlo sin red. */
@@ -148,7 +165,9 @@ export async function produceAsset(
   orgId: string,
   publicationId: string,
   role: CreateAssetInput["role"],
-  deps: ProduceAssetDeps = {}
+  deps: ProduceAssetDeps = {},
+  /** Brief del DCE para director y critico — undefined = flujo legacy. */
+  cognitiveBrief?: string
 ): Promise<ProducedAsset> {
   const creativeBase = buildCreativeBaseData(property, copy.titulo_comercial);
   const altText = copy.alt_text_cover;
@@ -169,7 +188,8 @@ export async function produceAsset(
           tituloComercial: copy.titulo_comercial,
           cta: copy.cta,
           format,
-          brand: { name: brand.name }
+          brand: { name: brand.name },
+          ...(cognitiveBrief ? { cognitiveBrief } : {})
         },
         sourceImageUrl,
         sizeKey
@@ -332,7 +352,14 @@ export async function generateDraftForProperty(
   const carouselPhotoUrls = assets.carousel.filter((url) => url !== assets.cover);
   const kind = carouselPhotoUrls.length > 0 ? ("carousel" as const) : ("single_image" as const);
 
-  const copyResult = await generateCopy(buildPropertyCopyInput(property), styleVariant, { name: brand.name });
+  // DCE: si la propiedad ya tiene Property Context 'ready', copywriter,
+  // director y critico trabajan para el buyer persona/emocion inferidos.
+  // Sin contexto (o si falla la lectura) el flujo es el legacy, identico.
+  const cognitive = await loadCognitiveContext(orgId, propertyId);
+  const copyBrief = cognitive ? copywriterBriefFromContext(cognitive) : undefined;
+  const creativeBrief = cognitive ? directorBriefFromContext(cognitive) : undefined;
+
+  const copyResult = await generateCopy(buildPropertyCopyInput(property), styleVariant, { name: brand.name }, undefined, copyBrief);
 
   await recordContentGeneration({
     org_id: orgId,
@@ -370,8 +397,8 @@ export async function generateDraftForProperty(
   // solo son sharp + upload, no agregan latencia perceptible.
   const engine = await resolveCreativeEngine(orgId);
   const [cover, story, extraSlides] = await Promise.all([
-    produceAsset(engine, brand, property, copyResult.output, styleVariant, assets.cover, "ig_feed", orgId, publication.id, "cover"),
-    produceAsset(engine, brand, property, copyResult.output, styleVariant, assets.story, "ig_story", orgId, publication.id, "story"),
+    produceAsset(engine, brand, property, copyResult.output, styleVariant, assets.cover, "ig_feed", orgId, publication.id, "cover", {}, creativeBrief),
+    produceAsset(engine, brand, property, copyResult.output, styleVariant, assets.story, "ig_story", orgId, publication.id, "story", {}, creativeBrief),
     produceCarouselSlides(orgId, publication.id, carouselPhotoUrls, copyResult.output.alt_text_cover)
   ]);
   const thumbnailAsset: CreateAssetInput = { ...cover.asset, role: "thumbnail" };
@@ -408,7 +435,9 @@ export async function generateDraftForProperty(
         // El critico IA no aprobo alguna pieza: el Content Studio muestra
         // el aviso "Revisar creativo" — la decision final es humana.
         needsReview: cover.meta.approved === false || story.meta.approved === false
-      }
+      },
+      // Trazabilidad: esta corrida uso (o no) el Property Context del DCE.
+      cognitiveContext: Boolean(cognitive)
     }
   });
 
@@ -435,7 +464,14 @@ export async function regenerateCopyForPublication(publicationId: string, styleV
   if (!property) throw new FatalError(`Propiedad ${publication.property_id} no existe`);
 
   const brand = await resolveBrandProfile(publication.org_id);
-  const copyResult = await generateCopy(buildPropertyCopyInput(property), styleVariant, { name: brand.name });
+  const cognitive = await loadCognitiveContext(publication.org_id, property.id);
+  const copyResult = await generateCopy(
+    buildPropertyCopyInput(property),
+    styleVariant,
+    { name: brand.name },
+    undefined,
+    cognitive ? copywriterBriefFromContext(cognitive) : undefined
+  );
 
   await recordContentGeneration({
     org_id: publication.org_id,
@@ -535,6 +571,8 @@ export async function regenerateCreativeForPublication(
   const recordEvent = deps.recordEvent ?? recordPublicationEvent;
   const now = deps.now ?? Date.now;
 
+  const cognitive = await loadCognitiveContext(publication.org_id, property.id);
+
   const ai = await aiCreative(
     brand,
     {
@@ -543,7 +581,8 @@ export async function regenerateCreativeForPublication(
       tituloComercial: publication.titulo_comercial ?? property.titulo,
       cta: publication.cta ?? "",
       format,
-      brand: { name: brand.name }
+      brand: { name: brand.name },
+      ...(cognitive ? { cognitiveBrief: directorBriefFromContext(cognitive) } : {})
     },
     current.source_image_url,
     sizeKey,

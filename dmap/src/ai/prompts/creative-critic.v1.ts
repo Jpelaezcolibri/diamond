@@ -7,6 +7,8 @@ export interface CreativeCriticContext {
   /** Headline que el director ordeno renderizar — el critico verifica que aparezca legible y sin deformaciones. */
   headline: string;
   format: "feed" | "story";
+  /** Brief compacto del Diamond Cognitive Engine — agrega el criterio de coherencia cognitiva. undefined = rubrica legacy. */
+  cognitiveBrief?: string;
 }
 
 /**
@@ -33,7 +35,7 @@ RUBRICA (pondera todo en un score 0-100):
 4. JERARQUIA VISUAL: un solo foco, headline dominante, flujo de lectura claro, un solo CTA.
 5. COHERENCIA DE MARCA: paleta oscura elegante con dorado #D4AF37 solo en acentos, editorial y sobrio — nada saturado, nada estilo Canva/volante.
 6. FOTOGRAFIA PROTAGONISTA: la propiedad real se ve clara y atractiva, no enterrada bajo overlays; la esquina superior izquierda esta razonablemente despejada (ahi va el logo).
-7. IMPACTO: ¿detiene el scroll? ¿parece de agencia internacional o de inmobiliaria promedio?
+7. IMPACTO: ¿detiene el scroll? ¿parece de agencia internacional o de inmobiliaria promedio?${ctx.cognitiveBrief ? `\n8. COHERENCIA COGNITIVA: la pieza debe respetar la direccion estrategica ya definida para esta propiedad:\n${ctx.cognitiveBrief}` : ""}
 
 Umbral de aprobacion: 75. Se estricto pero justo: 90+ solo para piezas excepcionales.
 

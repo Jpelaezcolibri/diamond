@@ -13,6 +13,8 @@ export interface CreativeDirectorInput {
   /** feed = 1:1 (Instagram/Facebook), story = 9:16 vertical. */
   format: "feed" | "story";
   brand: { name: string };
+  /** Brief del Diamond Cognitive Engine (briefs.ts) — undefined = flujo legacy. */
+  cognitiveBrief?: string;
 }
 
 const STYLE_AUDIENCE: Record<StyleVariant, string> = {
@@ -55,6 +57,7 @@ PROPIEDAD REAL (unica fuente de verdad — jamas inventes datos):
 - Descripcion: ${p.descripcion ?? "sin descripcion"}
 
 ESTILO PEDIDO: "${input.styleVariant}" — ${STYLE_AUDIENCE[input.styleVariant]}
+${input.cognitiveBrief ? `\n${input.cognitiveBrief}\nEste brief cognitivo ya analizo la audiencia real de esta propiedad: cuando choque con el estilo generico de arriba, manda el brief cognitivo (las reglas tecnicas, de identidad visual y anti-oscuridad de abajo siguen siendo innegociables).\n` : ""}
 TITULO COMERCIAL DE PARTIDA: "${input.tituloComercial}"
 CTA (unico permitido): "${input.cta}"
 FORMATO: ${dimensiones}.

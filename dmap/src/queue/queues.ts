@@ -7,7 +7,8 @@ export const QUEUE_NAMES = {
   generate: "generate",
   publish: "publish",
   metrics: "metrics",
-  tokenRefresh: "token-refresh"
+  tokenRefresh: "token-refresh",
+  cognitive: "cognitive"
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
@@ -44,7 +45,9 @@ export const jobIds = {
   generate: (propertyId: string, styleVariant: string) => `content.generate:${propertyId}:${styleVariant}`,
   publish: (targetId: string, attempt = 0) => `publish:${targetId}:r${attempt}`,
   metrics: (orgId: string) => `metrics_${orgId}`,
-  tokenRefresh: (orgId: string) => `token_refresh_${orgId}`
+  tokenRefresh: (orgId: string) => `token_refresh_${orgId}`,
+  cognitiveBuild: (propertyId: string) => `cognitive_build_${propertyId}`,
+  cognitiveRebuild: (orgId: string) => `cognitive_rebuild_${orgId}`
 };
 
 export async function enqueueSync(orgId: string, delayMs = 0): Promise<void> {
@@ -71,6 +74,15 @@ export async function enqueuePublish(targetId: string, delayMs: number, attempt 
       // El backoff real lo calcula publish.worker via PUBLISH_RETRY_BACKOFF_MS
       // (BullMQ custom backoff strategy se registra al construir el Worker).
     }
+  );
+}
+
+/** Construccion del Property Context (DCE) para una propiedad — jobId determinista anti-duplicados. */
+export async function enqueueCognitiveBuild(orgId: string, propertyId: string): Promise<void> {
+  await getQueue(QUEUE_NAMES.cognitive).add(
+    "build-context",
+    { orgId, propertyId },
+    { jobId: jobIds.cognitiveBuild(propertyId) }
   );
 }
 

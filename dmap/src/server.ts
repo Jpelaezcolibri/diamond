@@ -8,6 +8,7 @@ import { generationRoutes } from "./api/generation.routes.js";
 import { connectionsRoutes } from "./api/connections.routes.js";
 import { publicationsRoutes } from "./api/publications.routes.js";
 import { settingsRoutes } from "./api/settings.routes.js";
+import { cognitiveRoutes } from "./cognitive/api/cognitive.routes.js";
 
 export function buildServer() {
   const app = Fastify({
@@ -22,6 +23,7 @@ export function buildServer() {
   app.register(connectionsRoutes);
   app.register(publicationsRoutes);
   app.register(settingsRoutes);
+  app.register(cognitiveRoutes);
 
   // Las rutas restantes (templates, brand) se registran cuando el Brand
   // Studio (F2) las necesite, detras del middleware apiKeyAuth ya instalado.

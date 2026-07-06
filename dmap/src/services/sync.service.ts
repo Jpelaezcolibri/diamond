@@ -1,4 +1,5 @@
 import { logger } from "../lib/logger.js";
+import { applyCognitiveInvalidation } from "../cognitive/application/invalidation.service.js";
 import { diffPropertySnapshot, type PropertySnapshot } from "../sync/diff.js";
 import { WasiApiSource } from "../sync/wasi-api.source.js";
 import { WasiPublicSource } from "../sync/wasi-public.source.js";
@@ -176,6 +177,12 @@ async function processCandidate(orgId: string, syncRunId: string, candidate: Syn
       old_value: event.oldValue,
       new_value: event.newValue
     });
+  }
+
+  // DCE: propiedad nueva encola su Property Context; cambio semantico lo
+  // marca stale (regenera el batch nocturno). Nunca tumba el sync.
+  if (diff.events.length > 0) {
+    await applyCognitiveInvalidation(orgId, propertyId, diff.events);
   }
 
   if (diff.events.some((e) => e.changeType === "created")) stats.created += 1;

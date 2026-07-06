@@ -147,7 +147,8 @@ export async function generateAiCreative(
     const critique = await critic(await toCriticBase64(composed.buffer), {
       property: directorInput.property,
       headline: directed.output.headline,
-      format: directorInput.format
+      format: directorInput.format,
+      ...(directorInput.cognitiveBrief ? { cognitiveBrief: directorInput.cognitiveBrief } : {})
     });
     tokensIn += critique.tokensIn;
     tokensOut += critique.tokensOut;

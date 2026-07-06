@@ -64,9 +64,14 @@ export async function generateCopy(
   property: CopywriterPropertyInput,
   styleVariant: StyleVariant,
   brand: BrandVoiceInput,
-  caller: ClaudeCaller = defaultCaller
+  caller: ClaudeCaller = defaultCaller,
+  /** Brief del Diamond Cognitive Engine — undefined = flujo legacy identico al de siempre. */
+  cognitiveBrief?: string
 ): Promise<GenerateCopyResult> {
-  const prompt = buildCopyPrompt(property, styleVariant, brand);
+  const prompt = buildCopyPrompt(property, styleVariant, brand, cognitiveBrief);
+  // El sufijo hace trazable en content_generations que corridas del mismo
+  // prompt base usaron (o no) el contexto cognitivo.
+  const promptVersion = cognitiveBrief ? `${COPYWRITER_PROMPT_VERSION}+dce` : COPYWRITER_PROMPT_VERSION;
 
   let lastError: unknown;
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -74,7 +79,7 @@ export async function generateCopy(
     try {
       const json = tryParseJSON(result.text);
       const output = copywriterOutputSchema.parse(truncateMetaFields(json));
-      return { output, promptVersion: COPYWRITER_PROMPT_VERSION, tokensIn: result.tokensIn, tokensOut: result.tokensOut };
+      return { output, promptVersion, tokensIn: result.tokensIn, tokensOut: result.tokensOut };
     } catch (err) {
       lastError = err;
     }

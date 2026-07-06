@@ -13,6 +13,8 @@ export interface CreativeDirectorInput {
   /** feed = 1:1 (Instagram/Facebook), story = 9:16 vertical. */
   format: "feed" | "story";
   brand: { name: string };
+  /** Brief del Diamond Cognitive Engine (briefs.ts) — undefined = flujo legacy. */
+  cognitiveBrief?: string;
 }
 
 const STYLE_AUDIENCE: Record<StyleVariant, string> = {
