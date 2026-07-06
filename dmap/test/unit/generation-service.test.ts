@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCreativeBaseData, buildPropertyCopyInput } from "../../src/services/generation.service.js";
+import { actorUserId, buildCreativeBaseData, buildPropertyCopyInput } from "../../src/services/generation.service.js";
 import type { PropertyRow } from "../../src/repositories/properties.repo.js";
 
 const property: PropertyRow = {
@@ -54,5 +54,16 @@ describe("buildCreativeBaseData", () => {
     expect(data.zona).toBe("El Carmelo");
     expect(data.ciudad).toBe("Sabaneta");
     expect(data.ref).toBe("AP001");
+  });
+});
+
+describe("actorUserId", () => {
+  it("extrae el uuid de un actor 'user:<uuid>' — publications.created_by es un uuid real, no el string con prefijo", () => {
+    expect(actorUserId("user:550d9c60-dba9-4250-b695-481b85297aaf")).toBe("550d9c60-dba9-4250-b695-481b85297aaf");
+  });
+
+  it("devuelve null para actores 'system:*' (no hay usuario que referenciar)", () => {
+    expect(actorUserId("system:api")).toBeNull();
+    expect(actorUserId("system:generation.service")).toBeNull();
   });
 });

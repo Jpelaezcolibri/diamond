@@ -17,7 +17,7 @@ export interface CreatePublicationInput {
   cta?: string;
   template_id?: string;
   brand_profile_id?: string;
-  created_by?: string;
+  created_by?: string | null;
 }
 
 export async function createPublication(input: CreatePublicationInput): Promise<PublicationRow> {

@@ -18,6 +18,19 @@ export interface GenerateDraftResult {
   publicationId: string;
 }
 
+/**
+ * `actor` trae el prefijo de auditoria ("user:<uuid>" | "system:<worker>",
+ * ver publication_events.actor) pero `publications.created_by` es un uuid
+ * real — pasarle el string con prefijo rompe con "invalid input syntax for
+ * type uuid" (bug real 2026-07-06, primer intento de "Publicar" desde el
+ * CRM). Solo se guarda el uuid cuando el actor es un usuario; para
+ * system:* queda null (no hay usuario que referenciar).
+ */
+export function actorUserId(actor: string): string | null {
+  const match = /^user:(.+)$/.exec(actor);
+  return match?.[1] ?? null;
+}
+
 /** PropertyRow -> insumo del copywriter — separado para poder testearlo sin red. */
 export function buildPropertyCopyInput(property: PropertyRow): CopywriterPropertyInput {
   return {
@@ -129,7 +142,7 @@ export async function generateDraftForProperty(
     hashtags: copyResult.output.hashtags,
     cta: copyResult.output.cta,
     ...(brand.id ? { brand_profile_id: brand.id } : {}),
-    created_by: actor
+    created_by: actorUserId(actor)
   });
 
   const creativeBase = buildCreativeBaseData(property, copyResult.output.titulo_comercial);
