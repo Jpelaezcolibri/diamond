@@ -101,7 +101,12 @@ export async function generateAiCreative(
   deps: AiEngineDeps = {},
   /** Instrucciones del humano (Content Studio) — se inyectan en TODAS las
    *  rondas con prioridad sobre el estilo. undefined = generacion normal. */
-  userNotes?: string
+  userNotes?: string,
+  /** Correcciones del critico de una corrida ANTERIOR (boton "corregir con
+   *  las recomendaciones del critico" del Content Studio): entran como
+   *  MANDATORY CORRECTIONS desde la ronda 1. En rondas siguientes las
+   *  reemplazan las instrucciones frescas del critico de esta corrida. */
+  criticFeedback?: string[]
 ): Promise<AiCreativeResult> {
   const director = deps.director ?? generateMasterPrompt;
   const imageEditor = deps.imageEditor ?? editImage;
@@ -132,7 +137,7 @@ export async function generateAiCreative(
   // 3. Loop generar -> componer -> criticar.
   const rounds: AiCreativeRound[] = [];
   let best: { composed: Awaited<ReturnType<typeof composeLogoAndResize>>; score: number } | null = null;
-  let prompt = composeRoundPrompt(directed.output.master_prompt, userNotes, []);
+  let prompt = composeRoundPrompt(directed.output.master_prompt, userNotes, criticFeedback ?? []);
 
   for (let round = 1; round <= AI_ENGINE_MAX_ROUNDS; round++) {
     const generated = await imageEditor({

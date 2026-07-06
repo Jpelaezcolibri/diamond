@@ -49,10 +49,17 @@ const updateContentBodySchema = z.object({
 });
 
 const regenerateBodySchema = z.object({ styleVariant: z.enum(STYLE_VARIANTS) });
-const regenerateCreativeBodySchema = z.object({
-  role: z.enum(["cover", "story"]),
-  notes: z.string().trim().min(1, "Escribe los cambios que quieres").max(1000)
-});
+const regenerateCreativeBodySchema = z
+  .object({
+    role: z.enum(["cover", "story"]),
+    notes: z.string().trim().max(2000, "Las notas no pueden superar 2000 caracteres").optional(),
+    // Instrucciones de mejora del critico IA de la corrida anterior — el CRM
+    // las reenvia tal cual con el boton "corregir con las recomendaciones".
+    criticInstructions: z.array(z.string().trim().min(1).max(600)).max(12).optional()
+  })
+  .refine((b) => (b.notes && b.notes.length > 0) || (b.criticInstructions && b.criticInstructions.length > 0), {
+    message: "Escribe los cambios que quieres o envia las instrucciones del critico"
+  });
 
 export async function publicationsRoutes(app: FastifyInstance) {
   app.patch("/api/v1/publications/:id", async (request, reply) => {
@@ -114,7 +121,14 @@ export async function publicationsRoutes(app: FastifyInstance) {
       return;
     }
     try {
-      const result = await regenerateCreativeForPublication(params.data.id, body.data.role, body.data.notes, actorFromRequest(request));
+      const result = await regenerateCreativeForPublication(
+        params.data.id,
+        body.data.role,
+        body.data.notes ?? "",
+        actorFromRequest(request),
+        {},
+        body.data.criticInstructions ?? []
+      );
       reply.send(result);
     } catch (err) {
       reply.code(502).send({ error: "regenerate_creative_failed", message: (err as Error).message });

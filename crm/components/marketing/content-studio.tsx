@@ -29,6 +29,16 @@ interface CreativeMeta {
   rounds?: number;
   reason?: string;
   problemas?: string[];
+  /** Instrucciones de mejora del crítico — se reenvían a DMAP con el botón
+   *  "Corregir con las recomendaciones del crítico". */
+  instrucciones?: string[];
+}
+
+/** Feedback accionable del crítico para regenerar: instrucciones si las hay,
+ *  si no (eventos viejos, sin ese campo) los problemas sirven igual. */
+function criticFixInstructions(meta: CreativeMeta | undefined): string[] {
+  if (meta?.instrucciones?.length) return meta.instrucciones;
+  return meta?.problemas ?? [];
 }
 
 async function postJson(url: string, body?: unknown, method = "POST") {
@@ -139,15 +149,20 @@ export default function ContentStudio({
     if (ok) router.refresh();
   }
 
-  async function handleRegenerateCreative(role: "cover" | "story") {
+  async function handleRegenerateCreative(role: "cover" | "story", criticInstructions?: string[]) {
     const notes = regenNotes[role].trim();
-    if (!notes) {
+    const usingCritic = (criticInstructions?.length ?? 0) > 0;
+    if (!notes && !usingCritic) {
       setMessage({ type: "error", text: "Escribí los cambios que querés en el creativo" });
       return;
     }
-    setBusy(`regen-creative-${role}`);
+    setBusy(usingCritic ? `regen-critic-${role}` : `regen-creative-${role}`);
     setMessage(null);
-    const { ok, data } = await postJson(`/api/marketing/publications/${publication.id}/regenerate-creative`, { role, notes });
+    const { ok, data } = await postJson(`/api/marketing/publications/${publication.id}/regenerate-creative`, {
+      role,
+      ...(notes ? { notes } : {}),
+      ...(usingCritic ? { criticInstructions } : {}),
+    });
     setBusy(null);
     if (ok) {
       const label = role === "cover" ? "Portada" : "Historia";
@@ -158,7 +173,10 @@ export default function ContentStudio({
       setRegenNotes((prev) => ({ ...prev, [role]: "" }));
       router.refresh();
     } else {
-      setMessage({ type: "error", text: data.message || data.error || "No se pudo regenerar el creativo" });
+      // DMAP devuelve errores zod como { error: "invalid_request", issues } —
+      // mostrar los mensajes reales en vez del código opaco.
+      const issues = Array.isArray(data.issues) ? data.issues.map((i: { message?: string }) => i.message).filter(Boolean).join(" · ") : "";
+      setMessage({ type: "error", text: issues || data.message || data.error || "No se pudo regenerar el creativo" });
     }
   }
 
@@ -174,6 +192,7 @@ export default function ContentStudio({
           onChange={(e) => setRegenNotes((prev) => ({ ...prev, [role]: e.target.value }))}
           placeholder={`Cambios para la ${label} (ej: quitá el overlay oscuro, agrandá el precio, menos texto, tono más cálido)`}
           rows={2}
+          maxLength={2000}
           className="w-full rounded-lg border border-slate-200 p-2 text-xs"
           disabled={busy !== null}
         />
@@ -285,6 +304,27 @@ export default function ContentStudio({
                 )}
               </ul>
             </details>
+          )}
+          {/* Regenerar con el feedback del crítico en un clic: reenvía sus
+              instrucciones a GPT Image como correcciones obligatorias. */}
+          {isDraft && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {reviewParts
+                .filter((p) => criticFixInstructions(p.meta).length > 0)
+                .map((p) => (
+                  <button
+                    key={p.role}
+                    type="button"
+                    onClick={() => handleRegenerateCreative(p.role, criticFixInstructions(p.meta))}
+                    disabled={busy !== null}
+                    className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-amber-700 disabled:opacity-50"
+                  >
+                    {busy === `regen-critic-${p.role}`
+                      ? "Corrigiendo con IA… (~1-2 min)"
+                      : `✨ Corregir ${p.role === "cover" ? "la portada" : "la historia"} con las recomendaciones del crítico`}
+                  </button>
+                ))}
+            </div>
           )}
         </div>
       )}

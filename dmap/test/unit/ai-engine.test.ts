@@ -188,6 +188,30 @@ describe("generateAiCreative", () => {
     expect(firstPrompt).toContain("Quita el overlay oscuro y agranda el precio");
   });
 
+  it("criticFeedback: las correcciones del critico de una corrida anterior entran como MANDATORY CORRECTIONS desde la ronda 1", async () => {
+    const { deps, imageEditor } = makeDeps({ scores: [88] });
+
+    await generateAiCreative(brand, directorInput, "https://img.example/x.jpg", "ig_feed", deps, undefined, [
+      "corrige la tilde de 'Baños'",
+      "quita la caja negra del CTA"
+    ]);
+
+    const firstPrompt = imageEditor.mock.calls[0]![0].prompt as string;
+    expect(firstPrompt).toContain("MANDATORY CORRECTIONS");
+    expect(firstPrompt).toContain("corrige la tilde de 'Baños'");
+    expect(firstPrompt).toContain("quita la caja negra del CTA");
+  });
+
+  it("criticFeedback + fallo en ronda 1: la ronda 2 usa las instrucciones FRESCAS del critico (no las viejas)", async () => {
+    const { deps, imageEditor } = makeDeps({ scores: [60, 85] });
+
+    await generateAiCreative(brand, directorInput, "https://img.example/x.jpg", "ig_feed", deps, undefined, ["instruccion vieja de la corrida pasada"]);
+
+    const secondPrompt = imageEditor.mock.calls[1]![0].prompt as string;
+    expect(secondPrompt).toContain("agranda el precio"); // del critico de ESTA corrida
+    expect(secondPrompt).not.toContain("instruccion vieja de la corrida pasada");
+  });
+
   it("userNotes + correccion del critico coexisten en la ronda 2", async () => {
     const { deps, imageEditor } = makeDeps({ scores: [60, 85] });
 

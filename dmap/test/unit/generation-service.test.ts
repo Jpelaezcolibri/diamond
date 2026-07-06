@@ -249,7 +249,9 @@ describe("regenerateCreativeForPublication (guards)", () => {
   // El resto del flujo (carga de pub/property/brand/assets + reemplazo de
   // imagen) toca Supabase y se valida E2E, igual que generateDraftForProperty.
   // El guard de notas vacias corre ANTES de cualquier IO, asi que se testea puro.
-  it("rechaza notas vacias sin tocar red", async () => {
+  it("rechaza notas vacias sin instrucciones del critico, sin tocar red", async () => {
     await expect(regenerateCreativeForPublication("pub-1", "cover", "   ", "user:x")).rejects.toThrow(/notas/i);
+    // instrucciones en blanco tampoco cuentan
+    await expect(regenerateCreativeForPublication("pub-1", "cover", "", "user:x", {}, ["  ", ""])).rejects.toThrow(/notas/i);
   });
 });

@@ -136,6 +136,20 @@ interface CreativeMeta {
    *  mostrarlos en el aviso "Revisar creativo" (content_generations esta
    *  cerrada a lectura del CRM por RLS, asi que viajan en el evento). */
   problemas?: string[];
+  /** Instrucciones de mejora de la ultima ronda del critico — solo cuando NO
+   *  aprobo. El Content Studio las manda de vuelta a regenerate-creative con
+   *  el boton "corregir con las recomendaciones del critico". */
+  instrucciones?: string[];
+}
+
+/** Feedback accionable de la ultima ronda del critico (solo si no aprobo). */
+function criticFeedbackMeta(ai: { approved: boolean; rounds: { problemas: string[]; instrucciones_de_mejora: string[] }[] }): Pick<CreativeMeta, "problemas" | "instrucciones"> {
+  if (ai.approved) return {};
+  const last = ai.rounds[ai.rounds.length - 1];
+  return {
+    problemas: last?.problemas.slice(0, 6) ?? [],
+    instrucciones: last?.instrucciones_de_mejora.slice(0, 6) ?? []
+  };
 }
 
 interface ProducedAsset {
@@ -245,7 +259,7 @@ export async function produceAsset(
           score: ai.finalScore,
           approved: ai.approved,
           rounds: ai.rounds.length,
-          ...(ai.approved ? {} : { problemas: ai.rounds[ai.rounds.length - 1]?.problemas.slice(0, 6) ?? [] })
+          ...criticFeedbackMeta(ai)
         }
       };
     } catch (err) {
@@ -522,21 +536,28 @@ export interface RegenerateCreativeDeps {
  * "Regenerar creativo con notas" desde el Content Studio: el humano actua
  * como tercer director y escribe los cambios que quiere (ej "quita el overlay
  * oscuro, agranda el precio"); se re-corre el motor IA sobre la MISMA foto,
- * inyectando esas notas con prioridad en el prompt. Solo motor IA (la
- * plantilla no interpreta instrucciones) y solo en 'draft'. Reemplaza la
- * imagen del rol (y sus copias: thumbnail y slide 0 del carrusel comparten
- * el archivo de la portada). El registro y el evento no son criticos: si
- * fallan, el creativo regenerado NO se descarta.
+ * inyectando esas notas con prioridad en el prompt. Tambien acepta (ademas o
+ * en lugar de las notas) las instrucciones de mejora que dejo el critico en
+ * la corrida anterior (`criticInstructions`, boton "corregir con las
+ * recomendaciones del critico") — entran como MANDATORY CORRECTIONS desde la
+ * ronda 1. Solo motor IA (la plantilla no interpreta instrucciones) y solo en
+ * 'draft'. Reemplaza la imagen del rol (y sus copias: thumbnail y slide 0 del
+ * carrusel comparten el archivo de la portada). El registro y el evento no
+ * son criticos: si fallan, el creativo regenerado NO se descarta.
  */
 export async function regenerateCreativeForPublication(
   publicationId: string,
   role: RegenerableRole,
   userNotes: string,
   actor: string,
-  deps: RegenerateCreativeDeps = {}
+  deps: RegenerateCreativeDeps = {},
+  criticInstructions: string[] = []
 ): Promise<RegenerateCreativeResult> {
   const notes = userNotes.trim();
-  if (!notes) throw new FatalError("Las notas para regenerar el creativo no pueden estar vacias");
+  const feedback = criticInstructions.map((i) => i.trim()).filter(Boolean);
+  if (!notes && feedback.length === 0) {
+    throw new FatalError("Para regenerar el creativo escribe notas o envia las instrucciones del critico");
+  }
 
   const publication = await getPublicationById(publicationId);
   if (!publication) throw new FatalError(`Publicacion ${publicationId} no existe`);
@@ -587,7 +608,8 @@ export async function regenerateCreativeForPublication(
     current.source_image_url,
     sizeKey,
     {},
-    notes
+    notes || undefined,
+    feedback
   );
 
   const uploaded = await upload(publication.org_id, publicationId, role, 0, ai.buffer);
@@ -606,7 +628,8 @@ export async function regenerateCreativeForPublication(
     format: ai.format
   });
 
-  const problemas = ai.approved ? [] : (ai.rounds[ai.rounds.length - 1]?.problemas.slice(0, 6) ?? []);
+  const feedbackMeta = criticFeedbackMeta(ai);
+  const problemas = feedbackMeta.problemas ?? [];
 
   try {
     await recordGeneration({
@@ -617,7 +640,7 @@ export async function regenerateCreativeForPublication(
       style_variant: styleVariant,
       model: env.GPT_IMAGE_MODEL,
       prompt_version: ai.promptVersion,
-      input: { role, sizeKey, regenerated: true, userNotes: notes, sourceImageUrl: current.source_image_url, masterPrompt: ai.masterPrompt, headline: ai.headline },
+      input: { role, sizeKey, regenerated: true, userNotes: notes, criticInstructions: feedback, sourceImageUrl: current.source_image_url, masterPrompt: ai.masterPrompt, headline: ai.headline },
       output: {
         approved: ai.approved,
         finalScore: ai.finalScore,
@@ -639,7 +662,7 @@ export async function regenerateCreativeForPublication(
     score: ai.finalScore,
     approved: ai.approved,
     rounds: ai.rounds.length,
-    ...(ai.approved ? {} : { problemas })
+    ...feedbackMeta
   };
   try {
     // Evento draft->draft (auditoria): el Content Studio deriva el estado
@@ -655,6 +678,7 @@ export async function regenerateCreativeForPublication(
         source: "regenerate-creative",
         regeneratedRole: role,
         userNotes: notes,
+        criticInstructions: feedback,
         creative: { [role]: meta }
       }
     });

@@ -15,18 +15,28 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!user || !isAdmin(user)) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
   const { id } = await params;
-  const { role, notes } = await request.json();
+  const { role, notes, criticInstructions } = await request.json();
   if (role !== "cover" && role !== "story") {
     return NextResponse.json({ error: "role invalido (cover | story)" }, { status: 400 });
   }
-  if (typeof notes !== "string" || notes.trim().length === 0) {
-    return NextResponse.json({ error: "Escribe los cambios que quieres" }, { status: 400 });
+  const hasNotes = typeof notes === "string" && notes.trim().length > 0;
+  const instructions = Array.isArray(criticInstructions)
+    ? criticInstructions.filter((i: unknown): i is string => typeof i === "string" && i.trim().length > 0).slice(0, 12)
+    : [];
+  if (!hasNotes && instructions.length === 0) {
+    return NextResponse.json({ error: "Escribe los cambios que quieres o usa las recomendaciones del crítico" }, { status: 400 });
   }
 
   const { ok, status, data } = await dmapJson(`/api/v1/publications/${id}/regenerate-creative`, {
     method: "POST",
     actorId: user.id,
-    body: JSON.stringify({ role, notes }),
+    body: JSON.stringify({
+      role,
+      ...(hasNotes ? { notes: notes.trim().slice(0, 2000) } : {}),
+      // El prompt de GPT tolera bien instrucciones largas, pero el schema de
+      // DMAP corta en 600 c/u — truncar aquí evita un invalid_request opaco.
+      ...(instructions.length > 0 ? { criticInstructions: instructions.map((i: string) => i.trim().slice(0, 600)) } : {}),
+    }),
   });
 
   if (!ok) return NextResponse.json(data, { status });
