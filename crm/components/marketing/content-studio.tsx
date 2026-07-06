@@ -68,6 +68,7 @@ export default function ContentStudio({
   const [scheduledAt, setScheduledAt] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: "ok" | "error"; text: string } | null>(null);
+  const [regenNotes, setRegenNotes] = useState<{ cover: string; story: string }>({ cover: "", story: "" });
 
   const cover = assets.find((a) => a.role === "cover");
   const story = assets.find((a) => a.role === "story");
@@ -77,17 +78,20 @@ export default function ContentStudio({
     .filter((a) => a.role === "carousel" && a.position > 0 && a.public_url)
     .sort((a, b) => a.position - b.position);
 
-  // Motor IA de creativos: si el critico no aprobo alguna pieza, el evento
-  // draft trae detail.creative.needsReview con score y problemas — la
-  // decision final es humana, este aviso la hace visible.
-  const creativeReview = events
-    .map((e) => (e.detail as { creative?: { needsReview?: boolean; cover?: CreativeMeta; story?: CreativeMeta } } | null)?.creative)
-    .find((c) => c?.needsReview);
-  const reviewParts = creativeReview
-    ? (["cover", "story"] as const)
-        .map((role) => ({ role, meta: creativeReview[role] }))
-        .filter((p) => p.meta?.approved === false)
-    : [];
+  // Motor IA de creativos: si el critico no aprobo alguna pieza se muestra
+  // el aviso "Revisar creativo". Estado ACTUAL por rol = el meta mas reciente
+  // que lo menciona (los eventos vienen en orden cronologico) — asi una
+  // regeneracion con notas que ya aprobo limpia el aviso viejo del rol.
+  const latestCreativeByRole: { cover?: CreativeMeta; story?: CreativeMeta } = {};
+  for (const e of events) {
+    const c = (e.detail as { creative?: { cover?: CreativeMeta; story?: CreativeMeta } } | null)?.creative;
+    if (!c) continue;
+    if (c.cover) latestCreativeByRole.cover = c.cover;
+    if (c.story) latestCreativeByRole.story = c.story;
+  }
+  const reviewParts = (["cover", "story"] as const)
+    .map((role) => ({ role, meta: latestCreativeByRole[role] }))
+    .filter((p) => p.meta?.approved === false);
 
   function toggleConnection(id: string) {
     setSelectedConnections((prev) => (prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]));
@@ -119,6 +123,56 @@ export default function ContentStudio({
     setBusy(null);
     setMessage(ok ? { type: "ok", text: "Copy regenerado" } : { type: "error", text: data.error || data.message || "No se pudo regenerar" });
     if (ok) router.refresh();
+  }
+
+  async function handleRegenerateCreative(role: "cover" | "story") {
+    const notes = regenNotes[role].trim();
+    if (!notes) {
+      setMessage({ type: "error", text: "Escribí los cambios que querés en el creativo" });
+      return;
+    }
+    setBusy(`regen-creative-${role}`);
+    setMessage(null);
+    const { ok, data } = await postJson(`/api/marketing/publications/${publication.id}/regenerate-creative`, { role, notes });
+    setBusy(null);
+    if (ok) {
+      const label = role === "cover" ? "Portada" : "Historia";
+      const verdict = data.approved
+        ? `el crítico la aprobó (score ${data.score}/100) ✓`
+        : `el crítico aún ve problemas (score ${data.score}/100) — ajustá las notas y reintentá ⚠️`;
+      setMessage({ type: "ok", text: `${label} regenerada — ${verdict}` });
+      setRegenNotes((prev) => ({ ...prev, [role]: "" }));
+      router.refresh();
+    } else {
+      setMessage({ type: "error", text: data.message || data.error || "No se pudo regenerar el creativo" });
+    }
+  }
+
+  // Caja de notas + boton para regenerar un creativo con instrucciones del
+  // humano (solo en draft; requiere motor IA activo, el backend lo valida).
+  function regenBox(role: "cover" | "story") {
+    if (!isDraft) return null;
+    const label = role === "cover" ? "portada" : "historia";
+    return (
+      <div className="space-y-1.5">
+        <textarea
+          value={regenNotes[role]}
+          onChange={(e) => setRegenNotes((prev) => ({ ...prev, [role]: e.target.value }))}
+          placeholder={`Cambios para la ${label} (ej: quitá el overlay oscuro, agrandá el precio, menos texto, tono más cálido)`}
+          rows={2}
+          className="w-full rounded-lg border border-slate-200 p-2 text-xs"
+          disabled={busy !== null}
+        />
+        <button
+          type="button"
+          onClick={() => handleRegenerateCreative(role)}
+          disabled={busy !== null || !regenNotes[role].trim()}
+          className="w-full rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-slate-800 disabled:opacity-50"
+        >
+          {busy === `regen-creative-${role}` ? "Regenerando con IA… (~1-2 min)" : `Regenerar ${label} con mis notas`}
+        </button>
+      </div>
+    );
   }
 
   async function handleApprove() {
@@ -226,8 +280,11 @@ export default function ContentStudio({
         <div className="space-y-3">
           <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Creatives</h3>
           {cover?.public_url && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={cover.public_url} alt={cover.alt_text || "Portada"} className="w-full rounded-xl border border-slate-200" />
+            <div className="space-y-2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={cover.public_url} alt={cover.alt_text || "Portada"} className="w-full rounded-xl border border-slate-200" />
+              {regenBox("cover")}
+            </div>
           )}
           {carouselSlides.length > 0 && (
             <div className="space-y-1.5">
@@ -248,8 +305,11 @@ export default function ContentStudio({
             </div>
           )}
           {story?.public_url && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={story.public_url} alt="Historia" className="mx-auto w-1/2 rounded-xl border border-slate-200" />
+            <div className="space-y-2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={story.public_url} alt="Historia" className="mx-auto w-1/2 rounded-xl border border-slate-200" />
+              {regenBox("story")}
+            </div>
           )}
           {!cover && !story && <p className="text-sm text-slate-500">Sin creatives renderizados todavía.</p>}
         </div>
