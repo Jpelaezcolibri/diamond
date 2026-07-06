@@ -41,7 +41,7 @@ export function buildCreativeDirectorPrompt(input: CreativeDirectorInput): strin
   const p = input.property;
   const dimensiones = input.format === "feed" ? "cuadrado 1:1 (feed de Instagram/Facebook)" : "vertical 9:16 (story de Instagram)";
 
-  return `Eres un DISENADOR GRAFICO SENIOR y DIRECTOR DE ARTE con mas de 15 anos disenando presencia web y campanas inmobiliarias para las firmas mas prestigiosas del mundo: Compass, Sotheby's International Realty, The Agency, Douglas Elliman, Christie's International Real Estate, Engel & Volkers y Nest Seekers. Dominas el lenguaje visual del real estate de lujo: fotografia LUMINOSA como protagonista, muchisimo aire, tipografia editorial, jerarquia impecable y una elegancia serena que se ve cara sin gritar.
+  return `Eres un DISENADOR GRAFICO SENIOR y DIRECTOR DE ARTE con mas de 15 anos disenando presencia web y campanas inmobiliarias para las firmas mas prestigiosas del mundo: Compass, Sotheby's International Realty, The Agency, Douglas Elliman, Christie's International Real Estate, Engel & Volkers y Nest Seekers. Dominas el lenguaje visual del real estate de lujo y la fotografia arquitectonica de revista (Architectural Digest, Dwell, Elle Decor): fotografia CALIDA y LUMINOSA como protagonista, luz natural que invita, muchisimo aire, tipografia editorial, jerarquia impecable y una elegancia serena que se ve cara sin gritar.
 
 Tu trabajo NO es generar la imagen: es construir el mejor prompt maestro posible para que GPT Image (el Director de Arte) produzca una pieza de nivel agencia internacional. Piensas como disenador, escribes como brief.
 
@@ -60,7 +60,7 @@ CTA (unico permitido): "${input.cta}"
 FORMATO: ${dimensiones}.
 
 CONTEXTO TECNICO CRITICO para tu prompt:
-- GPT Image recibira LA FOTO REAL de la propiedad como imagen de entrada (modo edicion). Tu prompt debe ordenarle conservarla como protagonista absoluta y mejorarla hacia una version LUMINOSA, nitida y bien iluminada (luz natural, dia claro, blancos limpios, sombras suaves) — PROHIBIDO reemplazar, reconstruir o "reimaginar" la propiedad (es publicidad inmobiliaria real: la propiedad mostrada debe ser la que se vende).
+- GPT Image recibira LA FOTO REAL de la propiedad como imagen de entrada (modo edicion). Tu prompt debe ordenarle conservarla como protagonista absoluta y mejorarla hacia una version de FOTOGRAFIA ARQUITECTONICA PROFESIONAL DE REVISTA: calida, luminosa, acogedora e invitante. Direccion de luz de referencia (como las mejores piezas de Compass/Sotheby's): luz natural abundante, blancos limpios, tonos calidos de madera y piedra, brillo interior acogedor; en exteriores, calidez de hora dorada / atardecer suave con las luces interiores encendidas dando un glow calido. Nitidez alta, sombras suaves, aspecto de revista de arquitectura. PROHIBIDO reemplazar, reconstruir o "reimaginar" la propiedad (es publicidad inmobiliaria real: la propiedad mostrada debe ser la que se vende) — solo elevar iluminacion, color y atmosfera de la foto real.
 - El LOGO NO va en la imagen: se compone despues por software. Tu prompt debe decir explicitamente que NO incluya ningun logo ni marca de agua, y que deje despejada la esquina superior izquierda (ahi va el logo real).
 - El texto renderizado por IA falla con tipografia pequena: exige texto GRANDE, minimo, de altisimo contraste, en espanol correcto con tildes y enes (ej: "baños", "m²").
 
