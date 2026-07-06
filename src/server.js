@@ -20,7 +20,7 @@ app.get("/", (req, res) => {
 
 // ── Endpoints de prueba local (sin WhatsApp ni Telegram) ─────────
 app.post("/test", async (req, res) => {
-  const { phone = "test_user", message } = req.body;
+  const { phone = "test_user", message, adReferral } = req.body;
   if (!message) return res.status(400).json({ error: "Falta el campo 'message'" });
   try {
     const org = await organizations.getDefault();
@@ -29,6 +29,7 @@ app.post("/test", async (req, res) => {
       phone,
       text: message,
       source: "test",
+      adReferral: adReferral || null,
     });
     res.json({ reply, lead, transfer });
   } catch (e) {

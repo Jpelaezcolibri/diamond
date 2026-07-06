@@ -169,6 +169,10 @@ router.post("/webhook", async (req, res) => {
 
     console.log(`[whatsapp][${org.name}][${userPhone}] (${message.type}) ${userText}`);
 
+    // Presente solo en el primer mensaje de una conversacion originada en un
+    // anuncio de clic-a-WhatsApp (Meta adjunta este objeto automaticamente).
+    const adReferral = message.referral || null;
+
     const { reply, transfer, assistantMessageId } = await procesarMensaje({
       org,
       phone: userPhone,
@@ -176,6 +180,7 @@ router.post("/webhook", async (req, res) => {
       source: "whatsapp",
       messageExtras: extras,
       phoneNumberId,
+      adReferral,
     });
 
     if (reply) {

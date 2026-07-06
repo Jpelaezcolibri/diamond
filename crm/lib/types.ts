@@ -13,6 +13,8 @@ export type Lead = {
   estado: string;
   property_ref_origen: string | null;
   source: string;
+  /** Referral de Meta (Click-to-WhatsApp Ads) del primer mensaje — null = lead organico. */
+  ad_referral: { headline?: string; source_id?: string; source_url?: string; ctwa_clid?: string } | null;
   owner_id: string | null;
   owner_assigned_at: string | null;
   created_at: string;

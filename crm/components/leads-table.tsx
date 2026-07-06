@@ -21,11 +21,13 @@ export default function LeadsTable({
 }) {
   const [q, setQ] = useState("");
   const [onlyMine, setOnlyMine] = useState(false);
+  const [onlyAds, setOnlyAds] = useState(false);
 
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
     return leads
       .filter((l) => !onlyMine || l.owner_id === currentUserId)
+      .filter((l) => !onlyAds || l.ad_referral)
       .filter((l) => {
         if (!term) return true;
         return [l.nombre, l.phone, l.property_ref_origen, l.forma_pago, l.urgencia]
@@ -51,6 +53,15 @@ export default function LeadsTable({
         >
           Mis leads
         </button>
+        <button
+          onClick={() => setOnlyAds((v) => !v)}
+          title="Leads que llegaron de un anuncio de clic-a-WhatsApp (Meta Ads)"
+          className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+            onlyAds ? "border-blue-400 bg-blue-50 text-blue-700" : "border-slate-200 text-slate-500 hover:bg-slate-50"
+          }`}
+        >
+          📢 Solo Meta Ads
+        </button>
       </div>
       <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
         <table className="w-full text-sm">
@@ -72,7 +83,17 @@ export default function LeadsTable({
                   <div className="flex items-center gap-2.5">
                     <Avatar name={l.nombre} phone={l.phone} size={30} />
                     <div>
-                      <p className="font-semibold text-slate-900">{l.nombre || "Sin nombre"}</p>
+                      <p className="font-semibold text-slate-900">
+                        {l.nombre || "Sin nombre"}
+                        {l.ad_referral && (
+                          <span
+                            title={l.ad_referral.headline ? `Anuncio: ${l.ad_referral.headline}` : "Llegó de un anuncio de Meta Ads"}
+                            className="ml-1.5 rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-700"
+                          >
+                            📢 Ads
+                          </span>
+                        )}
+                      </p>
                       <p className="text-xs text-slate-400">+{l.phone}</p>
                     </div>
                   </div>

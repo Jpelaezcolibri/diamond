@@ -47,14 +47,23 @@ function nowInBogota() {
 const REF_PATTERN = /\b([A-Z]{2}\d{3}|\d{6,8})\b/;
 
 // Procesa un mensaje entrante de cualquier canal.
+// adReferral: objeto "referral" que WhatsApp Cloud API adjunta al PRIMER
+// mensaje cuando la conversacion se origino en un anuncio de clic-a-WhatsApp
+// (Click-to-WhatsApp Ads) — permite separar en el CRM los leads que llegaron
+// por un anuncio pago de los organicos, sin tocar `source` (canal).
 // Devuelve { reply, lead, transfer } — transfer: { motivo, advisorAlert } si aplico.
-async function procesarMensaje({ org, phone, text, source = "whatsapp", messageExtras = {}, phoneNumberId = null }) {
+async function procesarMensaje({ org, phone, text, source = "whatsapp", messageExtras = {}, phoneNumberId = null, adReferral = null }) {
   const lead = await leads.findOrCreate(org.id, phone, source);
 
   // Deep link / click-to-WhatsApp: la primera mencion de una ref queda como origen
   const refMatch = text.toUpperCase().match(REF_PATTERN);
   if (refMatch && !lead.property_ref_origen) {
     Object.assign(lead, await leads.update(lead.id, { property_ref_origen: refMatch[1] }));
+  }
+  // Igual que arriba: solo se guarda del PRIMER mensaje que lo trae (el
+  // origen del lead no cambia si mas adelante escribe mencionando otro anuncio).
+  if (adReferral && !lead.ad_referral) {
+    Object.assign(lead, await leads.update(lead.id, { ad_referral: adReferral }));
   }
   // Un lead recien creado entra al kanban en "nuevo"; pasa a "en_conversacion"
   // cuando vuelve a escribir (segunda interaccion en adelante)
