@@ -514,11 +514,23 @@ sequenceDiagram
 - Prompts versionados en `ai/prompts/`; `prompt_version` viaja a `content_generations` para poder comparar calidad entre versiones.
 - "Regenerar en estilo X" desde el Content Studio crea una nueva corrida sobre la misma publicación (historial completo en `content_generations`).
 
-**Render de creatives (Creative Generator Lite):**
+**Render de creatives (Creative Generator Lite — hoy el motor "template"/fallback):**
 
 - Por cada tamaño: sharp recorta la foto elegida al ratio → data URI → layout satori (logo Diamond, franja premium dorada, precio, zona, operación, REF, tipografía de marca desde `assets/fonts/`) → SVG → resvg → PNG → sharp a JPEG q85 → upload.
 - Los layouts son funciones puras `(brand: BrandProfile, data: CreativeData, size) => SatoriNode`. El futuro **Brand Studio** (F2) solo produce nuevos `brand_profiles` (colores, fuentes, overlays, layout_style) que consumen las mismas funciones — cero acoplamiento a Diamond.
 - Seed inicial: brand profile "Diamond" con navy `#0b1526`, oro `#c9a24b` y [LOGO DIAMOND.png](../LOGO%20DIAMOND.png).
+
+**Motor multiagente de creativos ("Diamond AI Creative Director", 2026-07-06 — motor default `creative_engine='ai'`):**
+
+Tres agentes en cadena por rol (cover ig_feed y story ig_story, en paralelo), orquestados por `creatives/ai-engine.ts`:
+
+1. **Director Creativo (Claude, `ai/creative-director.ts` + prompt versionado `creative-director.v1`)**: analiza propiedad/audiencia/estilo y construye un prompt maestro detallado (composición, dirección de arte, paleta `#0D1117/#1A1F2B/#FFFFFF/#D4AF37 solo acentos`, headline ≤7 palabras, UN CTA, sin logo). Claude nunca diseña: piensa y escribe el prompt.
+2. **Director de Arte (OpenAI `gpt-image-1`, `ai/gpt-image.ts`)**: `POST /v1/images/edits` con la **foto real** de la propiedad como imagen base (regla dura: nunca reinventar la propiedad). fetch puro, AbortController 120s, cualquier error → `FatalError` sin reintentos.
+3. **Crítico Creativo (Claude vision, `ai/creative-critic.ts` + rúbrica `creative-critic.v1`)**: evalúa la pieza final (texto letra por letra, datos reales exactos, legibilidad, marca, impacto) → `{score 0-100, problemas[], instrucciones_de_mejora[]}`. Umbral 75. Máximo **2 rondas**: la segunda regenera con las correcciones del crítico anexadas al prompt maestro. Si ninguna aprueba: gana la de mayor score con `approved:false` → el evento draft lleva `detail.creative.needsReview` y el Content Studio muestra el aviso "Revisar creativo".
+
+Post-proceso determinista (`creatives/compose.ts`, sharp): el **logo real nunca lo renderiza GPT** — se compone el PNG (~8% del ancho, esquina sup. izquierda) sobre la imagen generada, y se reescala del tamaño nativo de gpt-image-1 (1024x1024/1024x1536) a los tamaños Meta (1080x1080/1080x1920).
+
+Fallback: ante **cualquier** fallo de OpenAI (sin `OPENAI_API_KEY`, sin créditos, timeout, 5xx) el asset cae automáticamente a la plantilla satori (por asset, no por publicación) con la razón registrada en `detail.creative`. Cada corrida IA queda en `content_generations` (`kind='image_generation'`) con prompt maestro, rondas, scores y costo estimado. Config por org: `org_marketing_settings.creative_engine` (selector en `/marketing/configuracion` del CRM).
 
 ---
 
