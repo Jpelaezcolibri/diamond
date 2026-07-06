@@ -2,14 +2,17 @@ import type { PropertyRow } from "@/types/database";
 import type { Property, Operacion } from "@/types/property";
 import { parsePrice, formatPrice, parseArea } from "./price";
 import { buildSlug } from "./slug";
+import { htmlToPlainText } from "./clean-html";
 
 function normalizeOperacion(raw: string | null): Operacion {
   return raw?.trim().toLowerCase() === "arriendo" ? "Arriendo" : "Venta";
 }
 
 function splitCaracteristicas(raw: string | null): string[] {
-  if (!raw) return [];
-  return raw
+  // Puede venir con HTML/entidades igual que la descripcion — limpiar antes de partir.
+  const clean = htmlToPlainText(raw);
+  if (!clean) return [];
+  return clean
     .split(/[,;\n]/)
     .map((item) => item.trim())
     .filter(Boolean);
@@ -38,7 +41,7 @@ export function mapProperty(row: PropertyRow): Property {
     administracion: row.administracion,
     zona: row.zona?.trim() || null,
     ciudad: row.ciudad?.trim() || null,
-    descripcion: row.descripcion,
+    descripcion: htmlToPlainText(row.descripcion),
     caracteristicas: splitCaracteristicas(row.caracteristicas),
     images: Array.isArray(row.images) ? row.images.filter(Boolean) : [],
     wasiLink: row.link,
