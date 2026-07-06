@@ -3,6 +3,7 @@ import { getDefaultOrgId, type SocialConnectionRow } from "@/lib/marketing";
 import { dmapJson } from "@/lib/dmap";
 import MetaConnect from "@/components/marketing/meta-connect";
 import WasiSettings from "@/components/marketing/wasi-settings";
+import CreativeEngineSettings from "@/components/marketing/creative-engine-settings";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +11,7 @@ interface SettingsResponse {
   sync_source: "wasi_api" | "wasi_public";
   sync_interval_minutes: number;
   hasWasiCredentials: boolean;
+  creative_engine?: "ai" | "template";
 }
 
 export default async function ConfiguracionPage() {
@@ -25,10 +27,13 @@ export default async function ConfiguracionPage() {
     dmapJson<SettingsResponse>(`/api/v1/settings?orgId=${orgId}`),
   ]);
 
+  const settings = settingsResult.ok ? (settingsResult.data as SettingsResponse) : null;
+
   return (
     <div className="space-y-6">
       <MetaConnect orgId={orgId} connections={(connections || []) as SocialConnectionRow[]} />
-      <WasiSettings orgId={orgId} settings={settingsResult.ok ? (settingsResult.data as SettingsResponse) : null} />
+      <CreativeEngineSettings orgId={orgId} engine={settings?.creative_engine === "template" ? "template" : "ai"} />
+      <WasiSettings orgId={orgId} settings={settings} />
     </div>
   );
 }

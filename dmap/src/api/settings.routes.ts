@@ -17,6 +17,7 @@ const updateBodySchema = z.object({
   timezone: z.string().optional(),
   syncSource: z.enum(["wasi_api", "wasi_public"]).optional(),
   syncIntervalMinutes: z.number().int().positive().optional(),
+  creativeEngine: z.enum(["ai", "template"]).optional(),
   // Credenciales de la API oficial de Wasi (id_company + wasi_token) — se
   // cifran aqui mismo, en texto plano solo llegan por HTTPS y nunca se
   // guardan sin cifrar ni se devuelven en ninguna respuesta.
@@ -55,6 +56,7 @@ export async function settingsRoutes(app: FastifyInstance) {
         ...(rest.timezone && { timezone: rest.timezone }),
         ...(rest.syncSource && { sync_source: rest.syncSource }),
         ...(rest.syncIntervalMinutes && { sync_interval_minutes: rest.syncIntervalMinutes }),
+        ...(rest.creativeEngine && { creative_engine: rest.creativeEngine }),
         ...(wasiIdCompany && { wasi_id_company_enc: encryptSecret(wasiIdCompany) }),
         ...(wasiToken && { wasi_token_enc: encryptSecret(wasiToken) })
       });
