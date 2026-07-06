@@ -34,7 +34,18 @@ const envSchema = z.object({
   META_LOGIN_CONFIG_ID: z.string().optional(),
 
   DMAP_PUBLIC_URL: z.string().url(),
-  CRM_URL: z.string().url()
+  CRM_URL: z.string().url(),
+
+  // Links del bloque de contacto en los captions de FB/IG (ver
+  // publish.service). LANDING_BASE_URL replica el default del bot
+  // (src/config.js). CONTACT_WHATSAPP_NUMBER es el numero de Sofi en
+  // formato wa.me (solo digitos con indicativo, ej 573044653609) —
+  // opcional: sin el, el caption solo lleva el link de la landing.
+  LANDING_BASE_URL: z.string().url().default("https://diamondinmobiliaria.com"),
+  CONTACT_WHATSAPP_NUMBER: z
+    .string()
+    .regex(/^\d{8,15}$/, "CONTACT_WHATSAPP_NUMBER: solo digitos con indicativo, sin '+' (ej 573044653609)")
+    .optional()
 });
 
 export type Env = z.infer<typeof envSchema>;

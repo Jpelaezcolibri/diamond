@@ -12,3 +12,4 @@ process.env.META_APP_ID ??= "123456";
 process.env.META_APP_SECRET ??= "secret";
 process.env.DMAP_PUBLIC_URL ??= "http://localhost:3010";
 process.env.CRM_URL ??= "http://localhost:3000";
+process.env.CONTACT_WHATSAPP_NUMBER ??= "573044653609";

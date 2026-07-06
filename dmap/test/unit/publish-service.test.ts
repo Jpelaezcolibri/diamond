@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { buildCaption, selectAssetsForPublish } from "../../src/services/publish.service.js";
+import { buildCaption, buildContactBlock, selectAssetsForPublish } from "../../src/services/publish.service.js";
 import type { PublicationRow, PublicationAssetRow } from "../../src/repositories/types.js";
+
+const PROPERTY = { ref: "10012722", titulo: "Apartamento Exclusivo Piso 19 – Alicante, Itagüí" };
 
 function makePublication(partial: Partial<PublicationRow> = {}): PublicationRow {
   return {
@@ -67,6 +69,43 @@ describe("buildCaption", () => {
     const publication = makePublication({ hashtags: null, cta: null });
     expect(() => buildCaption(publication, "facebook")).not.toThrow();
     expect(buildCaption(publication, "facebook")).toBe("Copy largo para Facebook.");
+  });
+
+  it("normaliza hashtags guardados sin # (publicaciones viejas)", () => {
+    const publication = makePublication({ hashtags: ["Sabaneta", "#ApartamentoEnVenta"] });
+    const caption = buildCaption(publication, "instagram");
+    expect(caption).toContain("#Sabaneta #ApartamentoEnVenta");
+  });
+
+  it("incluye el bloque de contacto (landing + WhatsApp de Sofi con la ref) antes de los hashtags", () => {
+    const publication = makePublication();
+    const caption = buildCaption(publication, "facebook", PROPERTY);
+    expect(caption).toContain("https://diamondinmobiliaria.com/propiedades/apartamento-exclusivo-piso-19-alicante-itagui-10012722");
+    expect(caption).toContain("https://wa.me/573044653609?text=");
+    expect(caption).toContain(encodeURIComponent("Hola Sofi, me interesa la propiedad 10012722"));
+    expect(caption.indexOf("wa.me")).toBeLessThan(caption.indexOf("#Sabaneta"));
+  });
+
+  it("sin propiedad, el caption queda igual que antes (sin bloque de contacto)", () => {
+    const publication = makePublication();
+    expect(buildCaption(publication, "facebook", null)).toBe(buildCaption(publication, "facebook"));
+  });
+});
+
+describe("buildContactBlock", () => {
+  it("arma el slug igual que la landing (sin tildes, ref al final)", () => {
+    const block = buildContactBlock(PROPERTY);
+    expect(block).toContain("/propiedades/apartamento-exclusivo-piso-19-alicante-itagui-10012722");
+  });
+
+  it("la ref queda visible en texto plano y pre-llenada en el mensaje de WhatsApp", () => {
+    const block = buildContactBlock(PROPERTY);
+    expect(block).toContain("Ref 10012722");
+    expect(block).toContain(`?text=${encodeURIComponent("Hola Sofi, me interesa la propiedad 10012722")}`);
+  });
+
+  it("devuelve null sin propiedad", () => {
+    expect(buildContactBlock(null)).toBeNull();
   });
 });
 

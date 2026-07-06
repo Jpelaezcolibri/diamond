@@ -57,7 +57,7 @@ Reglas obligatorias:
 - Varia la estructura, el gancho inicial y el CTA respecto a otras publicaciones — evita plantillas repetitivas.
 - copy_facebook: 2-4 parrafos cortos, tono conversacional.
 - copy_instagram: mas corto, con emojis moderados, terminando en una pregunta o CTA.
-- hashtags: 8-12, mezcla de genericos inmobiliarios y especificos de la zona/ciudad, sin el simbolo # repetido mal formado.
+- hashtags: 8-12, mezcla de genericos inmobiliarios y especificos de la zona/ciudad. Cada uno DEBE empezar con "#" y no llevar espacios (ej: "#ApartamentosMedellin", "#VentaDeApartamentos").
 - alt_texts: describe la foto de portada en una frase util para accesibilidad (sin inventar detalles no visibles).
 - meta_title: maximo 70 caracteres EXACTOS (cuenta caracteres, no palabras) — es la etiqueta SEO <title>, se corta en buscadores si es mas largo.
 - meta_description: maximo 160 caracteres EXACTOS (cuenta caracteres, no palabras) — es la meta description SEO, se corta en buscadores si es mas larga. Prioriza precio, tipo de propiedad y zona; no repitas el titulo completo.

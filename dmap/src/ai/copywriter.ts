@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { FatalError } from "../lib/errors.js";
+import { normalizeHashtags } from "../lib/hashtags.js";
 import { callClaude, type ClaudeCallResult } from "./claude.js";
 import { tryParseJSON } from "./json-utils.js";
 import { buildCopyPrompt, COPYWRITER_PROMPT_VERSION, type BrandVoiceInput, type CopywriterPropertyInput } from "./prompts/copywriter.v1.js";
@@ -12,7 +13,9 @@ export const copywriterOutputSchema = z.object({
   descripcion_comercial: z.string().min(1),
   meta_title: z.string().min(1).max(70),
   meta_description: z.string().min(1).max(160),
-  hashtags: z.array(z.string()).min(1),
+  // El prompt pide "#" pero el modelo a veces lo omite y el tag sale como
+  // texto plano en FB/IG — normalizar aqui garantiza el "#" en filas nuevas.
+  hashtags: z.array(z.string()).min(1).transform(normalizeHashtags),
   cta: z.string().min(1),
   alt_text_cover: z.string().min(1)
 });
