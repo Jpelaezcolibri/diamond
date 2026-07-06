@@ -41,6 +41,7 @@ Los 10 work packages de Fase 1 (ver [ARCHITECTURE.md §15](ARCHITECTURE.md#15-pl
 - **App Review de Meta**: solo se necesita para onboardear inmobiliarias terceras (Diamond funciona en modo desarrollador de la app, sin necesidad de review).
 - **Migración `db/migrations/2026-07-05_dmap.sql` aplicada en Supabase**: correrla en el SQL Editor antes de usar el sistema contra datos reales (nunca se aplica automáticamente, mismo criterio que el resto de `db/migrations/`).
 - **Redis provisionado** (addon de Railway): sin él, el API sigue respondiendo pero la cola/scheduler no procesan jobs (degradación elegante, ver `src/index.ts`).
+- ~~Bucket de Supabase Storage `dmap-creatives`~~ — **creado el 2026-07-06** (público, vía API de Storage). Sin él, `uploadCreative` falla con "Bucket not found" y la generación de publicaciones no llega a crear el draft — no se crea automáticamente, es un paso manual de setup por ambiente (igual que las migraciones SQL).
 
 ### Guion de demo end-to-end (criterio de cierre de Fase 1)
 
