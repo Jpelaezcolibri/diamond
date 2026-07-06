@@ -30,6 +30,28 @@ type ClaudeCaller = (prompt: string) => Promise<ClaudeCallResult>;
 
 const defaultCaller: ClaudeCaller = (prompt) => callClaude({ messages: [{ role: "user", content: prompt }] });
 
+const META_LIMITS = { meta_title: 70, meta_description: 160 } as const;
+
+/**
+ * Recorte de seguridad para los campos SEO: el prompt le pide a Claude que
+ * cuente caracteres exactos, pero un LLM no siempre cuenta bien — visto en
+ * produccion (2026-07-06): meta_description se paso del limite y tumbo la
+ * generacion completa 2 veces seguidas (el prompt no cambia entre intentos,
+ * asi que el mismo error se repite). Recortar ANTES de validar con zod evita
+ * depender de que el conteo del modelo sea perfecto.
+ */
+function truncateMetaFields(json: unknown): unknown {
+  if (!json || typeof json !== "object") return json;
+  const patched = { ...(json as Record<string, unknown>) };
+  for (const [field, max] of Object.entries(META_LIMITS)) {
+    const value = patched[field];
+    if (typeof value === "string" && value.length > max) {
+      patched[field] = value.slice(0, max).trim();
+    }
+  }
+  return patched;
+}
+
 /**
  * Genera el copy de una propiedad en el estilo pedido. Reintenta UNA vez si
  * la respuesta no parsea como JSON valido (ver dmap/ARCHITECTURE.md #6).
@@ -48,7 +70,7 @@ export async function generateCopy(
     const result = await caller(prompt);
     try {
       const json = tryParseJSON(result.text);
-      const output = copywriterOutputSchema.parse(json);
+      const output = copywriterOutputSchema.parse(truncateMetaFields(json));
       return { output, promptVersion: COPYWRITER_PROMPT_VERSION, tokensIn: result.tokensIn, tokensOut: result.tokensOut };
     } catch (err) {
       lastError = err;

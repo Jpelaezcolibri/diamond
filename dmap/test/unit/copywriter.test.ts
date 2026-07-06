@@ -69,6 +69,22 @@ describe("generateCopy", () => {
     expect(caller).toHaveBeenCalledTimes(2);
   });
 
+  it("recorta meta_description/meta_title si el modelo se pasa del limite en vez de fallar (bug real 2026-07-06)", async () => {
+    const largaDescripcion = "Esta es una meta description absurdamente larga que un LLM puede generar sin darse cuenta ".repeat(3);
+    const largoTitulo = "Un titulo SEO demasiado largo que definitivamente supera los setenta caracteres permitidos por el schema";
+    const caller = vi.fn().mockResolvedValue({
+      text: JSON.stringify({ ...validOutput, meta_title: largoTitulo, meta_description: largaDescripcion }),
+      tokensIn: 10,
+      tokensOut: 5
+    });
+
+    const result = await generateCopy(property, "lujo", brand, caller);
+
+    expect(result.output.meta_title.length).toBeLessThanOrEqual(70);
+    expect(result.output.meta_description.length).toBeLessThanOrEqual(160);
+    expect(caller).toHaveBeenCalledTimes(1);
+  });
+
   it("el prompt incluye la referencia de la propiedad y el estilo pedido", async () => {
     let capturedPrompt = "";
     const caller = vi.fn().mockImplementation(async (prompt: string) => {
