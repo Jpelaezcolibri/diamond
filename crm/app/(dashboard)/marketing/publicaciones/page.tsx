@@ -1,7 +1,6 @@
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { getDefaultOrgId, PUBLICATION_STATUS_COLORS, PUBLICATION_STATUS_LABELS, STYLE_VARIANT_LABELS, type PublicationRow } from "@/lib/marketing";
-import GenerarPublicacion from "@/components/marketing/generar-publicacion";
+import { getDefaultOrgId } from "@/lib/marketing";
+import PropiedadesTable, { type PropiedadRow } from "@/components/marketing/propiedades-table";
 
 export const dynamic = "force-dynamic";
 
@@ -10,63 +9,63 @@ export default async function PublicacionesPage() {
   const orgId = await getDefaultOrgId(supabase);
   if (!orgId) return <p className="text-slate-500">No hay ninguna organización configurada todavía.</p>;
 
-  const { data } = await supabase
-    .from("publications")
-    .select("*, properties(ref,titulo,zona)")
-    .eq("org_id", orgId)
-    .order("created_at", { ascending: false })
-    .limit(100);
+  const [{ data: properties }, { data: publications }, { data: newEvents }] = await Promise.all([
+    supabase
+      .from("properties")
+      .select("id,ref,titulo,zona,ciudad,precio")
+      .eq("org_id", orgId)
+      .eq("disponible", true)
+      .order("titulo"),
+    supabase
+      .from("publications")
+      .select("id,property_id,status,style_variant,scheduled_at,created_at")
+      .eq("org_id", orgId)
+      .neq("status", "archived")
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("property_change_events")
+      .select("property_id")
+      .eq("org_id", orgId)
+      .eq("change_type", "created")
+      .eq("processed", false),
+  ]);
 
-  const publications = (data || []) as (PublicationRow & { properties: { ref: string; titulo: string; zona: string | null } | null })[];
+  // Una propiedad puede tener mas de una publicacion no archivada en teoria;
+  // se toma la mas reciente (publications ya viene ordenado desc).
+  const publicationByPropertyId = new Map<string, { id: string; status: string; styleVariant: string | null; scheduledAt: string | null }>();
+  for (const p of publications || []) {
+    if (!p.property_id || publicationByPropertyId.has(p.property_id)) continue;
+    publicationByPropertyId.set(p.property_id, { id: p.id, status: p.status, styleVariant: p.style_variant, scheduledAt: p.scheduled_at });
+  }
+  const newPropertyIds = new Set((newEvents || []).map((e) => e.property_id).filter(Boolean));
+
+  const rows: PropiedadRow[] = (properties || []).map((p) => ({
+    id: p.id,
+    ref: p.ref,
+    titulo: p.titulo,
+    zona: p.zona,
+    ciudad: p.ciudad,
+    precio: p.precio,
+    isNew: newPropertyIds.has(p.id),
+    publication: publicationByPropertyId.get(p.id) ?? null,
+  }));
+
+  // Nuevas primero, luego sin publicar, luego el resto — para que lo
+  // accionable quede arriba en vez de perderse entre 96 filas.
+  rows.sort((a, b) => {
+    if (a.isNew !== b.isNew) return a.isNew ? -1 : 1;
+    if (Boolean(a.publication) !== Boolean(b.publication)) return a.publication ? 1 : -1;
+    return a.titulo.localeCompare(b.titulo);
+  });
+
+  const totalPublicadas = rows.filter((r) => r.publication).length;
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
-        <GenerarPublicacion orgId={orgId} />
-      </div>
-      {publications.length === 0 ? (
-        <p className="rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center text-sm text-slate-500">
-          Todavía no se ha generado ninguna publicación. Elegí una propiedad arriba o generá una desde una novedad del inventario.
-        </p>
-      ) : (
-        <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
-                <th className="px-4 py-3">Propiedad</th>
-                <th className="px-4 py-3">Estilo</th>
-                <th className="px-4 py-3">Estado</th>
-                <th className="px-4 py-3">Programada</th>
-                <th className="px-4 py-3">Creada</th>
-              </tr>
-            </thead>
-            <tbody>
-              {publications.map((p) => (
-                <tr key={p.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
-                  <td className="px-4 py-3">
-                    <Link href={`/marketing/publicaciones/${p.id}`} className="font-medium text-slate-900 hover:text-[#c9a24b]">
-                      {p.titulo_comercial || p.properties?.titulo || "Sin título"}
-                    </Link>
-                    <p className="text-xs text-slate-500">
-                      {p.properties?.ref} {p.properties?.zona ? `· ${p.properties.zona}` : ""}
-                    </p>
-                  </td>
-                  <td className="px-4 py-3 text-slate-600">{p.style_variant ? STYLE_VARIANT_LABELS[p.style_variant] : "—"}</td>
-                  <td className="px-4 py-3">
-                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${PUBLICATION_STATUS_COLORS[p.status]}`}>
-                      {PUBLICATION_STATUS_LABELS[p.status]}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-slate-600">
-                    {p.scheduled_at ? new Date(p.scheduled_at).toLocaleString("es-CO") : "—"}
-                  </td>
-                  <td className="px-4 py-3 text-slate-500">{new Date(p.created_at).toLocaleDateString("es-CO")}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <p className="text-sm text-slate-500">
+        {rows.length} propiedades disponibles · {totalPublicadas} con publicación activa · {rows.length - totalPublicadas} sin publicar
+      </p>
+      <PropiedadesTable orgId={orgId} rows={rows} />
     </div>
   );
 }
