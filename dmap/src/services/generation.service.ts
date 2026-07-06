@@ -1,11 +1,14 @@
 import { env } from "../config/env.js";
 import { FatalError } from "../lib/errors.js";
-import type { StyleVariant } from "../config/constants.js";
+import { logger } from "../lib/logger.js";
+import { COST_PER_GPT_IMAGE_USD, GPT_IMAGE_QUALITY, GPT_IMAGE_SIZES, type GptImageSizeKey, type StyleVariant } from "../config/constants.js";
 import { analyzeImages, selectAssets } from "../ai/image-selector.js";
-import { generateCopy } from "../ai/copywriter.js";
+import { generateCopy, type CopywriterOutput } from "../ai/copywriter.js";
 import type { CopywriterPropertyInput } from "../ai/prompts/copywriter.v1.js";
+import { isGptImageConfigured } from "../ai/gpt-image.js";
 import { resolveBrandProfile, type BrandProfile } from "../creatives/brand.js";
 import { renderCreative, type CreativeInput } from "../creatives/renderer.js";
+import { generateAiCreative } from "../creatives/ai-engine.js";
 import { uploadCreative } from "../creatives/storage.js";
 import { getPropertyById, type PropertyRow } from "../repositories/properties.repo.js";
 import { createPublication, getPublicationById, updatePublicationContent } from "../repositories/publications.repo.js";
@@ -13,6 +16,8 @@ import { createPublicationAssets, type CreateAssetInput } from "../repositories/
 import { recordPublicationEvent } from "../repositories/publication-events.repo.js";
 import { recordContentGeneration } from "../repositories/content-generations.repo.js";
 import { markChangeEventsProcessedForProperty } from "../repositories/sync.repo.js";
+import { getOrgMarketingSettings } from "../repositories/settings.repo.js";
+import type { CreativeEngine } from "../repositories/types.js";
 
 export interface GenerateDraftResult {
   publicationId: string;
@@ -88,6 +93,137 @@ async function renderAndUpload(
 }
 
 /**
+ * Motor de creativos efectivo para la org: "ai" solo si esta configurado el
+ * Director de Arte (OPENAI_API_KEY) — sin el, degrada a template en silencio
+ * (log info) para no bloquear la generacion. `creative_engine` puede venir
+ * undefined si la migracion 2026-07-06 aun no corrio: default "ai".
+ */
+export async function resolveCreativeEngine(orgId: string): Promise<CreativeEngine> {
+  if (!isGptImageConfigured()) {
+    logger.info({ orgId }, "OPENAI_API_KEY no configurada — motor de creativos: template");
+    return "template";
+  }
+  const settings = await getOrgMarketingSettings(orgId);
+  return settings.creative_engine === "template" ? "template" : "ai";
+}
+
+/** Resumen por asset para el detail del evento draft (visible en el Content Studio). */
+interface CreativeMeta {
+  engine: "ai" | "template" | "template_fallback";
+  score?: number;
+  approved?: boolean;
+  rounds?: number;
+  reason?: string;
+}
+
+interface ProducedAsset {
+  asset: CreateAssetInput;
+  meta: CreativeMeta;
+}
+
+/**
+ * Deps inyectables para testear la integracion (seleccion de motor,
+ * fallback por asset) sin red — los defaults usan los agentes/IO reales.
+ */
+export interface ProduceAssetDeps {
+  aiCreative?: typeof generateAiCreative;
+  renderTemplate?: typeof renderAndUpload;
+  upload?: typeof uploadCreative;
+  recordGeneration?: typeof recordContentGeneration;
+}
+
+export async function produceAsset(
+  engine: CreativeEngine,
+  brand: BrandProfile,
+  property: PropertyRow,
+  copy: CopywriterOutput,
+  styleVariant: StyleVariant,
+  sourceImageUrl: string,
+  sizeKey: GptImageSizeKey,
+  orgId: string,
+  publicationId: string,
+  role: CreateAssetInput["role"],
+  deps: ProduceAssetDeps = {}
+): Promise<ProducedAsset> {
+  const creativeBase = buildCreativeBaseData(property, copy.titulo_comercial);
+  const altText = copy.alt_text_cover;
+  const renderTemplate = deps.renderTemplate ?? renderAndUpload;
+  const upload = deps.upload ?? uploadCreative;
+  const recordGeneration = deps.recordGeneration ?? recordContentGeneration;
+  let fallbackReason: string | null = null;
+
+  if (engine === "ai") {
+    try {
+      const aiCreative = deps.aiCreative ?? generateAiCreative;
+      const format = sizeKey === "ig_story" ? ("story" as const) : ("feed" as const);
+      const ai = await aiCreative(
+        brand,
+        {
+          property: buildPropertyCopyInput(property),
+          styleVariant,
+          tituloComercial: copy.titulo_comercial,
+          cta: copy.cta,
+          format,
+          brand: { name: brand.name }
+        },
+        sourceImageUrl,
+        sizeKey
+      );
+
+      const uploaded = await upload(orgId, publicationId, role, 0, ai.buffer);
+
+      await recordGeneration({
+        org_id: orgId,
+        property_id: property.id,
+        publication_id: publicationId,
+        kind: "image_generation",
+        style_variant: styleVariant,
+        model: env.GPT_IMAGE_MODEL,
+        prompt_version: ai.promptVersion,
+        input: { role, sizeKey, gptSize: GPT_IMAGE_SIZES[sizeKey], quality: GPT_IMAGE_QUALITY, sourceImageUrl, masterPrompt: ai.masterPrompt, headline: ai.headline, rationale: ai.rationale },
+        output: {
+          approved: ai.approved,
+          finalScore: ai.finalScore,
+          roundsUsed: ai.rounds.length,
+          rounds: ai.rounds,
+          logoApplied: ai.logoApplied,
+          storagePath: uploaded.storagePath,
+          estimatedCostUsd: Number((ai.rounds.length * COST_PER_GPT_IMAGE_USD).toFixed(2))
+        },
+        tokens_in: ai.tokensIn,
+        tokens_out: ai.tokensOut
+      });
+
+      return {
+        asset: {
+          publication_id: publicationId,
+          role,
+          position: 0,
+          source_image_url: sourceImageUrl,
+          storage_path: uploaded.storagePath,
+          public_url: uploaded.publicUrl,
+          width: ai.width,
+          height: ai.height,
+          format: ai.format,
+          alt_text: altText,
+          selected_by: "ai"
+        },
+        meta: { engine: "ai", score: ai.finalScore, approved: ai.approved, rounds: ai.rounds.length }
+      };
+    } catch (err) {
+      fallbackReason = (err as Error).message;
+      logger.warn({ err, role, publicationId }, "Motor IA de creativos fallo — fallback a plantilla");
+    }
+  }
+
+  const asset = await renderTemplate(brand, creativeBase, sourceImageUrl, sizeKey, orgId, publicationId, role, altText);
+  return {
+    asset,
+    meta: fallbackReason ? { engine: "template_fallback", reason: fallbackReason.slice(0, 300) } : { engine: "template" }
+  };
+}
+
+/**
  * Pipeline completo de generacion (ver dmap/ARCHITECTURE.md #6): selecciona
  * fotos -> genera copy -> renderiza creatives -> crea la publicacion en
  * `draft`. Nunca publica ni aprueba nada — eso pasa por publication.service
@@ -145,14 +281,17 @@ export async function generateDraftForProperty(
     created_by: actorUserId(actor)
   });
 
-  const creativeBase = buildCreativeBaseData(property, copyResult.output.titulo_comercial);
-  const altText = copyResult.output.alt_text_cover;
+  // Cover y story EN PARALELO: con el motor IA cada rol puede tomar 1-2 min
+  // (GPT Image + critico x hasta 2 rondas) — en serie duplicaria la espera
+  // del boton "Publicar" del CRM.
+  const engine = await resolveCreativeEngine(orgId);
+  const [cover, story] = await Promise.all([
+    produceAsset(engine, brand, property, copyResult.output, styleVariant, assets.cover, "ig_feed", orgId, publication.id, "cover"),
+    produceAsset(engine, brand, property, copyResult.output, styleVariant, assets.story, "ig_story", orgId, publication.id, "story")
+  ]);
+  const thumbnailAsset: CreateAssetInput = { ...cover.asset, role: "thumbnail" };
 
-  const coverAsset = await renderAndUpload(brand, creativeBase, assets.cover, "ig_feed", orgId, publication.id, "cover", altText);
-  const storyAsset = await renderAndUpload(brand, creativeBase, assets.story, "ig_story", orgId, publication.id, "story", altText);
-  const thumbnailAsset: CreateAssetInput = { ...coverAsset, role: "thumbnail" };
-
-  await createPublicationAssets([coverAsset, storyAsset, thumbnailAsset]);
+  await createPublicationAssets([cover.asset, story.asset, thumbnailAsset]);
 
   await recordPublicationEvent({
     publication_id: publication.id,
@@ -160,7 +299,19 @@ export async function generateDraftForProperty(
     from_status: null,
     to_status: "draft",
     actor,
-    detail: { source: "generation.service", styleVariant, propertyRef: property.ref }
+    detail: {
+      source: "generation.service",
+      styleVariant,
+      propertyRef: property.ref,
+      creative: {
+        engine,
+        cover: cover.meta,
+        story: story.meta,
+        // El critico IA no aprobo alguna pieza: el Content Studio muestra
+        // el aviso "Revisar creativo" — la decision final es humana.
+        needsReview: cover.meta.approved === false || story.meta.approved === false
+      }
+    }
   });
 
   await markChangeEventsProcessedForProperty(orgId, propertyId);
