@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { buildFinalCaption } from "@/lib/caption";
 import {
   PUBLICATION_STATUS_COLORS,
   PUBLICATION_STATUS_LABELS,
@@ -69,6 +70,7 @@ export default function ContentStudio({
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: "ok" | "error"; text: string } | null>(null);
   const [regenNotes, setRegenNotes] = useState<{ cover: string; story: string }>({ cover: "", story: "" });
+  const [previewPlatform, setPreviewPlatform] = useState<"facebook" | "instagram">("facebook");
 
   const cover = assets.find((a) => a.role === "cover");
   const story = assets.find((a) => a.role === "story");
@@ -92,6 +94,18 @@ export default function ContentStudio({
   const reviewParts = (["cover", "story"] as const)
     .map((role) => ({ role, meta: latestCreativeByRole[role] }))
     .filter((p) => p.meta?.approved === false);
+
+  // Vista previa del texto EXACTO que se publica: copy + CTA + bloque de
+  // contacto (link a la landing + WhatsApp de Sofi con la ref) + hashtags.
+  // El bloque de contacto lo agrega DMAP al publicar (no se guarda en el
+  // copy editable), por eso aqui lo mostramos para que sea visible antes.
+  const finalCaption = buildFinalCaption({
+    copy: previewPlatform === "facebook" ? copyFacebook : copyInstagram,
+    cta,
+    hashtags: hashtags.split(/\s+/).filter(Boolean),
+    ref: publication.properties?.ref,
+    titulo: publication.properties?.titulo,
+  });
 
   function toggleConnection(id: string) {
     setSelectedConnections((prev) => (prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]));
@@ -367,6 +381,33 @@ export default function ContentStudio({
                 className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-500"
               />
             </div>
+          </div>
+
+          {/* Vista previa del texto final tal como se publicara (con el link) */}
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Vista previa del texto final</label>
+              <div className="flex gap-1">
+                {(["facebook", "instagram"] as const).map((pf) => (
+                  <button
+                    key={pf}
+                    type="button"
+                    onClick={() => setPreviewPlatform(pf)}
+                    className={`rounded-md px-2 py-0.5 text-xs font-medium transition ${
+                      previewPlatform === pf ? "bg-[#0b1526] text-white" : "bg-white text-slate-500 border border-slate-200"
+                    }`}
+                  >
+                    {pf === "facebook" ? "Facebook" : "Instagram"}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words font-sans text-xs text-slate-700">
+              {finalCaption}
+            </pre>
+            <p className="mt-1 text-[11px] text-slate-400">
+              El link a la ficha (diamondinmobiliaria.com) y el WhatsApp de Sofi con la referencia se agregan automáticamente al publicar. En Instagram los links no son clicables (los abre Facebook), pero quedan visibles.
+            </p>
           </div>
 
           {isDraft && (
