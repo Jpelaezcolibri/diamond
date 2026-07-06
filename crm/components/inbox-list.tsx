@@ -72,6 +72,14 @@ export default function InboxList({
                     <p className="truncate font-semibold text-slate-900">
                       {c.leads?.nombre || `+${c.leads?.phone}`}
                     </p>
+                    {c.leads?.ad_referral && (
+                      <span
+                        title={c.leads.ad_referral.headline ? `Anuncio: ${c.leads.ad_referral.headline}` : "Llegó de un anuncio de Meta Ads"}
+                        className="shrink-0 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-700"
+                      >
+                        📢 Ads
+                      </span>
+                    )}
                     {c.modo === "humano" && (
                       <span className="shrink-0 rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-medium text-purple-700">
                         asesor al mando
