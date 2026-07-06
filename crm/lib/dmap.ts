@@ -9,7 +9,10 @@ export async function dmapFetch(
   return fetch(`${process.env.DMAP_API_URL}${path}`, {
     ...rest,
     headers: {
-      "Content-Type": "application/json",
+      // Solo si hay body: Fastify rechaza cualquier request con
+      // Content-Type: application/json y body vacio ("Body cannot be
+      // empty..."), visto en produccion al usar "Aprobar" (sin payload).
+      ...(rest.body ? { "Content-Type": "application/json" } : {}),
       "x-api-key": process.env.DMAP_API_KEY!,
       ...(actorId ? { "x-actor-id": actorId } : {}),
       ...headers,
