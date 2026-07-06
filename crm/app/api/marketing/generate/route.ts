@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { dmapJson } from "@/lib/dmap";
 
+// El motor IA de creativos (GPT Image + critico, hasta 2 rondas por rol)
+// puede tomar ~2 min; el default de Vercel cortaria el proxy a mitad.
+export const maxDuration = 300;
+
 export async function POST(request: Request) {
   const supabase = await createClient();
   const {

@@ -20,6 +20,16 @@ type PublicationWithProperty = PublicationRow & {
   properties: { ref: string; titulo: string; zona: string | null; ciudad: string | null; operacion: string | null; precio: string | null; link: string | null } | null;
 };
 
+/** Resumen por asset que deja el motor IA en detail.creative del evento draft. */
+interface CreativeMeta {
+  engine: string;
+  score?: number;
+  approved?: boolean;
+  rounds?: number;
+  reason?: string;
+  problemas?: string[];
+}
+
 async function postJson(url: string, body?: unknown, method = "POST") {
   const res = await fetch(url, {
     method,
@@ -61,6 +71,18 @@ export default function ContentStudio({
 
   const cover = assets.find((a) => a.role === "cover");
   const story = assets.find((a) => a.role === "story");
+
+  // Motor IA de creativos: si el critico no aprobo alguna pieza, el evento
+  // draft trae detail.creative.needsReview con score y problemas — la
+  // decision final es humana, este aviso la hace visible.
+  const creativeReview = events
+    .map((e) => (e.detail as { creative?: { needsReview?: boolean; cover?: CreativeMeta; story?: CreativeMeta } } | null)?.creative)
+    .find((c) => c?.needsReview);
+  const reviewParts = creativeReview
+    ? (["cover", "story"] as const)
+        .map((role) => ({ role, meta: creativeReview[role] }))
+        .filter((p) => p.meta?.approved === false)
+    : [];
 
   function toggleConnection(id: string) {
     setSelectedConnections((prev) => (prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]));
@@ -168,6 +190,29 @@ export default function ContentStudio({
       {message && (
         <div className={`rounded-xl p-3 text-sm ${message.type === "ok" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>
           {message.text}
+        </div>
+      )}
+
+      {reviewParts.length > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          <p className="font-medium">
+            ⚠️ Revisar creativo — el crítico IA no aprobó{" "}
+            {reviewParts.map((p) => `${p.role === "cover" ? "la portada" : "la historia"} (score ${p.meta?.score ?? "?"}/100)`).join(" ni ")}. Revisa la imagen antes de aprobar.
+          </p>
+          {reviewParts.some((p) => (p.meta?.problemas?.length ?? 0) > 0) && (
+            <details className="mt-1">
+              <summary className="cursor-pointer text-xs font-medium">Ver problemas detectados</summary>
+              <ul className="mt-1 list-disc pl-5 text-xs">
+                {reviewParts.flatMap((p) =>
+                  (p.meta?.problemas ?? []).map((problema, i) => (
+                    <li key={`${p.role}-${i}`}>
+                      [{p.role === "cover" ? "portada" : "historia"}] {problema}
+                    </li>
+                  ))
+                )}
+              </ul>
+            </details>
+          )}
         </div>
       )}
 

@@ -114,6 +114,10 @@ interface CreativeMeta {
   approved?: boolean;
   rounds?: number;
   reason?: string;
+  /** Problemas de la ultima ronda del critico — solo cuando NO aprobo, para
+   *  mostrarlos en el aviso "Revisar creativo" (content_generations esta
+   *  cerrada a lectura del CRM por RLS, asi que viajan en el evento). */
+  problemas?: string[];
 }
 
 interface ProducedAsset {
@@ -208,7 +212,13 @@ export async function produceAsset(
           alt_text: altText,
           selected_by: "ai"
         },
-        meta: { engine: "ai", score: ai.finalScore, approved: ai.approved, rounds: ai.rounds.length }
+        meta: {
+          engine: "ai",
+          score: ai.finalScore,
+          approved: ai.approved,
+          rounds: ai.rounds.length,
+          ...(ai.approved ? {} : { problemas: ai.rounds[ai.rounds.length - 1]?.problemas.slice(0, 6) ?? [] })
+        }
       };
     } catch (err) {
       fallbackReason = (err as Error).message;
