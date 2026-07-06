@@ -176,27 +176,34 @@ export async function produceAsset(
 
       const uploaded = await upload(orgId, publicationId, role, 0, ai.buffer);
 
-      await recordGeneration({
-        org_id: orgId,
-        property_id: property.id,
-        publication_id: publicationId,
-        kind: "image_generation",
-        style_variant: styleVariant,
-        model: env.GPT_IMAGE_MODEL,
-        prompt_version: ai.promptVersion,
-        input: { role, sizeKey, gptSize: GPT_IMAGE_SIZES[sizeKey], quality: GPT_IMAGE_QUALITY, sourceImageUrl, masterPrompt: ai.masterPrompt, headline: ai.headline, rationale: ai.rationale },
-        output: {
-          approved: ai.approved,
-          finalScore: ai.finalScore,
-          roundsUsed: ai.rounds.length,
-          rounds: ai.rounds,
-          logoApplied: ai.logoApplied,
-          storagePath: uploaded.storagePath,
-          estimatedCostUsd: Number((ai.rounds.length * COST_PER_GPT_IMAGE_USD).toFixed(2))
-        },
-        tokens_in: ai.tokensIn,
-        tokens_out: ai.tokensOut
-      });
+      // El registro es observabilidad: si falla (ej. la migracion del CHECK
+      // de kind aun no corrio) NO se descarta el creative ya generado y
+      // pagado — se loguea y se sigue.
+      try {
+        await recordGeneration({
+          org_id: orgId,
+          property_id: property.id,
+          publication_id: publicationId,
+          kind: "image_generation",
+          style_variant: styleVariant,
+          model: env.GPT_IMAGE_MODEL,
+          prompt_version: ai.promptVersion,
+          input: { role, sizeKey, gptSize: GPT_IMAGE_SIZES[sizeKey], quality: GPT_IMAGE_QUALITY, sourceImageUrl, masterPrompt: ai.masterPrompt, headline: ai.headline, rationale: ai.rationale },
+          output: {
+            approved: ai.approved,
+            finalScore: ai.finalScore,
+            roundsUsed: ai.rounds.length,
+            rounds: ai.rounds,
+            logoApplied: ai.logoApplied,
+            storagePath: uploaded.storagePath,
+            estimatedCostUsd: Number((ai.rounds.length * COST_PER_GPT_IMAGE_USD).toFixed(2))
+          },
+          tokens_in: ai.tokensIn,
+          tokens_out: ai.tokensOut
+        });
+      } catch (err) {
+        logger.warn({ err, publicationId, role }, "No se pudo registrar la generacion IA en content_generations");
+      }
 
       return {
         asset: {
