@@ -21,6 +21,11 @@ const envSchema = z.object({
   ANTHROPIC_API_KEY: z.string().min(1),
   CLAUDE_MODEL: z.string().default("claude-sonnet-4-5"),
 
+  // Motor IA de creativos (Director de Arte = GPT Image). OPCIONAL: sin la
+  // key, el motor "ai" degrada solo a la plantilla satori sin error.
+  OPENAI_API_KEY: z.string().min(1).optional(),
+  GPT_IMAGE_MODEL: z.string().default("gpt-image-1"),
+
   META_APP_ID: z.string().min(1),
   META_APP_SECRET: z.string().min(1),
   // Requerido para apps Meta de tipo Business (Facebook Login for Business):

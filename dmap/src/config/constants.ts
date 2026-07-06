@@ -23,6 +23,27 @@ export const GRAPH_API_BASE = `https://graph.facebook.com/${GRAPH_API_VERSION}`;
 export const IMAGE_ANALYSIS_MAX_DIMENSION = 1024;
 export const IMAGE_ANALYSIS_BATCH_SIZE = 12;
 
+// ── Motor IA de creativos (Director/GPT Image/Critico) ──────────────────
+/** Tamanos nativos de gpt-image-1 por rol; el resize final a los tamanos Meta lo hace sharp (compose.ts). */
+export const GPT_IMAGE_SIZES = {
+  ig_feed: "1024x1024",
+  ig_story: "1024x1536"
+} as const satisfies Partial<Record<CreativeSizeKey, string>>;
+
+export type GptImageSizeKey = keyof typeof GPT_IMAGE_SIZES;
+
+/** Maximo de rondas generar->criticar por creative (decision del usuario: 2). */
+export const AI_ENGINE_MAX_ROUNDS = 2;
+/** Score minimo del critico (0-100) para aprobar sin revision humana. */
+export const CRITIC_APPROVAL_THRESHOLD = 75;
+/** Knob de costo: "high" ~USD 0.17/imagen, "medium" ~0.04. */
+export const GPT_IMAGE_QUALITY = "high" as const;
+export const GPT_IMAGE_TIMEOUT_MS = 120_000;
+/** Ancho del logo compuesto (sharp) relativo al ancho del creative. */
+export const LOGO_WIDTH_RATIO = 0.08;
+/** Estimado para el historial de costos en content_generations (no facturado). */
+export const COST_PER_GPT_IMAGE_USD = 0.17;
+
 export const STYLE_VARIANTS = [
   "lujo",
   "familiar",

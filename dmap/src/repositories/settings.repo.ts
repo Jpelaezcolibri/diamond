@@ -9,7 +9,8 @@ const DEFAULTS: Omit<OrgMarketingSettingsRow, "org_id"> = {
   sync_source: "wasi_public",
   sync_interval_minutes: 60,
   wasi_id_company_enc: null,
-  wasi_token_enc: null
+  wasi_token_enc: null,
+  creative_engine: "ai"
 };
 
 export async function getOrgMarketingSettings(orgId: string): Promise<OrgMarketingSettingsRow> {

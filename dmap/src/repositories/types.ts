@@ -131,6 +131,8 @@ export interface PropertyChangeEventRow {
   created_at: string;
 }
 
+export type CreativeEngine = "ai" | "template";
+
 export interface OrgMarketingSettingsRow {
   org_id: string;
   auto_generate_on_new_property: boolean;
@@ -141,6 +143,9 @@ export interface OrgMarketingSettingsRow {
   sync_interval_minutes: number;
   wasi_id_company_enc: string | null;
   wasi_token_enc: string | null;
+  // Motor de creativos: "ai" (multiagente GPT Image, default) o "template"
+  // (plantilla satori). "ai" degrada solo a template si falta OPENAI_API_KEY.
+  creative_engine: CreativeEngine;
 }
 
 export interface BrandProfileRow {
