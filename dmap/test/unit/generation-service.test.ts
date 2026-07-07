@@ -116,6 +116,25 @@ describe("produceAsset (seleccion de motor + fallback)", () => {
     logoApplied: false
   };
 
+  const designerResult = {
+    buffer: Buffer.from("jpeg-designer"),
+    width: 1080,
+    height: 1080,
+    format: "jpeg" as const,
+    approved: true,
+    finalScore: 90,
+    rounds: [{ round: 1, score: 90, veredicto: "aprobado" as const, problemas: [], instrucciones_de_mejora: [] }],
+    masterPrompt: "foto real sin retocar",
+    headline: "Vive Sabaneta",
+    rationale: "editorial",
+    promptVersion: "creative-director.v1",
+    tokensIn: 50,
+    tokensOut: 80,
+    logoApplied: true,
+    photoEnhanced: false,
+    designSpec: { headline: "Vive Sabaneta", rationale: "editorial", photo_prompt: "foto real sin retocar" }
+  };
+
   const templateAsset = {
     publication_id: "pub-1",
     role: "cover" as const,
@@ -133,6 +152,7 @@ describe("produceAsset (seleccion de motor + fallback)", () => {
   function makeDeps() {
     return {
       aiCreative: vi.fn().mockResolvedValue(aiResult),
+      designerCreative: vi.fn().mockResolvedValue(designerResult),
       renderTemplate: vi.fn().mockResolvedValue(templateAsset),
       upload: vi.fn().mockResolvedValue({ storagePath: "org/pub/cover-0.jpg", publicUrl: "https://cdn/cover-ia.jpg" }),
       recordGeneration: vi.fn().mockResolvedValue(undefined)
@@ -188,6 +208,51 @@ describe("produceAsset (seleccion de motor + fallback)", () => {
     const directorInput = deps.aiCreative.mock.calls[0]![1];
     expect(directorInput.format).toBe("story");
     expect(result.meta.approved).toBe(false);
+  });
+
+  it("engine 'designer' exitoso: sube el buffer, costo $0 (sin Gemini), nunca llama al motor IA de OpenAI", async () => {
+    const deps = makeDeps();
+    const result = await produceAsset("designer", brand, property, copy, "lujo", "https://img/x.jpg", "ig_feed", "org-1", "pub-1", "cover", deps);
+
+    expect(deps.aiCreative).not.toHaveBeenCalled();
+    expect(deps.designerCreative).toHaveBeenCalledTimes(1);
+    expect(deps.designerCreative.mock.calls[0]![4]).toBe("designer");
+    expect(deps.renderTemplate).not.toHaveBeenCalled();
+    expect(deps.upload).toHaveBeenCalledWith("org-1", "pub-1", "cover", 0, designerResult.buffer);
+
+    const recorded = deps.recordGeneration.mock.calls[0]![0];
+    expect(recorded.kind).toBe("image_generation");
+    expect(recorded.output.estimatedCostUsd).toBe(0);
+    expect(recorded.model).toBe("claude");
+
+    expect(result.meta.engine).toBe("designer");
+    expect(result.meta.approved).toBe(true);
+    expect(result.asset.public_url).toBe("https://cdn/cover-ia.jpg");
+  });
+
+  it("engine 'hybrid' con foto mejorada por Gemini: registra el costo de Gemini, no $0", async () => {
+    const deps = makeDeps();
+    deps.designerCreative.mockResolvedValue({ ...designerResult, photoEnhanced: true });
+
+    const result = await produceAsset("hybrid", brand, property, copy, "lujo", "https://img/x.jpg", "ig_feed", "org-1", "pub-1", "cover", deps);
+
+    expect(deps.designerCreative.mock.calls[0]![4]).toBe("hybrid");
+    const recorded = deps.recordGeneration.mock.calls[0]![0];
+    expect(recorded.output.estimatedCostUsd).toBeGreaterThan(0);
+    expect(recorded.model).toBe("claude+gemini");
+    expect(result.meta.engine).toBe("hybrid");
+  });
+
+  it("engine 'designer' que lanza: fallback POR ASSET a plantilla con la razon en meta", async () => {
+    const deps = makeDeps();
+    deps.designerCreative.mockRejectedValue(new Error("Satori no pudo renderizar la tipografia"));
+
+    const result = await produceAsset("designer", brand, property, copy, "lujo", "https://img/x.jpg", "ig_feed", "org-1", "pub-1", "cover", deps);
+
+    expect(deps.renderTemplate).toHaveBeenCalledTimes(1);
+    expect(result.meta.engine).toBe("template_fallback");
+    expect(result.meta.reason).toMatch(/Satori/);
+    expect(result.asset).toBe(templateAsset);
   });
 });
 

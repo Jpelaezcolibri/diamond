@@ -150,7 +150,7 @@ export async function resolveCreativeEngine(orgId: string): Promise<CreativeEngi
 
 /** Resumen por asset para el detail del evento draft (visible en el Content Studio). */
 interface CreativeMeta {
-  engine: "ai" | "template" | "template_fallback";
+  engine: "ai" | "designer" | "hybrid" | "template" | "template_fallback";
   score?: number;
   approved?: boolean;
   rounds?: number;
@@ -186,6 +186,7 @@ interface ProducedAsset {
  */
 export interface ProduceAssetDeps {
   aiCreative?: typeof generateAiCreative;
+  designerCreative?: typeof generateDesignerCreative;
   renderTemplate?: typeof renderAndUpload;
   upload?: typeof uploadCreative;
   recordGeneration?: typeof recordContentGeneration;
@@ -288,6 +289,83 @@ export async function produceAsset(
     } catch (err) {
       fallbackReason = (err as Error).message;
       logger.warn({ err, role, publicationId }, "Motor IA de creativos fallo — fallback a plantilla");
+    }
+  }
+
+  if (engine === "designer" || engine === "hybrid") {
+    try {
+      const designerCreative = deps.designerCreative ?? generateDesignerCreative;
+      const format = sizeKey === "ig_story" ? ("story" as const) : ("feed" as const);
+      const design = await designerCreative(
+        brand,
+        {
+          property: buildPropertyCopyInput(property),
+          styleVariant,
+          tituloComercial: copy.titulo_comercial,
+          cta: copy.cta,
+          format,
+          brand: { name: brand.name },
+          ...(cognitiveBrief ? { cognitiveBrief } : {})
+        },
+        sourceImageUrl,
+        sizeKey,
+        engine
+      );
+
+      const uploaded = await upload(orgId, publicationId, role, 0, design.buffer);
+
+      try {
+        await recordGeneration({
+          org_id: orgId,
+          property_id: property.id,
+          publication_id: publicationId,
+          kind: "image_generation",
+          style_variant: styleVariant,
+          model: design.photoEnhanced ? "claude+gemini" : "claude",
+          prompt_version: design.promptVersion,
+          input: { role, sizeKey, engine, sourceImageUrl, designSpec: design.designSpec, headline: design.headline, rationale: design.rationale },
+          output: {
+            approved: design.approved,
+            finalScore: design.finalScore,
+            roundsUsed: design.rounds.length,
+            rounds: design.rounds,
+            logoApplied: design.logoApplied,
+            photoEnhanced: design.photoEnhanced,
+            storagePath: uploaded.storagePath,
+            estimatedCostUsd: design.photoEnhanced ? Number(COST_PER_GEMINI_IMAGE_USD.toFixed(3)) : 0
+          },
+          tokens_in: design.tokensIn,
+          tokens_out: design.tokensOut
+        });
+      } catch (err) {
+        logger.warn({ err, publicationId, role }, "No se pudo registrar la generacion designer/hybrid en content_generations");
+      }
+
+      return {
+        asset: {
+          publication_id: publicationId,
+          role,
+          position: 0,
+          source_image_url: sourceImageUrl,
+          storage_path: uploaded.storagePath,
+          public_url: uploaded.publicUrl,
+          width: design.width,
+          height: design.height,
+          format: design.format,
+          alt_text: altText,
+          selected_by: "ai"
+        },
+        meta: {
+          engine,
+          score: design.finalScore,
+          approved: design.approved,
+          rounds: design.rounds.length,
+          ...criticFeedbackMeta(design)
+        }
+      };
+    } catch (err) {
+      fallbackReason = (err as Error).message;
+      logger.warn({ err, role, publicationId, engine }, "Motor designer/hybrid fallo — fallback a plantilla");
     }
   }
 
