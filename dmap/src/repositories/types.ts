@@ -131,7 +131,7 @@ export interface PropertyChangeEventRow {
   created_at: string;
 }
 
-export type CreativeEngine = "ai" | "template";
+export type CreativeEngine = "ai" | "template" | "hybrid" | "designer";
 
 export interface OrgMarketingSettingsRow {
   org_id: string;
@@ -143,8 +143,11 @@ export interface OrgMarketingSettingsRow {
   sync_interval_minutes: number;
   wasi_id_company_enc: string | null;
   wasi_token_enc: string | null;
-  // Motor de creativos: "ai" (multiagente GPT Image, default) o "template"
-  // (plantilla satori). "ai" degrada solo a template si falta OPENAI_API_KEY.
+  // Motor de creativos: "ai" (multiagente GPT Image, default), "hybrid"
+  // (Gemini mejora la foto + plantilla pone el texto), "designer" (solo
+  // plantilla disenada por Claude, $0) o "template" (plantilla clasica).
+  // "ai" degrada a template si falta OPENAI_API_KEY; "hybrid" degrada a
+  // designer si falta GEMINI_API_KEY.
   creative_engine: CreativeEngine;
 }
 

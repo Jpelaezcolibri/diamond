@@ -43,6 +43,8 @@ export const GPT_IMAGE_TIMEOUT_MS = 120_000;
 export const LOGO_WIDTH_RATIO = 0.08;
 /** Estimado para el historial de costos en content_generations (no facturado). */
 export const COST_PER_GPT_IMAGE_USD = 0.17;
+/** Gemini 2.5 Flash Image (Nano Banana): ~$0.039 por imagen 1K (pricing oficial jul 2026). */
+export const COST_PER_GEMINI_IMAGE_USD = 0.039;
 
 // ── Diamond Cognitive Engine (DCE) ───────────────────────────────────────
 /** Estimado para cost_usd en property_contexts (precio Sonnet, no facturado). */

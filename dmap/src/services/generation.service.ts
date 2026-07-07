@@ -1,15 +1,24 @@
 import { env } from "../config/env.js";
 import { FatalError } from "../lib/errors.js";
 import { logger } from "../lib/logger.js";
-import { COST_PER_GPT_IMAGE_USD, GPT_IMAGE_QUALITY, GPT_IMAGE_SIZES, type GptImageSizeKey, type StyleVariant } from "../config/constants.js";
+import {
+  COST_PER_GEMINI_IMAGE_USD,
+  COST_PER_GPT_IMAGE_USD,
+  GPT_IMAGE_QUALITY,
+  GPT_IMAGE_SIZES,
+  type GptImageSizeKey,
+  type StyleVariant
+} from "../config/constants.js";
 import { analyzeImages, selectAssets } from "../ai/image-selector.js";
 import { generateCopy, type CopywriterOutput } from "../ai/copywriter.js";
 import type { CopywriterPropertyInput } from "../ai/prompts/copywriter.v1.js";
 import { isGptImageConfigured } from "../ai/gpt-image.js";
+import { isGeminiImageConfigured } from "../ai/gemini-image.js";
 import { resolveBrandProfile, type BrandProfile } from "../creatives/brand.js";
 import { prepareCarouselPhoto } from "../creatives/compose.js";
 import { renderCreative, type CreativeInput } from "../creatives/renderer.js";
-import { generateAiCreative } from "../creatives/ai-engine.js";
+import { generateAiCreative, type AiCreativeResult } from "../creatives/ai-engine.js";
+import { generateDesignerCreative, type DesignerCreativeResult } from "../creatives/designer-engine.js";
 import { uploadCreative } from "../creatives/storage.js";
 import { getPropertyById, type PropertyRow } from "../repositories/properties.repo.js";
 import { createPublication, getPublicationById, updatePublicationContent, updatePublicationKind } from "../repositories/publications.repo.js";
@@ -111,18 +120,32 @@ async function renderAndUpload(
 }
 
 /**
- * Motor de creativos efectivo para la org: "ai" solo si esta configurado el
- * Director de Arte (OPENAI_API_KEY) — sin el, degrada a template en silencio
- * (log info) para no bloquear la generacion. `creative_engine` puede venir
- * undefined si la migracion 2026-07-06 aun no corrio: default "ai".
+ * Motor de creativos efectivo para la org, degradando segun las keys
+ * disponibles (nunca bloquea la generacion):
+ *   - "ai" requiere OPENAI_API_KEY; sin ella degrada a template (historico).
+ *   - "hybrid" requiere GEMINI_API_KEY; sin ella degrada a designer (la
+ *     misma pieza, con la foto original sin retocar).
+ *   - "designer" y "template" siempre disponibles.
+ * `creative_engine` puede venir undefined si la migracion 2026-07-06 aun no
+ * corrio: default "ai".
  */
 export async function resolveCreativeEngine(orgId: string): Promise<CreativeEngine> {
+  const settings = await getOrgMarketingSettings(orgId);
+  const configured: CreativeEngine = settings.creative_engine ?? "ai";
+
+  if (configured === "template" || configured === "designer") return configured;
+
+  if (configured === "hybrid") {
+    if (isGeminiImageConfigured()) return "hybrid";
+    logger.info({ orgId }, "GEMINI_API_KEY no configurada — motor hibrido degrada a designer");
+    return "designer";
+  }
+
   if (!isGptImageConfigured()) {
     logger.info({ orgId }, "OPENAI_API_KEY no configurada — motor de creativos: template");
     return "template";
   }
-  const settings = await getOrgMarketingSettings(orgId);
-  return settings.creative_engine === "template" ? "template" : "ai";
+  return "ai";
 }
 
 /** Resumen por asset para el detail del evento draft (visible en el Content Studio). */

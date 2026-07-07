@@ -26,6 +26,12 @@ const envSchema = z.object({
   OPENAI_API_KEY: z.string().min(1).optional(),
   GPT_IMAGE_MODEL: z.string().default("gpt-image-1"),
 
+  // Motor hibrido: Gemini (Nano Banana) mejora la foto SIN texto y la
+  // plantilla satori pone el texto encima. OPCIONAL: sin la key, "hybrid"
+  // degrada a "designer" (misma pieza con la foto original).
+  GEMINI_API_KEY: z.string().min(1).optional(),
+  GEMINI_IMAGE_MODEL: z.string().default("gemini-2.5-flash-image"),
+
   META_APP_ID: z.string().min(1),
   META_APP_SECRET: z.string().min(1),
   // Requerido para apps Meta de tipo Business (Facebook Login for Business):

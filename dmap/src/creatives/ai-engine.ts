@@ -1,10 +1,8 @@
-import sharp from "sharp";
 import {
   AI_ENGINE_MAX_ROUNDS,
   CRITIC_APPROVAL_THRESHOLD,
   GPT_IMAGE_QUALITY,
   GPT_IMAGE_SIZES,
-  IMAGE_ANALYSIS_MAX_DIMENSION,
   type GptImageSizeKey
 } from "../config/constants.js";
 import { logger } from "../lib/logger.js";
@@ -12,7 +10,7 @@ import { generateMasterPrompt } from "../ai/creative-director.js";
 import { critiqueCreative, type CriticOutput } from "../ai/creative-critic.js";
 import { editImage } from "../ai/gpt-image.js";
 import type { CreativeDirectorInput } from "../ai/prompts/creative-director.v1.js";
-import { composeLogoAndResize, prepareSourceForEdit } from "./compose.js";
+import { composeLogoAndResize, prepareSourceForEdit, toCriticBase64 } from "./compose.js";
 import type { BrandProfile } from "./brand.js";
 
 /**
@@ -65,14 +63,6 @@ async function downloadBuffer(url: string, fetchFn: typeof fetch): Promise<Buffe
   const response = await fetchFn(url);
   if (!response.ok) throw new Error(`No se pudo descargar ${url}: ${response.status}`);
   return Buffer.from(await response.arrayBuffer());
-}
-
-async function toCriticBase64(buffer: Buffer): Promise<string> {
-  const resized = await sharp(buffer)
-    .resize({ width: IMAGE_ANALYSIS_MAX_DIMENSION, height: IMAGE_ANALYSIS_MAX_DIMENSION, fit: "inside", withoutEnlargement: true })
-    .jpeg({ quality: 82 })
-    .toBuffer();
-  return resized.toString("base64");
 }
 
 /**

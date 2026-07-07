@@ -1,5 +1,5 @@
 import sharp from "sharp";
-import { CREATIVE_SIZES, LOGO_WIDTH_RATIO, type CreativeSizeKey } from "../config/constants.js";
+import { CREATIVE_SIZES, IMAGE_ANALYSIS_MAX_DIMENSION, LOGO_WIDTH_RATIO, type CreativeSizeKey } from "../config/constants.js";
 import type { RenderedCreative } from "./renderer.js";
 
 /**
@@ -28,6 +28,15 @@ export async function prepareSourceForEdit(sourceBuffer: Buffer, gptSize: string
     .resize({ width, height, fit: "cover", position: "attention" })
     .jpeg({ quality: 90 })
     .toBuffer();
+}
+
+/** Pieza final -> base64 reducido para el critico (Claude vision). Compartido por ai-engine y designer-engine. */
+export async function toCriticBase64(buffer: Buffer): Promise<string> {
+  const resized = await sharp(buffer)
+    .resize({ width: IMAGE_ANALYSIS_MAX_DIMENSION, height: IMAGE_ANALYSIS_MAX_DIMENSION, fit: "inside", withoutEnlargement: true })
+    .jpeg({ quality: 82 })
+    .toBuffer();
+  return resized.toString("base64");
 }
 
 /**

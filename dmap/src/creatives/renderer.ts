@@ -17,12 +17,30 @@ export interface RenderedCreative {
 
 export type CreativeInput = Omit<CreativeData, "coverImageDataUri"> & { sourceImageUrl: string };
 
-async function cropToDataUri(sourceBuffer: Buffer, width: number, height: number): Promise<string> {
+export async function cropToDataUri(sourceBuffer: Buffer, width: number, height: number): Promise<string> {
   const cropped = await sharp(sourceBuffer)
     .resize({ width, height, fit: "cover", position: "attention" })
     .jpeg({ quality: 90 })
     .toBuffer();
   return `data:image/jpeg;base64,${cropped.toString("base64")}`;
+}
+
+/**
+ * Arbol satori -> JPEG final (satori -> resvg -> sharp). Compartido entre la
+ * plantilla clasica y el motor designer/hybrid (designer-engine.ts).
+ */
+export async function renderSatoriTree(tree: unknown, size: { width: number; height: number }): Promise<RenderedCreative> {
+  const svg = await satori(tree as ReactNode, {
+    width: size.width,
+    height: size.height,
+    fonts: getBrandFonts()
+  });
+
+  const resvg = new Resvg(svg, { fitTo: { mode: "width", value: size.width } });
+  const png = resvg.render().asPng();
+  const jpeg = await sharp(png).jpeg({ quality: 85 }).toBuffer();
+
+  return { buffer: jpeg, width: size.width, height: size.height, format: "jpeg" };
 }
 
 async function downloadImage(imageUrl: string): Promise<Buffer> {
@@ -52,17 +70,7 @@ export async function renderCreativeFromBuffer(
   const layout = resolveLayout(brand.layoutStyle);
   const tree = layout(brand, { ...input, coverImageDataUri }, size);
 
-  const svg = await satori(tree as unknown as ReactNode, {
-    width: size.width,
-    height: size.height,
-    fonts: getBrandFonts()
-  });
-
-  const resvg = new Resvg(svg, { fitTo: { mode: "width", value: size.width } });
-  const png = resvg.render().asPng();
-  const jpeg = await sharp(png).jpeg({ quality: 85 }).toBuffer();
-
-  return { buffer: jpeg, width: size.width, height: size.height, format: "jpeg" };
+  return renderSatoriTree(tree, size);
 }
 
 /** Pipeline completo de un creative (ver dmap/ARCHITECTURE.md #6/#E) — descarga la foto de origen y delega en renderCreativeFromBuffer. */
