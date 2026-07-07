@@ -26,7 +26,7 @@ Los 10 work packages de Fase 1 (ver [ARCHITECTURE.md §15](ARCHITECTURE.md#15-pl
 | WP-A | `ARCHITECTURE.md` — arquitectura aprobada antes de escribir código |
 | WP0 | Esqueleto: Fastify+TS, Docker, auth por API key, health/metrics |
 | WP1 | Migración SQL (14 tablas) + repositorios + state machine de publicaciones |
-| WP2 | Sync engine Wasi (scraper público activo por defecto + interfaz para la API oficial) |
+| WP2 | Sync engine Wasi (fuente activa hoy: **API oficial**, `wasi_api`; scraper público queda como fallback) |
 | WP3 | AI Content Factory (copywriter en 5 estilos) + AI Image Selector |
 | WP4 | Creative Generator Lite (satori + resvg + sharp, 3 tamaños, branding Diamond) |
 | WP5 | Pipeline draft end-to-end (evento → generar → renderizar → draft) |
@@ -35,13 +35,20 @@ Los 10 work packages de Fase 1 (ver [ARCHITECTURE.md §15](ARCHITECTURE.md#15-pl
 | WP8 | Sección Marketing en el CRM + Content Studio (`crm/app/(dashboard)/marketing/`) |
 | WP9 | Analytics (metrics.worker cada 6h) + esta documentación |
 
-### Pendientes externos (no bloquean la Fase 1)
+### Estado de despliegue (verificado en vivo, 2026-07-07)
 
-- ~~Credenciales de la API oficial de Wasi~~ — **obtenidas y verificadas el 2026-07-05** contra la cuenta real de Diamond ("Paraíso Inmobiliario", `id_company=12212160`, 96 propiedades). `wasi-api.source.ts` ya refleja la forma real de la respuesta (muy distinta de lo asumido antes de tener acceso — ver ARCHITECTURE.md §5). Falta un solo paso para activarla: guardar las credenciales desde `/marketing/configuracion` en el CRM (se cifran server-side, `PUT /api/v1/settings`) y cambiar `syncSource` a `wasi_api`.
-- **App Review de Meta**: solo se necesita para onboardear inmobiliarias terceras (Diamond funciona en modo desarrollador de la app, sin necesidad de review).
-- **Migración `db/migrations/2026-07-05_dmap.sql` aplicada en Supabase**: correrla en el SQL Editor antes de usar el sistema contra datos reales (nunca se aplica automáticamente, mismo criterio que el resto de `db/migrations/`).
-- **Redis provisionado** (addon de Railway): sin él, el API sigue respondiendo pero la cola/scheduler no procesan jobs (degradación elegante, ver `src/index.ts`).
-- ~~Bucket de Supabase Storage `dmap-creatives`~~ — **creado el 2026-07-06** (público, vía API de Storage). Sin él, `uploadCreative` falla con "Bucket not found" y la generación de publicaciones no llega a crear el draft — no se crea automáticamente, es un paso manual de setup por ambiente (igual que las migraciones SQL).
+**Ya en producción — no repetir estos pasos:**
+- ~~Credenciales de la API oficial de Wasi~~ — obtenidas y verificadas el 2026-07-05, **y activas**: `syncSource = wasi_api` ya está configurado, el sync corre solo (última corrida conocida: 99 propiedades vistas).
+- ~~Migración `db/migrations/2026-07-05_dmap.sql` (y las 4 siguientes: `_dmap_rls`, `_dmap_ai_engine`, `_dmap_creative_engines`, `_dce_property_contexts`)~~ — aplicadas, `property_contexts` recibe escrituras reales.
+- ~~Redis provisionado~~ — Online en Railway (`redis-volume`), workers (sync/cognitive/metrics/token-refresh) confirmados procesando en logs.
+- ~~Bucket `dmap-creatives`~~ — creado el 2026-07-06, en uso.
+- ~~Servicio DMAP en Railway~~ — desplegado y Online: `https://dmap-production.up.railway.app`.
+- ~~OAuth Meta (Page + Instagram)~~ — conectado; hay publicaciones/targets reales bajo seguimiento de métricas.
+- **App Review de Meta**: sigue sin necesitarse — solo aplica para onboardear inmobiliarias terceras.
+
+**⚠️ Known Issue (P2, no bloquea el flujo de venta):** `metrics.worker` falla el 100% de sus corridas (cada 6h, 8/8 targets). Dos causas distintas en Graph API: código 100 en Facebook ("the value must be a valid insights metric" — nombre de métrica inválido en `facebook.adapter.js`) y código 10 en Instagram ("application does not have permission" — falta scope de insights en el token). Efecto acotado a que `post_metrics`/`/marketing/analytics` no se llenan. Corrección pendiente (código, fuera del alcance de un simple despliegue).
+
+**⚠️ WIP local sin pushear:** hay cambios en `dmap/src/` (motores de creativos "designer"/"hybrid": resolución de engine con degradación a Gemini si falta `GEMINI_API_KEY`) que existen solo en un commit local, no en `origin/main`. `produceAsset` todavía NO invoca `generateDesignerCreative` — el wiring completo queda pendiente. No asumir que estos motores están activos en el DMAP desplegado hasta confirmar con `git log origin/main`.
 
 ### Guion de demo end-to-end (criterio de cierre de Fase 1)
 
