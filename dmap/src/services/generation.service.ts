@@ -627,6 +627,7 @@ export interface RegenerateCreativeResult {
 
 export interface RegenerateCreativeDeps {
   aiCreative?: typeof generateAiCreative;
+  designerCreative?: typeof generateDesignerCreative;
   upload?: typeof uploadCreative;
   recordGeneration?: typeof recordContentGeneration;
   recordEvent?: typeof recordPublicationEvent;
@@ -641,10 +642,12 @@ export interface RegenerateCreativeDeps {
  * en lugar de las notas) las instrucciones de mejora que dejo el critico en
  * la corrida anterior (`criticInstructions`, boton "corregir con las
  * recomendaciones del critico") — entran como MANDATORY CORRECTIONS desde la
- * ronda 1. Solo motor IA (la plantilla no interpreta instrucciones) y solo en
- * 'draft'. Reemplaza la imagen del rol (y sus copias: thumbnail y slide 0 del
- * carrusel comparten el archivo de la portada). El registro y el evento no
- * son criticos: si fallan, el creativo regenerado NO se descarta.
+ * ronda 1. Funciona con cualquier motor de IA (ai, designer o hybrid — la
+ * plantilla clasica "template" no interpreta instrucciones, esa si sigue
+ * bloqueada) y solo en 'draft'. Reemplaza la imagen del rol (y sus copias:
+ * thumbnail y slide 0 del carrusel comparten el archivo de la portada). El
+ * registro y el evento no son criticos: si fallan, el creativo regenerado
+ * NO se descarta.
  */
 export async function regenerateCreativeForPublication(
   publicationId: string,
@@ -668,8 +671,8 @@ export async function regenerateCreativeForPublication(
   if (!publication.property_id) throw new FatalError(`Publicacion ${publicationId} no tiene propiedad asociada`);
 
   const engine = await resolveCreativeEngine(publication.org_id);
-  if (engine !== "ai") {
-    throw new FatalError("Regenerar el creativo con notas requiere el motor IA (activa OPENAI_API_KEY y el motor 'ai' en Configuracion)");
+  if (engine === "template") {
+    throw new FatalError("Regenerar el creativo con notas requiere un motor de IA (designer, hybrid o ai) — el motor 'template' no interpreta instrucciones. Cambialo en Configuracion.");
   }
 
   const property = await getPropertyById(publication.property_id);
@@ -688,30 +691,28 @@ export async function regenerateCreativeForPublication(
   const format = role === "story" ? ("story" as const) : ("feed" as const);
 
   const aiCreative = deps.aiCreative ?? generateAiCreative;
+  const designerCreative = deps.designerCreative ?? generateDesignerCreative;
   const upload = deps.upload ?? uploadCreative;
   const recordGeneration = deps.recordGeneration ?? recordContentGeneration;
   const recordEvent = deps.recordEvent ?? recordPublicationEvent;
   const now = deps.now ?? Date.now;
 
   const cognitive = await loadCognitiveContext(publication.org_id, property.id);
+  const directorInput = {
+    property: buildPropertyCopyInput(property),
+    styleVariant,
+    tituloComercial: publication.titulo_comercial ?? property.titulo,
+    cta: publication.cta ?? "",
+    format,
+    brand: { name: brand.name },
+    ...(cognitive ? { cognitiveBrief: directorBriefFromContext(cognitive) } : {})
+  };
 
-  const ai = await aiCreative(
-    brand,
-    {
-      property: buildPropertyCopyInput(property),
-      styleVariant,
-      tituloComercial: publication.titulo_comercial ?? property.titulo,
-      cta: publication.cta ?? "",
-      format,
-      brand: { name: brand.name },
-      ...(cognitive ? { cognitiveBrief: directorBriefFromContext(cognitive) } : {})
-    },
-    current.source_image_url,
-    sizeKey,
-    {},
-    notes || undefined,
-    feedback
-  );
+  const ai: AiCreativeResult | DesignerCreativeResult =
+    engine === "ai"
+      ? await aiCreative(brand, directorInput, current.source_image_url, sizeKey, {}, notes || undefined, feedback)
+      : await designerCreative(brand, directorInput, current.source_image_url, sizeKey, engine, {}, notes || undefined, feedback);
+  const photoEnhanced = "photoEnhanced" in ai && ai.photoEnhanced;
 
   const uploaded = await upload(publication.org_id, publicationId, role, 0, ai.buffer);
   // Cache-bust: uploadCreative sobreescribe el mismo path (upsert), asi que
@@ -739,9 +740,9 @@ export async function regenerateCreativeForPublication(
       publication_id: publicationId,
       kind: "image_generation",
       style_variant: styleVariant,
-      model: env.GPT_IMAGE_MODEL,
+      model: engine === "ai" ? env.GPT_IMAGE_MODEL : photoEnhanced ? "claude+gemini" : "claude",
       prompt_version: ai.promptVersion,
-      input: { role, sizeKey, regenerated: true, userNotes: notes, criticInstructions: feedback, sourceImageUrl: current.source_image_url, masterPrompt: ai.masterPrompt, headline: ai.headline },
+      input: { role, sizeKey, engine, regenerated: true, userNotes: notes, criticInstructions: feedback, sourceImageUrl: current.source_image_url, masterPrompt: ai.masterPrompt, headline: ai.headline },
       output: {
         approved: ai.approved,
         finalScore: ai.finalScore,
@@ -749,17 +750,18 @@ export async function regenerateCreativeForPublication(
         rounds: ai.rounds,
         logoApplied: ai.logoApplied,
         storagePath: uploaded.storagePath,
-        estimatedCostUsd: Number((ai.rounds.length * COST_PER_GPT_IMAGE_USD).toFixed(2))
+        estimatedCostUsd:
+          engine === "ai" ? Number((ai.rounds.length * COST_PER_GPT_IMAGE_USD).toFixed(2)) : photoEnhanced ? Number(COST_PER_GEMINI_IMAGE_USD.toFixed(3)) : 0
       },
       tokens_in: ai.tokensIn,
       tokens_out: ai.tokensOut
     });
   } catch (err) {
-    logger.warn({ err, publicationId, role }, "No se pudo registrar la regeneracion IA en content_generations");
+    logger.warn({ err, publicationId, role }, "No se pudo registrar la regeneracion en content_generations");
   }
 
   const meta: CreativeMeta = {
-    engine: "ai",
+    engine,
     score: ai.finalScore,
     approved: ai.approved,
     rounds: ai.rounds.length,

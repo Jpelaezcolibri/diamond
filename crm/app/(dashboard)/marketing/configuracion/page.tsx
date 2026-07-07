@@ -11,7 +11,7 @@ interface SettingsResponse {
   sync_source: "wasi_api" | "wasi_public";
   sync_interval_minutes: number;
   hasWasiCredentials: boolean;
-  creative_engine?: "ai" | "template";
+  creative_engine?: "ai" | "template" | "designer" | "hybrid";
 }
 
 export default async function ConfiguracionPage() {
@@ -32,7 +32,7 @@ export default async function ConfiguracionPage() {
   return (
     <div className="space-y-6">
       <MetaConnect orgId={orgId} connections={(connections || []) as SocialConnectionRow[]} />
-      <CreativeEngineSettings orgId={orgId} engine={settings?.creative_engine === "template" ? "template" : "ai"} />
+      <CreativeEngineSettings orgId={orgId} engine={settings?.creative_engine ?? "ai"} />
       <WasiSettings orgId={orgId} settings={settings} />
     </div>
   );
