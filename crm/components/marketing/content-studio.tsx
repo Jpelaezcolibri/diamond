@@ -41,6 +41,29 @@ function criticFixInstructions(meta: CreativeMeta | undefined): string[] {
   return meta?.problemas ?? [];
 }
 
+/** Foto real candidata a portada/historia (GET /cover-candidates de DMAP) —
+ *  mismo ranking determinista con el que el sistema elige por defecto. */
+interface CoverCandidate {
+  imageUrl: string;
+  roomType: string;
+  qualityScore: number;
+  brightnessScore: number;
+  isDark: boolean;
+  recommended: boolean;
+  current: boolean;
+}
+
+const ROOM_TYPE_LABELS: Record<string, string> = {
+  fachada: "Fachada",
+  sala: "Sala",
+  cocina: "Cocina",
+  balcon: "Balcón",
+  vista: "Vista",
+  habitacion_principal: "Habitación principal",
+  bano: "Baño",
+  otro: "Otro espacio",
+};
+
 async function postJson(url: string, body?: unknown, method = "POST") {
   const res = await fetch(url, {
     method,
@@ -81,6 +104,9 @@ export default function ContentStudio({
   const [message, setMessage] = useState<{ type: "ok" | "error"; text: string } | null>(null);
   const [regenNotes, setRegenNotes] = useState<{ cover: string; story: string }>({ cover: "", story: "" });
   const [previewPlatform, setPreviewPlatform] = useState<"facebook" | "instagram">("facebook");
+  const [pickerOpen, setPickerOpen] = useState<{ cover: boolean; story: boolean }>({ cover: false, story: false });
+  const [candidates, setCandidates] = useState<{ cover: CoverCandidate[] | null; story: CoverCandidate[] | null }>({ cover: null, story: null });
+  const [loadingCandidates, setLoadingCandidates] = useState<"cover" | "story" | null>(null);
 
   const cover = assets.find((a) => a.role === "cover");
   const story = assets.find((a) => a.role === "story");
@@ -150,19 +176,23 @@ export default function ContentStudio({
     if (ok) router.refresh();
   }
 
-  async function handleRegenerateCreative(role: "cover" | "story", criticInstructions?: string[]) {
+  async function handleRegenerateCreative(role: "cover" | "story", opts?: { criticInstructions?: string[]; sourceImageUrl?: string }) {
     const notes = regenNotes[role].trim();
+    const criticInstructions = opts?.criticInstructions;
+    const sourceImageUrl = opts?.sourceImageUrl;
     const usingCritic = (criticInstructions?.length ?? 0) > 0;
-    if (!notes && !usingCritic) {
-      setMessage({ type: "error", text: "Escribí los cambios que querés en el creativo" });
+    if (!notes && !usingCritic && !sourceImageUrl) {
+      setMessage({ type: "error", text: "Escribí los cambios que querés en el creativo o elegí otra foto" });
       return;
     }
-    setBusy(usingCritic ? `regen-critic-${role}` : `regen-creative-${role}`);
+    const busyKey = sourceImageUrl ? `regen-photo-${role}` : usingCritic ? `regen-critic-${role}` : `regen-creative-${role}`;
+    setBusy(busyKey);
     setMessage(null);
     const { ok, data } = await postJson(`/api/marketing/publications/${publication.id}/regenerate-creative`, {
       role,
       ...(notes ? { notes } : {}),
       ...(usingCritic ? { criticInstructions } : {}),
+      ...(sourceImageUrl ? { sourceImageUrl } : {}),
     });
     setBusy(null);
     if (ok) {
@@ -172,6 +202,12 @@ export default function ContentStudio({
         : `el crítico aún ve problemas (score ${data.score}/100) — ajustá las notas y reintentá ⚠️`;
       setMessage({ type: "ok", text: `${label} regenerada — ${verdict}` });
       setRegenNotes((prev) => ({ ...prev, [role]: "" }));
+      if (sourceImageUrl) {
+        // La foto elegida ya quedo aplicada — cerrar el picker y limpiar el
+        // cache de candidatas (la portada "actual" cambio).
+        setPickerOpen((prev) => ({ ...prev, [role]: false }));
+        setCandidates((prev) => ({ ...prev, [role]: null }));
+      }
       router.refresh();
     } else {
       // DMAP devuelve errores zod como { error: "invalid_request", issues } —
@@ -179,6 +215,76 @@ export default function ContentStudio({
       const issues = Array.isArray(data.issues) ? data.issues.map((i: { message?: string }) => i.message).filter(Boolean).join(" · ") : "";
       setMessage({ type: "error", text: issues || data.message || data.error || "No se pudo regenerar el creativo" });
     }
+  }
+
+  async function togglePhotoPicker(role: "cover" | "story") {
+    const opening = !pickerOpen[role];
+    setPickerOpen((prev) => ({ ...prev, [role]: opening }));
+    if (opening && !candidates[role]) {
+      setLoadingCandidates(role);
+      const res = await fetch(`/api/marketing/publications/${publication.id}/cover-candidates?role=${role}`);
+      const data = await res.json().catch(() => ({}));
+      setLoadingCandidates(null);
+      setCandidates((prev) => ({ ...prev, [role]: Array.isArray(data.candidates) ? data.candidates : [] }));
+    }
+  }
+
+  // Selector de foto real: el sistema ya elige "la mejor" con un ranking
+  // determinista (calidad + tipo de espacio, ver dmap/ai/image-selector.ts;
+  // marcada con ⭐ "recomendada"), pero antes de aprobar el humano puede ver
+  // todas las candidatas y elegir otra — dispara una regeneración sobre esa
+  // foto (mismo motor IA activo, ~1-2 min).
+  function photoPicker(role: "cover" | "story") {
+    if (!isDraft) return null;
+    const list = candidates[role];
+    return (
+      <div className="space-y-1.5">
+        <button
+          type="button"
+          onClick={() => togglePhotoPicker(role)}
+          disabled={busy !== null}
+          className="text-xs font-medium text-[#c9a24b] hover:underline disabled:opacity-50"
+        >
+          {pickerOpen[role] ? "Ocultar fotos ▲" : "🖼️ Elegir otra foto ▼"}
+        </button>
+        {pickerOpen[role] && (
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-2">
+            {loadingCandidates === role && <p className="text-xs text-slate-500">Analizando fotos…</p>}
+            {list && list.length === 0 && <p className="text-xs text-slate-500">No hay fotos utilizables (todas oscuras o sin analizar).</p>}
+            {list && list.length > 0 && (
+              <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-4">
+                {list.map((c) => (
+                  <button
+                    key={c.imageUrl}
+                    type="button"
+                    disabled={busy !== null || c.current}
+                    onClick={() => handleRegenerateCreative(role, { sourceImageUrl: c.imageUrl })}
+                    className={`group relative overflow-hidden rounded-lg border-2 text-left disabled:cursor-default ${
+                      c.current ? "border-[#c9a24b]" : "border-transparent hover:border-slate-400"
+                    }`}
+                    title={c.current ? "Ya es la foto actual" : "Usar esta foto"}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={c.imageUrl} alt={ROOM_TYPE_LABELS[c.roomType] || c.roomType} className="aspect-square w-full object-cover" />
+                    <span className="absolute bottom-0 left-0 right-0 bg-black/70 px-1 py-0.5 text-[9px] leading-tight text-white">
+                      {ROOM_TYPE_LABELS[c.roomType] || c.roomType}
+                      {c.recommended ? " · ⭐ mejor" : ""}
+                      {c.current ? " · actual" : ""}
+                    </span>
+                    {busy === `regen-photo-${role}` && !c.current && (
+                      <span className="absolute inset-0 flex items-center justify-center bg-black/40 text-[10px] text-white">…</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+            <p className="mt-1.5 text-[10px] text-slate-400">
+              ⭐ marca la que el sistema recomienda por calidad y tipo de espacio. Elegí otra para regenerar el creativo con esa foto.
+            </p>
+          </div>
+        )}
+      </div>
+    );
   }
 
   // Caja de notas + boton para regenerar un creativo con instrucciones del
@@ -316,7 +422,7 @@ export default function ContentStudio({
                   <button
                     key={p.role}
                     type="button"
-                    onClick={() => handleRegenerateCreative(p.role, criticFixInstructions(p.meta))}
+                    onClick={() => handleRegenerateCreative(p.role, { criticInstructions: criticFixInstructions(p.meta) })}
                     disabled={busy !== null}
                     className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-amber-700 disabled:opacity-50"
                   >
@@ -338,6 +444,7 @@ export default function ContentStudio({
             <div className="space-y-2">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={cover.public_url} alt={cover.alt_text || "Portada"} className="w-full rounded-xl border border-slate-200" />
+              {photoPicker("cover")}
               {regenBox("cover")}
             </div>
           )}
@@ -363,6 +470,7 @@ export default function ContentStudio({
             <div className="space-y-2">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={story.public_url} alt="Historia" className="mx-auto w-1/2 rounded-xl border border-slate-200" />
+              {photoPicker("story")}
               {regenBox("story")}
             </div>
           )}

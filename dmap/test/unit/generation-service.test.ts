@@ -3,6 +3,7 @@ import {
   actorUserId,
   buildCreativeBaseData,
   buildPropertyCopyInput,
+  hasRegenerationInput,
   produceAsset,
   produceCarouselSlides,
   regenerateCreativeForPublication
@@ -310,11 +311,24 @@ describe("produceCarouselSlides", () => {
   });
 });
 
+describe("hasRegenerationInput (guard puro de regenerateCreativeForPublication)", () => {
+  it("false si notas, instrucciones del critico y foto vienen todas vacias/blancas", () => {
+    expect(hasRegenerationInput("", [], undefined)).toBe(false);
+    expect(hasRegenerationInput("   ", ["  ", ""], "   ")).toBe(false);
+  });
+
+  it("true con notas solas, instrucciones del critico solas, o una foto elegida a mano sola", () => {
+    expect(hasRegenerationInput("quita el overlay oscuro", [], undefined)).toBe(true);
+    expect(hasRegenerationInput("", ["agranda el precio"], undefined)).toBe(true);
+    expect(hasRegenerationInput("", [], "https://img.wasi.co/otra-foto.jpg")).toBe(true);
+  });
+});
+
 describe("regenerateCreativeForPublication (guards)", () => {
   // El resto del flujo (carga de pub/property/brand/assets + reemplazo de
   // imagen) toca Supabase y se valida E2E, igual que generateDraftForProperty.
   // El guard de notas vacias corre ANTES de cualquier IO, asi que se testea puro.
-  it("rechaza notas vacias sin instrucciones del critico, sin tocar red", async () => {
+  it("rechaza notas vacias sin instrucciones del critico ni foto elegida, sin tocar red", async () => {
     await expect(regenerateCreativeForPublication("pub-1", "cover", "   ", "user:x")).rejects.toThrow(/notas/i);
     // instrucciones en blanco tampoco cuentan
     await expect(regenerateCreativeForPublication("pub-1", "cover", "", "user:x", {}, ["  ", ""])).rejects.toThrow(/notas/i);

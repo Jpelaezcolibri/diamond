@@ -29,7 +29,8 @@ export async function listAssetsByPublication(publicationId: string): Promise<Pu
 export async function updateAssetsImageAtPosition0(
   publicationId: string,
   roles: PublicationAssetRow["role"][],
-  fields: Pick<PublicationAssetRow, "storage_path" | "public_url" | "width" | "height" | "format">
+  fields: Pick<PublicationAssetRow, "storage_path" | "public_url" | "width" | "height" | "format"> &
+    Partial<Pick<PublicationAssetRow, "source_image_url">>
 ): Promise<void> {
   const { error } = await getSupabase()
     .from("publication_assets")

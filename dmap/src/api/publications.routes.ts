@@ -9,7 +9,7 @@ import {
 import { getConnectionById } from "../repositories/social-connections.repo.js";
 import { enqueuePublish } from "../queue/queues.js";
 import { FatalError } from "../lib/errors.js";
-import { regenerateCopyForPublication, regenerateCreativeForPublication } from "../services/generation.service.js";
+import { listCoverCandidates, regenerateCopyForPublication, regenerateCreativeForPublication } from "../services/generation.service.js";
 import { STYLE_VARIANTS } from "../config/constants.js";
 
 function actorFromRequest(request: { headers: Record<string, unknown> }): string {
@@ -55,11 +55,16 @@ const regenerateCreativeBodySchema = z
     notes: z.string().trim().max(2000, "Las notas no pueden superar 2000 caracteres").optional(),
     // Instrucciones de mejora del critico IA de la corrida anterior — el CRM
     // las reenvia tal cual con el boton "corregir con las recomendaciones".
-    criticInstructions: z.array(z.string().trim().min(1).max(600)).max(12).optional()
+    criticInstructions: z.array(z.string().trim().min(1).max(600)).max(12).optional(),
+    // Foto real elegida a mano por el humano (boton "elegir otra foto") —
+    // reemplaza la que el ranking automatico puso por defecto.
+    sourceImageUrl: z.string().trim().url().optional()
   })
-  .refine((b) => (b.notes && b.notes.length > 0) || (b.criticInstructions && b.criticInstructions.length > 0), {
-    message: "Escribe los cambios que quieres o envia las instrucciones del critico"
+  .refine((b) => (b.notes && b.notes.length > 0) || (b.criticInstructions && b.criticInstructions.length > 0) || b.sourceImageUrl, {
+    message: "Escribe los cambios que quieres, envia las instrucciones del critico, o elegi otra foto"
   });
+
+const coverCandidatesQuerySchema = z.object({ role: z.enum(["cover", "story"]).default("cover") });
 
 export async function publicationsRoutes(app: FastifyInstance) {
   app.patch("/api/v1/publications/:id", async (request, reply) => {
@@ -127,11 +132,29 @@ export async function publicationsRoutes(app: FastifyInstance) {
         body.data.notes ?? "",
         actorFromRequest(request),
         {},
-        body.data.criticInstructions ?? []
+        body.data.criticInstructions ?? [],
+        body.data.sourceImageUrl
       );
       reply.send(result);
     } catch (err) {
       reply.code(502).send({ error: "regenerate_creative_failed", message: (err as Error).message });
+    }
+  });
+
+  // Candidatas para elegir a mano la foto fuente de un rol (Content Studio,
+  // boton "elegir otra foto"): reusa el ranking determinista ya cacheado.
+  app.get("/api/v1/publications/:id/cover-candidates", async (request, reply) => {
+    const params = z.object({ id: z.string().uuid() }).safeParse(request.params);
+    const query = coverCandidatesQuerySchema.safeParse(request.query);
+    if (!params.success || !query.success) {
+      reply.code(400).send({ error: "invalid_request", issues: [...(params.error?.issues ?? []), ...(query.error?.issues ?? [])] });
+      return;
+    }
+    try {
+      const candidates = await listCoverCandidates(params.data.id, query.data.role);
+      reply.send({ candidates });
+    } catch (err) {
+      reply.code(502).send({ error: "cover_candidates_failed", message: (err as Error).message });
     }
   });
 

@@ -9,7 +9,7 @@ import {
   type GptImageSizeKey,
   type StyleVariant
 } from "../config/constants.js";
-import { analyzeImages, selectAssets } from "../ai/image-selector.js";
+import { analyzeImages, rankImages, selectAssets, type RoomType } from "../ai/image-selector.js";
 import { generateCopy, type CopywriterOutput } from "../ai/copywriter.js";
 import type { CopywriterPropertyInput } from "../ai/prompts/copywriter.v1.js";
 import { isGptImageConfigured } from "../ai/gpt-image.js";
@@ -635,19 +635,81 @@ export interface RegenerateCreativeDeps {
 }
 
 /**
+ * Guard puro (sin IO) de `regenerateCreativeForPublication`: hay una razon
+ * valida para gastar una corrida si el humano escribio notas, reenvia el
+ * feedback del critico, o eligio una foto fuente distinta a la actual —
+ * cualquiera de las tres solas ya justifica regenerar.
+ */
+export function hasRegenerationInput(notes: string, criticInstructions: string[], sourceImageUrl?: string): boolean {
+  return Boolean(notes.trim()) || criticInstructions.some((i) => i.trim().length > 0) || Boolean(sourceImageUrl?.trim());
+}
+
+export interface CoverCandidate {
+  imageUrl: string;
+  roomType: RoomType;
+  qualityScore: number;
+  brightnessScore: number;
+  isDark: boolean;
+  /** true = la foto que el ranking determinista pondria de primera (ver rankImages). */
+  recommended: boolean;
+  /** true = la foto fuente que hoy tiene el asset de ese rol en la publicacion. */
+  current: boolean;
+}
+
+/**
+ * Candidatas para elegir a mano la foto fuente de un rol (Content Studio,
+ * boton "elegir otra foto"): reusa el MISMO ranking determinista con el que
+ * el sistema ya elige la portada por defecto (ver ai/image-selector.ts) —
+ * el analisis por foto esta cacheado desde generateDraftForProperty, asi que
+ * esto no vuelve a llamar a Claude salvo que haya fotos nuevas sin analizar.
+ * Oscuras y duplicadas quedan fuera (rankImages ya las filtra).
+ */
+export async function listCoverCandidates(publicationId: string, role: RegenerableRole): Promise<CoverCandidate[]> {
+  const publication = await getPublicationById(publicationId);
+  if (!publication) throw new FatalError(`Publicacion ${publicationId} no existe`);
+  if (!publication.property_id) throw new FatalError(`Publicacion ${publicationId} no tiene propiedad asociada`);
+
+  const property = await getPropertyById(publication.property_id);
+  if (!property) throw new FatalError(`Propiedad ${publication.property_id} no existe`);
+  if (!property.images || property.images.length === 0) return [];
+
+  const [analyses, assets] = await Promise.all([
+    analyzeImages(publication.org_id, property.id, property.images),
+    listAssetsByPublication(publicationId)
+  ]);
+  const ranked = rankImages(analyses);
+  const current = assets.find((a) => a.role === role && a.position === 0);
+
+  return ranked.map((a, i) => ({
+    imageUrl: a.imageUrl,
+    roomType: a.roomType,
+    qualityScore: a.qualityScore,
+    brightnessScore: a.brightnessScore,
+    isDark: a.isDark,
+    recommended: i === 0,
+    current: a.imageUrl === current?.source_image_url
+  }));
+}
+
+/**
  * "Regenerar creativo con notas" desde el Content Studio: el humano actua
  * como tercer director y escribe los cambios que quiere (ej "quita el overlay
- * oscuro, agranda el precio"); se re-corre el motor IA sobre la MISMA foto,
- * inyectando esas notas con prioridad en el prompt. Tambien acepta (ademas o
- * en lugar de las notas) las instrucciones de mejora que dejo el critico en
- * la corrida anterior (`criticInstructions`, boton "corregir con las
- * recomendaciones del critico") — entran como MANDATORY CORRECTIONS desde la
- * ronda 1. Funciona con cualquier motor de IA (ai, designer o hybrid — la
- * plantilla clasica "template" no interpreta instrucciones, esa si sigue
- * bloqueada) y solo en 'draft'. Reemplaza la imagen del rol (y sus copias:
- * thumbnail y slide 0 del carrusel comparten el archivo de la portada). El
- * registro y el evento no son criticos: si fallan, el creativo regenerado
- * NO se descarta.
+ * oscuro, agranda el precio"); se re-corre el motor IA inyectando esas notas
+ * con prioridad en el prompt. Tambien acepta (ademas o en lugar de las notas)
+ * las instrucciones de mejora que dejo el critico en la corrida anterior
+ * (`criticInstructions`, boton "corregir con las recomendaciones del
+ * critico") — entran como MANDATORY CORRECTIONS desde la ronda 1. Y acepta
+ * (ademas o en lugar de ambas) `sourceImageUrl`: el humano puede elegir a
+ * mano OTRA foto real de la propiedad (boton "elegir otra foto" del Content
+ * Studio, ver listCoverCandidates) en vez de la que el ranking automatico
+ * puso por defecto — sin foto nueva, se regenera sobre la MISMA de siempre.
+ * Cualquiera de las tres razones sola ya justifica una corrida (ver
+ * hasRegenerationInput). Funciona con cualquier motor de IA (ai, designer o
+ * hybrid — la plantilla clasica "template" no interpreta instrucciones, esa
+ * si sigue bloqueada) y solo en 'draft'. Reemplaza la imagen del rol (y sus
+ * copias: thumbnail y slide 0 del carrusel comparten el archivo de la
+ * portada, incluida la foto fuente para trazabilidad). El registro y el
+ * evento no son criticos: si fallan, el creativo regenerado NO se descarta.
  */
 export async function regenerateCreativeForPublication(
   publicationId: string,
@@ -655,12 +717,14 @@ export async function regenerateCreativeForPublication(
   userNotes: string,
   actor: string,
   deps: RegenerateCreativeDeps = {},
-  criticInstructions: string[] = []
+  criticInstructions: string[] = [],
+  sourceImageUrl?: string
 ): Promise<RegenerateCreativeResult> {
   const notes = userNotes.trim();
   const feedback = criticInstructions.map((i) => i.trim()).filter(Boolean);
-  if (!notes && feedback.length === 0) {
-    throw new FatalError("Para regenerar el creativo escribe notas o envia las instrucciones del critico");
+  const requestedSource = sourceImageUrl?.trim() || undefined;
+  if (!hasRegenerationInput(userNotes, criticInstructions, sourceImageUrl)) {
+    throw new FatalError("Para regenerar el creativo escribe notas, envia las instrucciones del critico, o elegi otra foto");
   }
 
   const publication = await getPublicationById(publicationId);
@@ -685,6 +749,7 @@ export async function regenerateCreativeForPublication(
   if (!current?.source_image_url) {
     throw new FatalError(`La publicacion no tiene un asset '${role}' con foto fuente para regenerar`);
   }
+  const effectiveSource = requestedSource ?? current.source_image_url;
 
   const styleVariant = (publication.style_variant ?? "premium") as StyleVariant;
   const sizeKey: GptImageSizeKey = role === "story" ? "ig_story" : "ig_feed";
@@ -710,8 +775,8 @@ export async function regenerateCreativeForPublication(
 
   const ai: AiCreativeResult | DesignerCreativeResult =
     engine === "ai"
-      ? await aiCreative(brand, directorInput, current.source_image_url, sizeKey, {}, notes || undefined, feedback)
-      : await designerCreative(brand, directorInput, current.source_image_url, sizeKey, engine, {}, notes || undefined, feedback);
+      ? await aiCreative(brand, directorInput, effectiveSource, sizeKey, {}, notes || undefined, feedback)
+      : await designerCreative(brand, directorInput, effectiveSource, sizeKey, engine, {}, notes || undefined, feedback);
   const photoEnhanced = "photoEnhanced" in ai && ai.photoEnhanced;
 
   const uploaded = await upload(publication.org_id, publicationId, role, 0, ai.buffer);
@@ -720,14 +785,17 @@ export async function regenerateCreativeForPublication(
   const bustedUrl = `${uploaded.publicUrl}?v=${now()}`;
 
   // La portada se reusa como thumbnail y como slide 0 del carrusel (mismo
-  // archivo): actualizarlos juntos evita que queden desincronizados.
+  // archivo): actualizarlos juntos evita que queden desincronizados. Si el
+  // humano eligio otra foto, source_image_url tambien se actualiza en los
+  // tres — sin esto quedaria trazado el archivo pero no la foto real de origen.
   const rolesToUpdate: PublicationAssetRow["role"][] = role === "cover" ? ["cover", "thumbnail", "carousel"] : ["story"];
   await updateAssetsImageAtPosition0(publicationId, rolesToUpdate, {
     storage_path: uploaded.storagePath,
     public_url: bustedUrl,
     width: ai.width,
     height: ai.height,
-    format: ai.format
+    format: ai.format,
+    ...(requestedSource ? { source_image_url: requestedSource } : {})
   });
 
   const feedbackMeta = criticFeedbackMeta(ai);
@@ -742,7 +810,18 @@ export async function regenerateCreativeForPublication(
       style_variant: styleVariant,
       model: engine === "ai" ? env.GPT_IMAGE_MODEL : photoEnhanced ? "claude+gemini" : "claude",
       prompt_version: ai.promptVersion,
-      input: { role, sizeKey, engine, regenerated: true, userNotes: notes, criticInstructions: feedback, sourceImageUrl: current.source_image_url, masterPrompt: ai.masterPrompt, headline: ai.headline },
+      input: {
+        role,
+        sizeKey,
+        engine,
+        regenerated: true,
+        userNotes: notes,
+        criticInstructions: feedback,
+        sourceImageUrl: effectiveSource,
+        sourceImageChangedByHuman: Boolean(requestedSource),
+        masterPrompt: ai.masterPrompt,
+        headline: ai.headline
+      },
       output: {
         approved: ai.approved,
         finalScore: ai.finalScore,
