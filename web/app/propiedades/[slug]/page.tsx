@@ -3,6 +3,7 @@ import { notFound, permanentRedirect } from "next/navigation";
 import { MessageCircle, Check, ExternalLink } from "lucide-react";
 import { getTenantConfig } from "@/config/tenant";
 import { getProperties, getPropertyByRef, getSimilar } from "@/services/properties";
+import { getPropertyContext } from "@/services/property-context";
 import { refFromSlug } from "@/lib/slug";
 import { propertyWhatsAppUrl } from "@/lib/whatsapp";
 import { propertyJsonLd } from "@/lib/seo";
@@ -38,8 +39,15 @@ export async function generateMetadata({ params }: { params: Promise<Params> }):
   if (!property) return {};
 
   const location = [property.zona, property.ciudad].filter(Boolean).join(", ");
-  const title = `${property.tipo} en ${property.operacion.toLowerCase()}${location ? ` en ${location}` : ""} · ${property.precio.formatted}`;
+  const context = await getPropertyContext(property.ref);
+  // El DCE ya redacta un titulo/descripcion pensados para SEO (ver
+  // recommendations.seoTitle/seoDescription); si no existe, cae al calculo
+  // generico de siempre.
+  const title =
+    context?.seoTitle ??
+    `${property.tipo} en ${property.operacion.toLowerCase()}${location ? ` en ${location}` : ""} · ${property.precio.formatted}`;
   const description =
+    context?.seoDescription ??
     property.descripcion?.slice(0, 155) ??
     `${property.tipo} en ${property.operacion.toLowerCase()} — Ref. ${property.ref}.`;
 
@@ -72,6 +80,7 @@ export default async function PropertyPage({ params }: { params: Promise<Params>
   const whatsappUrl = propertyWhatsAppUrl(config, property.ref);
   const similares = await getSimilar(property, 3);
   const location = [property.zona, property.ciudad].filter(Boolean).join(", ");
+  const context = await getPropertyContext(property.ref);
 
   return (
     <main data-hide-fab>
@@ -96,8 +105,26 @@ export default async function PropertyPage({ params }: { params: Promise<Params>
               <span className="text-xs uppercase tracking-[0.18em] text-muted">Ref. {property.ref}</span>
             </div>
 
-            <h1 className="mt-4 text-3xl leading-tight md:text-4xl">{property.titulo}</h1>
-            {location ? <p className="mt-2 text-base text-muted">{location}</p> : null}
+            {context?.heroMessage ? (
+              <p className="mt-4 text-balance font-heading text-2xl leading-snug text-foreground md:text-3xl">
+                {context.heroMessage}
+              </p>
+            ) : null}
+            <h1
+              className={
+                context?.heroMessage
+                  ? "mt-2 text-lg text-muted md:text-xl"
+                  : "mt-4 text-3xl leading-tight md:text-4xl"
+              }
+            >
+              {property.titulo}
+            </h1>
+            {context?.heroSubtitle ? <p className="mt-2 text-base text-muted">{context.heroSubtitle}</p> : null}
+            {location ? (
+              <p className={context?.heroSubtitle ? "mt-1 text-sm text-muted/80" : "mt-2 text-base text-muted"}>
+                {location}
+              </p>
+            ) : null}
 
             <div className="mt-6 flex flex-wrap items-center justify-between gap-4 border-y border-line py-5">
               <p className="font-heading text-3xl tracking-tight tabular-nums md:text-4xl">
@@ -126,6 +153,20 @@ export default async function PropertyPage({ params }: { params: Promise<Params>
                 <p className="mt-4 max-w-prose whitespace-pre-line text-base leading-relaxed text-foreground/85">
                   {property.descripcion}
                 </p>
+              </div>
+            ) : null}
+
+            {context && context.benefits.length > 0 ? (
+              <div className="mt-10">
+                <h2 className="text-xl md:text-2xl">Por qué te va a encantar</h2>
+                <ul className="mt-4 space-y-3">
+                  {context.benefits.map((beneficio) => (
+                    <li key={beneficio} className="flex items-start gap-2.5 text-base text-foreground/85">
+                      <Check className="mt-1 size-4 shrink-0 text-accent" aria-hidden="true" />
+                      {beneficio}
+                    </li>
+                  ))}
+                </ul>
               </div>
             ) : null}
 

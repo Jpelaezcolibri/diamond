@@ -77,13 +77,27 @@ describe("buildCaption", () => {
     expect(caption).toContain("#Sabaneta #ApartamentoEnVenta");
   });
 
-  it("incluye el bloque de contacto (landing + WhatsApp de Sofi con la ref) antes de los hashtags", () => {
+  it("Facebook: incluye el bloque de contacto (landing + link corto de WhatsApp) antes de los hashtags", () => {
     const publication = makePublication();
     const caption = buildCaption(publication, "facebook", PROPERTY);
     expect(caption).toContain("https://diamondinmobiliaria.com/propiedades/apartamento-exclusivo-piso-19-alicante-itagui-10012722");
-    expect(caption).toContain("https://wa.me/573044653609?text=");
-    expect(caption).toContain(encodeURIComponent("Hola Sofi, me interesa la propiedad 10012722"));
-    expect(caption.indexOf("wa.me")).toBeLessThan(caption.indexOf("#Sabaneta"));
+    // Link corto propio (redirige a wa.me con el mensaje precargado, ver
+    // web/app/wa/[ref]/route.ts) — nunca el wa.me?text=... crudo con
+    // URL-encoding largo, que se ve mal pegado en un post.
+    expect(caption).toContain("https://diamondinmobiliaria.com/wa/10012722");
+    expect(caption).not.toContain("wa.me");
+    expect(caption.indexOf("diamondinmobiliaria.com/wa")).toBeLessThan(caption.indexOf("#Sabaneta"));
+  });
+
+  it("Instagram: el contacto de WhatsApp es texto plano (numero + ref), nunca un link crudo", () => {
+    const publication = makePublication();
+    const caption = buildCaption(publication, "instagram", PROPERTY);
+    // En IG ningun link del caption es clicable — mostrar una URL ahi es puro
+    // ruido. En vez de eso, numero legible para marcar a mano.
+    expect(caption).toContain("+57 304 465 3609");
+    expect(caption).toContain("Ref 10012722");
+    expect(caption).not.toContain("wa.me");
+    expect(caption).not.toContain("diamondinmobiliaria.com/wa");
   });
 
   it("sin propiedad, el caption queda igual que antes (sin bloque de contacto)", () => {
@@ -94,18 +108,24 @@ describe("buildCaption", () => {
 
 describe("buildContactBlock", () => {
   it("arma el slug igual que la landing (sin tildes, ref al final)", () => {
-    const block = buildContactBlock(PROPERTY);
+    const block = buildContactBlock(PROPERTY, "facebook");
     expect(block).toContain("/propiedades/apartamento-exclusivo-piso-19-alicante-itagui-10012722");
   });
 
-  it("la ref queda visible en texto plano y pre-llenada en el mensaje de WhatsApp", () => {
-    const block = buildContactBlock(PROPERTY);
+  it("Facebook: la ref queda visible en el link corto de WhatsApp", () => {
+    const block = buildContactBlock(PROPERTY, "facebook");
     expect(block).toContain("Ref 10012722");
-    expect(block).toContain(`?text=${encodeURIComponent("Hola Sofi, me interesa la propiedad 10012722")}`);
+    expect(block).toContain("https://diamondinmobiliaria.com/wa/10012722");
+  });
+
+  it("Instagram: numero formateado legible en vez de un link", () => {
+    const block = buildContactBlock(PROPERTY, "instagram");
+    expect(block).toContain("+57 304 465 3609");
+    expect(block).toContain("Ref 10012722");
   });
 
   it("devuelve null sin propiedad", () => {
-    expect(buildContactBlock(null)).toBeNull();
+    expect(buildContactBlock(null, "facebook")).toBeNull();
   });
 });
 

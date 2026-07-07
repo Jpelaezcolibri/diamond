@@ -25,21 +25,43 @@ import type { PublicationRow, PublicationAssetRow, SocialPlatform } from "../rep
 const PUBLISH_WORKER_ACTOR = "system:publish.worker";
 
 /**
- * Bloque de contacto deterministico: link a la ficha en la landing + link de
- * WhatsApp directo a Sofi con la ref pre-llenada en el mensaje (el bot la
- * detecta con REF_PATTERN y la guarda como origen del lead). Se arma en
- * codigo, NO en el copywriter, para que nunca falte ni el modelo lo altere.
- * Nota IG: los links del caption no son clicables (limitacion de Instagram),
- * pero el numero y la ref quedan visibles para copiar/escribir.
+ * Bloque de contacto deterministico: link a la ficha en la landing + contacto
+ * de WhatsApp a Sofi con la ref pre-llenada en el mensaje (el bot la detecta
+ * con REF_PATTERN y la guarda como origen del lead). Se arma en codigo, NO en
+ * el copywriter, para que nunca falte ni el modelo lo altere.
+ *
+ * El link de WhatsApp varia por plataforma:
+ * - Facebook autolinkea URLs en el caption: usamos el link corto propio
+ *   (LANDING_BASE_URL/wa/<ref>, ver web/app/wa/[ref]/route.ts) en vez del
+ *   wa.me?text=... con URL-encoding largo — mismo destino, se lee limpio.
+ * - Instagram NUNCA hace clicable un link del caption (limitacion de la
+ *   plataforma): mostrar ahi una URL es puro ruido visual sin funcion. En su
+ *   lugar mostramos el numero en texto plano para que la persona lo marque
+ *   manualmente, mencionando la ref.
  */
-export function buildContactBlock(property: Pick<PropertyRow, "ref" | "titulo"> | null): string | null {
+export function buildContactBlock(
+  property: Pick<PropertyRow, "ref" | "titulo"> | null,
+  platform: SocialPlatform
+): string | null {
   if (!property?.ref) return null;
   const lines = [`🔗 Conoce esta propiedad: ${env.LANDING_BASE_URL}/propiedades/${buildSlug(property.titulo, property.ref)}`];
   if (env.CONTACT_WHATSAPP_NUMBER) {
-    const prefilled = encodeURIComponent(`Hola Sofi, me interesa la propiedad ${property.ref}`);
-    lines.push(`💬 Escríbenos al WhatsApp (Ref ${property.ref}): https://wa.me/${env.CONTACT_WHATSAPP_NUMBER}?text=${prefilled}`);
+    if (platform === "facebook") {
+      lines.push(`💬 Escríbenos al WhatsApp (Ref ${property.ref}): ${env.LANDING_BASE_URL}/wa/${property.ref}`);
+    } else {
+      lines.push(`📲 Escríbenos por WhatsApp al ${formatPhone(env.CONTACT_WHATSAPP_NUMBER)} y menciona la Ref ${property.ref}`);
+    }
   }
   return lines.join("\n");
+}
+
+// +57 304 465 3609 en vez de 573044653609 corrido — legible en un caption de
+// IG donde la persona lo va a marcar a mano, no a copiar de un link.
+function formatPhone(number: string): string {
+  const country = number.slice(0, 2);
+  const rest = number.slice(2); // celular colombiano de 10 digitos: 3-3-4
+  const groups = [rest.slice(0, 3), rest.slice(3, 6), rest.slice(6)].filter(Boolean);
+  return `+${country} ${groups.join(" ")}`;
 }
 
 /** Copy + CTA + bloque de contacto + hashtags en un solo texto, por plataforma — separado para poder testearlo sin red. */
@@ -52,7 +74,7 @@ export function buildCaption(
   // Normalizar tambien aqui (no solo en el copywriter) cubre publicaciones
   // viejas guardadas sin "#" antes del fix de 2026-07-06.
   const hashtags = normalizeHashtags(publication.hashtags ?? []).join(" ");
-  const parts = [base, publication.cta, buildContactBlock(property), hashtags]
+  const parts = [base, publication.cta, buildContactBlock(property, platform), hashtags]
     .map((p) => p?.trim())
     .filter((p): p is string => Boolean(p));
   return parts.join("\n\n");

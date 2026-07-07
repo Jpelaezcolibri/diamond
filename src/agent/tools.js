@@ -2,6 +2,7 @@ const properties = require("../data/properties");
 const leads = require("../data/leads");
 const advisors = require("../data/advisors");
 const allyProperties = require("../data/ally-properties");
+const propertyContext = require("../data/property-context");
 const { computeScore, isQualified } = require("./qualification");
 const { buildClientLink } = require("../notifications/advisor");
 const { LEGAL_TOPICS, LEGAL_DISCLAIMER } = require("./knowledge");
@@ -154,6 +155,18 @@ async function executeTool(name, input, ctx) {
     if (disponibles.length > 0 && (!ctx.lead.categoria || ctx.lead.categoria === "otros")) {
       const categoria = (disponibles[0].operacion || "").toLowerCase() === "arriendo" ? "alquiler" : "compra";
       Object.assign(ctx.lead, await leads.update(ctx.lead.id, { categoria }));
+    }
+    // Contexto de venta (DCE) solo para la propiedad principal (disponibles[0]):
+    // angulo, beneficios y objeciones ya resueltas por el Diamond Cognitive
+    // Engine, para que Sofi no tenga que improvisar la regla 7 (vender estilo
+    // de vida) desde cero. Complementario, nunca reemplaza los datos crudos.
+    if (disponibles.length > 0) {
+      try {
+        const contexto = await propertyContext.getSalesContext(ctx.org.id, disponibles[0].id);
+        if (contexto) disponibles[0].contexto_venta = contexto;
+      } catch (e) {
+        console.warn("[tools] No se pudo obtener el contexto DCE:", e.message);
+      }
     }
     if (results.length === 0) {
       // Fallback silencioso: buscar en la red de aliados con los mismos

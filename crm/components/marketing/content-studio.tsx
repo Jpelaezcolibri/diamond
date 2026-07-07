@@ -115,6 +115,7 @@ export default function ContentStudio({
     hashtags: hashtags.split(/\s+/).filter(Boolean),
     ref: publication.properties?.ref,
     titulo: publication.properties?.titulo,
+    platform: previewPlatform,
   });
 
   function toggleConnection(id: string) {

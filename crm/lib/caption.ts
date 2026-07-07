@@ -26,11 +26,32 @@ export function normalizeHashtags(tags: string[]): string[] {
   return result;
 }
 
-export function buildContactBlock(ref: string | null | undefined, titulo: string | null | undefined): string | null {
+// +57 304 465 3609 en vez de 573044653609 corrido — legible en un caption de
+// IG donde la persona lo va a marcar a mano, no a copiar de un link.
+function formatPhone(number: string): string {
+  const country = number.slice(0, 2);
+  const rest = number.slice(2); // celular colombiano de 10 digitos: 3-3-4
+  const groups = [rest.slice(0, 3), rest.slice(3, 6), rest.slice(6)].filter(Boolean);
+  return `+${country} ${groups.join(" ")}`;
+}
+
+export function buildContactBlock(
+  ref: string | null | undefined,
+  titulo: string | null | undefined,
+  platform: "facebook" | "instagram"
+): string | null {
   if (!ref) return null;
   const lines = [`🔗 Conoce esta propiedad: ${LANDING_BASE_URL}/propiedades/${buildSlug(titulo ?? "", ref)}`];
-  const prefilled = encodeURIComponent(`Hola Sofi, me interesa la propiedad ${ref}`);
-  lines.push(`💬 Escríbenos al WhatsApp (Ref ${ref}): https://wa.me/${CONTACT_WHATSAPP_NUMBER}?text=${prefilled}`);
+  // Facebook autolinkea URLs en el caption: link corto propio (redirige a
+  // wa.me con el mensaje precargado, ver web/app/wa/[ref]/route.ts) en vez
+  // del wa.me?text=... crudo con URL-encoding largo. Instagram nunca hace
+  // clicable un link del caption — mostrar ahi una URL es puro ruido, mejor
+  // el numero en texto plano para marcar a mano.
+  if (platform === "facebook") {
+    lines.push(`💬 Escríbenos al WhatsApp (Ref ${ref}): ${LANDING_BASE_URL}/wa/${ref}`);
+  } else {
+    lines.push(`📲 Escríbenos por WhatsApp al ${formatPhone(CONTACT_WHATSAPP_NUMBER)} y menciona la Ref ${ref}`);
+  }
   return lines.join("\n");
 }
 
@@ -41,9 +62,10 @@ export function buildFinalCaption(params: {
   hashtags: string[];
   ref: string | null | undefined;
   titulo: string | null | undefined;
+  platform: "facebook" | "instagram";
 }): string {
   const hashtags = normalizeHashtags(params.hashtags).join(" ");
-  const parts = [params.copy, params.cta, buildContactBlock(params.ref, params.titulo), hashtags]
+  const parts = [params.copy, params.cta, buildContactBlock(params.ref, params.titulo, params.platform), hashtags]
     .map((p) => p?.trim())
     .filter((p): p is string => Boolean(p));
   return parts.join("\n\n");
