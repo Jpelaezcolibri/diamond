@@ -130,6 +130,7 @@ export async function generateDesignerCreative(
       property: directorInput.property,
       headline: designed.output.headline,
       format: directorInput.format,
+      engine: mode,
       ...(directorInput.cognitiveBrief ? { cognitiveBrief: directorInput.cognitiveBrief } : {})
     });
     tokensIn += critique.tokensIn;

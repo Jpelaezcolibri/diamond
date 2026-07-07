@@ -76,7 +76,7 @@ describe("integracion del brief en los prompts", () => {
   });
 
   it("el critico agrega el criterio 8 de coherencia cognitiva solo con brief", () => {
-    const base = { property, headline: "Titular", format: "feed" as const };
+    const base = { property, headline: "Titular", format: "feed" as const, engine: "ai" as const };
     expect(buildCriticPrompt(base)).not.toContain("COHERENCIA COGNITIVA");
     expect(buildCriticPrompt({ ...base, cognitiveBrief: "Direccion X" })).toContain("COHERENCIA COGNITIVA");
   });

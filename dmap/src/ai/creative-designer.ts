@@ -35,6 +35,12 @@ export const designSpecSchema = z.object({
     .transform((c) => c.split(/\s+/).slice(0, MAX_CTA_WORDS).join(" ")),
   panel: z.enum(["light", "graphite"]).catch("light"),
   text_zone: z.enum(["bottom_strip", "bottom_card"]).catch("bottom_strip"),
+  // Encuadre de la foto real (objectPosition): el disenador SI puede corregir
+  // una foto donde el area relevante (cocina, cama, sala) queda relegada a
+  // una esquina — sin esto, la unica palanca contra una foto mal compuesta
+  // era pedirle al humano una foto distinta, aunque el problema fuera
+  // resoluble con un simple cambio de encuadre.
+  photo_focus: z.enum(["top", "center", "bottom"]).catch("center"),
   photo_prompt: z.string().min(20),
   rationale: z.string().min(1)
 });

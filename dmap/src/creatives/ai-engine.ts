@@ -143,6 +143,7 @@ export async function generateAiCreative(
       property: directorInput.property,
       headline: directed.output.headline,
       format: directorInput.format,
+      engine: "ai",
       ...(directorInput.cognitiveBrief ? { cognitiveBrief: directorInput.cognitiveBrief } : {})
     });
     tokensIn += critique.tokensIn;

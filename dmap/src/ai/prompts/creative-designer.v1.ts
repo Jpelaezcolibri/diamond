@@ -59,6 +59,7 @@ FORMATO: ${formato}.
 ${input.userNotes?.trim() ? `\nNOTAS DEL CLIENTE (OBLIGATORIAS, mandan sobre todo lo demas):\n${input.userNotes.trim()}\n` : ""}${input.criticInstructions?.length ? `\nCORRECCIONES DEL CRITICO DE LA RONDA ANTERIOR (OBLIGATORIAS — arregla TODAS):\n- ${input.criticInstructions.join("\n- ")}\n` : ""}
 REGLAS DE LA PLANTILLA:
 - La foto real ocupa toda la pieza; el texto vive en UNA zona: franja inferior compacta ("bottom_strip") o tarjeta en la esquina inferior ("bottom_card"). Elige segun donde la foto tenga menos informacion visual importante.
+- ENCUADRE (photo_focus): la foto se recorta a toda la pieza (object-fit: cover) y TU decides que parte del encuadre original se conserva: "top" (conserva la mitad superior — techos altos, balcones con vista), "center" (default, uso general) o "bottom" (conserva la mitad inferior — usala cuando lo que vende la propiedad, ej. cocina o acabados, quede en la parte baja de la foto y el techo/estructura domine visualmente la parte alta). Este es tu UNICO control sobre el encuadre: no puedes pedir otra foto ni recortar de otra forma.
 - Panel "light" = fondo blanco, texto grafito #1A1F2B (elegante, editorial — el default de las firmas de referencia). Panel "graphite" = fondo azul grafito, texto blanco (usar cuando la foto es muy clara/blanca y el panel claro se fundiria).
 - El precio va UNA sola vez, en dorado #D4AF37, tal cual te lo doy (no lo recalcules ni lo abrevies si viene completo).
 - Specs: maximo 3, cortas y con simbolos correctos ("3 hab", "2 baños", "85 m²"). Solo datos reales de arriba; si un dato falta, omitelo.
@@ -79,6 +80,7 @@ Responde EXCLUSIVAMENTE con un objeto JSON (sin texto antes/despues, sin markdow
   "cta_text": string,        // max 5 palabras
   "panel": "light"|"graphite",
   "text_zone": "bottom_strip"|"bottom_card",
+  "photo_focus": "top"|"center"|"bottom", // que mitad de la foto conservar al recortar
   "photo_prompt": string,    // mejora fotografica en ingles, SIN texto ni cambios estructurales
   "rationale": string        // 1-2 frases: por que estas decisiones para esta audiencia
 }`;

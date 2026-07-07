@@ -16,7 +16,8 @@ const ctx: CreativeCriticContext = {
     descripcion: null
   },
   headline: "Vive el lujo de Las Palmas",
-  format: "feed"
+  format: "feed",
+  engine: "ai"
 };
 
 const aprobado = {
@@ -27,13 +28,29 @@ const aprobado = {
 };
 
 describe("buildCriticPrompt", () => {
-  it("incluye la rubrica (texto letra por letra, datos reales, marca) y el headline a verificar", () => {
+  it("engine 'ai': incluye la rubrica de texto letra por letra (GPT Image puede deformarlo), datos reales, marca", () => {
     const prompt = buildCriticPrompt(ctx);
     expect(prompt).toMatch(/LETRA POR LETRA/);
     expect(prompt).toContain("$920.000.000");
     expect(prompt).toContain("Vive el lujo de Las Palmas");
     expect(prompt).toContain("#D4AF37");
     expect(prompt).toMatch(/75/); // umbral
+  });
+
+  it("engine 'designer'/'hybrid': NO pide revisar ortografia/tildes (satori nunca deforma texto) y guia el encuadre hacia photo_focus", () => {
+    for (const engine of ["designer", "hybrid"] as const) {
+      const prompt = buildCriticPrompt({ ...ctx, engine });
+      expect(prompt).not.toMatch(/LETRA POR LETRA/);
+      expect(prompt).not.toMatch(/tildes\/enie corruptas/);
+      expect(prompt).toMatch(/photo_focus/);
+      expect(prompt).toMatch(/nunca pidas ["“]otra foto["”]|no puede elegir ni retocar la foto/);
+    }
+  });
+
+  it("toda instruccion de mejora debe ser algo que el disenador pueda cambiar en su spec (REGLA DE ORO)", () => {
+    const prompt = buildCriticPrompt(ctx);
+    expect(prompt).toMatch(/REGLA DE ORO/);
+    expect(prompt).toMatch(/photo_focus/);
   });
 });
 

@@ -135,9 +135,13 @@ export function designerLayout(brand: BrandProfile, spec: DesignSpec, ref: strin
   // que es exactamente el look editorial buscado (foto >= 65%).
   const base = Math.round(size.width * 0.055);
 
+  // El disenador decide que mitad de la foto conservar al recortar (ver
+  // creative-designer.v1.ts) — es su unica palanca real contra una foto
+  // donde lo que vende la propiedad queda relegado a una esquina.
+  const objectPosition = spec.photo_focus === "top" ? "center top" : spec.photo_focus === "bottom" ? "center bottom" : "center center";
   const photo = h("img", {
     src: coverImageDataUri,
-    style: { position: "absolute", top: 0, left: 0, width: size.width, height: size.height, objectFit: "cover" }
+    style: { position: "absolute", top: 0, left: 0, width: size.width, height: size.height, objectFit: "cover", objectPosition }
   });
 
   const zone =
