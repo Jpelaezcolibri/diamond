@@ -385,6 +385,27 @@ export default function ContentStudio({
     if (ok) router.refresh();
   }
 
+  /**
+   * Descartar el borrador (draft -> archived): la propiedad vuelve a
+   * aparecer como "Sin publicar" en /marketing/publicaciones (esa query
+   * filtra status archived) — unica forma de generar un draft nuevo desde
+   * cero para una propiedad que ya tiene uno (ej. para que tome el
+   * selector/critico de fotos actualizado). No borra nada de la BD, solo
+   * archiva; irreversible desde esta pantalla asi que confirma antes.
+   */
+  async function handleArchive() {
+    if (!window.confirm("¿Descartar este borrador? La propiedad queda 'Sin publicar' de nuevo y vas a poder generar uno nuevo.")) return;
+    setBusy("archive");
+    setMessage(null);
+    const { ok, data } = await postJson(`/api/marketing/publications/${publication.id}/archive`);
+    setBusy(null);
+    if (ok) {
+      router.push("/marketing/publicaciones");
+      return;
+    }
+    setMessage({ type: "error", text: data.message || data.error || "No se pudo descartar el borrador" });
+  }
+
   async function handlePublishNow() {
     if (selectedConnections.length === 0) {
       setMessage({ type: "error", text: "Elegí al menos una cuenta conectada" });
@@ -650,9 +671,18 @@ export default function ContentStudio({
               <button
                 onClick={handleApprove}
                 disabled={busy !== null}
-                className="ml-auto rounded-lg bg-[#c9a24b] px-4 py-2 text-sm font-medium text-[#0b1526] transition hover:bg-[#c9a24b]/90 disabled:opacity-50"
+                className="rounded-lg bg-[#c9a24b] px-4 py-2 text-sm font-medium text-[#0b1526] transition hover:bg-[#c9a24b]/90 disabled:opacity-50"
               >
                 {busy === "approve" ? "Aprobando…" : "Aprobar"}
+              </button>
+
+              <button
+                onClick={handleArchive}
+                disabled={busy !== null}
+                title="Descarta este borrador para poder generar uno nuevo desde cero"
+                className="ml-auto rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-50"
+              >
+                {busy === "archive" ? "Descartando…" : "Descartar borrador"}
               </button>
             </div>
           )}

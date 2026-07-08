@@ -177,6 +177,38 @@ export async function publicationsRoutes(app: FastifyInstance) {
     }
   });
 
+  /**
+   * Descartar un borrador (draft -> archived, ver domain/publication-status.ts):
+   * el Content Studio no ofrecia forma de "empezar de nuevo" para una propiedad
+   * con un draft ya generado — archivar la libera para volver a aparecer como
+   * "Sin publicar" en /marketing/publicaciones (esa query filtra status
+   * archived) y poder generar un draft fresco con el selector/critico
+   * actualizados. Solo valido en 'draft': aprobado/programado/publicado no se
+   * descartan por accidente desde este boton.
+   */
+  app.post("/api/v1/publications/:id/archive", async (request, reply) => {
+    const params = z.object({ id: z.string().uuid() }).safeParse(request.params);
+    if (!params.success) {
+      reply.code(400).send({ error: "invalid_id" });
+      return;
+    }
+    try {
+      const publication = await getPublicationById(params.data.id);
+      if (!publication) {
+        reply.code(404).send({ error: "not_found" });
+        return;
+      }
+      if (publication.status !== "draft") {
+        reply.code(409).send({ error: "not_a_draft", message: `Solo se puede descartar un borrador (estado actual: '${publication.status}')` });
+        return;
+      }
+      await publicationService.transition(publication.id, publication.org_id, "archived", actorFromRequest(request));
+      reply.send({ status: "archived" });
+    } catch (err) {
+      reply.code(409).send({ error: "archive_failed", message: (err as Error).message });
+    }
+  });
+
   app.post("/api/v1/publications/:id/schedule", async (request, reply) => {
     const params = z.object({ id: z.string().uuid() }).safeParse(request.params);
     const body = scheduleBodySchema.safeParse(request.body);
