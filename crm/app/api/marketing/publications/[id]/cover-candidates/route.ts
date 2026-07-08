@@ -3,6 +3,11 @@ import { createClient } from "@/lib/supabase/server";
 import { isAdmin } from "@/lib/auth";
 import { dmapJson } from "@/lib/dmap";
 
+// listCoverCandidates ahora suma una llamada a Claude vision cuando la
+// propiedad tiene brief cognitivo (scoreImagesForBrief) — con el default de
+// Vercel esto se podia cortar a mitad; mismo patron que regenerate-creative.
+export const maxDuration = 60;
+
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient();
   const {

@@ -82,14 +82,26 @@ const ROOM_TYPE_LABELS: Record<string, string> = {
   otro: "Otro espacio",
 };
 
+/**
+ * Nunca lanza: un fetch que falla en la red (timeout, conexion perdida) NO
+ * debe dejar el `busy` de arriba pegado para siempre — todo caller hace
+ * `setBusy(null)` justo despues de este await, y si esta funcion lanzara esa
+ * linea nunca correria, dejando TODOS los botones de accion de la pagina
+ * deshabilitados hasta recargar (bug real: "elegir otra foto" dejaba de
+ * reaccionar sin ningun mensaje visible).
+ */
 async function postJson(url: string, body?: unknown, method = "POST") {
-  const res = await fetch(url, {
-    method,
-    headers: { "Content-Type": "application/json" },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  const data = await res.json().catch(() => ({}));
-  return { ok: res.ok, data };
+  try {
+    const res = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const data = await res.json().catch(() => ({}));
+    return { ok: res.ok, data };
+  } catch (err) {
+    return { ok: false, data: { error: err instanceof Error ? err.message : "No se pudo conectar — revisa tu conexion e intenta de nuevo" } };
+  }
 }
 
 export default function ContentStudio({
@@ -248,9 +260,17 @@ export default function ContentStudio({
     setPickerOpen((prev) => ({ ...prev, [role]: opening }));
     if (opening && !candidates[role]) {
       setLoadingCandidates(role);
-      const res = await fetch(`/api/marketing/publications/${publication.id}/cover-candidates?role=${role}`);
-      const data = await res.json().catch(() => ({}));
+      // Mismo motivo que postJson: un fetch que falla en la red no debe
+      // dejar loadingCandidates pegado (el picker se quedaria en "Analizando
+      // fotos…" para siempre sin poder reintentar).
+      const { ok, data } = await postJson(`/api/marketing/publications/${publication.id}/cover-candidates?role=${role}`, undefined, "GET");
       setLoadingCandidates(null);
+      if (!ok) {
+        // candidates[role] queda en null (no []) para que un proximo toggle
+        // reintente el fetch en vez de asumir "no hay fotos utilizables".
+        setMessage({ type: "error", text: data.error || data.message || "No se pudieron cargar las fotos — intenta de nuevo" });
+        return;
+      }
       setCandidates((prev) => ({ ...prev, [role]: Array.isArray(data.candidates) ? data.candidates : [] }));
     }
   }
