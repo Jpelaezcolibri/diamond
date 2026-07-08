@@ -63,8 +63,8 @@ REGLAS DE LA PLANTILLA:
 - REGLA DE ENCUADRE: el panel (headline + precio/specs, solo 2 lineas de texto) tapa una franja baja de la pieza — chica, pero real. La estructura principal de la propiedad (fachada, casa) DEBE quedar visible por encima de esa franja — nunca elijas un photo_focus que deje la casa justo detras de donde cae el texto. Si la foto es un paisaje abierto con la casa chica y abajo, NO uses "top" solo por mostrar mas cielo si eso empuja la poca casa visible justo detras del panel: en ese caso preferi "center", o si aun asi se tapa, usa "bottom_card" (tapa menos superficie que "bottom_strip").
 - Panel "light" = fondo blanco, texto grafito #1A1F2B (elegante, editorial — el default de las firmas de referencia). Panel "graphite" = fondo azul grafito, texto blanco (usar cuando la foto es muy clara/blanca y el panel claro se fundiria).
 - El precio va UNA sola vez, en dorado #D4AF37, tal cual te lo doy (no lo recalcules ni lo abrevies si viene completo).
-- Specs: maximo 3, cortas y con simbolos correctos ("3 hab", "2 baños", "85 m²"). Solo datos reales de arriba; si un dato falta, omitelo.
-- Headline: maximo 6 palabras, espanol perfecto con tildes, beneficio emocional (no caracteristicas). NO repitas el precio ni la zona en el headline.
+- Specs: maximo 3, cortas y con simbolos correctos ("3 hab", "2 baños", "85 m²"). Solo datos reales de arriba — copia el numero TAL CUAL viene arriba, letra por letra, nunca lo redondees ni inventes uno parecido (un area equivocada es un error legal/comercial, no un detalle menor); si un dato falta, omitelo.
+- Headline: maximo 6 palabras, espanol perfecto con tildes, beneficio emocional (no caracteristicas). PROHIBIDO mencionar la zona, ciudad o cualquier ubicacion en el headline (ni la real ni una inventada) — ese dato va en location_text, nunca en el headline. Un headline como "X en Alto de Y" cuando la zona real es otra es doblemente malo: repite ubicacion Y la inventa mal.
 - CTA: maximo 5 palabras, accion clara.
 - La esquina superior izquierda queda libre (ahi se compone el logo por software).
 

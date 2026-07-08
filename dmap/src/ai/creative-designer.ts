@@ -58,6 +58,53 @@ type ClaudeCaller = (prompt: string) => Promise<ClaudeCallResult>;
 
 const defaultCaller: ClaudeCaller = (prompt) => callClaude({ messages: [{ role: "user", content: prompt }], maxTokens: 2000 });
 
+/** Primer numero (con separadores de miles/decimales) que aparece en un texto, o null. */
+function extractNumericToken(raw: string): string | null {
+  return raw.match(/[\d]+(?:[.,]\d+)*/)?.[0] ?? null;
+}
+
+function sameNumber(a: string, b: string): boolean {
+  return a.replace(/[.,]/g, "") === b.replace(/[.,]/g, "");
+}
+
+/**
+ * Corrige numeros de "specs" que el disenador transcribio distinto al dato
+ * real — hallazgo real: el disenador escribio "650 m²" cuando el area real
+ * de la propiedad era "2.950 m²" (78% de error, riesgo legal/comercial) y el
+ * critico lo detecto una ronda entera despues. area/habitaciones/banos YA
+ * son datos estructurados y exactos — no hay razon para confiar en que un
+ * LLM los transcriba bien en texto libre cuando el codigo puede verificarlos
+ * con cero costo y cero variabilidad. Preserva el formato/label que eligio
+ * el disenador (ej. "2.000 m² terreno"), solo corrige el numero.
+ */
+export function reconcileSpecsWithRealData(
+  specs: string[],
+  property: Pick<CreativeDesignerInput["property"], "area" | "habitaciones" | "banos">
+): string[] {
+  return specs.map((spec) => {
+    if (property.area && /m[²2]/i.test(spec)) {
+      const real = extractNumericToken(property.area);
+      const written = extractNumericToken(spec);
+      if (real && written && !sameNumber(real, written)) {
+        return spec.replace(written, real);
+      }
+    }
+    if (property.habitaciones != null && /hab/i.test(spec)) {
+      const written = extractNumericToken(spec);
+      if (written && !sameNumber(written, String(property.habitaciones))) {
+        return spec.replace(written, String(property.habitaciones));
+      }
+    }
+    if (property.banos != null && /ba[ñn]o/i.test(spec)) {
+      const written = extractNumericToken(spec);
+      if (written && !sameNumber(written, String(property.banos))) {
+        return spec.replace(written, String(property.banos));
+      }
+    }
+    return spec;
+  });
+}
+
 export async function generateDesignSpec(
   input: CreativeDesignerInput,
   caller: ClaudeCaller = defaultCaller
@@ -69,7 +116,8 @@ export async function generateDesignSpec(
     const result = await caller(prompt);
     try {
       const json = tryParseJSON(result.text);
-      const output = designSpecSchema.parse(json);
+      const parsed = designSpecSchema.parse(json);
+      const output: DesignSpec = { ...parsed, specs: reconcileSpecsWithRealData(parsed.specs, input.property) };
       return { output, promptVersion: CREATIVE_DESIGNER_PROMPT_VERSION, tokensIn: result.tokensIn, tokensOut: result.tokensOut };
     } catch (err) {
       lastError = err;
