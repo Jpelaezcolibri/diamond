@@ -22,12 +22,34 @@ interface PanelColors {
   heading: string;
   body: string;
   muted: string;
+  /**
+   * Halo de contraste independiente del degradado — hallazgo real: con el
+   * panel bottom_strip en degradado (ver designerLayout), el headline/precio
+   * caen justo en la zona MAS transparente (arriba del todo), asi que su
+   * legibilidad depende de que colores tenga la foto ahi (ej. texto dorado
+   * sobre cesped claro = casi ilegible, reportado por el critico). Esto
+   * garantiza contraste pase lo que pase debajo, sin depender de que el
+   * degradado ya haya oscurecido/aclarado lo suficiente en ese punto.
+   */
+  textShadow: string;
 }
 
 function panelColors(panel: DesignSpec["panel"]): PanelColors {
   return panel === "graphite"
-    ? { bg: GRAPHITE, heading: WHITE, body: "rgba(255,255,255,0.92)", muted: "rgba(255,255,255,0.65)" }
-    : { bg: WHITE, heading: GRAPHITE, body: "rgba(26,31,43,0.92)", muted: "rgba(26,31,43,0.55)" };
+    ? {
+        bg: GRAPHITE,
+        heading: WHITE,
+        body: "rgba(255,255,255,0.92)",
+        muted: "rgba(255,255,255,0.65)",
+        textShadow: "0 2px 16px rgba(0,0,0,0.6), 0 1px 4px rgba(0,0,0,0.7)"
+      }
+    : {
+        bg: WHITE,
+        heading: GRAPHITE,
+        body: "rgba(26,31,43,0.92)",
+        muted: "rgba(26,31,43,0.55)",
+        textShadow: "0 2px 16px rgba(255,255,255,0.7), 0 1px 4px rgba(255,255,255,0.8)"
+      };
 }
 
 /** Fila precio (dorado, una vez) + specs — o solo specs si no hay precio. */
@@ -37,7 +59,7 @@ function priceSpecsRow(brand: BrandProfile, spec: DesignSpec, colors: PanelColor
     children.push(
       h(
         "div",
-        { style: { display: "flex", fontFamily: brand.fonts.body, fontWeight: 700, fontSize: priceSize, color: GOLD } },
+        { style: { display: "flex", fontFamily: brand.fonts.body, fontWeight: 700, fontSize: priceSize, color: GOLD, textShadow: colors.textShadow } },
         spec.price_text
       )
     );
@@ -46,7 +68,7 @@ function priceSpecsRow(brand: BrandProfile, spec: DesignSpec, colors: PanelColor
     children.push(
       h(
         "div",
-        { style: { display: "flex", fontFamily: brand.fonts.body, fontWeight: 400, fontSize: metaSize, color: colors.body } },
+        { style: { display: "flex", fontFamily: brand.fonts.body, fontWeight: 400, fontSize: metaSize, color: colors.body, textShadow: colors.textShadow } },
         s
       )
     );
@@ -89,6 +111,7 @@ function panelContent(brand: BrandProfile, spec: DesignSpec, colors: PanelColors
           fontWeight: 700,
           fontSize: headingSize,
           color: colors.heading,
+          textShadow: colors.textShadow,
           lineHeight: 1.12
         }
       },
