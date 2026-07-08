@@ -406,6 +406,37 @@ export default function ContentStudio({
     setMessage({ type: "error", text: data.message || data.error || "No se pudo descartar el borrador" });
   }
 
+  /**
+   * Reescribe la direccion cognitiva (DCE) de esta propiedad — el brief que
+   * le dice al selector de fotos y al critico que atmosfera/elemento hero
+   * buscar. Necesario cuando la direccion ya guardada pide algo (ej. "vista
+   * aerea del terreno") que las fotos reales no tienen: sin esto, el selector
+   * y el critico siguen midiendo contra un ideal irrealizable para siempre.
+   * Regenerar el contexto NO actualiza la foto ya elegida en este draft —
+   * hay que usar "Elegir otra foto" (ya recalcula contra el contexto nuevo)
+   * o descartar el borrador y generar uno fresco.
+   */
+  async function handleRegenerateCognitiveContext() {
+    const ref = publication.properties?.ref;
+    if (!ref) return;
+    setBusy("regen-cognitive");
+    setMessage(null);
+    const { ok, data } = await postJson(`/api/marketing/cognitive/${encodeURIComponent(ref)}/regenerate`, { orgId: publication.org_id });
+    setBusy(null);
+    setMessage(
+      ok
+        ? {
+            type: "ok",
+            text: 'Dirección estratégica actualizada — ahora abrí "🖼️ Elegir otra foto" para re-elegir contra el brief nuevo, o descartá el borrador para generar uno de cero.'
+          }
+        : { type: "error", text: data.message || data.error || "No se pudo regenerar la dirección estratégica" }
+    );
+    if (ok) {
+      setCandidates({ cover: null, story: null });
+      router.refresh();
+    }
+  }
+
   async function handlePublishNow() {
     if (selectedConnections.length === 0) {
       setMessage({ type: "error", text: "Elegí al menos una cuenta conectada" });
@@ -515,6 +546,17 @@ export default function ContentStudio({
                       : `✨ Corregir ${p.role === "cover" ? "la portada" : "la historia"} con las recomendaciones del crítico`}
                   </button>
                 ))}
+              {publication.properties?.ref && (
+                <button
+                  type="button"
+                  onClick={handleRegenerateCognitiveContext}
+                  disabled={busy !== null}
+                  title="Si el crítico rechaza por 'no muestra la vista/amplitud/elemento hero que pide el brief', el problema puede ser que el brief pide algo que estas fotos no tienen — esto lo reescribe contra el inventario real de fotos"
+                  className="rounded-lg border border-amber-600 px-3 py-1.5 text-xs font-medium text-amber-800 transition hover:bg-amber-100 disabled:opacity-50"
+                >
+                  {busy === "regen-cognitive" ? "Actualizando…" : "🔄 Actualizar dirección estratégica"}
+                </button>
+              )}
             </div>
           )}
         </div>
