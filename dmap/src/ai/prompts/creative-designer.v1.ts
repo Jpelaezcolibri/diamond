@@ -58,9 +58,9 @@ CTA DE PARTIDA: "${input.cta}"
 FORMATO: ${formato}.
 ${input.userNotes?.trim() ? `\nNOTAS DEL CLIENTE (OBLIGATORIAS, mandan sobre todo lo demas):\n${input.userNotes.trim()}\n` : ""}${input.criticInstructions?.length ? `\nCORRECCIONES DEL CRITICO DE LA RONDA ANTERIOR (OBLIGATORIAS — arregla TODAS):\n- ${input.criticInstructions.join("\n- ")}\n` : ""}
 REGLAS DE LA PLANTILLA:
-- La foto real ocupa toda la pieza; el texto vive en UNA zona: franja inferior compacta ("bottom_strip", cubre aprox. el TERCIO INFERIOR completo del ancho) o tarjeta en la esquina inferior izquierda ("bottom_card", mas chica, cubre menos). Elige segun donde la foto tenga menos informacion visual importante.
+- La foto real ocupa toda la pieza y es la protagonista — el texto es SOLO headline + precio/specs (nada de ubicacion, REF ni boton de CTA: eso ya va en el copy del post, no se dibuja encima de la foto). El texto vive en UNA zona: franja inferior ("bottom_strip", ancho completo, fondo en DEGRADADO — transparente arriba, solido solo cerca del borde inferior, así la foto se sigue viendo detras del texto) o tarjeta en la esquina inferior izquierda ("bottom_card", mas chica y solida, cubre aun menos superficie). Elige segun donde la foto tenga menos informacion visual importante.
 - ENCUADRE (photo_focus): la foto se recorta a toda la pieza (object-fit: cover) y TU decides que parte del encuadre original se conserva: "top" (conserva la mitad superior — techos altos, balcones con vista), "center" (default, uso general) o "bottom" (conserva la mitad inferior — usala cuando lo que vende la propiedad, ej. cocina o acabados, quede en la parte baja de la foto y el techo/estructura domine visualmente la parte alta). Este es tu UNICO control sobre el encuadre: no puedes pedir otra foto ni recortar de otra forma.
-- REGLA CRITICA DE ENCUADRE: el panel de texto SIEMPRE tapa el tercio inferior de la pieza (mas si text_zone es "bottom_strip"). La estructura principal de la propiedad (fachada, casa, lo que se esta vendiendo) DEBE quedar visible en los dos tercios superiores que quedan libres — nunca elijas un photo_focus que deje la casa justo donde el panel la va a tapar. Si la foto es un paisaje abierto con la casa chica y abajo (cielo/terreno arriba, casa al fondo), NO uses "top" solo por mostrar mas cielo: eso empuja la poca casa visible hacia abajo, exactamente donde el panel la esconde. En ese caso preferi "center", o si el panel igual tapa la casa, usa "bottom_card" (mas chico, tapa menos superficie) en vez de "bottom_strip".
+- REGLA DE ENCUADRE: el panel (headline + precio/specs, solo 2 lineas de texto) tapa una franja baja de la pieza — chica, pero real. La estructura principal de la propiedad (fachada, casa) DEBE quedar visible por encima de esa franja — nunca elijas un photo_focus que deje la casa justo detras de donde cae el texto. Si la foto es un paisaje abierto con la casa chica y abajo, NO uses "top" solo por mostrar mas cielo si eso empuja la poca casa visible justo detras del panel: en ese caso preferi "center", o si aun asi se tapa, usa "bottom_card" (tapa menos superficie que "bottom_strip").
 - Panel "light" = fondo blanco, texto grafito #1A1F2B (elegante, editorial — el default de las firmas de referencia). Panel "graphite" = fondo azul grafito, texto blanco (usar cuando la foto es muy clara/blanca y el panel claro se fundiria).
 - El precio va UNA sola vez, en dorado #D4AF37, tal cual te lo doy (no lo recalcules ni lo abrevies si viene completo).
 - Specs: maximo 3, cortas y con simbolos correctos ("3 hab", "2 baños", "85 m²"). Solo datos reales de arriba; si un dato falta, omitelo.
@@ -77,8 +77,8 @@ Responde EXCLUSIVAMENTE con un objeto JSON (sin texto antes/despues, sin markdow
   "headline": string,        // max 6 palabras, espanol perfecto
   "price_text": string|null, // precio EXACTO a mostrar (ej "$515.000.000") o null si no hay
   "specs": string[],         // 0-3 specs cortas reales
-  "location_text": string|null, // ej "La Estrella, Medellín" o null
-  "cta_text": string,        // max 5 palabras
+  "location_text": string|null, // ej "La Estrella, Medellín" o null — NO se dibuja sobre la foto (ya va en el copy del post), completalo igual pero sin darle vueltas
+  "cta_text": string,        // max 5 palabras — NO se dibuja sobre la foto (ya va en el copy del post), completalo igual pero sin darle vueltas
   "panel": "light"|"graphite",
   "text_zone": "bottom_strip"|"bottom_card",
   "photo_focus": "top"|"center"|"bottom", // que mitad de la foto conservar al recortar

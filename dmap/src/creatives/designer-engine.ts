@@ -122,7 +122,7 @@ export async function generateDesignerCreative(
   let best: { composed: Awaited<ReturnType<typeof composeLogoAndResize>>; score: number; spec: DesignSpec } | null = null;
 
   for (let round = 1; round <= AI_ENGINE_MAX_ROUNDS; round++) {
-    const tree = designerLayout(brand, designed.output, directorInput.property.ref, photoDataUri, size);
+    const tree = designerLayout(brand, designed.output, photoDataUri, size);
     const rendered = await renderSatoriTree(tree, size);
     const composed = await composeLogoAndResize(rendered.buffer, logoBuffer, sizeKey);
 

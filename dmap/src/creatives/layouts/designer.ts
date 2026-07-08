@@ -58,52 +58,19 @@ function priceSpecsRow(brand: BrandProfile, spec: DesignSpec, colors: PanelColor
   );
 }
 
-/** Fila inferior: ubicacion + REF a la izquierda, CTA pill dorado a la derecha. */
-function footerRow(brand: BrandProfile, spec: DesignSpec, ref: string, colors: PanelColors, metaSize: number, ctaSize: number): SatoriNode {
-  const left = h(
-    "div",
-    { style: { display: "flex", flexDirection: "column", gap: Math.round(metaSize * 0.35) } },
-    [
-      ...(spec.location_text
-        ? [h("div", { style: { display: "flex", fontFamily: brand.fonts.body, fontWeight: 400, fontSize: metaSize, color: colors.muted } }, spec.location_text)]
-        : []),
-      h(
-        "div",
-        { style: { display: "flex", fontFamily: brand.fonts.body, fontWeight: 700, fontSize: Math.round(metaSize * 0.85), color: colors.muted, letterSpacing: 1 } },
-        `REF: ${ref}`
-      )
-    ]
-  );
-  const cta = h(
-    "div",
-    {
-      style: {
-        display: "flex",
-        alignItems: "center",
-        backgroundColor: GOLD,
-        color: GRAPHITE,
-        fontFamily: brand.fonts.body,
-        fontWeight: 700,
-        fontSize: ctaSize,
-        padding: `${Math.round(ctaSize * 0.55)}px ${Math.round(ctaSize * 1.1)}px`,
-        borderRadius: 999
-      }
-    },
-    spec.cta_text
-  );
-  return h(
-    "div",
-    { style: { display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" } },
-    [left, cta]
-  );
-}
-
-/** Contenido comun del panel de texto (headline -> precio/specs -> footer). */
-function panelContent(brand: BrandProfile, spec: DesignSpec, ref: string, colors: PanelColors, base: number): SatoriNode[] {
+/**
+ * Contenido del panel de texto: SOLO headline + precio/specs. Ubicacion, REF
+ * y un boton de CTA dibujado encima de la foto se sacaron del render (hasta
+ * 2026-07-08 vivian aca) — hallazgo real revisando como publican Compass,
+ * Sotheby's y The Agency: sus piezas dejan la foto casi a pantalla completa,
+ * con texto minimo superpuesto; ubicacion/REF/CTA viven en el copy del post
+ * (que DMAP ya genera aparte, ver copywriter.ts), no encima de la imagen.
+ * Menos contenido = panel mas bajo = menos foto tapada, sin tocar el copy.
+ */
+function panelContent(brand: BrandProfile, spec: DesignSpec, colors: PanelColors, base: number): SatoriNode[] {
   const headingSize = Math.round(base * 1.0);
   const priceSize = Math.round(base * 0.62);
   const metaSize = Math.round(base * 0.42);
-  const ctaSize = Math.round(base * 0.42);
   return [
     h(
       "div",
@@ -129,14 +96,11 @@ function panelContent(brand: BrandProfile, spec: DesignSpec, ref: string, colors
     ),
     h("div", { style: { display: "flex", marginTop: Math.round(base * 0.45) } }, [
       priceSpecsRow(brand, spec, colors, priceSize, metaSize)
-    ]),
-    h("div", { style: { display: "flex", marginTop: Math.round(base * 0.5) } }, [
-      footerRow(brand, spec, ref, colors, metaSize, ctaSize)
     ])
   ];
 }
 
-export function designerLayout(brand: BrandProfile, spec: DesignSpec, ref: string, coverImageDataUri: string, size: CreativeSize): SatoriNode {
+export function designerLayout(brand: BrandProfile, spec: DesignSpec, coverImageDataUri: string, size: CreativeSize): SatoriNode {
   const colors = panelColors(spec.panel);
   // Escala tipografica anclada al ancho: consistente entre feed (1080x1080)
   // y story (1080x1920) — en story el panel es proporcionalmente mas bajo,
@@ -171,7 +135,7 @@ export function designerLayout(brand: BrandProfile, spec: DesignSpec, ref: strin
               borderLeft: `${Math.max(4, Math.round(size.width * 0.006))}px solid ${GOLD}`
             }
           },
-          panelContent(brand, spec, ref, colors, Math.round(base * 0.82))
+          panelContent(brand, spec, colors, Math.round(base * 0.82))
         )
       : h(
           "div",
@@ -184,10 +148,16 @@ export function designerLayout(brand: BrandProfile, spec: DesignSpec, ref: strin
               display: "flex",
               flexDirection: "column",
               padding: `${Math.round(size.width * 0.045)}px ${Math.round(size.width * 0.055)}px`,
-              backgroundColor: colors.bg
+              // Degradado (transparente arriba -> solido abajo) en vez de un
+              // bloque opaco: con solo headline+precio/specs (ver
+              // panelContent) el panel ya es mucho mas bajo, y el degradado
+              // deja ver la foto incluso en la franja de texto — hallazgo
+              // real: un panel solido de 1/3 de la pieza "tapaba toda la
+              // foto" segun el cliente, aunque el contenido fuera correcto.
+              backgroundImage: `linear-gradient(180deg, rgba(0,0,0,0) 0%, ${colors.bg} 55%)`
             }
           },
-          panelContent(brand, spec, ref, colors, base)
+          panelContent(brand, spec, colors, base)
         );
 
   return h(

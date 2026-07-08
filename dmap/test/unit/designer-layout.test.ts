@@ -47,15 +47,40 @@ describe("designerLayout", () => {
     // texto dentro de un div flex — un headline de 5-6 palabras se renderizaba
     // como una sola linea que se salia del ancho del panel y quedaba cortado
     // en ambos bordes de la pieza final.
-    const tree = designerLayout(brand, spec, "10070645", "data:image/jpeg;base64,AAAA", size);
+    const tree = designerLayout(brand, spec, "data:image/jpeg;base64,AAAA", size);
     const headlineNode = findAll(tree, (n) => n.props.children === spec.headline);
     expect(headlineNode).toHaveLength(1);
     expect(headlineNode[0]!.props.style?.flexWrap).toBe("wrap");
   });
 
   it("funciona igual en text_zone bottom_card", () => {
-    const tree = designerLayout(brand, { ...spec, text_zone: "bottom_card" }, "10070645", "data:image/jpeg;base64,AAAA", size);
+    const tree = designerLayout(brand, { ...spec, text_zone: "bottom_card" }, "data:image/jpeg;base64,AAAA", size);
     const headlineNode = findAll(tree, (n) => n.props.children === spec.headline);
     expect(headlineNode[0]!.props.style?.flexWrap).toBe("wrap");
+  });
+
+  it("ya no dibuja ubicacion/REF/boton CTA encima de la foto (viven en el copy del post, no en la imagen)", () => {
+    // Hallazgo real: el panel completo (headline+precio+specs+footer) tapaba
+    // ~1/3 de la pieza. location/REF/CTA ya estan en el copy del post, asi
+    // que sacarlos de la imagen reduce el panel sin perder informacion real.
+    const tree = designerLayout(brand, spec, "data:image/jpeg;base64,AAAA", size);
+    const text = JSON.stringify(tree);
+    expect(text).not.toContain("El Poblado");
+    expect(text).not.toContain("REF:");
+    expect(text).not.toContain("Agenda tu visita privada");
+  });
+
+  it("bottom_strip usa un degradado (no un bloque solido) para dejar ver la foto detras del texto", () => {
+    const tree = designerLayout(brand, spec, "data:image/jpeg;base64,AAAA", size);
+    const panel = findAll(tree, (n) => typeof n.props.style?.backgroundImage === "string");
+    expect(panel).toHaveLength(1);
+    expect(panel[0]!.props.style?.backgroundImage).toContain("linear-gradient");
+    expect(panel[0]!.props.style?.backgroundColor).toBeUndefined();
+  });
+
+  it("bottom_card sigue con fondo solido (es una tarjeta flotante, no una franja)", () => {
+    const tree = designerLayout(brand, { ...spec, text_zone: "bottom_card" }, "data:image/jpeg;base64,AAAA", size);
+    const card = findAll(tree, (n) => n.props.style?.backgroundColor === "#FFFFFF");
+    expect(card.length).toBeGreaterThan(0);
   });
 });
