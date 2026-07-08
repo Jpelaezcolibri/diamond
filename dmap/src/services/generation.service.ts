@@ -9,7 +9,7 @@ import {
   type GptImageSizeKey,
   type StyleVariant
 } from "../config/constants.js";
-import { analyzeImages, rankImages, selectAssets, type RoomType } from "../ai/image-selector.js";
+import { analyzeImages, rankImages, scoreImagesForBrief, selectAssets, type RoomType } from "../ai/image-selector.js";
 import { generateCopy, type CopywriterOutput } from "../ai/copywriter.js";
 import type { CopywriterPropertyInput } from "../ai/prompts/copywriter.v1.js";
 import { isGptImageConfigured } from "../ai/gpt-image.js";
@@ -453,8 +453,23 @@ export async function generateDraftForProperty(
 
   const brand = await resolveBrandProfile(orgId);
 
-  const analyses = await analyzeImages(orgId, propertyId, property.images);
-  const assets = selectAssets(analyses);
+  // DCE: si la propiedad ya tiene Property Context 'ready', copywriter,
+  // director, critico Y AHORA TAMBIEN la seleccion de foto trabajan para el
+  // buyer persona/direccion inferidos. Sin contexto (o si falla la lectura)
+  // el flujo es el legacy, identico. En paralelo con analyzeImages: son
+  // fuentes de datos independientes.
+  const [analyses, cognitive] = await Promise.all([analyzeImages(orgId, propertyId, property.images), loadCognitiveContext(orgId, propertyId)]);
+  const copyBrief = cognitive ? copywriterBriefFromContext(cognitive) : undefined;
+  const creativeBrief = cognitive ? directorBriefFromContext(cognitive) : undefined;
+
+  // Con brief cognitivo: reordena las mejores candidatas (ya filtradas por
+  // calidad/tipo) segun que tanto sirven la direccion creativa — sin esto la
+  // seleccion automatica es ciega a la estrategia y el critico rechaza
+  // piezas que ninguna ronda de diseno puede arreglar (foto equivocada, no
+  // layout equivocado; ver dmap/ARCHITECTURE.md #6). Sin brief, comportamiento
+  // identico al de siempre.
+  const briefFit = creativeBrief ? await scoreImagesForBrief(rankImages(analyses), creativeBrief) : undefined;
+  const assets = selectAssets(analyses, briefFit);
   if (!assets) {
     throw new FatalError(`Propiedad ${property.ref}: ninguna foto es utilizable (todas oscuras o invalidas)`);
   }
@@ -466,13 +481,6 @@ export async function generateDraftForProperty(
   // una foto utilizable, degrada a single_image como antes.
   const carouselPhotoUrls = assets.carousel.filter((url) => url !== assets.cover);
   const kind = carouselPhotoUrls.length > 0 ? ("carousel" as const) : ("single_image" as const);
-
-  // DCE: si la propiedad ya tiene Property Context 'ready', copywriter,
-  // director y critico trabajan para el buyer persona/emocion inferidos.
-  // Sin contexto (o si falla la lectura) el flujo es el legacy, identico.
-  const cognitive = await loadCognitiveContext(orgId, propertyId);
-  const copyBrief = cognitive ? copywriterBriefFromContext(cognitive) : undefined;
-  const creativeBrief = cognitive ? directorBriefFromContext(cognitive) : undefined;
 
   const copyResult = await generateCopy(buildPropertyCopyInput(property), styleVariant, { name: brand.name }, undefined, copyBrief);
 

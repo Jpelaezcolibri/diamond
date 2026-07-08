@@ -22,6 +22,8 @@ export const GRAPH_API_BASE = `https://graph.facebook.com/${GRAPH_API_VERSION}`;
 
 export const IMAGE_ANALYSIS_MAX_DIMENSION = 1024;
 export const IMAGE_ANALYSIS_BATCH_SIZE = 12;
+/** Cuantas candidatas (ya rankeadas por calidad/tipo) se evaluan contra el brief cognitivo — acota el costo de la llamada extra a Claude vision. */
+export const IMAGE_BRIEF_FIT_CANDIDATE_LIMIT = 8;
 
 // ── Motor IA de creativos (Director/GPT Image/Critico) ──────────────────
 /** Tamanos nativos de gpt-image-1 por rol; el resize final a los tamanos Meta lo hace sharp (compose.ts). */

@@ -4,7 +4,8 @@ import { logger } from "../lib/logger.js";
 import { callClaude, type ClaudeCallResult } from "./claude.js";
 import { tryParseJSON } from "./json-utils.js";
 import { buildImageAnalysisPrompt, IMAGE_SELECTOR_PROMPT_VERSION } from "./prompts/image-selector.v1.js";
-import { IMAGE_ANALYSIS_BATCH_SIZE, IMAGE_ANALYSIS_MAX_DIMENSION } from "../config/constants.js";
+import { buildImageBriefFitPrompt, IMAGE_BRIEF_FIT_PROMPT_VERSION } from "./prompts/image-brief-fit.v1.js";
+import { IMAGE_ANALYSIS_BATCH_SIZE, IMAGE_ANALYSIS_MAX_DIMENSION, IMAGE_BRIEF_FIT_CANDIDATE_LIMIT } from "../config/constants.js";
 import { getSupabase } from "../repositories/supabase.js";
 
 export type RoomType = "fachada" | "sala" | "cocina" | "balcon" | "vista" | "habitacion_principal" | "bano" | "otro";
@@ -26,6 +27,12 @@ export interface SelectedAssets {
   thumbnail: string;
 }
 
+export interface BriefFitScore {
+  imageUrl: string;
+  briefFitScore: number;
+  reason: string;
+}
+
 /** Prioridad de tipo de espacio (ver dmap/ARCHITECTURE.md #6). Menor = mejor. */
 const ROOM_PRIORITY: Record<RoomType, number> = {
   fachada: 0,
@@ -38,12 +45,31 @@ const ROOM_PRIORITY: Record<RoomType, number> = {
   otro: 6
 };
 
+function legacyRank(pool: ImageAnalysis[]): ImageAnalysis[] {
+  return [...pool].sort((a, b) => {
+    const priorityDiff = ROOM_PRIORITY[a.roomType] - ROOM_PRIORITY[b.roomType];
+    if (priorityDiff !== 0) return priorityDiff;
+    return b.qualityScore - a.qualityScore;
+  });
+}
+
 /**
- * Ranking determinista (NO decidido por el modelo): excluye oscuras y
- * duplicadas (se queda con la de mayor quality_score por grupo), y ordena
- * por prioridad de espacio y luego por calidad.
+ * Ranking determinista (NO decidido libremente por el modelo): excluye
+ * oscuras y duplicadas (se queda con la de mayor quality_score por grupo), y
+ * ordena por prioridad de espacio y luego por calidad.
+ *
+ * `briefFit` (opcional) viene de `scoreImagesForBrief` — cuando la propiedad
+ * tiene direccion cognitiva (DCE), el ajuste a esa estrategia manda sobre
+ * tipo de espacio/calidad (ver dmap/ARCHITECTURE.md #6): una foto
+ * tecnicamente perfecta que contradice la direccion (ej. muestra interiores
+ * cuando la estrategia pide contexto de paisaje) es peor eleccion que una
+ * foto un poco menos nitida que si la sirve. Solo se reordenan las
+ * candidatas que SI fueron evaluadas contra el brief (scoreImagesForBrief
+ * acota a las top N por calidad, ver IMAGE_BRIEF_FIT_CANDIDATE_LIMIT) — el
+ * resto conserva su lugar legacy al final, sin cambio de comportamiento
+ * cuando no hay brief.
  */
-export function rankImages(analyses: ImageAnalysis[]): ImageAnalysis[] {
+export function rankImages(analyses: ImageAnalysis[], briefFit?: Map<string, BriefFitScore>): ImageAnalysis[] {
   const usable = analyses.filter((a) => !a.isDark);
 
   const uniques: ImageAnalysis[] = [];
@@ -59,16 +85,18 @@ export function rankImages(analyses: ImageAnalysis[]): ImageAnalysis[] {
     }
   }
 
-  return [...uniques, ...bestByGroup.values()].sort((a, b) => {
-    const priorityDiff = ROOM_PRIORITY[a.roomType] - ROOM_PRIORITY[b.roomType];
-    if (priorityDiff !== 0) return priorityDiff;
-    return b.qualityScore - a.qualityScore;
-  });
+  const legacyRanked = legacyRank([...uniques, ...bestByGroup.values()]);
+  if (!briefFit || briefFit.size === 0) return legacyRanked;
+
+  const scored = legacyRanked.filter((a) => briefFit.has(a.imageUrl));
+  const unscored = legacyRanked.filter((a) => !briefFit.has(a.imageUrl));
+  scored.sort((a, b) => briefFit.get(b.imageUrl)!.briefFitScore - briefFit.get(a.imageUrl)!.briefFitScore);
+  return [...scored, ...unscored];
 }
 
 /** cover/thumbnail = mejor foto; carousel = hasta 7; story = otra foto de buena calidad. */
-export function selectAssets(analyses: ImageAnalysis[]): SelectedAssets | null {
-  const ranked = rankImages(analyses);
+export function selectAssets(analyses: ImageAnalysis[], briefFit?: Map<string, BriefFitScore>): SelectedAssets | null {
+  const ranked = rankImages(analyses, briefFit);
   if (ranked.length === 0) return null;
 
   const cover = ranked[0]!.imageUrl;
@@ -175,4 +203,58 @@ export async function analyzeImages(
 
   logger.debug({ propertyId, promptVersion: IMAGE_SELECTOR_PROMPT_VERSION, count: results.length }, "Analisis de imagenes completo");
   return results;
+}
+
+const briefFitArraySchema = z.array(
+  z.object({
+    index: z.number().int(),
+    brief_fit_score: z.number().min(0).max(100),
+    reason: z.string()
+  })
+);
+
+/**
+ * Evalua que tan bien cada foto sirve la direccion cognitiva de la propiedad
+ * (mismo brief que reciben director y critico, ver
+ * cognitive/application/briefs.ts#directorBriefFromContext) — sin esto,
+ * rankImages es ciego a la estrategia y puede elegir una foto tecnicamente
+ * buena que la contradice (ver dmap/ARCHITECTURE.md #6).
+ *
+ * Deliberadamente NO se cachea como analyzeImages: el brief cambia por
+ * propiedad/corrida, cachear por foto sola mezclaria evaluaciones de briefs
+ * distintos. Para acotar el costo de la llamada extra a Claude vision, solo
+ * evalua las top `limit` candidatas del ranking legacy (ya filtrado de
+ * oscuras/duplicadas) — no tiene sentido pagar por fotos que la calidad ya
+ * descartaria.
+ */
+export async function scoreImagesForBrief(
+  rankedCandidates: ImageAnalysis[],
+  brief: string,
+  caller: ClaudeCaller = defaultCaller,
+  limit: number = IMAGE_BRIEF_FIT_CANDIDATE_LIMIT
+): Promise<Map<string, BriefFitScore>> {
+  const pool = rankedCandidates.slice(0, limit);
+  const result = new Map<string, BriefFitScore>();
+  if (pool.length === 0) return result;
+
+  try {
+    const images = await Promise.all(pool.map((c) => downscaleToBase64(c.imageUrl)));
+    const prompt = buildImageBriefFitPrompt(brief, pool.length);
+    const response = await caller(prompt, images);
+    const parsed = briefFitArraySchema.parse(tryParseJSON(response.text));
+
+    for (const item of parsed) {
+      const candidate = pool[item.index];
+      if (!candidate) continue;
+      result.set(candidate.imageUrl, { imageUrl: candidate.imageUrl, briefFitScore: item.brief_fit_score, reason: item.reason });
+    }
+  } catch (err) {
+    // No bloquea la generacion: sin scores, rankImages hace fallback al
+    // ranking legacy (ver su firma) — una foto elegida por calidad/tipo de
+    // espacio sigue siendo mejor que tumbar la corrida completa.
+    logger.warn({ err }, "scoreImagesForBrief fallo — ranking cae a legacy (sin ajuste por brief)");
+  }
+
+  logger.debug({ promptVersion: IMAGE_BRIEF_FIT_PROMPT_VERSION, count: result.size }, "Brief-fit de imagenes completo");
+  return result;
 }

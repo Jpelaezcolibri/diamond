@@ -34,11 +34,25 @@ interface CreativeMeta {
   instrucciones?: string[];
 }
 
-/** Feedback accionable del crítico para regenerar: instrucciones si las hay,
- *  si no (eventos viejos, sin ese campo) los problemas sirven igual. */
+/** Feedback accionable del crítico para regenerar con IA: solo instrucciones
+ *  que el diseñador puede ejecutar con su spec (headline, precio, encuadre,
+ *  etc — ver REGLA DE ORO en creative-critic.v1.ts). Si el campo existe pero
+ *  vino vacío, el crítico ya determinó que NADA de lo malo es arreglable por
+ *  el diseñador (ej. la foto muestra un edificio distinto al que promete el
+ *  copy) — regenerar sobre la misma foto solo repetiría el mismo resultado;
+ *  la salida correcta es "elegir otra foto", no reintentar con IA. Fallback a
+ *  problemas SOLO para eventos viejos sin el campo `instrucciones` (undefined,
+ *  no vacío). */
 function criticFixInstructions(meta: CreativeMeta | undefined): string[] {
-  if (meta?.instrucciones?.length) return meta.instrucciones;
+  if (meta?.instrucciones !== undefined) return meta.instrucciones;
   return meta?.problemas ?? [];
+}
+
+/** true = el crítico encontró problemas pero ninguno es corregible por el
+ *  diseñador (instrucciones vino vacía, no undefined) — la única salida es
+ *  cambiar la foto fuente, no reintentar con IA sobre la misma. */
+function needsDifferentPhoto(meta: CreativeMeta | undefined): boolean {
+  return (meta?.problemas?.length ?? 0) > 0 && meta?.instrucciones !== undefined && meta.instrucciones.length === 0;
 }
 
 /** Foto real candidata a portada/historia (GET /cover-candidates de DMAP) —
@@ -413,7 +427,9 @@ export default function ContentStudio({
             </details>
           )}
           {/* Regenerar con el feedback del crítico en un clic: reenvía sus
-              instrucciones a GPT Image como correcciones obligatorias. */}
+              instrucciones a GPT Image como correcciones obligatorias. Solo
+              se ofrece cuando el crítico dejó instrucciones ejecutables por
+              el diseñador — si no, es un problema de foto, no de layout. */}
           {isDraft && (
             <div className="mt-2 flex flex-wrap gap-2">
               {reviewParts
@@ -431,6 +447,17 @@ export default function ContentStudio({
                       : `✨ Corregir ${p.role === "cover" ? "la portada" : "la historia"} con las recomendaciones del crítico`}
                   </button>
                 ))}
+              {reviewParts.some((p) => needsDifferentPhoto(p.meta)) && (
+                <p className="w-full text-xs text-amber-700">
+                  El crítico determinó que{" "}
+                  {reviewParts
+                    .filter((p) => needsDifferentPhoto(p.meta))
+                    .map((p) => (p.role === "cover" ? "la portada" : "la historia"))
+                    .join(" y ")}{" "}
+                  necesita una foto distinta — regenerar con IA sobre la misma foto no lo va a arreglar. Usá{" "}
+                  <strong>🖼️ Elegir otra foto</strong> más abajo.
+                </p>
+              )}
             </div>
           )}
         </div>

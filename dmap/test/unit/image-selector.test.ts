@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { rankImages, selectAssets, type ImageAnalysis } from "../../src/ai/image-selector.js";
+import { rankImages, selectAssets, type BriefFitScore, type ImageAnalysis } from "../../src/ai/image-selector.js";
+
+function fit(entries: Array<[string, number]>): Map<string, BriefFitScore> {
+  return new Map(entries.map(([imageUrl, briefFitScore]) => [imageUrl, { imageUrl, briefFitScore, reason: "" }]));
+}
 
 function img(partial: Partial<ImageAnalysis> & { imageUrl: string }): ImageAnalysis {
   return {
@@ -49,6 +53,40 @@ describe("rankImages", () => {
       img({ imageUrl: "sala-alta", roomType: "sala", qualityScore: 95 })
     ];
     expect(rankImages(analyses).map((a) => a.imageUrl)).toEqual(["sala-alta", "sala-baja"]);
+  });
+
+  it("con brief: el ajuste a la estrategia manda sobre tipo de espacio/calidad", () => {
+    const analyses = [
+      img({ imageUrl: "fachada", roomType: "fachada", qualityScore: 95 }),
+      img({ imageUrl: "vista", roomType: "vista", qualityScore: 80 })
+    ];
+    // Sin brief, fachada gana (prioridad de tipo de espacio).
+    expect(rankImages(analyses).map((a) => a.imageUrl)).toEqual(["fachada", "vista"]);
+    // Con brief que favorece la vista (ej. "prioriza contexto de paisaje"), la vista pasa primero.
+    const briefFit = fit([
+      ["fachada", 20],
+      ["vista", 90]
+    ]);
+    expect(rankImages(analyses, briefFit).map((a) => a.imageUrl)).toEqual(["vista", "fachada"]);
+  });
+
+  it("con brief parcial (solo algunas candidatas evaluadas), las no evaluadas quedan al final en su orden legacy", () => {
+    const analyses = [
+      img({ imageUrl: "fachada", roomType: "fachada" }),
+      img({ imageUrl: "sala", roomType: "sala" }),
+      img({ imageUrl: "cocina", roomType: "cocina" })
+    ];
+    // Solo se evaluaron fachada y sala contra el brief (simula el limit de scoreImagesForBrief).
+    const briefFit = fit([
+      ["fachada", 10],
+      ["sala", 80]
+    ]);
+    expect(rankImages(analyses, briefFit).map((a) => a.imageUrl)).toEqual(["sala", "fachada", "cocina"]);
+  });
+
+  it("con un Map de brief vacio, se comporta igual que sin brief", () => {
+    const analyses = [img({ imageUrl: "fachada", roomType: "fachada" }), img({ imageUrl: "sala", roomType: "sala" })];
+    expect(rankImages(analyses, fit([])).map((a) => a.imageUrl)).toEqual(rankImages(analyses).map((a) => a.imageUrl));
   });
 });
 
