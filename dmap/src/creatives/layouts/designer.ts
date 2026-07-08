@@ -17,6 +17,18 @@ const GOLD = "#D4AF37";
 const GRAPHITE = "#1A1F2B";
 const WHITE = "#FFFFFF";
 
+/**
+ * Margen horizontal de seguridad — hallazgo real (2026-07-08): la
+ * miniatura de grid del perfil de Instagram recorta TODO post a
+ * proporcion 3:4 sin importar como se subio (confirmado: un post 1:1 de
+ * 1080x1080 pierde ~12-13% de ancho por lado en esa miniatura especifica).
+ * El post real (feed, detalle, notificaciones) no se recorta — esto es
+ * SOLO para que el headline/precio no queden cortados en esa miniatura.
+ * No es tan grave como cambiar photo_focus/text_zone si se viola: es un
+ * margen de diseno, no un dato o encuadre incorrecto.
+ */
+const GRID_SAFE_MARGIN_RATIO = 0.13;
+
 interface PanelColors {
   bg: string;
   heading: string;
@@ -146,7 +158,7 @@ export function designerLayout(brand: BrandProfile, spec: DesignSpec, coverImage
           {
             style: {
               position: "absolute",
-              left: Math.round(size.width * 0.05),
+              left: Math.round(size.width * GRID_SAFE_MARGIN_RATIO),
               bottom: Math.round(size.width * 0.05),
               width: Math.round(size.width * 0.72),
               display: "flex",
@@ -170,7 +182,7 @@ export function designerLayout(brand: BrandProfile, spec: DesignSpec, coverImage
               width: size.width,
               display: "flex",
               flexDirection: "column",
-              padding: `${Math.round(size.width * 0.045)}px ${Math.round(size.width * 0.055)}px`,
+              padding: `${Math.round(size.width * 0.045)}px ${Math.round(size.width * GRID_SAFE_MARGIN_RATIO)}px`,
               // Degradado (transparente arriba -> solido abajo) en vez de un
               // bloque opaco: con solo headline+precio/specs (ver
               // panelContent) el panel ya es mucho mas bajo, y el degradado
