@@ -258,3 +258,36 @@ export async function scoreImagesForBrief(
   logger.debug({ promptVersion: IMAGE_BRIEF_FIT_PROMPT_VERSION, count: result.size }, "Brief-fit de imagenes completo");
   return result;
 }
+
+const ROOM_TYPE_LABELS: Record<RoomType, string> = {
+  fachada: "fachada",
+  sala: "sala",
+  cocina: "cocina",
+  balcon: "balcon",
+  vista: "vista/paisaje abierto",
+  habitacion_principal: "habitacion principal",
+  bano: "bano",
+  otro: "otro/interior generico"
+};
+
+/**
+ * Resumen legible del inventario REAL de fotos de una propiedad — insumo
+ * para el DCE (narrative-direction.v1.ts): sin esto, la direccion creativa
+ * se escribe solo a partir del texto de la propiedad y puede pedir un "hero
+ * visual" (ej. "vista panoramica con horizonte") que ninguna foto real
+ * contiene, condenando la pieza a repetir rechazos del critico para
+ * siempre (ver dmap/ARCHITECTURE.md #6, seccion DCE). Cuenta por tipo de
+ * espacio (mismo ROOM_TYPE que usa rankImages) para que el prompt sepa
+ * exactamente que SI existe y que NO.
+ */
+export function summarizePhotoInventory(analyses: ImageAnalysis[]): string {
+  const usable = analyses.filter((a) => !a.isDark);
+  if (usable.length === 0) return "Sin fotos analizadas todavia — no asumas ningun elemento visual especifico.";
+
+  const counts = new Map<RoomType, number>();
+  for (const a of usable) counts.set(a.roomType, (counts.get(a.roomType) ?? 0) + 1);
+  const parts = [...counts.entries()]
+    .sort((a, b) => ROOM_PRIORITY[a[0]] - ROOM_PRIORITY[b[0]])
+    .map(([type, n]) => `${ROOM_TYPE_LABELS[type]} x${n}`);
+  return `Fotos reales disponibles (${usable.length}): ${parts.join(", ")}.`;
+}

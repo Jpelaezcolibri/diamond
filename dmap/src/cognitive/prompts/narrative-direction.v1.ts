@@ -15,7 +15,9 @@ export function buildNarrativeDirectionPrompt(
   property: PropertyRow,
   derived: DerivedContext,
   analysis: AudienceAnalysisOutput,
-  brandName: string
+  brandName: string,
+  /** Ver image-selector.ts#summarizePhotoInventory — que fotos EXISTEN realmente para esta propiedad. */
+  photoInventory: string
 ): string {
   const personaIds = [
     analysis.audience.buyerPersonaPrimary.id,
@@ -37,7 +39,10 @@ PROPIEDAD REAL (unica fuente de verdad — JAMAS inventes datos):
 ANALISIS DE AUDIENCIA (ya validado — construye SOBRE esto, no lo contradigas):
 ${JSON.stringify(analysis, null, 2)}
 
+${photoInventory}
+
 REGLAS:
+- creativeDirection e imageMood DEBEN ser realizables con las fotos reales de arriba — NUNCA describas un elemento hero, angulo o vista que no este en ese inventario (ej. si no hay foto de tipo "vista/paisaje abierto", no pidas "vista panoramica con horizonte visible" ni "amplitud de cielo protagonista": esa pieza jamas podra cumplirlo y el critico la rechazara para siempre). Trabaja con lo que SI existe (fachada, terraza cubierta, jardin, interiores) y arma la narrativa alrededor de eso — la ausencia de una vista abierta no es un defecto a ocultar, es un dato real que cambia que atmosfera es alcanzable.
 - Una propiedad NO es un conjunto de datos: es una historia, un estilo de vida, una emocion. El heroMessage vende el BENEFICIO principal, nunca abre con "Apartamento de 3 habitaciones".
 - heroMessage: maximo 9 palabras, gancho emocional anclado al beneficio #1. heroSubtitle: 1 frase que aterriza el gancho con algo concreto y real.
 - heroVariants: UNA variante por cada uno de estos personaIds exactos: ${JSON.stringify(personaIds)}. Cada variante cuenta la MISMA propiedad desde la motivacion de esa persona.

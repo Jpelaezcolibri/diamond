@@ -4,6 +4,7 @@ import { FatalError } from "../../lib/errors.js";
 import { logger } from "../../lib/logger.js";
 import { callClaude, type ClaudeCallResult } from "../../ai/claude.js";
 import { tryParseJSON } from "../../ai/json-utils.js";
+import { analyzeImages, summarizePhotoInventory } from "../../ai/image-selector.js";
 import { computeContentHash, computeImagesHash } from "../../sync/hash.js";
 import { getPropertyById, type PropertyRow } from "../../repositories/properties.repo.js";
 import { recordContentGeneration } from "../../repositories/content-generations.repo.js";
@@ -90,6 +91,7 @@ export interface BuildContextDeps {
   upsertContext?: typeof upsertPropertyContext;
   getExisting?: typeof getContextByPropertyId;
   recordGeneration?: typeof recordContentGeneration;
+  analyzeImages?: typeof analyzeImages;
 }
 
 /**
@@ -112,6 +114,7 @@ export async function buildPropertyContext(
   const upsertContext = deps.upsertContext ?? upsertPropertyContext;
   const getExisting = deps.getExisting ?? getContextByPropertyId;
   const recordGeneration = deps.recordGeneration ?? recordContentGeneration;
+  const analyzeImagesFn = deps.analyzeImages ?? analyzeImages;
 
   const property = await getProperty(propertyId);
   if (!property) throw new FatalError(`Propiedad ${propertyId} no existe`);
@@ -122,6 +125,17 @@ export async function buildPropertyContext(
   const sourceHash = computeSourceHash(property);
 
   try {
+    // Inventario REAL de fotos (mismo analisis cacheado que usa el selector
+    // de portada, ver image-selector.ts): sin esto la direccion narrativa se
+    // escribe solo desde el texto y puede pedir un "hero visual" que ninguna
+    // foto real puede mostrar, condenando la pieza a rechazo perpetuo del
+    // critico (ver dmap/ARCHITECTURE.md #6, hallazgo Carmen de Viboral).
+    const analyses = await analyzeImagesFn(orgId, propertyId, property.images ?? []).catch((err) => {
+      logger.warn({ err, propertyId }, "DCE: no se pudo analizar fotos para el inventario — direccion narrativa sin ese insumo");
+      return [];
+    });
+    const photoInventory = summarizePhotoInventory(analyses);
+
     const analysis = await callAndParse(
       buildAudienceAnalysisPrompt(property, derived, brand.name),
       (json) => audienceAnalysisOutputSchema.parse(json),
@@ -130,7 +144,7 @@ export async function buildPropertyContext(
     );
 
     const direction = await callAndParse(
-      buildNarrativeDirectionPrompt(property, derived, analysis.output, brand.name),
+      buildNarrativeDirectionPrompt(property, derived, analysis.output, brand.name, photoInventory),
       (json) => narrativeDirectionOutputSchema.parse(json),
       caller,
       "direccion narrativa"

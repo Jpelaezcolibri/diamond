@@ -30,6 +30,7 @@ function makeDeps(overrides: Record<string, unknown> = {}) {
     }),
     getExisting: vi.fn().mockResolvedValue(null),
     recordGeneration: vi.fn().mockResolvedValue(undefined),
+    analyzeImages: vi.fn().mockResolvedValue([]),
     ...overrides
   };
   return { deps, upserted };
@@ -97,6 +98,33 @@ describe("buildPropertyContext", () => {
       getProperty: vi.fn().mockResolvedValue({ ...propertyFixture, org_id: "33333333-3333-3333-3333-333333333333" })
     });
     await expect(buildPropertyContext(ORG, propertyFixture.id, deps)).rejects.toThrow(/no pertenece/);
+  });
+
+  it("la direccion narrativa recibe el inventario REAL de fotos (no inventa un hero visual que no existe)", async () => {
+    const { deps } = makeDeps({
+      analyzeImages: vi.fn().mockResolvedValue([
+        { imageUrl: "a", roomType: "fachada", brightnessScore: 80, qualityScore: 80, isDark: false, duplicateGroup: null },
+        { imageUrl: "b", roomType: "cocina", brightnessScore: 80, qualityScore: 80, isDark: false, duplicateGroup: null }
+      ])
+    });
+
+    await buildPropertyContext(ORG, propertyFixture.id, deps);
+
+    const secondPrompt = (deps.caller as ReturnType<typeof vi.fn>).mock.calls[1][0] as string;
+    expect(secondPrompt).toContain("Fotos reales disponibles");
+    expect(secondPrompt).toContain("fachada x1");
+    expect(secondPrompt).toContain("cocina x1");
+  });
+
+  it("si el analisis de fotos falla, no tumba el contexto — sigue con inventario vacio", async () => {
+    const { deps } = makeDeps({
+      analyzeImages: vi.fn().mockRejectedValue(new Error("supabase caido"))
+    });
+
+    const row = await buildPropertyContext(ORG, propertyFixture.id, deps);
+    expect(row.status).toBe("ready");
+    const secondPrompt = (deps.caller as ReturnType<typeof vi.fn>).mock.calls[1][0] as string;
+    expect(secondPrompt).toContain("Sin fotos analizadas");
   });
 
   it("reintenta una vez por llamada si el JSON no parsea", async () => {
