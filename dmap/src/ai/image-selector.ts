@@ -4,7 +4,7 @@ import { logger } from "../lib/logger.js";
 import { callClaude, type ClaudeCallResult } from "./claude.js";
 import { tryParseJSON } from "./json-utils.js";
 import { buildImageAnalysisPrompt, IMAGE_SELECTOR_PROMPT_VERSION } from "./prompts/image-selector.v1.js";
-import { buildImageBriefFitPrompt, IMAGE_BRIEF_FIT_PROMPT_VERSION } from "./prompts/image-brief-fit.v1.js";
+import { buildImageBriefFitPrompt, IMAGE_BRIEF_FIT_PROMPT_VERSION } from "./prompts/image-brief-fit.v2.js";
 import { IMAGE_ANALYSIS_BATCH_SIZE, IMAGE_ANALYSIS_MAX_DIMENSION, IMAGE_BRIEF_FIT_CANDIDATE_LIMIT } from "../config/constants.js";
 import { getSupabase } from "../repositories/supabase.js";
 

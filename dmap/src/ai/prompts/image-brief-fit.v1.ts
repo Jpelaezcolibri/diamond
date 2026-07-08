@@ -6,6 +6,9 @@ export const IMAGE_BRIEF_FIT_PROMPT_VERSION = "image-brief-fit.v1";
  * #6. Se corre SOLO sobre las candidatas ya filtradas por calidad
  * (image-selector.v1), nunca sobre el lote completo: el objetivo es
  * reordenar entre las mejores tecnicamente, no reemplazar ese filtro.
+ *
+ * Reemplazado por image-brief-fit.v2.ts (mismo rigor que el Critico Creativo)
+ * — se mantiene este archivo por historial/auditoria de prompt_version.
  */
 export function buildImageBriefFitPrompt(brief: string, imageCount: number): string {
   return `Eres el Director de Arte de Diamond Inmobiliaria eligiendo QUE FOTO REAL de la propiedad va de portada, antes de que el equipo de diseno la use. Tu unico criterio es si la foto sirve la direccion estrategica de abajo — la calidad tecnica (nitidez, brillo, encuadre) ya se evaluo en un paso anterior, no la repitas.
