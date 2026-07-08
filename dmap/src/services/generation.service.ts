@@ -658,18 +658,25 @@ export interface CoverCandidate {
   qualityScore: number;
   brightnessScore: number;
   isDark: boolean;
-  /** true = la foto que el ranking determinista pondria de primera (ver rankImages). */
+  /** true = la foto que el ranking pondria de primera (ver rankImages) — con brief cognitivo, ya considera que tanto sirve la estrategia. */
   recommended: boolean;
   /** true = la foto fuente que hoy tiene el asset de ese rol en la publicacion. */
   current: boolean;
+  /** Solo si la propiedad tiene brief cognitivo: que tan bien esta foto especifica sirve la direccion creativa (ver scoreImagesForBrief). */
+  briefFitScore?: number;
+  briefFitReason?: string;
 }
 
 /**
  * Candidatas para elegir a mano la foto fuente de un rol (Content Studio,
- * boton "elegir otra foto"): reusa el MISMO ranking determinista con el que
- * el sistema ya elige la portada por defecto (ver ai/image-selector.ts) —
- * el analisis por foto esta cacheado desde generateDraftForProperty, asi que
- * esto no vuelve a llamar a Claude salvo que haya fotos nuevas sin analizar.
+ * boton "elegir otra foto"): reusa el MISMO ranking con el que el sistema
+ * ya elige la portada por defecto (ver ai/image-selector.ts), incluido el
+ * ajuste por brief cognitivo si la propiedad tiene uno — para que la
+ * recomendada (⭐) en este picker sea la misma logica que generateDraftForProperty,
+ * no una version ciega a la estrategia. El analisis objetivo por foto esta
+ * cacheado desde generateDraftForProperty (no vuelve a llamar a Claude salvo
+ * fotos nuevas); el brief-fit NO se cachea (ver scoreImagesForBrief), asi que
+ * abrir el picker si hay brief cuesta una llamada extra a Claude vision.
  * Oscuras y duplicadas quedan fuera (rankImages ya las filtra).
  */
 export async function listCoverCandidates(publicationId: string, role: RegenerableRole): Promise<CoverCandidate[]> {
@@ -681,11 +688,14 @@ export async function listCoverCandidates(publicationId: string, role: Regenerab
   if (!property) throw new FatalError(`Propiedad ${publication.property_id} no existe`);
   if (!property.images || property.images.length === 0) return [];
 
-  const [analyses, assets] = await Promise.all([
+  const [analyses, assets, cognitive] = await Promise.all([
     analyzeImages(publication.org_id, property.id, property.images),
-    listAssetsByPublication(publicationId)
+    listAssetsByPublication(publicationId),
+    loadCognitiveContext(publication.org_id, property.id)
   ]);
-  const ranked = rankImages(analyses);
+  const creativeBrief = cognitive ? directorBriefFromContext(cognitive) : undefined;
+  const briefFit = creativeBrief ? await scoreImagesForBrief(rankImages(analyses), creativeBrief) : undefined;
+  const ranked = rankImages(analyses, briefFit);
   const current = assets.find((a) => a.role === role && a.position === 0);
 
   return ranked.map((a, i) => ({
@@ -694,6 +704,9 @@ export async function listCoverCandidates(publicationId: string, role: Regenerab
     qualityScore: a.qualityScore,
     brightnessScore: a.brightnessScore,
     isDark: a.isDark,
+    ...(briefFit?.has(a.imageUrl)
+      ? { briefFitScore: briefFit.get(a.imageUrl)!.briefFitScore, briefFitReason: briefFit.get(a.imageUrl)!.reason }
+      : {}),
     recommended: i === 0,
     current: a.imageUrl === current?.source_image_url
   }));

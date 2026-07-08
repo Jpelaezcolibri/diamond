@@ -56,7 +56,8 @@ function needsDifferentPhoto(meta: CreativeMeta | undefined): boolean {
 }
 
 /** Foto real candidata a portada/historia (GET /cover-candidates de DMAP) —
- *  mismo ranking determinista con el que el sistema elige por defecto. */
+ *  mismo ranking con el que el sistema elige por defecto, ya considerando el
+ *  brief cognitivo cuando la propiedad tiene uno (ver scoreImagesForBrief). */
 interface CoverCandidate {
   imageUrl: string;
   roomType: string;
@@ -65,6 +66,9 @@ interface CoverCandidate {
   isDark: boolean;
   recommended: boolean;
   current: boolean;
+  /** Solo presente si la propiedad tiene brief cognitivo. */
+  briefFitScore?: number;
+  briefFitReason?: string;
 }
 
 const ROOM_TYPE_LABELS: Record<string, string> = {
@@ -276,12 +280,19 @@ export default function ContentStudio({
                     className={`group relative overflow-hidden rounded-lg border-2 text-left disabled:cursor-default ${
                       c.current ? "border-[#c9a24b]" : "border-transparent hover:border-slate-400"
                     }`}
-                    title={c.current ? "Ya es la foto actual" : "Usar esta foto"}
+                    title={
+                      c.current
+                        ? "Ya es la foto actual"
+                        : c.briefFitReason
+                          ? `Ajuste a la estrategia (${c.briefFitScore}/100): ${c.briefFitReason}`
+                          : "Usar esta foto"
+                    }
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={c.imageUrl} alt={ROOM_TYPE_LABELS[c.roomType] || c.roomType} className="aspect-square w-full object-cover" />
                     <span className="absolute bottom-0 left-0 right-0 bg-black/70 px-1 py-0.5 text-[9px] leading-tight text-white">
                       {ROOM_TYPE_LABELS[c.roomType] || c.roomType}
+                      {typeof c.briefFitScore === "number" ? ` · 🎯 ${c.briefFitScore}/100` : ""}
                       {c.recommended ? " · ⭐ mejor" : ""}
                       {c.current ? " · actual" : ""}
                     </span>
@@ -293,7 +304,11 @@ export default function ContentStudio({
               </div>
             )}
             <p className="mt-1.5 text-[10px] text-slate-400">
-              ⭐ marca la que el sistema recomienda por calidad y tipo de espacio. Elegí otra para regenerar el creativo con esa foto.
+              ⭐ marca la que el sistema recomienda
+              {list?.some((c) => typeof c.briefFitScore === "number")
+                ? " (calidad + que tan bien sirve la estrategia de esta propiedad — 🎯 = ese ajuste)"
+                : " por calidad y tipo de espacio"}
+              . Elegí otra para regenerar el creativo con esa foto.
             </p>
           </div>
         )}
