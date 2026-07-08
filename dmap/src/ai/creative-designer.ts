@@ -71,18 +71,29 @@ function sameNumber(a: string, b: string): boolean {
  * Corrige numeros de "specs" que el disenador transcribio distinto al dato
  * real — hallazgo real: el disenador escribio "650 m²" cuando el area real
  * de la propiedad era "2.950 m²" (78% de error, riesgo legal/comercial) y el
- * critico lo detecto una ronda entera despues. area/habitaciones/banos YA
- * son datos estructurados y exactos — no hay razon para confiar en que un
- * LLM los transcriba bien en texto libre cuando el codigo puede verificarlos
- * con cero costo y cero variabilidad. Preserva el formato/label que eligio
- * el disenador (ej. "2.000 m² terreno"), solo corrige el numero.
+ * critico lo detecto una ronda entera despues. habitaciones/banos y el area
+ * de LOTE/TERRENO YA son datos estructurados y exactos — no hay razon para
+ * confiar en que un LLM los transcriba bien en texto libre cuando el codigo
+ * puede verificarlos con cero costo y cero variabilidad.
+ *
+ * OJO — `property.area` en este sistema es UN solo numero (lo que cargo el
+ * Excel/Wasi en "METROS CUADRADOS"), casi siempre el area de LOTE en fincas/
+ * casas con terreno. El area CONSTRUIDA (ej. "650m² construidos en un lote
+ * de 2.950m²") no existe como campo estructurado — solo vive en el texto
+ * libre de la descripcion, si esta la menciona. Por eso esta funcion NUNCA
+ * toca un spec que se identifica a si mismo como "construido/edificado": no
+ * hay ground truth contra que compararlo, y "corregirlo" a `property.area`
+ * fue exactamente el bug reportado (borraba la distincion real lote vs.
+ * construccion). Solo reconcilia menciones de lote/terreno o "m²" sin
+ * calificar — ahi si hay un dato real y estructurado con que compararlas.
  */
 export function reconcileSpecsWithRealData(
   specs: string[],
   property: Pick<CreativeDesignerInput["property"], "area" | "habitaciones" | "banos">
 ): string[] {
   return specs.map((spec) => {
-    if (property.area && /m[²2]/i.test(spec)) {
+    const isBuiltArea = /constru|edifica/i.test(spec);
+    if (property.area && !isBuiltArea && /m[²2]/i.test(spec)) {
       const real = extractNumericToken(property.area);
       const written = extractNumericToken(spec);
       if (real && written && !sameNumber(real, written)) {

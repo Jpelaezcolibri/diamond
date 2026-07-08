@@ -54,7 +54,7 @@ Propiedad:
 - Titulo actual: ${property.titulo ?? "sin titulo"}
 - Operacion: ${property.operacion ?? "no especificada"}
 - Precio: ${property.precio ?? "no especificado"}
-- Area: ${property.area ?? "no especificada"}
+- Area: ${property.area ?? "no especificada"} (area de LOTE/TERRENO segun el sistema — si la descripcion de abajo menciona ADEMAS un area CONSTRUIDA distinta, ej. "650m² construidos en un lote de 2.950m²", son DOS datos reales separados: mencionalos ambos, cada uno con su etiqueta, nunca los mezcles en un solo numero)
 - Habitaciones: ${property.habitaciones ?? "no especificado"}
 - Banos: ${property.banos ?? "no especificado"}
 - Zona: ${property.zona ?? "no especificada"}, ${property.ciudad ?? ""}

@@ -47,7 +47,7 @@ PROPIEDAD REAL (unica fuente de verdad — jamas inventes datos):
 - Titulo: ${p.titulo ?? "sin titulo"}
 - Operacion: ${p.operacion ?? "no especificada"}
 - Precio: ${p.precio ?? "no especificado"}
-- Area: ${p.area ?? "no especificada"} | Habitaciones: ${p.habitaciones ?? "?"} | Banos: ${p.banos ?? "?"}
+- Area: ${p.area ?? "no especificada"} (esta es el area de LOTE/TERRENO segun el sistema — en casas/fincas grandes, la descripcion de abajo puede mencionar ADEMAS un area CONSTRUIDA distinta, ej. "650m² construidos en un lote de 2.950m²": son DOS datos reales diferentes, nunca los confundas ni los promedies. Si la descripcion distingue ambas, mostra las dos por separado en los specs, cada una con su etiqueta ("650 m² construidos", "2.950 m² de lote") — no un solo numero ambiguo) | Habitaciones: ${p.habitaciones ?? "?"} | Banos: ${p.banos ?? "?"}
 - Zona: ${p.zona ?? "?"}, ${p.ciudad ?? ""}
 - Descripcion: ${p.descripcion ?? "sin descripcion"}
 

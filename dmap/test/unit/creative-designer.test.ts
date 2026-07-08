@@ -25,6 +25,16 @@ describe("reconcileSpecsWithRealData", () => {
     expect(fixed).toEqual(["2.950 m²", "3 hab", "4 baños"]);
   });
 
+  it("NO toca un area 'construida' — property.area es el area de lote/terreno, no hay ground truth para el area construida (hallazgo real: Las Palmas 650m2 construidos en lote de 2.950m2, dos datos reales distintos)", () => {
+    const fixed = reconcileSpecsWithRealData(["650 m² construidos"], property);
+    expect(fixed).toEqual(["650 m² construidos"]);
+  });
+
+  it("SI reconcilia un area de lote/terreno explicita", () => {
+    const fixed = reconcileSpecsWithRealData(["500 m² de lote"], property);
+    expect(fixed).toEqual(["2.950 m² de lote"]);
+  });
+
   it("no toca specs sin numero comparable (ej. un highlight de texto libre)", () => {
     const fixed = reconcileSpecsWithRealData(["Casa de mayordomo"], property);
     expect(fixed).toEqual(["Casa de mayordomo"]);
