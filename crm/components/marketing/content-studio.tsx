@@ -318,10 +318,14 @@ export default function ContentStudio({
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={c.imageUrl} alt={ROOM_TYPE_LABELS[c.roomType] || c.roomType} className="aspect-square w-full object-cover" />
-                    <span className="absolute bottom-0 left-0 right-0 bg-black/70 px-1 py-0.5 text-[9px] leading-tight text-white">
+                    {/* Una sola linea con truncado (whitespace-nowrap + ellipsis): con
+                        el score de brief-fit sumado, el texto ya no cabe siempre en
+                        miniaturas chicas y llegaba a envolver en 3 lineas, tapando la
+                        foto entera. El detalle completo queda en el title (hover). */}
+                    <span className="absolute bottom-0 left-0 right-0 truncate whitespace-nowrap bg-black/70 px-1 py-0.5 text-[9px] leading-tight text-white">
                       {ROOM_TYPE_LABELS[c.roomType] || c.roomType}
-                      {typeof c.briefFitScore === "number" ? ` · 🎯 ${c.briefFitScore}/100` : ""}
-                      {c.recommended ? " · ⭐ mejor" : ""}
+                      {typeof c.briefFitScore === "number" ? ` · 🎯${c.briefFitScore}` : ""}
+                      {c.recommended ? " · ⭐" : ""}
                       {c.current ? " · actual" : ""}
                     </span>
                     {busy === `regen-photo-${role}` && !c.current && (
