@@ -7,6 +7,7 @@ import { getPropertyContext } from "@/services/property-context";
 import { refFromSlug } from "@/lib/slug";
 import { propertyWhatsAppUrl } from "@/lib/whatsapp";
 import { propertyJsonLd } from "@/lib/seo";
+import { isNewProperty } from "@/lib/property-freshness";
 import { Container } from "@/components/layout/container";
 import { Badge } from "@/components/design-system/badge";
 import { Button } from "@/components/design-system/button";
@@ -102,6 +103,7 @@ export default async function PropertyPage({ params }: { params: Promise<Params>
           <div>
             <div className="flex flex-wrap items-center gap-3">
               <Badge variant="accent">{property.operacion}</Badge>
+              {isNewProperty(property.createdAt) && <Badge>Nuevo</Badge>}
               <span className="text-xs uppercase tracking-[0.18em] text-muted">Ref. {property.ref}</span>
             </div>
 
