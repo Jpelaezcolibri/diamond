@@ -110,6 +110,14 @@ function panelContent(brand: BrandProfile, spec: DesignSpec, ref: string, colors
       {
         style: {
           display: "flex",
+          // Sin flexWrap, satori (a diferencia de un navegador) NO envuelve
+          // el texto a una segunda linea: lo extiende como una sola linea
+          // mas alla del ancho del panel, y termina renderizado fuera del
+          // canvas de la pieza (bug real: headlines de 5-6 palabras
+          // aparecian cortados en ambos bordes de la imagen). width:100%
+          // ancla el wrap al ancho del panel en vez de al contenido.
+          flexWrap: "wrap",
+          width: "100%",
           fontFamily: brand.fonts.heading,
           fontWeight: 700,
           fontSize: headingSize,
