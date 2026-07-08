@@ -145,9 +145,17 @@ export default function ContentStudio({
     if (c.cover) latestCreativeByRole.cover = c.cover;
     if (c.story) latestCreativeByRole.story = c.story;
   }
+  // needsDifferentPhoto === true: el critico ya determino que nada de lo
+  // malo es corregible por el disenador (instrucciones vino vacia) — es un
+  // problema de que foto se eligio, no de layout/texto/precio/marca. El
+  // primer agente (selector de fotos, ya consciente del brief cognitivo)
+  // tiene permiso de publicar con su mejor eleccion sin que esto se muestre
+  // como obstaculo: no se ofrece "revisar" ni "corregir", se sigue de largo.
+  // Solo se muestra el aviso cuando SI hay algo genuinamente accionable
+  // (texto, precio, marca) que el humano deberia mirar antes de aprobar.
   const reviewParts = (["cover", "story"] as const)
     .map((role) => ({ role, meta: latestCreativeByRole[role] }))
-    .filter((p) => p.meta?.approved === false);
+    .filter((p) => p.meta?.approved === false && !needsDifferentPhoto(p.meta));
 
   // Vista previa del texto EXACTO que se publica: copy + CTA + bloque de
   // contacto (link a la landing + WhatsApp de Sofi con la ref) + hashtags.
@@ -462,17 +470,6 @@ export default function ContentStudio({
                       : `✨ Corregir ${p.role === "cover" ? "la portada" : "la historia"} con las recomendaciones del crítico`}
                   </button>
                 ))}
-              {reviewParts.some((p) => needsDifferentPhoto(p.meta)) && (
-                <p className="w-full text-xs text-amber-700">
-                  El crítico determinó que{" "}
-                  {reviewParts
-                    .filter((p) => needsDifferentPhoto(p.meta))
-                    .map((p) => (p.role === "cover" ? "la portada" : "la historia"))
-                    .join(" y ")}{" "}
-                  necesita una foto distinta — regenerar con IA sobre la misma foto no lo va a arreglar. Usá{" "}
-                  <strong>🖼️ Elegir otra foto</strong> más abajo.
-                </p>
-              )}
             </div>
           )}
         </div>
