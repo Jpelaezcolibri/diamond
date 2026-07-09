@@ -111,3 +111,12 @@
 body:has(main[data-hide-fab]) [data-fab] {
   display: none;
 }
+
+/* En el detalle de propiedad, la barra CTA fija (lg:hidden, ~69px de alto)
+   ocupa el borde inferior: la firma de Vertice sube para no tapar el precio.
+   Nunca se oculta — solo se reubica mientras la barra este visible. */
+@media (max-width: 1023px) {
+  body:has(main[data-hide-fab]) [data-vertice-signature] {
+    bottom: calc(78px + env(safe-area-inset-bottom, 0px));
+  }
+}

@@ -75,6 +75,7 @@ export function VerticeSignature({
   return (
     <a
       ref={linkRef}
+      data-vertice-signature
       href={href}
       target="_blank"
       rel="noopener noreferrer"
