@@ -32,7 +32,7 @@ export default async function ConfiguracionPage() {
   return (
     <div className="space-y-6">
       <MetaConnect orgId={orgId} connections={(connections || []) as SocialConnectionRow[]} />
-      <CreativeEngineSettings orgId={orgId} engine={settings?.creative_engine ?? "ai"} />
+      <CreativeEngineSettings orgId={orgId} engine={settings?.creative_engine ?? "designer"} />
       <WasiSettings orgId={orgId} settings={settings} />
     </div>
   );

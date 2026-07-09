@@ -13,7 +13,6 @@ interface MetricRow {
   comments: number | null;
   shares: number | null;
   clicks: number | null;
-  saved: number | null;
 }
 
 interface TargetWithContext {
@@ -43,6 +42,15 @@ interface RelatedPublicationRow {
  * publicaciones activas de esa propiedad, para avisar si sigue habiendo
  * publicidad corriendo sobre algo que ya no esta disponible.
  */
+const METRIC_LABELS: Record<string, string> = {
+  impressions: "Impresiones",
+  reach: "Alcance",
+  likes: "Me gusta",
+  comments: "Comentarios",
+  shares: "Compartidos",
+  clicks: "Clics",
+};
+
 function activePromoBadge(statuses: PublicationStatus[]): { label: string; color: string } {
   if (statuses.length === 0) return { label: "Sin publicidad asociada", color: "bg-slate-100 text-slate-500" };
   if (statuses.some((s) => s === "published" || s === "partially_published")) {
@@ -127,7 +135,7 @@ export default async function AnalyticsPage() {
         {Object.entries(totals).map(([key, value]) => (
           <div key={key} className="rounded-2xl border border-slate-200 bg-white p-4 text-center">
             <p className="text-2xl font-bold text-slate-900">{value}</p>
-            <p className="text-xs capitalize text-slate-500">{key}</p>
+            <p className="text-xs text-slate-500">{METRIC_LABELS[key] || key}</p>
           </div>
         ))}
       </div>
@@ -144,10 +152,10 @@ export default async function AnalyticsPage() {
                 <th className="px-4 py-3">Publicación</th>
                 <th className="px-4 py-3">Red</th>
                 <th className="px-4 py-3">Alcance</th>
-                <th className="px-4 py-3">Likes</th>
+                <th className="px-4 py-3">Me gusta</th>
                 <th className="px-4 py-3">Comentarios</th>
                 <th className="px-4 py-3">Compartidos</th>
-                <th className="px-4 py-3">Clicks</th>
+                <th className="px-4 py-3">Clics</th>
               </tr>
             </thead>
             <tbody>

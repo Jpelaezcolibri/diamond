@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ESTADO_COLORS, ESTADO_LABELS, type Lead } from "@/lib/types";
+import { CATEGORIAS, ESTADO_COLORS, ESTADO_LABELS, type Lead } from "@/lib/types";
 import type { TeamMember } from "@/lib/team";
 import Avatar from "./avatar";
 import ScoreBadge from "./score-badge";
@@ -106,7 +106,9 @@ export default function LeadsTable({
                     {ESTADO_LABELS[l.estado] || l.estado}
                   </span>
                 </td>
-                <td className="px-4 py-3 capitalize text-slate-600">{l.categoria || "otros"}</td>
+                <td className="px-4 py-3 text-slate-600">
+                  {CATEGORIAS.find((c) => c.key === (l.categoria || "otros"))?.label || l.categoria}
+                </td>
                 <td className="px-4 py-3 text-slate-600">{l.property_ref_origen || "—"}</td>
                 <td className="px-4 py-3">
                   <OwnerBadge

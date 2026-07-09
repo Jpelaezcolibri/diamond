@@ -11,7 +11,7 @@
 **Arquitectura elegida:** 3-tier con Supabase como única fuente de verdad, en el mismo repositorio (carpeta `crm/`).
 
 **Stack:**
-- **Frontend/CRM:** Next.js 16 + React 19 + TypeScript + Shadcn/ui + Tailwind 4, desplegado en Vercel (root directory `crm/`).
+- **Frontend/CRM:** Next.js 15 + React 19 + TypeScript + Shadcn/ui + Tailwind 4, desplegado en Vercel (root directory `crm/`).
 - **Datos:** la MISMA Supabase del bot (tablas `organizations`, `properties`, `leads`, `conversations`, `messages`). Supabase Auth para el login del equipo. Supabase Realtime para actualizar el inbox en vivo.
 - **Backend bot (existente):** Express en Railway. Se le agregan 2 cosas: respetar el modo "humano" de una conversación (Sofi se pausa) y un endpoint `POST /api/send` protegido con API key para que el CRM envíe mensajes manuales por la Cloud API.
 

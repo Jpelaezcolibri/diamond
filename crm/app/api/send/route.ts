@@ -10,7 +10,7 @@ export async function POST(request: Request) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
-  const { conversationId, text } = await request.json();
+  const { conversationId, text, replyToId } = await request.json();
   if (!conversationId || !text?.trim()) {
     return NextResponse.json({ error: "Faltan datos" }, { status: 400 });
   }
@@ -29,7 +29,7 @@ export async function POST(request: Request) {
         "Content-Type": "application/json",
         "x-api-key": process.env.BOT_API_KEY!,
       },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text, replyToId: replyToId || null }),
     }
   ).catch(() => null);
 

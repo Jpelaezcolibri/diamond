@@ -220,7 +220,7 @@ export default function ContentStudio({
     const sourceImageUrl = opts?.sourceImageUrl;
     const usingCritic = (criticInstructions?.length ?? 0) > 0;
     if (!notes && !usingCritic && !sourceImageUrl) {
-      setMessage({ type: "error", text: "Escribí los cambios que querés en el creativo o elegí otra foto" });
+      setMessage({ type: "error", text: "Escribe los cambios que quieres en el creativo o elige otra foto" });
       return;
     }
     const busyKey = sourceImageUrl ? `regen-photo-${role}` : usingCritic ? `regen-critic-${role}` : `regen-creative-${role}`;
@@ -237,7 +237,7 @@ export default function ContentStudio({
       const label = role === "cover" ? "Portada" : "Historia";
       const verdict = data.approved
         ? `el crítico la aprobó (score ${data.score}/100) ✓`
-        : `el crítico aún ve problemas (score ${data.score}/100) — ajustá las notas y reintentá ⚠️`;
+        : `el crítico aún ve problemas (score ${data.score}/100) — ajusta las notas y reintenta ⚠️`;
       setMessage({ type: "ok", text: `${label} regenerada — ${verdict}` });
       setRegenNotes((prev) => ({ ...prev, [role]: "" }));
       if (sourceImageUrl) {
@@ -340,7 +340,7 @@ export default function ContentStudio({
               {list?.some((c) => typeof c.briefFitScore === "number")
                 ? " (calidad + que tan bien sirve la estrategia de esta propiedad — 🎯 = ese ajuste)"
                 : " por calidad y tipo de espacio"}
-              . Elegí otra para regenerar el creativo con esa foto.
+              . Elige otra para regenerar el creativo con esa foto.
             </p>
           </div>
         )}
@@ -358,7 +358,7 @@ export default function ContentStudio({
         <textarea
           value={regenNotes[role]}
           onChange={(e) => setRegenNotes((prev) => ({ ...prev, [role]: e.target.value }))}
-          placeholder={`Cambios para la ${label} (ej: quitá el overlay oscuro, agrandá el precio, menos texto, tono más cálido)`}
+          placeholder={`Cambios para la ${label} (ej: quita el overlay oscuro, agranda el precio, menos texto, tono más cálido)`}
           rows={2}
           maxLength={2000}
           className="w-full rounded-lg border border-slate-200 p-2 text-xs"
@@ -427,7 +427,7 @@ export default function ContentStudio({
       ok
         ? {
             type: "ok",
-            text: 'Dirección estratégica actualizada — ahora abrí "🖼️ Elegir otra foto" para re-elegir contra el brief nuevo, o descartá el borrador para generar uno de cero.'
+            text: 'Dirección estratégica actualizada — ahora abre "🖼️ Elegir otra foto" para re-elegir contra el brief nuevo, o descarta el borrador para generar uno de cero.'
           }
         : { type: "error", text: data.message || data.error || "No se pudo regenerar la dirección estratégica" }
     );
@@ -439,7 +439,7 @@ export default function ContentStudio({
 
   async function handlePublishNow() {
     if (selectedConnections.length === 0) {
-      setMessage({ type: "error", text: "Elegí al menos una cuenta conectada" });
+      setMessage({ type: "error", text: "Elige al menos una cuenta conectada" });
       return;
     }
     setBusy("publish-now");
@@ -454,11 +454,11 @@ export default function ContentStudio({
 
   async function handleSchedule() {
     if (!scheduledAt) {
-      setMessage({ type: "error", text: "Elegí una fecha y hora" });
+      setMessage({ type: "error", text: "Elige una fecha y hora" });
       return;
     }
     if (selectedConnections.length === 0) {
-      setMessage({ type: "error", text: "Elegí al menos una cuenta conectada" });
+      setMessage({ type: "error", text: "Elige al menos una cuenta conectada" });
       return;
     }
     setBusy("schedule");
@@ -565,7 +565,7 @@ export default function ContentStudio({
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Preview de imagenes */}
         <div className="space-y-3">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Creatives</h3>
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Creativos</h3>
           {cover?.public_url && (
             <div className="space-y-2">
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -600,7 +600,7 @@ export default function ContentStudio({
               {regenBox("story")}
             </div>
           )}
-          {!cover && !story && <p className="text-sm text-slate-500">Sin creatives renderizados todavía.</p>}
+          {!cover && !story && <p className="text-sm text-slate-500">Sin creativos renderizados todavía.</p>}
         </div>
 
         {/* Copy editable */}
@@ -735,7 +735,7 @@ export default function ContentStudio({
               <div className="flex flex-wrap gap-2">
                 {connections.length === 0 && (
                   <p className="text-xs text-slate-500">
-                    No hay cuentas conectadas. Configurá Facebook/Instagram en{" "}
+                    No hay cuentas conectadas. Configura Facebook/Instagram en{" "}
                     <Link href="/marketing/configuracion" className="text-[#c9a24b] underline">
                       Configuración
                     </Link>

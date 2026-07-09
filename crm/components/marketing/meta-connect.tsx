@@ -36,7 +36,7 @@ export default function MetaConnect({ orgId, connections }: { orgId: string; con
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(
     connectResult === "ok"
-      ? "Conexión con Meta exitosa. Elegí qué cuentas usar."
+      ? "Conexión con Meta exitosa. Elige qué cuentas usar."
       : connectResult === "error"
         ? `No se pudo completar la conexión con Meta.${connectReason ? ` Detalle: ${connectReason}` : ""}`
         : null
@@ -142,7 +142,7 @@ export default function MetaConnect({ orgId, connections }: { orgId: string; con
 
       {accounts && accounts.length > 0 && (
         <section className="rounded-2xl border border-slate-200 bg-white p-4">
-          <h3 className="mb-2 font-semibold text-slate-900">Elegí qué cuentas usar</h3>
+          <h3 className="mb-2 font-semibold text-slate-900">Elige qué cuentas usar</h3>
           <div className="space-y-2">
             {accounts.map((a) => (
               <label key={a.externalAccountId} className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm">

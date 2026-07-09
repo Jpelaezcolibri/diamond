@@ -26,7 +26,7 @@ export default async function PlantillasPage() {
   return (
     <div>
       <p className="mb-4 text-sm text-slate-500">
-        Guardá un copy o layout desde el Content Studio para reutilizarlo en próximas publicaciones.
+        Guarda un copy o layout desde el Content Studio para reutilizarlo en próximas publicaciones.
       </p>
       {templates.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center text-sm text-slate-500">

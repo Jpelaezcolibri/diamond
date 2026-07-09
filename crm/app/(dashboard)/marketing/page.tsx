@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { getDefaultOrgId, PUBLICATION_STATUS_LABELS, type PublicationRow, type PropertyChangeEventRow, type SyncRunRow } from "@/lib/marketing";
+import { getDefaultOrgId, PUBLICATION_STATUS_LABELS, STYLE_VARIANT_LABELS, type PublicationRow, type PropertyChangeEventRow, type SyncRunRow } from "@/lib/marketing";
 import NovedadesSection from "@/components/marketing/novedades-section";
 import SyncButton from "@/components/marketing/sync-button";
 import Link from "next/link";
@@ -163,7 +163,7 @@ export default async function MarketingDashboardPage() {
                   <div>
                     <p className="font-medium text-slate-900">{d.titulo_comercial || d.properties?.titulo || "Sin título"}</p>
                     <p className="text-xs text-slate-500">
-                      {d.properties?.ref} · estilo {d.style_variant}
+                      {d.properties?.ref} · Estilo: {(d.style_variant && STYLE_VARIANT_LABELS[d.style_variant]) || d.style_variant}
                     </p>
                   </div>
                   <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-700">

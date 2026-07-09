@@ -25,7 +25,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     : [];
   const hasSourceImageUrl = typeof sourceImageUrl === "string" && sourceImageUrl.trim().length > 0;
   if (!hasNotes && instructions.length === 0 && !hasSourceImageUrl) {
-    return NextResponse.json({ error: "Escribe los cambios que quieres, usa las recomendaciones del crítico, o elegí otra foto" }, { status: 400 });
+    return NextResponse.json({ error: "Escribe los cambios que quieres, usa las recomendaciones del crítico, o elige otra foto" }, { status: 400 });
   }
 
   const { ok, status, data } = await dmapJson(`/api/v1/publications/${id}/regenerate-creative`, {

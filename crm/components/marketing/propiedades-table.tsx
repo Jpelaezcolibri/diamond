@@ -66,7 +66,7 @@ function GenerarInline({ orgId, propertyId, titulo }: { orgId: string; propertyI
           title={`Generar publicación para ${titulo}`}
           className="whitespace-nowrap rounded-lg bg-[#c9a24b] px-2.5 py-1 text-xs font-medium text-[#0b1526] transition hover:bg-[#c9a24b]/90 disabled:opacity-50"
         >
-          {loading ? "Generando…" : "Publicar"}
+          {loading ? "Generando…" : "Generar publicación"}
         </button>
       </div>
       {error && <p className="text-[10px] text-red-600">{error}</p>}

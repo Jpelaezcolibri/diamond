@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { ESTADO_COLORS, type Conversation, type Message } from "@/lib/types";
+import { ESTADO_COLORS, ESTADO_LABELS, type Conversation, type Message } from "@/lib/types";
 
 function hora(iso: string) {
   try {
@@ -179,7 +179,7 @@ export default function ChatView({
             <p className="text-sm font-semibold">
               {lead?.nombre || `+${lead?.phone}`}
               <span className={`ml-2 rounded-full px-2 py-0.5 text-[10px] ${ESTADO_COLORS[lead?.estado] || "bg-slate-100"}`}>
-                {lead?.estado} · {lead?.score}
+                {ESTADO_LABELS[lead?.estado] || lead?.estado} · {lead?.score}
               </span>
             </p>
             <p className="text-xs text-slate-500">
