@@ -1,21 +1,20 @@
 import type { TenantConfigInput } from "../tenant-schema";
 
 // ---------------------------------------------------------------------------
-// Diamond Inmobiliaria — primer tenant real de REF.
-// Inventario: Supabase (39 propiedades Wasi). WhatsApp: Sofi (+57 304 4653609).
+// kubeta-preview — variante de Diamond Inmobiliaria con un tema visual
+// inspirado en kubeta.com.co (paleta cálida/neutra, serif clásico,
+// fotografía protagonista). SOLO para preview local (TENANT_ID=kubeta-preview),
+// no está pensado para deploy. Mismo inventario/contacto real que "diamond".
 // ---------------------------------------------------------------------------
 
-export const diamond = {
-  id: "diamond",
+export const kubetaPreview = {
+  id: "kubeta-preview",
 
   brand: {
     name: "Diamond Inmobiliaria",
-    tagline: "Propiedades seleccionadas en Medellín y toda Colombia",
+    tagline: "Un hogar para cada forma de vivir",
     logo: { light: "/logo.png", dark: "/logo.png", alt: "Logo Diamond Inmobiliaria" },
     monogram: "D",
-    // Marca con alcance nacional (decisión comercial del propietario). El
-    // inventario hoy se concentra en Antioquia (Medellín/Valle de Aburrá,
-    // oriente y occidente), con presencia en otras zonas del país.
     city: "Medellín y toda Colombia",
     country: "Colombia",
   },
@@ -35,34 +34,32 @@ export const diamond = {
 
   theme: {
     colors: {
-      background: { light: "#FAF9F6", dark: "#101012" },
-      foreground: { light: "#101012", dark: "#F4F2ED" },
-      surface: { light: "#FFFFFF", dark: "#18181B" },
-      primary: { light: "#101012", dark: "#F4F2ED" },
-      primaryForeground: { light: "#FAF9F6", dark: "#101012" },
-      accent: { light: "#C9A24B", dark: "#B8964A" },
-      accentForeground: { light: "#101012", dark: "#101012" },
-      muted: { light: "#6E6A63", dark: "#A19C93" },
-      border: { light: "#E7E3DB", dark: "#2A2A2E" },
+      // Paleta cálida/neutra tipo papel — inspirada en kubeta.com.co.
+      background: { light: "#F5F1E8", dark: "#15130F" },
+      foreground: { light: "#201B14", dark: "#F3EEE3" },
+      surface: { light: "#FFFFFF", dark: "#1D1912" },
+      primary: { light: "#201B14", dark: "#F3EEE3" },
+      primaryForeground: { light: "#F5F1E8", dark: "#15130F" },
+      accent: { light: "#A6642F", dark: "#C97D45" },
+      accentForeground: { light: "#FFFFFF", dark: "#15130F" },
+      muted: { light: "#7C7263", dark: "#A79C89" },
+      border: { light: "#E6DFCF", dark: "#2C2820" },
     },
-    fontPreset: "elegant",
-    radius: "md",
+    fontPreset: "editorial",
+    radius: "sm",
     darkMode: "system",
   },
 
   seo: {
-    titleTemplate: "%s · Diamond Inmobiliaria",
+    titleTemplate: "%s · Diamond Inmobiliaria (preview)",
     defaultTitle: "Diamond Inmobiliaria · Propiedades en Medellín y toda Colombia",
     description:
       "Casas, apartamentos y fincas seleccionadas en Medellín y toda Colombia. Propiedades verificadas y atención inmediata por WhatsApp.",
-    keywords: [
-      "inmobiliaria Medellín",
-      "inmobiliaria Colombia",
-      "finca raíz Colombia",
-      "apartamentos en venta Medellín",
-      "casas en venta Colombia",
-    ],
-    baseUrl: "https://diamondinmobiliaria.com",
+    keywords: ["inmobiliaria Medellín", "inmobiliaria Colombia"],
+    // localhost a proposito: este tenant es SOLO preview local. Si algun dia
+    // se despliega, cambiar a su dominio real — nunca al de produccion de
+    // Diamond (canonical/sitemap/OG apuntarian al sitio real con "(preview)").
+    baseUrl: "http://localhost:3000",
   },
 
   home: {
@@ -72,12 +69,12 @@ export const diamond = {
         type: "hero",
         enabled: true,
         eyebrow: "Diamond Inmobiliaria",
-        title: "El hogar que mereces, en toda Colombia",
+        title: "Un hogar para cada forma de vivir",
         subtitle:
-          "Desde Medellín para todo el país: propiedades verificadas y acompañamiento real en cada paso.",
+          "Casas, apartamentos y fincas seleccionadas en Medellín y toda Colombia, con acompañamiento cercano en cada paso.",
         image:
-          "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=2400&auto=format&fit=crop",
-        imageAlt: "Casa moderna con jardín al atardecer",
+          "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?q=80&w=2400&auto=format&fit=crop",
+        imageAlt: "Fachada cálida de casa moderna al atardecer",
         showSearch: true,
       },
       {
@@ -85,8 +82,6 @@ export const diamond = {
         type: "trust-bar",
         enabled: true,
         metrics: [
-          // El conteo se resuelve en vivo desde la base (value = respaldo si falla).
-          // Respaldo alineado al inventario real (~39) — nunca inflar la cifra.
           { value: 38, suffix: "+", label: "Propiedades disponibles", source: "properties_count" },
           { value: 24, suffix: "/7", label: "Atención por WhatsApp" },
           { value: 1, suffix: " min", label: "Tiempo de respuesta" },
@@ -105,7 +100,7 @@ export const diamond = {
         id: "why-us",
         type: "why-us",
         enabled: true,
-        eyebrow: "Por qué Diamond",
+        eyebrow: "Por qué elegirnos",
         title: "Comprar bien empieza por estar bien acompañado",
         items: [
           {
@@ -166,15 +161,33 @@ export const diamond = {
       {
         id: "testimonials",
         type: "testimonials",
-        // Activar cuando existan testimonios reales de clientes Diamond.
-        enabled: false,
+        // Habilitado solo en este tenant de preview para mostrar la seccion
+        // visualmente. En "diamond" (produccion) permanece apagada hasta
+        // tener testimonios reales.
+        enabled: true,
         eyebrow: "Clientes",
         title: "Historias que terminaron en llaves",
+        // DATOS DE MUESTRA para que la seccion se vea completa en el preview.
+        // Antes de usar en cualquier sitio publico, reemplazar por
+        // testimonios reales y verificables.
         items: [
           {
-            name: "EJEMPLO — Reemplazar con testimonio real",
-            quote: "Texto del testimonio real del cliente.",
+            name: "Carolina M. (ejemplo)",
+            quote:
+              "Escribí un domingo por la noche y en minutos ya tenía opciones que sí encajaban con lo que buscaba. Nunca sentí presión, solo acompañamiento.",
             result: "Compró apartamento en Envigado",
+          },
+          {
+            name: "Andrés y Laura (ejemplo)",
+            quote:
+              "Nos coordinaron las visitas, nos ayudaron con el crédito y estuvieron pendientes hasta la firma. Se nota que conocen su inventario.",
+            result: "Compraron casa en La Estrella",
+          },
+          {
+            name: "Familia Restrepo (ejemplo)",
+            quote:
+              "Publicamos la finca con ellos y solo nos llegaron interesados de verdad. El proceso fue mucho más tranquilo de lo que esperábamos.",
+            result: "Vendieron finca en el Oriente",
           },
         ],
       },
@@ -223,10 +236,5 @@ export const diamond = {
   },
 
   features: { map: false, aiAssistant: false, comparator: false },
-  // Pixel ID via env: se pega en Vercel sin tocar codigo. Vacio = Pixel apagado.
-  integrations: {
-    metaPixelId: process.env.NEXT_PUBLIC_META_PIXEL_ID,
-    // Verificacion del dominio diamondinmobiliaria.com en Meta (Vertice Studio).
-    metaDomainVerification: "42evdyqf11w2jr91ddlmomeih3d5so",
-  },
+  integrations: {},
 } satisfies TenantConfigInput;

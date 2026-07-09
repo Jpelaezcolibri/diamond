@@ -9,6 +9,19 @@
 - **Equipo:** 1 desarrollador (Juan), stack dominado: Node.js, Supabase, Claude SDK, Next.js.
 - **Restricciones clave:** Sin admin en la máquina de desarrollo; presupuesto de infra mínimo (~5 USD/mes); WhatsApp Cloud API exige webhook público con respuesta rápida.
 
+## Reglas del dominio (NO romper)
+
+1. **Sofi**: mujer, paisa suave SIN muletillas forzadas (el usuario pidió explícitamente no forzar "pues"). La calidez va en el trato.
+2. **Fichas de propiedad**: formato completo estilo Wasi (precio, área, hab, baños, garaje, estrato, admon, ubicación, link) + cierre "¿Te gustaría hablar con un asesor...? Responde SI".
+3. **Venta vs Arriendo**: nunca mezclarlas. Campo `operacion` en properties.
+4. **Cierre no invasivo**: en venta preguntar forma de pago (crédito → ofrecer asesoría); si el cliente duda, NO insistir.
+5. **Transferencias por especialidad**: venta / arriendo / vehiculos / otro → tabla `advisors`. La alerta y el link wa.me van al asesor de la especialidad.
+6. **Nunca inventar** propiedades, precios ni disponibilidad. Solo lo que devuelve `buscar_propiedades`. Nunca prometer descuentos.
+7. **Multi-tenant**: la org se resuelve por `phone_number_id` entrante; token y asesores por organización.
+8. Estados del lead: `nuevo → en_conversacion → calificado → transferido` (o `descartado`). Score con piso 70 para calificados.
+
+**Convenciones del bot:** sin TypeScript (JS plano con CommonJS); después de cambiar `prompts.js`/`tools.js`/`engine.js`, correr `npm test` y probar al menos un flujo completo por `/test` antes de commitear.
+
 ## Decisión
 
 **Arquitectura elegida:** Monolito modular (3-tier: canal → lógica de agente → datos), con estado 100% en base de datos.
