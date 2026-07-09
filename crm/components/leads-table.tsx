@@ -34,7 +34,7 @@ export default function LeadsTable({
           .filter(Boolean)
           .some((v) => String(v).toLowerCase().includes(term));
       });
-  }, [leads, q, onlyMine, currentUserId]);
+  }, [leads, q, onlyMine, onlyAds, currentUserId]);
 
   return (
     <>
