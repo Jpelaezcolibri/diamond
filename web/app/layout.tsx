@@ -7,6 +7,7 @@ import { ThemeProvider } from "@/components/shared/theme-provider";
 import { Header } from "@/components/navigation/header";
 import { Footer } from "@/components/layout/footer";
 import { WhatsAppFab } from "@/components/navigation/whatsapp-fab";
+import { VerticeSignature } from "@/components/shared/VerticeSignature";
 import { MetaPixel } from "@/components/shared/meta-pixel";
 import { generalWhatsAppUrl } from "@/lib/whatsapp";
 import { organizationJsonLd } from "@/lib/seo";
@@ -50,6 +51,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <div className="flex-1">{children}</div>
             <Footer />
             <WhatsAppFab href={generalWhatsAppUrl(config)} />
+            <VerticeSignature position="bottom-left" />
           </ThemeProvider>
         </NuqsAdapter>
       </body>
