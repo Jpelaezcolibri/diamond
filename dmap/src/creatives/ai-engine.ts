@@ -78,7 +78,7 @@ export function composeRoundPrompt(masterPrompt: string, userNotes: string | und
     prompt += `\n\nART DIRECTOR NOTES (from the human client — MANDATORY, honor these exactly; they OVERRIDE the style defaults wherever they conflict):\n${userNotes.trim()}`;
   }
   if (criticInstructions.length > 0) {
-    prompt += `\n\nMANDATORY CORRECTIONS FROM PREVIOUS ROUND (a senior art director rejected the last attempt — fix ALL of these):\n- ${criticInstructions.join("\n- ")}`;
+    prompt += `\n\nMANDATORY CORRECTIONS FROM PREVIOUS ROUND (a senior art director rejected the last attempt — fix ALL of these; where a correction conflicts with any instruction above, the CORRECTION wins):\n- ${criticInstructions.join("\n- ")}`;
   }
   return prompt;
 }

@@ -1,7 +1,7 @@
 import {
-  AI_ENGINE_MAX_ROUNDS,
   CREATIVE_SIZES,
   CRITIC_APPROVAL_THRESHOLD,
+  DESIGNER_ENGINE_MAX_ROUNDS,
   type GptImageSizeKey
 } from "../config/constants.js";
 import { logger } from "../lib/logger.js";
@@ -121,7 +121,7 @@ export async function generateDesignerCreative(
   const rounds: AiCreativeRound[] = [];
   let best: { composed: Awaited<ReturnType<typeof composeLogoAndResize>>; score: number; spec: DesignSpec } | null = null;
 
-  for (let round = 1; round <= AI_ENGINE_MAX_ROUNDS; round++) {
+  for (let round = 1; round <= DESIGNER_ENGINE_MAX_ROUNDS; round++) {
     const tree = designerLayout(brand, designed.output, photoDataUri, size);
     const rendered = await renderSatoriTree(tree, size);
     const composed = await composeLogoAndResize(rendered.buffer, logoBuffer, sizeKey);
@@ -152,7 +152,7 @@ export async function generateDesignerCreative(
       break;
     }
 
-    if (round < AI_ENGINE_MAX_ROUNDS && critique.output.instrucciones_de_mejora.length > 0) {
+    if (round < DESIGNER_ENGINE_MAX_ROUNDS && critique.output.instrucciones_de_mejora.length > 0) {
       // Re-diseno con las instrucciones FRESCAS del critico (reemplazan las
       // de la corrida anterior); las notas del humano se mantienen siempre.
       designed = await designer({

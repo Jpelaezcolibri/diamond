@@ -34,8 +34,10 @@ export const GPT_IMAGE_SIZES = {
 
 export type GptImageSizeKey = keyof typeof GPT_IMAGE_SIZES;
 
-/** Maximo de rondas generar->criticar por creative (decision del usuario: 2). */
+/** Maximo de rondas generar->criticar por creative (decision del usuario: 2 — cada ronda GPT Image cuesta ~$0.17). */
 export const AI_ENGINE_MAX_ROUNDS = 2;
+/** Maximo de rondas para designer/hybrid: las rondas extra son casi gratis (solo tokens de Claude — la foto de Gemini se reusa), asi que se permite una ronda mas de correccion que en "ai". */
+export const DESIGNER_ENGINE_MAX_ROUNDS = 3;
 /** Score minimo del critico (0-100) para aprobar sin revision humana. */
 export const CRITIC_APPROVAL_THRESHOLD = 75;
 /** Knob de costo: "high" ~USD 0.17/imagen, "medium" ~0.04. */

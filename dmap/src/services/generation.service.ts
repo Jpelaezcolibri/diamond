@@ -127,11 +127,12 @@ async function renderAndUpload(
  *     misma pieza, con la foto original sin retocar).
  *   - "designer" y "template" siempre disponibles.
  * `creative_engine` puede venir undefined si la migracion 2026-07-06 aun no
- * corrio: default "ai".
+ * corrio: default "designer" (recomendado, costo $0 — igual que el default
+ * de la columna desde la migracion 2026-07-09).
  */
 export async function resolveCreativeEngine(orgId: string): Promise<CreativeEngine> {
   const settings = await getOrgMarketingSettings(orgId);
-  const configured: CreativeEngine = settings.creative_engine ?? "ai";
+  const configured: CreativeEngine = settings.creative_engine ?? "designer";
 
   if (configured === "template" || configured === "designer") return configured;
 
