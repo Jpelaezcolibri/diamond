@@ -28,6 +28,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
             <span className="text-lg font-bold tracking-wide text-[#c9a24b]">DIAMOND</span>
           </span>
           <nav className="flex gap-1 text-sm">
+            <NavLink href="/sofi">SOFI</NavLink>
             <NavLink href="/inbox">Inbox</NavLink>
             <NavLink href="/kanban">Kanban</NavLink>
             <NavLink href="/leads">Leads</NavLink>

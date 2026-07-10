@@ -12,6 +12,10 @@ app.use(express.json());
 
 app.use(whatsapp);
 app.use(telegram);
+// assistant antes que crm: el middleware "/api" de crm.js matchea tambien
+// /api/assistant/* y exige Supabase; montar assistant primero deja que su
+// propio guard maneje la ruta sin acoplarse a crm.js.
+app.use(require("./api/assistant"));
 app.use(require("./api/crm"));
 
 app.get("/", (req, res) => {
