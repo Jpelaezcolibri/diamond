@@ -56,6 +56,30 @@ const COMMAND_TOOL_DEFINITIONS = [
     },
   },
   {
+    name: "resumen_lead",
+    description:
+      "Trae la ficha de un lead y su conversacion completa con Sofi, para preparar la llamada o el seguimiento del asesor. Usala cuando pregunten por un cliente especifico ('preparame la llamada con Marta', 'que sabemos del 3001234567', 'que pidio Javier'). Busca por nombre o por telefono. Con el resultado, resume: que busca, presupuesto, objeciones o dudas que planteo, propiedad de interes, y sugiere UNA apertura concreta para la llamada.",
+    input_schema: {
+      type: "object",
+      properties: {
+        cliente: { type: "string", description: "Nombre (o parte del nombre) o telefono del lead" },
+      },
+      required: ["cliente"],
+    },
+  },
+  {
+    name: "cruzar_propiedad_leads",
+    description:
+      "Dada una propiedad del inventario (por referencia), encuentra los leads activos del alcance del asesor que encajan por zona de interes, presupuesto y tipo — convierte una propiedad en una lista de clientes a llamar. Usala cuando pregunten 'a quien le puede servir esta propiedad', 'quien de mis leads encaja con la ref X' o cuando entre inventario nuevo.",
+    input_schema: {
+      type: "object",
+      properties: {
+        ref: { type: "string", description: "Referencia de la propiedad (codigo Wasi), ej 9776475" },
+      },
+      required: ["ref"],
+    },
+  },
+  {
     name: "buscar_red_aliados",
     description:
       "Busca en las propiedades que colegas de OTRAS inmobiliarias compartieron a la red de aliados. Aqui hablas con el asesor, asi que SI puedes mostrarle todo: precio, zona, referencia y el contacto del colega. Usala cuando el inventario propio no alcance, cuando pidan explicitamente opciones de aliados, o para un analisis completo de lo disponible. Sin filtros devuelve las mas recientes.",
@@ -123,6 +147,50 @@ async function executeCommandTool(name, input, ctx) {
         return "Sin resultados en el inventario propio con esos criterios. Puedes ampliar la busqueda (quitar filtros, subir presupuesto, zonas vecinas segun la geografia) o revisar la red de aliados con buscar_red_aliados.";
       }
       return JSON.stringify(results, null, 2);
+    }
+    case "resumen_lead": {
+      const candidatos = await command.buscarLeads(scope, input?.cliente);
+      if (candidatos.length === 0) {
+        return `No encontre ningun lead que coincida con "${input?.cliente}" en tu alcance. Puede estar a nombre de otro asesor, con otro nombre, o no estar registrado todavia.`;
+      }
+      if (candidatos.length > 1) {
+        const lista = candidatos.map((l) => ({ nombre: l.nombre || "(sin nombre)", phone: l.phone, estado: l.estado }));
+        return `Hay ${candidatos.length} leads que coinciden — pregunta al asesor cual es antes de resumir:\n${JSON.stringify(lista, null, 2)}`;
+      }
+      const data = await command.conversacionDeLead(scope, candidatos[0].id);
+      if (!data) return "El lead existe pero no esta en tu alcance.";
+      const { lead, mensajes } = data;
+      const ficha = {
+        nombre: lead.nombre || null,
+        phone: lead.phone || null,
+        estado: lead.estado,
+        score: lead.score || 0,
+        presupuesto: lead.presupuesto || null,
+        zona_interes: lead.zona_interes || null,
+        tipo_interes: lead.tipo_interes || null,
+        urgencia: lead.urgencia || null,
+        forma_pago: lead.forma_pago || null,
+        intencion: lead.intencion || null,
+        propiedad_origen: lead.property_ref_origen || null,
+        cita: lead.cita || null,
+        fuente: lead.source || null,
+      };
+      return JSON.stringify({ ficha, conversacion: mensajes }, null, 2);
+    }
+    case "cruzar_propiedad_leads": {
+      const prop = await properties.findByRef(scope.orgId, input?.ref || "");
+      if (!prop) {
+        return `No encontre la referencia ${input?.ref} en el inventario. Verifica el codigo o busca la propiedad con buscar_inventario.`;
+      }
+      const candidatos = await command.leadsParaPropiedad(scope, prop);
+      const resumenProp = { ref: prop.ref, titulo: prop.titulo, precio: prop.precio, zona: prop.zona, ciudad: prop.ciudad, operacion: prop.operacion, disponible: prop.disponible };
+      if (candidatos.length === 0) {
+        return `Ningun lead activo de tu alcance encaja hoy con esta propiedad:\n${JSON.stringify(resumenProp)}\nPuedes ampliar revisando leads sin zona o presupuesto registrado en el CRM.`;
+      }
+      return (
+        "Leads que encajan con la propiedad (presenta los 2-3 mejores con el porque de cada uno; coincide_en dice en que coincidio):\n" +
+        JSON.stringify({ propiedad: resumenProp, candidatos }, null, 2)
+      );
     }
     case "buscar_red_aliados": {
       const results = await allyProperties.search(
