@@ -207,6 +207,121 @@ async function leadsParaPropiedad(scope, propiedad, limit = 10) {
   return matchLeadsConPropiedad(candidatos, propiedad, limit);
 }
 
+// ── Cierre de negocios (Sprint "Cero Leads Perdidos") ─────────────────────
+// Decision de diseno aprobada: el cierre es un ESTADO del lead
+// (cerrado_ganado | cerrado_perdido), no un objeto aparte.
+
+// Campos que produce un cierre (pura, exportada para tests). resultado:
+// 'ganado' | 'perdido'. valor: texto libre ("340 millones") -> pesos.
+function camposDeCierre(resultado, { valor = null, motivo = null } = {}) {
+  const estado = resultado === "ganado" ? "cerrado_ganado" : "cerrado_perdido";
+  const fields = { estado, closed_at: new Date().toISOString() };
+  if (resultado === "ganado" && valor) fields.valor_cierre = parsePresupuesto(valor);
+  if (resultado === "perdido" && motivo) fields.motivo_perdida = String(motivo).slice(0, 300);
+  return fields;
+}
+
+// Cierra un lead DEL ALCANCE.
+async function cerrarLead(scope, leadId, { resultado, valor = null, motivo = null }) {
+  const fields = camposDeCierre(resultado, { valor, motivo });
+  const { estado } = fields;
+
+  if (!supabase) {
+    const lead = memory.leads.find(
+      (l) => l.id === leadId && l.org_id === scope.orgId && (scope.isAdmin || l.owner_id === scope.viewerUid)
+    );
+    if (!lead) return null;
+    Object.assign(lead, fields);
+    return lead;
+  }
+  // Verifica el alcance releyendo el lead con los mismos filtros.
+  let leadQuery = supabase.from("leads").select("id").eq("org_id", scope.orgId).eq("id", leadId);
+  if (!scope.isAdmin) leadQuery = leadQuery.eq("owner_id", scope.viewerUid);
+  const { data: found, error: findError } = await leadQuery.maybeSingle();
+  if (findError) throw findError;
+  if (!found) return null;
+
+  try {
+    const { data, error } = await supabase
+      .from("leads")
+      .update({ ...fields, updated_at: new Date().toISOString() })
+      .eq("id", leadId)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  } catch (e) {
+    // Si las columnas de cierre no existen (migracion 2026-07-11 pendiente),
+    // al menos persiste el estado para no perder el dato del negocio.
+    console.warn("[command] cierre degradado (revisar migracion leads_cierre):", e.message);
+    const { data, error } = await supabase
+      .from("leads")
+      .update({ estado, updated_at: new Date().toISOString() })
+      .eq("id", leadId)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  }
+}
+
+// Agregacion pura del embudo por fuente (exportada para tests).
+// Cohorte: leads creados en el periodo. Un lead "alcanzo" una etapa si su
+// estado actual es esa etapa o una posterior (aproximacion honesta: no hay
+// historial de transiciones).
+function calcularEmbudo(leadsList) {
+  const ALCANZO_CALIFICADO = ["calificado", "transferido", "cerrado_ganado", "cerrado_perdido"];
+  const ALCANZO_TRANSFERIDO = ["transferido", "cerrado_ganado", "cerrado_perdido"];
+  const porFuente = {};
+  const totales = { leads: 0, calificados: 0, transferidos: 0, ganados: 0, perdidos: 0, valor_ganado: 0 };
+
+  for (const l of leadsList) {
+    const fuente = l.source || "desconocida";
+    if (!porFuente[fuente]) {
+      porFuente[fuente] = { leads: 0, calificados: 0, transferidos: 0, ganados: 0, perdidos: 0, valor_ganado: 0 };
+    }
+    const f = porFuente[fuente];
+    f.leads++;
+    totales.leads++;
+    if (ALCANZO_CALIFICADO.includes(l.estado)) { f.calificados++; totales.calificados++; }
+    if (ALCANZO_TRANSFERIDO.includes(l.estado)) { f.transferidos++; totales.transferidos++; }
+    if (l.estado === "cerrado_ganado") {
+      f.ganados++;
+      totales.ganados++;
+      const v = Number(l.valor_cierre) || 0;
+      f.valor_ganado += v;
+      totales.valor_ganado += v;
+    }
+    if (l.estado === "cerrado_perdido") { f.perdidos++; totales.perdidos++; }
+  }
+  return { totales, por_fuente: porFuente };
+}
+
+// Embudo del periodo (por defecto: ultimos 30 dias) sobre la cohorte de leads
+// creados en el rango, con el mismo scope de siempre.
+async function embudo(scope, { desde = null, hasta = null } = {}) {
+  const vDesde = desde || new Date(Date.now() - 30 * 86400000).toISOString();
+  const vHasta = hasta || new Date().toISOString();
+  let rows;
+  if (!supabase) {
+    rows = memory.leads.filter(
+      (l) => l.org_id === scope.orgId && (scope.isAdmin || l.owner_id === scope.viewerUid)
+    );
+  } else {
+    let query = supabase
+      .from("leads")
+      .select("estado, source, valor_cierre")
+      .eq("org_id", scope.orgId)
+      .gte("created_at", vDesde)
+      .lt("created_at", vHasta);
+    if (!scope.isAdmin) query = query.eq("owner_id", scope.viewerUid);
+    const { data, error } = await query.limit(2000);
+    if (error) throw error;
+    rows = data;
+  }
+  return { desde: vDesde, hasta: vHasta, ...calcularEmbudo(rows) };
+}
+
 // ── Sesiones ──────────────────────────────────────────────────────────────
 // Retoma la sesion abierta del usuario o crea una nueva.
 async function ensureSession(scope) {
@@ -326,9 +441,13 @@ module.exports = {
   buscarLeads,
   conversacionDeLead,
   leadsParaPropiedad,
+  cerrarLead,
+  embudo,
   // Puras, exportadas para tests:
   parsePresupuesto,
   matchLeadsConPropiedad,
+  calcularEmbudo,
+  camposDeCierre,
   ensureSession,
   getSession,
   appendCommandMessage,

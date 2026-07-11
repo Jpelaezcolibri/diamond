@@ -58,9 +58,12 @@ create table if not exists leads (
   urgencia text,
   forma_pago text,
   score int not null default 0,
-  estado text not null default 'nuevo', -- nuevo | en_conversacion | calificado | transferido | descartado
+  estado text not null default 'nuevo', -- nuevo | en_conversacion | calificado | transferido | descartado | cerrado_ganado | cerrado_perdido
   property_ref_origen text,
   source text not null default 'whatsapp',
+  closed_at timestamptz,
+  valor_cierre bigint, -- pesos COP del negocio ganado
+  motivo_perdida text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (org_id, phone)

@@ -17,6 +17,10 @@ export type Lead = {
   ad_referral: { headline?: string; source_id?: string; source_url?: string; ctwa_clid?: string } | null;
   owner_id: string | null;
   owner_assigned_at: string | null;
+  /** Cierre del negocio (Sprint "Cero Leads Perdidos"): estado cerrado_ganado | cerrado_perdido. */
+  closed_at?: string | null;
+  valor_cierre?: number | null;
+  motivo_perdida?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -90,13 +94,23 @@ export type Message = {
   created_at: string;
 };
 
-export const ESTADOS = ["nuevo", "en_conversacion", "calificado", "transferido", "descartado"] as const;
+export const ESTADOS = [
+  "nuevo",
+  "en_conversacion",
+  "calificado",
+  "transferido",
+  "cerrado_ganado",
+  "cerrado_perdido",
+  "descartado",
+] as const;
 
 export const ESTADO_LABELS: Record<string, string> = {
   nuevo: "Nuevo",
   en_conversacion: "En conversación",
   calificado: "Calificado",
   transferido: "Transferido",
+  cerrado_ganado: "Ganado 🏆",
+  cerrado_perdido: "Perdido",
   descartado: "Descartado",
 };
 
@@ -105,6 +119,8 @@ export const ESTADO_COLORS: Record<string, string> = {
   en_conversacion: "bg-blue-100 text-blue-700",
   calificado: "bg-amber-100 text-amber-800",
   transferido: "bg-green-100 text-green-700",
+  cerrado_ganado: "bg-emerald-100 text-emerald-800",
+  cerrado_perdido: "bg-zinc-200 text-zinc-600",
   descartado: "bg-red-100 text-red-700",
 };
 
@@ -119,6 +135,8 @@ export const ESTADO_DOT: Record<string, string> = {
   en_conversacion: "bg-blue-500",
   calificado: "bg-amber-500",
   transferido: "bg-emerald-500",
+  cerrado_ganado: "bg-emerald-600",
+  cerrado_perdido: "bg-zinc-400",
   descartado: "bg-red-400",
 };
 
@@ -127,6 +145,8 @@ export const ESTADO_COLUMN_THEME: Record<string, { header: string; bg: string; b
   en_conversacion: { header: "text-blue-700", bg: "bg-blue-50/60", border: "border-t-blue-400" },
   calificado: { header: "text-amber-700", bg: "bg-amber-50/60", border: "border-t-amber-400" },
   transferido: { header: "text-emerald-700", bg: "bg-emerald-50/60", border: "border-t-emerald-400" },
+  cerrado_ganado: { header: "text-emerald-800", bg: "bg-emerald-100/60", border: "border-t-emerald-600" },
+  cerrado_perdido: { header: "text-zinc-600", bg: "bg-zinc-100/60", border: "border-t-zinc-400" },
   descartado: { header: "text-red-700", bg: "bg-red-50/60", border: "border-t-red-300" },
 };
 

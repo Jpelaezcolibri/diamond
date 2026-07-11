@@ -80,6 +80,33 @@ const COMMAND_TOOL_DEFINITIONS = [
     },
   },
   {
+    name: "cerrar_lead",
+    description:
+      "Cierra el negocio de un lead como GANADO o PERDIDO. Usala cuando el asesor diga que un cliente compro/firmo/arrendo (ganado) o que el negocio se cayo/no va (perdido). Si es ganado y el asesor no dio el valor del negocio, PREGUNTALE el valor ANTES de cerrar. Si es perdido y no dio el motivo, PREGUNTALE el motivo en una frase ANTES de cerrar — ese dato vale oro para el negocio. Busca el lead por nombre o telefono.",
+    input_schema: {
+      type: "object",
+      properties: {
+        cliente: { type: "string", description: "Nombre o telefono del lead a cerrar" },
+        resultado: { type: "string", enum: ["ganado", "perdido"], description: "ganado: compro/firmo. perdido: el negocio no se dio." },
+        valor: { type: "string", description: "Valor del negocio tal como lo dijo el asesor (ej '340 millones'). Solo para ganado." },
+        motivo: { type: "string", description: "Por que se perdio, en una frase (ej 'compro con otra inmobiliaria', 'no le salio el credito'). Solo para perdido." },
+      },
+      required: ["cliente", "resultado"],
+    },
+  },
+  {
+    name: "embudo_ventas",
+    description:
+      "Devuelve el embudo del periodo (por defecto ultimos 30 dias) por fuente: leads -> calificados -> transferidos -> ganados/perdidos, con el valor total ganado. Usala para preguntas de conversion, rendimiento por fuente/campana, cuanto se vendio, o que fuente trae mejores leads. El asesor ve su embudo; el admin el de toda la organizacion.",
+    input_schema: {
+      type: "object",
+      properties: {
+        desde: { type: "string", description: "Fecha ISO de inicio (opcional, default hace 30 dias)" },
+        hasta: { type: "string", description: "Fecha ISO de fin (opcional, default ahora)" },
+      },
+    },
+  },
+  {
     name: "buscar_red_aliados",
     description:
       "Busca en las propiedades que colegas de OTRAS inmobiliarias compartieron a la red de aliados. Aqui hablas con el asesor, asi que SI puedes mostrarle todo: precio, zona, referencia y el contacto del colega. Usala cuando el inventario propio no alcance, cuando pidan explicitamente opciones de aliados, o para un analisis completo de lo disponible. Sin filtros devuelve las mas recientes.",
@@ -190,6 +217,40 @@ async function executeCommandTool(name, input, ctx) {
       return (
         "Leads que encajan con la propiedad (presenta los 2-3 mejores con el porque de cada uno; coincide_en dice en que coincidio):\n" +
         JSON.stringify({ propiedad: resumenProp, candidatos }, null, 2)
+      );
+    }
+    case "cerrar_lead": {
+      const candidatos = await command.buscarLeads(scope, input?.cliente);
+      if (candidatos.length === 0) {
+        return `No encontre ningun lead que coincida con "${input?.cliente}" en tu alcance — no cerre nada.`;
+      }
+      if (candidatos.length > 1) {
+        const lista = candidatos.map((l) => ({ nombre: l.nombre || "(sin nombre)", phone: l.phone, estado: l.estado }));
+        return `Hay ${candidatos.length} leads que coinciden — pregunta al asesor cual es antes de cerrar (no cerre nada):\n${JSON.stringify(lista, null, 2)}`;
+      }
+      const objetivo = candidatos[0];
+      if (["cerrado_ganado", "cerrado_perdido"].includes(objetivo.estado)) {
+        return `${objetivo.nombre || objetivo.phone} ya estaba cerrado (${objetivo.estado}). No lo modifique.`;
+      }
+      const cerrado = await command.cerrarLead(scope, objetivo.id, {
+        resultado: input.resultado,
+        valor: input?.valor || null,
+        motivo: input?.motivo || null,
+      });
+      if (!cerrado) return "El lead existe pero no esta en tu alcance — no cerre nada.";
+      const detalle =
+        input.resultado === "ganado"
+          ? `GANADO${cerrado.valor_cierre ? ` por $${Number(cerrado.valor_cierre).toLocaleString("es-CO")}` : " (sin valor registrado)"}`
+          : `PERDIDO${input?.motivo ? ` — motivo: ${input.motivo}` : " (sin motivo registrado)"}`;
+      return `Listo: ${cerrado.nombre || cerrado.phone} quedo cerrado como ${detalle}. Confirmaselo al asesor en una linea${
+        input.resultado === "ganado" ? " y felicitalo" : ""
+      }.`;
+    }
+    case "embudo_ventas": {
+      const data = await command.embudo(scope, { desde: input?.desde || null, hasta: input?.hasta || null });
+      return (
+        "Embudo del periodo (cohorte por fecha de creacion del lead; presenta lo esencial y resalta la fuente que mejor convierte):\n" +
+        JSON.stringify(data, null, 2)
       );
     }
     case "buscar_red_aliados": {
