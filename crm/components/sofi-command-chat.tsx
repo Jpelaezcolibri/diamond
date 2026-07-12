@@ -93,20 +93,20 @@ export default function SofiCommandChat({
   }
 
   return (
-    <div className="mx-auto flex h-[calc(100vh-57px)] max-w-3xl flex-col">
+    <div className="mx-auto flex h-full max-w-3xl flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-slate-200 bg-[#f0f2f5] px-4 py-2">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#c9a24b] font-semibold text-white">S</div>
-          <div>
-            <p className="text-sm font-semibold">SOFI · Centro de Comando</p>
-            <p className="text-xs text-slate-500">Tu copiloto del día</p>
+      <div className="flex items-center justify-between gap-2 border-b border-slate-200 bg-[#f0f2f5] px-3 py-2 sm:px-4">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#c9a24b] font-semibold text-white sm:h-10 sm:w-10">S</div>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold">SOFI · Centro de Comando</p>
+            <p className="truncate text-xs text-slate-500">Tu copiloto del día</p>
           </div>
         </div>
         <button
           onClick={handleClose}
           disabled={closing || !sessionId}
-          className="rounded-lg bg-slate-700 px-3 py-2 text-xs font-medium text-white hover:bg-slate-800 disabled:opacity-40"
+          className="shrink-0 whitespace-nowrap rounded-lg bg-slate-700 px-3 py-2 text-xs font-medium text-white hover:bg-slate-800 disabled:opacity-40"
         >
           {closing ? "Cerrando…" : "Cerrar el día"}
         </button>

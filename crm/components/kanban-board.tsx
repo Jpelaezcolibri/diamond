@@ -226,7 +226,7 @@ export default function KanbanBoard({
   }
 
   return (
-    <div className="flex h-[calc(100vh-57px)] flex-col bg-slate-50 p-4">
+    <div className="flex h-full flex-col bg-slate-50 p-3 sm:p-4">
       <div className="mb-4 flex flex-wrap items-center gap-2">
         {CATEGORIAS.map((c) => (
           <button

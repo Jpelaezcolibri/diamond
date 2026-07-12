@@ -26,7 +26,7 @@ export default async function LeadsPage() {
   const leads = (data || []) as Lead[];
 
   return (
-    <div className="mx-auto max-w-6xl p-6">
+    <div className="mx-auto max-w-6xl p-4 sm:p-6">
       <h1 className="mb-4 text-2xl font-bold text-slate-900">Leads</h1>
       <LeadsTable leads={leads} admin={admin} roster={roster} currentUserId={user?.id || ""} />
     </div>

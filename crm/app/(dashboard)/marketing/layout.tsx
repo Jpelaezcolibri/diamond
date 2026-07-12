@@ -11,11 +11,11 @@ export default async function MarketingLayout({ children }: { children: React.Re
   if (!user || !isAdmin(user)) redirect("/inbox");
 
   return (
-    <div className="mx-auto max-w-6xl p-6">
-      <div className="mb-6 flex items-center justify-between">
+    <div className="mx-auto max-w-6xl p-4 sm:p-6">
+      <div className="mb-4 flex items-center justify-between sm:mb-6">
         <h1 className="text-2xl font-bold text-slate-900">Marketing</h1>
       </div>
-      <nav className="mb-6 flex gap-1 border-b border-slate-200 text-sm">
+      <nav className="mb-6 flex gap-1 overflow-x-auto border-b border-slate-200 text-sm [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <NavLink href="/marketing">Dashboard</NavLink>
         <NavLink href="/marketing/publicaciones">Publicaciones</NavLink>
         <NavLink href="/marketing/calendario">Calendario</NavLink>

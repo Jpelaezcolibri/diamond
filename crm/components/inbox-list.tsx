@@ -60,10 +60,10 @@ export default function InboxList({
       ) : (
         <ul className="space-y-2">
           {conversations.map((c) => (
-            <li key={c.id} className="group flex items-center gap-2">
+            <li key={c.id} className="group flex flex-wrap items-center gap-2">
               <Link
                 href={`/inbox/${c.id}`}
-                className="flex flex-1 items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm transition hover:-translate-y-0.5 hover:border-[#c9a24b]/50 hover:shadow-md"
+                className="flex min-w-[16rem] flex-1 items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm transition hover:-translate-y-0.5 hover:border-[#c9a24b]/50 hover:shadow-md"
               >
                 <Avatar name={c.leads?.nombre} phone={c.leads?.phone || ""} />
                 <div className="min-w-0 flex-1">
@@ -112,7 +112,7 @@ export default function InboxList({
                 />
               )}
               {admin && c.leads?.id && (
-                <div className="opacity-0 transition group-hover:opacity-100">
+                <div className="transition lg:opacity-0 lg:group-hover:opacity-100">
                   <LeadDeleteButton leadId={c.leads.id} nombre={c.leads.nombre || `+${c.leads.phone}`} />
                 </div>
               )}

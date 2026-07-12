@@ -167,22 +167,22 @@ export default function ChatView({
   const canWrite = modo === "humano" && !sending;
 
   return (
-    <div className="mx-auto flex h-[calc(100vh-57px)] max-w-3xl flex-col">
+    <div className="mx-auto flex h-full max-w-3xl flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-slate-200 bg-[#f0f2f5] px-4 py-2">
-        <div className="flex items-center gap-3">
-          <Link href="/inbox" className="text-slate-500 hover:text-slate-800">←</Link>
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-600 font-semibold text-white">
+      <div className="flex items-center justify-between gap-2 border-b border-slate-200 bg-[#f0f2f5] px-3 py-2 sm:px-4">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+          <Link href="/inbox" className="shrink-0 text-slate-500 hover:text-slate-800">←</Link>
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-600 font-semibold text-white sm:h-10 sm:w-10">
             {(lead?.nombre || lead?.phone || "?").slice(0, 1).toUpperCase()}
           </div>
-          <div>
-            <p className="text-sm font-semibold">
-              {lead?.nombre || `+${lead?.phone}`}
-              <span className={`ml-2 rounded-full px-2 py-0.5 text-[10px] ${ESTADO_COLORS[lead?.estado] || "bg-slate-100"}`}>
+          <div className="min-w-0">
+            <p className="flex items-center gap-2 text-sm font-semibold">
+              <span className="truncate">{lead?.nombre || `+${lead?.phone}`}</span>
+              <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] ${ESTADO_COLORS[lead?.estado] || "bg-slate-100"}`}>
                 {ESTADO_LABELS[lead?.estado] || lead?.estado} · {lead?.score}
               </span>
             </p>
-            <p className="text-xs text-slate-500">
+            <p className="truncate text-xs text-slate-500">
               {modo === "bot" ? "🤖 Sofi atendiendo" : "🙋 Asesor al mando"}
               {lead?.property_ref_origen ? ` · ${lead.property_ref_origen}` : ""}
             </p>
@@ -190,7 +190,7 @@ export default function ChatView({
         </div>
         <button
           onClick={toggleModo}
-          className={`rounded-lg px-3 py-2 text-xs font-medium text-white ${
+          className={`shrink-0 whitespace-nowrap rounded-lg px-3 py-2 text-xs font-medium text-white ${
             modo === "bot" ? "bg-purple-600 hover:bg-purple-700" : "bg-emerald-600 hover:bg-emerald-700"
           }`}
         >

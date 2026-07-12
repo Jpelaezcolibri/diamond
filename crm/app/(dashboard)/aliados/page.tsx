@@ -16,7 +16,7 @@ export default async function AliadosPage() {
   const aliados = (data || []) as AllyProperty[];
 
   return (
-    <div className="mx-auto max-w-6xl p-6">
+    <div className="mx-auto max-w-6xl p-4 sm:p-6">
       <h1 className="mb-1 text-2xl font-bold text-slate-900">Red de aliados</h1>
       <p className="mb-4 text-sm text-slate-500">
         Propiedades de otras inmobiliarias que colegas comparten con nosotros — nunca son inventario propio. Confirma

@@ -13,7 +13,7 @@ export default async function UsuariosPage() {
   if (!user || !isAdmin(user)) redirect("/inbox");
 
   return (
-    <div className="mx-auto max-w-4xl p-6">
+    <div className="mx-auto max-w-4xl p-4 sm:p-6">
       <h1 className="mb-4 text-xl font-bold">Usuarios del equipo</h1>
       <UserManager currentUserId={user.id} />
     </div>

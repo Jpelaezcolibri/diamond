@@ -67,19 +67,19 @@ export default function LeadsTable({
         <table className="w-full text-sm">
           <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
             <tr>
-              <th className="px-4 py-3">Cliente</th>
-              <th className="px-4 py-3">Score</th>
-              <th className="px-4 py-3">Estado</th>
-              <th className="px-4 py-3">Tablero</th>
-              <th className="px-4 py-3">Propiedad</th>
-              <th className="px-4 py-3">Asesor</th>
+              <th className="px-3 py-3 sm:px-4">Cliente</th>
+              <th className="px-3 py-3 sm:px-4">Score</th>
+              <th className="px-3 py-3 sm:px-4">Estado</th>
+              <th className="hidden px-4 py-3 md:table-cell">Tablero</th>
+              <th className="hidden px-4 py-3 md:table-cell">Propiedad</th>
+              <th className="px-3 py-3 sm:px-4">Asesor</th>
               {admin && <th className="px-4 py-3"></th>}
             </tr>
           </thead>
           <tbody>
             {filtered.map((l) => (
               <tr key={l.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/80">
-                <td className="px-4 py-3">
+                <td className="px-3 py-3 sm:px-4">
                   <div className="flex items-center gap-2.5">
                     <Avatar name={l.nombre} phone={l.phone} size={30} />
                     <div>
@@ -98,19 +98,19 @@ export default function LeadsTable({
                     </div>
                   </div>
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-3 py-3 sm:px-4">
                   <ScoreBadge score={l.score} />
                 </td>
-                <td className="px-4 py-3">
-                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${ESTADO_COLORS[l.estado] || "bg-slate-100"}`}>
+                <td className="px-3 py-3 sm:px-4">
+                  <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${ESTADO_COLORS[l.estado] || "bg-slate-100"}`}>
                     {ESTADO_LABELS[l.estado] || l.estado}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-slate-600">
+                <td className="hidden px-4 py-3 text-slate-600 md:table-cell">
                   {CATEGORIAS.find((c) => c.key === (l.categoria || "otros"))?.label || l.categoria}
                 </td>
-                <td className="px-4 py-3 text-slate-600">{l.property_ref_origen || "—"}</td>
-                <td className="px-4 py-3">
+                <td className="hidden px-4 py-3 text-slate-600 md:table-cell">{l.property_ref_origen || "—"}</td>
+                <td className="px-3 py-3 sm:px-4">
                   <OwnerBadge
                     leadId={l.id}
                     ownerId={l.owner_id}
@@ -121,7 +121,7 @@ export default function LeadsTable({
                   />
                 </td>
                 {admin && (
-                  <td className="px-4 py-3 text-right">
+                  <td className="px-3 py-3 text-right sm:px-4">
                     <LeadDeleteButton leadId={l.id} nombre={l.nombre || `+${l.phone}`} />
                   </td>
                 )}

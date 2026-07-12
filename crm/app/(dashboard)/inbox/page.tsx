@@ -36,7 +36,7 @@ export default async function InboxPage() {
   ];
 
   return (
-    <div className="mx-auto max-w-3xl p-6">
+    <div className="mx-auto max-w-3xl p-4 sm:p-6">
       <h1 className="mb-5 text-2xl font-bold text-slate-900">Inbox</h1>
       <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {stats.map((s) => (
