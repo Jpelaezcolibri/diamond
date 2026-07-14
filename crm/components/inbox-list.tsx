@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { ESTADO_COLORS, ESTADO_LABELS, ESTADO_DOT, relativeTime, type Conversation } from "@/lib/types";
+import { ESTADO_COLORS, ESTADO_LABELS, ESTADO_DOT, relativeTime, absoluteDateTime, type Conversation } from "@/lib/types";
 import type { TeamMember } from "@/lib/team";
 import Avatar from "./avatar";
 import ScoreBadge from "./score-badge";
@@ -92,7 +92,9 @@ export default function InboxList({
                   </p>
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1.5">
-                  <span className="text-xs text-slate-400">{relativeTime(c.last_activity_at)}</span>
+                  <span className="text-xs text-slate-400" title={absoluteDateTime(c.last_activity_at)}>
+                    {relativeTime(c.last_activity_at)}
+                  </span>
                   <div className="flex items-center gap-1.5">
                     <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${ESTADO_COLORS[c.leads?.estado] || "bg-slate-100"}`}>
                       {ESTADO_LABELS[c.leads?.estado] || c.leads?.estado}
