@@ -14,3 +14,6 @@ __pycache__/
 dbg.log
 
 .vercel
+
+# Subagent-driven-development scratch state (progress ledger)
+.superpowers/
