@@ -13,7 +13,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import { CATEGORIAS, ESTADOS, ESTADO_LABELS, ESTADO_COLUMN_THEME, scoreTemperature, type Lead } from "@/lib/types";
+import { CATEGORIAS, ESTADOS, ESTADO_LABELS, ESTADO_COLUMN_THEME, scoreTemperature, relativeTime, absoluteDateTime, type Lead } from "@/lib/types";
 import type { TeamMember } from "@/lib/team";
 import Avatar from "./avatar";
 import ScoreBadge from "./score-badge";
@@ -22,6 +22,7 @@ import OwnerBadge from "./owner-badge";
 function LeadCard({
   lead,
   convId,
+  lastActivity,
   dragging = false,
   roster,
   currentUserId,
@@ -29,6 +30,7 @@ function LeadCard({
 }: {
   lead: Lead;
   convId?: string;
+  lastActivity?: string;
   dragging?: boolean;
   roster: Record<string, TeamMember>;
   currentUserId: string;
@@ -50,6 +52,10 @@ function LeadCard({
         {[lead.property_ref_origen, lead.forma_pago, lead.urgencia].filter(Boolean).join(" · ") ||
           lead.tipo_interes ||
           "sin datos"}
+      </p>
+      <p className="mt-1 flex items-center gap-1 text-[10px] text-slate-400">
+        <span title={absoluteDateTime(lead.created_at)}>Ingreso: {relativeTime(lead.created_at)}</span>
+        {lastActivity && <span title={absoluteDateTime(lastActivity)}>· Act.: {relativeTime(lastActivity)}</span>}
       </p>
       <div className="mt-2 flex items-center justify-between gap-2">
         <OwnerBadge
@@ -77,6 +83,7 @@ function LeadCard({
 function DraggableCard({
   lead,
   convId,
+  lastActivity,
   editable,
   roster,
   currentUserId,
@@ -84,6 +91,7 @@ function DraggableCard({
 }: {
   lead: Lead;
   convId?: string;
+  lastActivity?: string;
   editable: boolean;
   roster: Record<string, TeamMember>;
   currentUserId: string;
@@ -99,7 +107,7 @@ function DraggableCard({
         isDragging ? "opacity-30" : ""
       }`}
     >
-      <LeadCard lead={lead} convId={convId} roster={roster} currentUserId={currentUserId} admin={admin} />
+      <LeadCard lead={lead} convId={convId} lastActivity={lastActivity} roster={roster} currentUserId={currentUserId} admin={admin} />
     </div>
   );
 }
@@ -108,6 +116,7 @@ function Column({
   estado,
   leads,
   convByLead,
+  lastActivityByLead,
   roster,
   currentUserId,
   admin,
@@ -115,6 +124,7 @@ function Column({
   estado: string;
   leads: Lead[];
   convByLead: Record<string, string>;
+  lastActivityByLead: Record<string, string>;
   roster: Record<string, TeamMember>;
   currentUserId: string;
   admin: boolean;
@@ -138,6 +148,7 @@ function Column({
             key={l.id}
             lead={l}
             convId={convByLead[l.id]}
+            lastActivity={lastActivityByLead[l.id]}
             editable={admin || !l.owner_id || l.owner_id === currentUserId}
             roster={roster}
             currentUserId={currentUserId}
@@ -157,12 +168,14 @@ function Column({
 export default function KanbanBoard({
   initialLeads,
   convByLead,
+  lastActivityByLead,
   admin,
   roster,
   currentUserId,
 }: {
   initialLeads: Lead[];
   convByLead: Record<string, string>;
+  lastActivityByLead: Record<string, string>;
   admin: boolean;
   roster: Record<string, TeamMember>;
   currentUserId: string;
@@ -261,6 +274,7 @@ export default function KanbanBoard({
               estado={estado}
               leads={byEstado[estado] || []}
               convByLead={convByLead}
+              lastActivityByLead={lastActivityByLead}
               roster={roster}
               currentUserId={currentUserId}
               admin={admin}
@@ -268,7 +282,16 @@ export default function KanbanBoard({
           ))}
         </div>
         <DragOverlay>
-          {active ? <LeadCard lead={active} dragging roster={roster} currentUserId={currentUserId} admin={admin} /> : null}
+          {active ? (
+            <LeadCard
+              lead={active}
+              lastActivity={lastActivityByLead[active.id]}
+              dragging
+              roster={roster}
+              currentUserId={currentUserId}
+              admin={admin}
+            />
+          ) : null}
         </DragOverlay>
       </DndContext>
     </div>
