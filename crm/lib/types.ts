@@ -167,3 +167,35 @@ export function relativeTime(iso: string): string {
   const days = Math.floor(hr / 24);
   return `hace ${days} d`;
 }
+
+export function absoluteDateTime(iso: string): string {
+  try {
+    return new Date(iso).toLocaleString("es-CO", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return "";
+  }
+}
+
+export function dayLabel(iso: string): string {
+  try {
+    const d = new Date(iso);
+    const now = new Date();
+    const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+    const diffDays = Math.round((startOf(now) - startOf(d)) / 86400000);
+    if (diffDays === 0) return "Hoy";
+    if (diffDays === 1) return "Ayer";
+    return d.toLocaleDateString("es-CO", {
+      day: "numeric",
+      month: "long",
+      ...(d.getFullYear() !== now.getFullYear() ? { year: "numeric" as const } : {}),
+    });
+  } catch {
+    return "";
+  }
+}
