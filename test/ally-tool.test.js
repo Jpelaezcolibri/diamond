@@ -9,6 +9,7 @@ const assert = require("node:assert");
 const { executeTool } = require("../src/agent/tools");
 const allyProperties = require("../src/data/ally-properties");
 const properties = require("../src/data/properties");
+const advisors = require("../src/data/advisors");
 
 function baseCtx() {
   return {
@@ -18,6 +19,7 @@ function baseCtx() {
     transfer: null,
     cita: null,
     allyMatch: null,
+    allyAlert: null,
     lastUserMessage: "les comparto este apto en Guatape, ref 10128030, $450.000.000 — Natalia Velez, Paraiso Inmobiliaria",
   };
 }
@@ -113,4 +115,57 @@ test("buscar_propiedades CON resultados propios: no consulta la red de aliados",
 
   assert.strictEqual(allySearchCalls.length, 0);
   assert.match(result, /AP001/);
+});
+
+test("buscar_propiedades: match de aliado CON dueno y aviso nuevo → arma ctx.allyAlert para el asesor dueno", async (t) => {
+  t.mock.method(properties, "search", async () => []);
+  t.mock.method(allyProperties, "search", async () => [
+    { id: "ally-3", registrado_por: "uid-asesor-1", zona: "Laureles", tipo: "Apartamento", precio: "$1.800.000", ref: "10128030", contacto_nombre: "Andrea Restrepo", inmobiliaria_origen: "Century21" },
+  ]);
+  t.mock.method(allyProperties, "registerAlert", async () => true);
+  let findArgs = null;
+  t.mock.method(advisors, "findByAuthUserId", async (orgId, authUserId) => {
+    findArgs = { orgId, authUserId };
+    return { name: "Camila", phone: "573009990000" };
+  });
+
+  const ctx = baseCtx();
+  await executeTool("buscar_propiedades", { zona: "Laureles" }, ctx);
+
+  assert.deepStrictEqual(findArgs, { orgId: "org-1", authUserId: "uid-asesor-1" });
+  assert.strictEqual(ctx.allyAlert.advisorPhone, "573009990000");
+  assert.match(ctx.allyAlert.advisorAlert, /Andrea Restrepo/);
+});
+
+test("buscar_propiedades: match ya avisado antes (registerAlert devuelve false) → no repite el aviso", async (t) => {
+  t.mock.method(properties, "search", async () => []);
+  t.mock.method(allyProperties, "search", async () => [
+    { id: "ally-3", registrado_por: "uid-asesor-1", zona: "Laureles" },
+  ]);
+  t.mock.method(allyProperties, "registerAlert", async () => false);
+  t.mock.method(advisors, "findByAuthUserId", async () => ({ name: "Camila", phone: "573009990000" }));
+
+  const ctx = baseCtx();
+  await executeTool("buscar_propiedades", { zona: "Laureles" }, ctx);
+
+  assert.strictEqual(ctx.allyAlert, null);
+});
+
+test("buscar_propiedades: match del flujo viejo SIN dueno (registrado_por null) → no genera aviso inmediato", async (t) => {
+  t.mock.method(properties, "search", async () => []);
+  t.mock.method(allyProperties, "search", async () => [
+    { id: "ally-2", registrado_por: null, zona: "Guatape" },
+  ]);
+  const registerCalls = [];
+  t.mock.method(allyProperties, "registerAlert", async (...args) => {
+    registerCalls.push(args);
+    return true;
+  });
+
+  const ctx = baseCtx();
+  const result = await executeTool("buscar_propiedades", { zona: "Guatape" }, ctx);
+
+  assert.strictEqual(registerCalls.length, 0);
+  assert.strictEqual(ctx.allyAlert, null);
+  assert.match(result, /AVISO INTERNO/);
 });

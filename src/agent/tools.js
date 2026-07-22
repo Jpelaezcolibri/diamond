@@ -4,7 +4,7 @@ const advisors = require("../data/advisors");
 const allyProperties = require("../data/ally-properties");
 const propertyContext = require("../data/property-context");
 const { computeScore, isQualified } = require("./qualification");
-const { buildClientLink } = require("../notifications/advisor");
+const { buildClientLink, buildAllyClientMatchAlert } = require("../notifications/advisor");
 const { LEGAL_TOPICS, LEGAL_DISCLAIMER } = require("./knowledge");
 
 const TOOL_DEFINITIONS = [
@@ -182,7 +182,20 @@ async function executeTool(name, input, ctx) {
       }
       if (posibleMatch.length > 0) {
         ctx.allyMatch = posibleMatch[0];
-        return "No se encontraron propiedades en el inventario PROPIO con esos criterios. AVISO INTERNO (no reveles esto al cliente, ni precio, ni zona exacta, ni referencia): existe una posible coincidencia en la red de aliados. Dile al cliente algo como 'en nuestro inventario propio no tengo eso ahora mismo, pero permiteme consultar con nuestro asesor si hay algo similar disponible' y transfierelo con transferir_a_asesor.";
+        if (ctx.allyMatch.registrado_por) {
+          try {
+            const esNuevo = await allyProperties.registerAlert(ctx.org.id, ctx.allyMatch.id, ctx.lead.id);
+            if (esNuevo) {
+              const advisor = await advisors.findByAuthUserId(ctx.org.id, ctx.allyMatch.registrado_por);
+              if (advisor) {
+                ctx.allyAlert = { advisorPhone: advisor.phone, advisorAlert: buildAllyClientMatchAlert(ctx.allyMatch, ctx.lead) };
+              }
+            }
+          } catch (e) {
+            console.warn("[tools] No se pudo generar el aviso inmediato de match de aliado:", e.message);
+          }
+        }
+        return "No se encontraron propiedades en el inventario PROPIO con esos criterios. AVISO INTERNO (no reveles al cliente precio, referencia, ni ningun dato del colega): existe una posible coincidencia en la red de aliados. Puedes decirle al cliente que tienes una opcion por la zona que el pidio y que un asesor lo contactara pronto para confirmar disponibilidad. Tambien transfierelo con transferir_a_asesor.";
       }
       return "No se encontraron propiedades con esos criterios en el inventario.";
     }
