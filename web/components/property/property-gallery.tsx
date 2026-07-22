@@ -59,6 +59,7 @@ export function PropertyGallery({ property, placeholder }: PropertyGalleryProps)
             alt={alt(0)}
             fill
             priority
+            unoptimized
             sizes="(max-width: 768px) 100vw, 66vw"
             className="object-cover transition-transform duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-[1.02] motion-reduce:transition-none"
           />
@@ -79,7 +80,7 @@ export function PropertyGallery({ property, placeholder }: PropertyGalleryProps)
                 className="relative hidden aspect-[3/2] overflow-hidden rounded-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent md:block"
                 aria-label={`Ampliar foto ${i + 2}`}
               >
-                <Image src={src} alt={alt(i + 1)} fill sizes="17vw" className="object-cover" />
+                <Image src={src} alt={alt(i + 1)} fill unoptimized sizes="17vw" className="object-cover" />
               </button>
             ))}
           </div>
@@ -99,6 +100,7 @@ export function PropertyGallery({ property, placeholder }: PropertyGalleryProps)
                 src={images[index]}
                 alt={alt(index)}
                 fill
+                unoptimized
                 sizes="100vw"
                 className="object-contain"
               />

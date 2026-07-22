@@ -62,6 +62,7 @@ export function PropertyImage({ property, index = 0, sizes, priority = false, cl
       fill
       sizes={sizes}
       priority={priority}
+      unoptimized
       className={cn("object-cover", className)}
     />
   );
