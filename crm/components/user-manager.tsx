@@ -24,6 +24,8 @@ const ROLE_BADGE: Record<string, string> = {
 
 export default function UserManager({ currentUserId }: { currentUserId: string }) {
   const [users, setUsers] = useState<TeamUser[]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingEmail, setEditingEmail] = useState("");
   const [nombre, setNombre] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
@@ -44,26 +46,51 @@ export default function UserManager({ currentUserId }: { currentUserId: string }
     void load();
   }, []);
 
-  async function handleCreate(e: React.FormEvent) {
+  function resetForm() {
+    setEditingId(null);
+    setEditingEmail("");
+    setEmail("");
+    setPassword("");
+    setNombre("");
+    setPhone("");
+    setRole("asesor_ventas");
+  }
+
+  function startEdit(u: TeamUser) {
+    setEditingId(u.id);
+    setEditingEmail(u.email);
+    setNombre(u.nombre);
+    setPhone(u.phone);
+    setRole(u.role);
+    setPassword("");
+    setMsg(null);
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setMsg(null);
+    const isEditing = Boolean(editingId);
     const res = await fetch("/api/users", {
-      method: "POST",
+      method: isEditing ? "PATCH" : "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password, nombre, phone, role }),
+      body: JSON.stringify(
+        isEditing
+          ? { userId: editingId, nombre, phone, role, password: password || undefined }
+          : { email, password, nombre, phone, role }
+      ),
     });
     const body = await res.json().catch(() => ({}));
     if (res.ok) {
-      setMsg(body.warning ? `Usuario ${nombre} creado ⚠️ — ${body.warning}` : `Usuario ${nombre} creado ✓ — ya quedó en su cola de asesor`);
-      setEmail("");
-      setPassword("");
-      setNombre("");
-      setPhone("");
-      setRole("asesor_ventas");
+      setMsg(
+        body.warning
+          ? `Usuario ${nombre} ${isEditing ? "actualizado" : "creado"} ⚠️ — ${body.warning}`
+          : `Usuario ${nombre} ${isEditing ? "actualizado ✓" : "creado ✓ — ya quedó en su cola de asesor"}`
+      );
+      resetForm();
       void load();
     } else {
-      setMsg(body.error || "No se pudo crear");
+      setMsg(body.error || `No se pudo ${isEditing ? "actualizar" : "crear"}`);
     }
     setBusy(false);
   }
@@ -86,8 +113,10 @@ export default function UserManager({ currentUserId }: { currentUserId: string }
 
   return (
     <div className="space-y-6">
-      <form onSubmit={handleCreate} className="rounded-xl border border-slate-200 bg-white p-4">
-        <p className="mb-3 text-sm font-semibold">Crear usuario del equipo</p>
+      <form onSubmit={handleSubmit} className="rounded-xl border border-slate-200 bg-white p-4">
+        <p className="mb-3 text-sm font-semibold">
+          {editingId ? `Editar usuario — ${editingEmail}` : "Crear usuario del equipo"}
+        </p>
         <div className="flex flex-wrap items-center gap-2">
           <input
             type="text"
@@ -105,19 +134,21 @@ export default function UserManager({ currentUserId }: { currentUserId: string }
             onChange={(e) => setPhone(e.target.value)}
             className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
           />
-          <input
-            type="email"
-            required
-            placeholder="correo@diamond.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
-          />
+          {!editingId && (
+            <input
+              type="email"
+              required
+              placeholder="correo@diamond.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
+            />
+          )}
           <input
             type="text"
-            required
+            required={!editingId}
             minLength={6}
-            placeholder="Contraseña (mín. 6)"
+            placeholder={editingId ? "Nueva contraseña (opcional)" : "Contraseña (mín. 6)"}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
@@ -138,8 +169,17 @@ export default function UserManager({ currentUserId }: { currentUserId: string }
             disabled={busy}
             className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50"
           >
-            {busy ? "Creando..." : "Crear"}
+            {busy ? "Guardando..." : editingId ? "Guardar cambios" : "Crear"}
           </button>
+          {editingId && (
+            <button
+              type="button"
+              onClick={resetForm}
+              className="rounded-lg px-3 py-2 text-sm text-slate-500 hover:text-slate-800"
+            >
+              Cancelar
+            </button>
+          )}
         </div>
         {msg && <p className="mt-2 text-xs text-slate-600">{msg}</p>}
         <p className="mt-2 text-xs text-slate-400">
@@ -178,6 +218,13 @@ export default function UserManager({ currentUserId }: { currentUserId: string }
                   {u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleString("es-CO") : "Nunca"}
                 </td>
                 <td className="px-4 py-3 text-right">
+                  <button
+                    onClick={() => startEdit(u)}
+                    className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                    title="Editar usuario"
+                  >
+                    ✏️
+                  </button>
                   {u.id !== currentUserId && (
                     <button
                       onClick={() => handleDelete(u)}

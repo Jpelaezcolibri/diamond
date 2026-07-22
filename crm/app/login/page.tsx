@@ -4,10 +4,20 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
+// Traduce los errores mas comunes de Supabase Auth; el resto se muestra tal
+// cual (en vez de un generico "credenciales incorrectas" que oculta la causa
+// real cuando el problema no es la contrasena, ej. email sin confirmar).
+function loginErrorMessage(message: string): string {
+  if (message === "Invalid login credentials") return "Correo o contraseña incorrectos.";
+  if (message === "Email not confirmed") return "Este correo no ha confirmado su cuenta.";
+  return message;
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -18,7 +28,7 @@ export default function LoginPage() {
     const supabase = createClient();
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
-      setError("Credenciales incorrectas");
+      setError(loginErrorMessage(error.message));
       setLoading(false);
       return;
     }
@@ -45,14 +55,23 @@ export default function LoginPage() {
           onChange={(e) => setEmail(e.target.value)}
           className="w-full rounded-lg border border-slate-600 bg-[#0b1526] px-3 py-2 text-sm text-white outline-none placeholder:text-slate-400 focus:border-[#c9a24b]"
         />
-        <input
-          type="password"
-          required
-          placeholder="Contraseña"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="w-full rounded-lg border border-slate-600 bg-[#0b1526] px-3 py-2 text-sm text-white outline-none placeholder:text-slate-400 focus:border-[#c9a24b]"
-        />
+        <div className="relative">
+          <input
+            type={showPassword ? "text" : "password"}
+            required
+            placeholder="Contraseña"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full rounded-lg border border-slate-600 bg-[#0b1526] px-3 py-2 pr-16 text-sm text-white outline-none placeholder:text-slate-400 focus:border-[#c9a24b]"
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword((v) => !v)}
+            className="absolute inset-y-0 right-0 px-3 text-xs text-slate-400 hover:text-[#c9a24b]"
+          >
+            {showPassword ? "Ocultar" : "Ver"}
+          </button>
+        </div>
         {error && <p className="text-sm text-red-400">{error}</p>}
         <button
           type="submit"

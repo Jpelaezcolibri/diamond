@@ -136,6 +136,85 @@ export async function POST(request: Request) {
   return NextResponse.json({ ok: true, id: data.user?.id, warning });
 }
 
+// Editar usuario del equipo: nombre, celular, rol y (opcional) resetear
+// contrasena. El correo NO se puede cambiar aca (login sigue siendo el mismo).
+export async function PATCH(request: Request) {
+  const auth = await requireAdmin();
+  if (auth.error) return auth.error;
+
+  const { userId, nombre, phone, role, password } = await request.json();
+  if (!userId) return NextResponse.json({ error: "Falta userId" }, { status: 400 });
+  if (!nombre?.trim()) {
+    return NextResponse.json({ error: "El nombre es obligatorio" }, { status: 400 });
+  }
+  const normalizedPhone = normalizePhone(phone || "");
+  if (!normalizedPhone) {
+    return NextResponse.json({ error: "El celular es obligatorio y debe ser válido (ej. 3016981200)" }, { status: 400 });
+  }
+  if (password && password.length < 6) {
+    return NextResponse.json({ error: "La contraseña nueva debe tener al menos 6 caracteres" }, { status: 400 });
+  }
+
+  const validRole: Role = ROLES.some((r) => r.value === role) ? (role as Role) : "asesor_otros";
+  const admin = createAdminClient();
+  const especialidad = roleEspecialidad(validRole);
+
+  // Mismo candado anti-choque que el POST: el celular no puede quedar
+  // vinculado a otro usuario, pero aca se excluye al propio usuario editado.
+  let orgId: string | undefined;
+  if (especialidad) {
+    orgId = await currentOrgId(admin);
+    if (orgId) {
+      const { data: existing } = await admin
+        .from("advisors")
+        .select("id, auth_user_id")
+        .eq("org_id", orgId)
+        .eq("phone", normalizedPhone)
+        .maybeSingle();
+      if (existing?.auth_user_id && existing.auth_user_id !== userId) {
+        return NextResponse.json(
+          { error: "Ese celular ya está vinculado a otro usuario del equipo" },
+          { status: 409 }
+        );
+      }
+    }
+  }
+
+  const updatePayload: { app_metadata: { role: Role; nombre: string }; password?: string } = {
+    app_metadata: { role: validRole, nombre: nombre.trim() },
+  };
+  if (password) updatePayload.password = password;
+
+  const { error } = await admin.auth.admin.updateUserById(userId, updatePayload);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  let warning: string | undefined;
+  if (orgId) {
+    const { data: linkedAdvisor } = await admin
+      .from("advisors")
+      .select("id")
+      .eq("org_id", orgId)
+      .eq("auth_user_id", userId)
+      .maybeSingle();
+    const sync = linkedAdvisor
+      ? await admin
+          .from("advisors")
+          .update({ name: nombre.trim(), phone: normalizedPhone, ...(especialidad ? { especialidad } : {}) })
+          .eq("id", linkedAdvisor.id)
+      : especialidad
+        ? await admin
+            .from("advisors")
+            .insert({ org_id: orgId, name: nombre.trim(), phone: normalizedPhone, especialidad, activo: true, auth_user_id: userId })
+        : { error: null };
+    if (sync.error) {
+      warning = `Usuario actualizado, pero no quedó sincronizada su cola de asesor: ${sync.error.message}`;
+    }
+  }
+
+  revalidateTag(TEAM_ROSTER_TAG);
+  return NextResponse.json({ ok: true, warning });
+}
+
 // Eliminar usuario del equipo (no puede eliminarse a si mismo)
 export async function DELETE(request: Request) {
   const auth = await requireAdmin();
