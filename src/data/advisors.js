@@ -26,4 +26,22 @@ async function findForTransfer(org, especialidad) {
     : null;
 }
 
-module.exports = { findForTransfer };
+// Busca el asesor (fila de advisors) vinculado a un login del CRM
+// (auth_user_id) — usado para dirigir el aviso de un match de aliado a quien
+// registro esa propiedad, no al asesor de la especialidad.
+async function findByAuthUserId(orgId, authUserId) {
+  if (!authUserId) return null;
+  if (!supabase) {
+    return memory.advisors.find((a) => a.org_id === orgId && a.auth_user_id === authUserId) || null;
+  }
+  const { data, error } = await supabase
+    .from("advisors")
+    .select("*")
+    .eq("org_id", orgId)
+    .eq("auth_user_id", authUserId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+module.exports = { findForTransfer, findByAuthUserId };
