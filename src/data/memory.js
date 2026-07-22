@@ -38,6 +38,7 @@ const db = {
   conversations: [],
   messages: [],
   allyProperties: [],
+  allyPropertyAlerts: [],
   uid,
 };
 

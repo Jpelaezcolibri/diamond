@@ -38,6 +38,7 @@ async function create(orgId, fields) {
     contacto_telefono: fields.contacto_telefono || null,
     lead_id: fields.lead_id || null,
     mensaje_original: fields.mensaje_original || null,
+    registrado_por: fields.registrado_por || null,
     estado: "pendiente",
   };
 
@@ -135,4 +136,24 @@ async function update(orgId, id, fields) {
   return data;
 }
 
-module.exports = { create, search, findById, list, update, matchesFilters };
+// Registra que ya se aviso al asesor de un match cliente-aliado para este
+// lead (dedup real: unique(ally_property_id, lead_id) en la migracion).
+// Devuelve true la PRIMERA vez (aviso nuevo), false si ya se habia notificado.
+async function registerAlert(orgId, allyPropertyId, leadId) {
+  if (!supabase) {
+    const key = `${allyPropertyId}:${leadId}`;
+    if (memory.allyPropertyAlerts.includes(key)) return false;
+    memory.allyPropertyAlerts.push(key);
+    return true;
+  }
+  const { error } = await supabase
+    .from("ally_property_alerts")
+    .insert({ ally_property_id: allyPropertyId, lead_id: leadId, org_id: orgId });
+  if (error) {
+    if (error.code === "23505") return false; // ya existia (violacion del unique)
+    throw error;
+  }
+  return true;
+}
+
+module.exports = { create, search, findById, list, update, matchesFilters, registerAlert };
