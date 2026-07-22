@@ -38,7 +38,7 @@ router.post("/telegram", async (req, res) => {
     const org = await organizations.getDefault();
     console.log(`[telegram][${chatId}] ${userText}`);
 
-    const { reply, transfer } = await procesarMensaje({
+    const { reply, transfer, allyAlert } = await procesarMensaje({
       org,
       phone: chatId,
       text: userText,
@@ -49,6 +49,9 @@ router.post("/telegram", async (req, res) => {
     if (transfer) {
       // En demo la alerta se envia al mismo chat, marcada, para que se vea el flujo
       await sendTelegram(chatId, `🔔 [ALERTA QUE RECIBE EL ASESOR]\n\n${transfer.advisorAlert}`);
+    }
+    if (allyAlert) {
+      await sendTelegram(chatId, `🔔 [ALERTA INMEDIATA AL DUENO DEL ALIADO]\n\n${allyAlert.advisorAlert}`);
     }
   } catch (e) {
     console.error("[telegram] Error procesando update:", e);
