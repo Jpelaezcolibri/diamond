@@ -143,6 +143,38 @@ const COMMAND_TOOL_DEFINITIONS = [
       required: ["contacto_nombre"],
     },
   },
+  {
+    name: "crear_recordatorio",
+    description:
+      "Crea un recordatorio PERSONAL para el asesor que esta chateando ahora mismo — nunca lo ve otro asesor, ni el admin. Usala cuando pida que le recuerdes algo: una cita, una llamada, una tarea. Si menciona un cliente que existe en el CRM, se lo vincula automaticamente.",
+    input_schema: {
+      type: "object",
+      properties: {
+        descripcion: { type: "string", description: "El recordatorio tal como lo pidio, ej 'llamar a Pedro por el credito', 'cita con Marta a las 3pm'" },
+        fecha_hora_iso: { type: "string", description: "Fecha/hora ISO si dio dia/hora (resuelve 'manana', 'el jueves' con la fecha actual del sistema). Omitir si no dio fecha." },
+        cliente: { type: "string", description: "Nombre o telefono del cliente relacionado, si aplica" },
+      },
+      required: ["descripcion"],
+    },
+  },
+  {
+    name: "consultar_recordatorios",
+    description:
+      "Lista los recordatorios personales pendientes del asesor que esta chateando. Usala cuando pregunte 'que tengo pendiente', 'mis recordatorios' o 'que se me olvido'.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "completar_recordatorio",
+    description:
+      "Marca un recordatorio personal como resuelto. Usala cuando el asesor diga que ya hizo algo que tenia pendiente ('ya llame a Pedro', 'listo con la cita de Marta').",
+    input_schema: {
+      type: "object",
+      properties: {
+        referencia: { type: "string", description: "Como describe el asesor el recordatorio — una frase o parte de la descripcion original" },
+      },
+      required: ["referencia"],
+    },
+  },
 ];
 
 // Techo de resultados por consulta: suficiente para un analisis, sin inundar
@@ -300,6 +332,33 @@ async function executeCommandTool(name, input, ctx) {
         registrado_por: scope.viewerUid,
       });
       return `Propiedad de ${input.contacto_nombre} registrada en la red de aliados. Si un cliente pregunta por algo similar, te avisaremos a ti primero para que valides disponibilidad.`;
+    }
+    case "crear_recordatorio": {
+      let leadId = null;
+      if (input?.cliente) {
+        const candidatos = await command.buscarLeads(scope, input.cliente);
+        if (candidatos.length === 1) leadId = candidatos[0].id;
+      }
+      const creado = await command.crearRecordatorio(scope, {
+        descripcion: input.descripcion,
+        fechaHoraIso: input?.fecha_hora_iso || null,
+        leadId,
+      });
+      return `Recordatorio guardado${leadId ? " y vinculado al cliente" : ""}: "${creado.descripcion}". Solo tu lo vas a ver.`;
+    }
+    case "consultar_recordatorios": {
+      const pendientes = await command.recordatoriosPendientes(scope);
+      if (pendientes.length === 0) return "No tienes recordatorios pendientes.";
+      return JSON.stringify(
+        pendientes.map((r) => ({ id: r.id, descripcion: r.descripcion, fecha_hora: r.fecha_hora, lead_id: r.lead_id })),
+        null,
+        2
+      );
+    }
+    case "completar_recordatorio": {
+      const actualizado = await command.completarRecordatorio(scope, input?.referencia);
+      if (!actualizado) return `No encontre ningun recordatorio pendiente que coincida con "${input?.referencia}".`;
+      return `Listo, marque como resuelto: "${actualizado.descripcion}".`;
     }
     default:
       return `Herramienta desconocida: ${name}`;

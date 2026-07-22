@@ -8,7 +8,7 @@ const { zonaTokens, distinctiveTokens } = require("./properties");
 
 // ── Modo demo (sin Supabase): sesiones/mensajes en memoria ────────────────
 let seq = 0;
-const demo = { sessions: [], messages: [] };
+const demo = { sessions: [], messages: [], reminders: [] };
 const demoId = () => `cmd_${++seq}`;
 
 // ── Consultas agregadas (la base calcula, la IA conversa) ─────────────────
@@ -322,6 +322,71 @@ async function embudo(scope, { desde = null, hasta = null } = {}) {
   return { desde: vDesde, hasta: vHasta, ...calcularEmbudo(rows) };
 }
 
+// ── Recordatorios personales del asesor ────────────────────────────────────
+// Siempre por user_id, incluso si scope.isAdmin: son notas propias, no datos
+// del negocio (a diferencia de leads/metricas, que el admin ve completos).
+async function crearRecordatorio(scope, { descripcion, fechaHoraIso = null, leadId = null }) {
+  if (!supabase) {
+    const row = {
+      id: demoId(),
+      org_id: scope.orgId,
+      user_id: scope.viewerUid,
+      lead_id: leadId,
+      descripcion,
+      fecha_hora: fechaHoraIso,
+      completado: false,
+      created_at: new Date().toISOString(),
+    };
+    demo.reminders.push(row);
+    return row;
+  }
+  const { data, error } = await supabase
+    .from("advisor_reminders")
+    .insert({ org_id: scope.orgId, user_id: scope.viewerUid, lead_id: leadId, descripcion, fecha_hora: fechaHoraIso })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+// incluirFuturos=false filtra a solo los que ya vencieron o son de hoy (para
+// el briefing); true trae todos los pendientes (para "que tengo pendiente").
+async function recordatoriosPendientes(scope, { incluirFuturos = true } = {}) {
+  let rows;
+  if (!supabase) {
+    rows = demo.reminders.filter((r) => r.org_id === scope.orgId && r.user_id === scope.viewerUid && !r.completado);
+  } else {
+    const { data, error } = await supabase
+      .from("advisor_reminders")
+      .select("*")
+      .eq("org_id", scope.orgId)
+      .eq("user_id", scope.viewerUid)
+      .eq("completado", false)
+      .order("fecha_hora", { ascending: true, nullsFirst: false });
+    if (error) throw error;
+    rows = data;
+  }
+  if (incluirFuturos) return rows;
+  const ahora = Date.now();
+  return rows.filter((r) => !r.fecha_hora || new Date(r.fecha_hora).getTime() <= ahora);
+}
+
+// Busca por id exacto o por coincidencia parcial de texto entre los
+// pendientes del usuario — el asesor no sabe el id, describe el recordatorio.
+async function completarRecordatorio(scope, referencia) {
+  const pendientes = await recordatoriosPendientes(scope);
+  const ref = String(referencia || "").toLowerCase();
+  const match = pendientes.find((r) => r.id === referencia) || pendientes.find((r) => r.descripcion.toLowerCase().includes(ref));
+  if (!match) return null;
+  if (!supabase) {
+    match.completado = true;
+    return match;
+  }
+  const { data, error } = await supabase.from("advisor_reminders").update({ completado: true }).eq("id", match.id).select().single();
+  if (error) throw error;
+  return data;
+}
+
 // ── Sesiones ──────────────────────────────────────────────────────────────
 // Retoma la sesion abierta del usuario o crea una nueva.
 async function ensureSession(scope) {
@@ -443,6 +508,9 @@ module.exports = {
   leadsParaPropiedad,
   cerrarLead,
   embudo,
+  crearRecordatorio,
+  recordatoriosPendientes,
+  completarRecordatorio,
   // Puras, exportadas para tests:
   parsePresupuesto,
   matchLeadsConPropiedad,

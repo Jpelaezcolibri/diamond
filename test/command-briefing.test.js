@@ -42,3 +42,21 @@ test("renderBriefing: dia sin nada urgente no inventa datos", () => {
   const text = renderBriefing({ userName: null, metrics: { nuevos: 0, por_estado: {}, por_fuente: {} }, follow: { total: 0, items: [] }, seed: null });
   assert.match(text, /no tienes pendientes urgentes/i);
 });
+
+test("renderBriefing: incluye los recordatorios personales vencidos/de hoy", () => {
+  const recordatorios = [{ id: "r1", descripcion: "llamar a Pedro por el credito" }];
+  const text = renderBriefing({
+    userName: "Claudia",
+    metrics: { nuevos: 0, por_estado: {}, por_fuente: {} },
+    follow: { total: 0, items: [] },
+    seed: null,
+    recordatorios,
+  });
+  assert.match(text, /1 recordatorio/);
+  assert.match(text, /llamar a Pedro por el credito/);
+});
+
+test("renderBriefing: sin recordatorios (undefined) no rompe ni inventa la linea", () => {
+  const text = renderBriefing({ userName: "Claudia", metrics: { nuevos: 0, por_estado: {}, por_fuente: {} }, follow: { total: 0, items: [] }, seed: null });
+  assert.doesNotMatch(text, /recordatorio/i);
+});

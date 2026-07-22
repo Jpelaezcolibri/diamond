@@ -68,7 +68,7 @@ function toApiMessages(history) {
 }
 
 // ── Ensamblador determinista del briefing (EXP-001) ───────────────────────
-function renderBriefing({ userName, metrics, follow, seed }) {
+function renderBriefing({ userName, metrics, follow, seed, recordatorios }) {
   const saludo = `Buenos dias${userName ? `, ${userName}` : ""}.`;
   const lineas = [];
 
@@ -80,6 +80,13 @@ function renderBriefing({ userName, metrics, follow, seed }) {
   if (Array.isArray(seed) && seed.length) {
     const nombres = seed.slice(0, 3).map(nombreDe).join(", ");
     lineas.push(`Ayer quedaron ${seed.length} pendiente(s) para hoy: ${nombres}.`);
+  }
+
+  // Recordatorios personales (crear_recordatorio) vencidos o de hoy — nunca
+  // se mezclan con los de otro asesor, ya vienen filtrados por user_id.
+  if (Array.isArray(recordatorios) && recordatorios.length) {
+    const detalle = recordatorios.slice(0, 3).map((r) => r.descripcion).join("; ");
+    lineas.push(`Tienes ${recordatorios.length} recordatorio(s) tuyo(s) para hoy: ${detalle}.`);
   }
 
   if (citas.length) {
@@ -169,12 +176,13 @@ async function openSession(scope, { userName } = {}) {
   if (!messages.length) {
     let briefing;
     try {
-      const [metrics, follow, seed] = await Promise.all([
+      const [metrics, follow, seed, recordatorios] = await Promise.all([
         command.metricasLeads(scope, {}),
         command.seguimientos(scope, { dias: 3 }),
         command.lastClosedTomorrowQueue(scope),
+        command.recordatoriosPendientes(scope, { incluirFuturos: false }),
       ]);
-      briefing = renderBriefing({ userName, metrics, follow, seed });
+      briefing = renderBriefing({ userName, metrics, follow, seed, recordatorios });
     } catch (e) {
       console.error("[sofi-comando] briefing degradado:", e.message);
       briefing = renderBriefingFallback({ userName });
