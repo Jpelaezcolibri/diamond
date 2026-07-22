@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { buildFinalCaption } from "@/lib/caption";
+import { CreativeImage } from "@/components/marketing/creative-image";
 import {
   PUBLICATION_STATUS_COLORS,
   PUBLICATION_STATUS_LABELS,
@@ -318,8 +319,13 @@ export default function ContentStudio({
                           : "Usar esta foto"
                     }
                   >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={c.imageUrl} alt={ROOM_TYPE_LABELS[c.roomType] || c.roomType} className="aspect-square w-full object-cover" />
+                    <CreativeImage
+                      src={c.imageUrl}
+                      alt={ROOM_TYPE_LABELS[c.roomType] || c.roomType}
+                      label={ROOM_TYPE_LABELS[c.roomType] || c.roomType}
+                      showRetry={false}
+                      className="aspect-square w-full object-cover"
+                    />
                     {/* Una sola linea con truncado (whitespace-nowrap + ellipsis): con
                         el score de brief-fit sumado, el texto ya no cabe siempre en
                         miniaturas chicas y llegaba a envolver en 3 lineas, tapando la
@@ -573,8 +579,7 @@ export default function ContentStudio({
           <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Creativos</h3>
           {cover?.public_url && (
             <div className="space-y-2">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={cover.public_url} alt={cover.alt_text || "Portada"} className="w-full rounded-xl border border-slate-200" />
+              <CreativeImage src={cover.public_url} alt={cover.alt_text || "Portada"} label="Portada" className="w-full rounded-xl border border-slate-200" />
               {photoPicker("cover")}
               {regenBox("cover")}
             </div>
@@ -586,11 +591,11 @@ export default function ContentStudio({
               </p>
               <div className="grid grid-cols-3 gap-1.5">
                 {carouselSlides.map((slide) => (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
+                  <CreativeImage
                     key={slide.id}
-                    src={slide.public_url!}
+                    src={slide.public_url}
                     alt={slide.alt_text || `Foto ${slide.position + 1} del carrusel`}
+                    label={`Foto ${slide.position + 1}`}
                     className="aspect-square w-full rounded-lg border border-slate-200 object-cover"
                   />
                 ))}
@@ -599,8 +604,7 @@ export default function ContentStudio({
           )}
           {story?.public_url && (
             <div className="space-y-2">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={story.public_url} alt="Historia" className="mx-auto w-1/2 rounded-xl border border-slate-200" />
+              <CreativeImage src={story.public_url} alt="Historia" label="Historia" className="mx-auto w-1/2 rounded-xl border border-slate-200" />
               {photoPicker("story")}
               {regenBox("story")}
             </div>
