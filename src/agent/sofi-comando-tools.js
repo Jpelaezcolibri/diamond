@@ -121,6 +121,28 @@ const COMMAND_TOOL_DEFINITIONS = [
       },
     },
   },
+  {
+    name: "registrar_propiedad_colega",
+    description:
+      "Registra una propiedad que un colega de OTRA inmobiliaria le comparte al asesor, para sumarla a la red de aliados del equipo. Usala cuando el asesor te cuente que un colega tiene un inmueble disponible ('mi colega Andrea de Century21 tiene un apto en Laureles en arriendo'). Queda guardada con el asesor como quien la registro: si mas adelante un cliente pregunta por algo similar, se le avisa a EL primero.",
+    input_schema: {
+      type: "object",
+      properties: {
+        ref: { type: "string", description: "Referencia de la propiedad, si la dieron" },
+        titulo: { type: "string", description: "Titulo o descripcion corta" },
+        tipo: { type: "string", description: "Tipo de propiedad: Apartamento, Casa, Apartaestudio, Finca, Lote" },
+        operacion: { type: "string", enum: ["Venta", "Arriendo"] },
+        precio: { type: "string", description: "Precio o canon, tal como lo dieron" },
+        zona: { type: "string", description: "Zona o barrio" },
+        ciudad: { type: "string", description: "Ciudad o municipio" },
+        descripcion: { type: "string", description: "Resto de detalles relevantes en texto libre" },
+        inmobiliaria_origen: { type: "string", description: "Inmobiliaria del colega" },
+        contacto_nombre: { type: "string", description: "Nombre del colega que comparte la propiedad" },
+        contacto_telefono: { type: "string", description: "Telefono del colega, si lo dieron" },
+      },
+      required: ["contacto_nombre"],
+    },
+  },
 ];
 
 // Techo de resultados por consulta: suficiente para un analisis, sin inundar
@@ -271,6 +293,13 @@ async function executeCommandTool(name, input, ctx) {
         "Propiedades de la RED DE ALIADOS (son de otras inmobiliarias — recuerdale al asesor confirmar disponibilidad y condiciones con el colega antes de ofrecerlas a su cliente):\n" +
         JSON.stringify(results, null, 2)
       );
+    }
+    case "registrar_propiedad_colega": {
+      await allyProperties.create(scope.orgId, {
+        ...input,
+        registrado_por: scope.viewerUid,
+      });
+      return `Propiedad de ${input.contacto_nombre} registrada en la red de aliados. Si un cliente pregunta por algo similar, te avisaremos a ti primero para que valides disponibilidad.`;
     }
     default:
       return `Herramienta desconocida: ${name}`;
