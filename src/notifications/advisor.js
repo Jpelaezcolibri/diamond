@@ -108,6 +108,26 @@ function formatAllyMatch(allyMatch) {
   return `Posible match en red de aliados: ${tipo}${zona}${precio}${ref} — contacto: ${contacto} (${inmobiliaria})${telefono}. CONFIRMA disponibilidad antes de ofrecerla al cliente.`;
 }
 
+// Aviso INMEDIATO al asesor DUENO de una propiedad de colega cuando un cliente
+// pregunta por algo similar — a diferencia de formatAllyMatch (nota dentro de
+// la alerta de transferencia), este mensaje viaja solo, apenas se detecta el
+// match, sin esperar a que el cliente califique o se transfiera.
+function buildAllyClientMatchAlert(allyProperty, lead) {
+  const tipo = allyProperty.tipo || "propiedad";
+  const zona = allyProperty.zona ? ` en ${allyProperty.zona}` : "";
+  const precio = allyProperty.precio ? `, ${allyProperty.precio}` : "";
+  const ref = allyProperty.ref ? ` (ref ${allyProperty.ref})` : "";
+  const contacto = allyProperty.contacto_nombre || "tu colega";
+  const inmobiliaria = allyProperty.inmobiliaria_origen ? ` de ${allyProperty.inmobiliaria_origen}` : "";
+  const clienteNombre = lead.nombre || "Un cliente";
+  const clienteTelefono = lead.phone ? ` (+${lead.phone})` : "";
+  return [
+    "Match con la red de aliados!",
+    `${clienteNombre}${clienteTelefono} pregunto por algo similar a la ${tipo}${zona}${precio}${ref} que te comparte ${contacto}${inmobiliaria}.`,
+    "Valida disponibilidad con tu colega antes de confirmarle al cliente.",
+  ].join("\n");
+}
+
 // Mensaje de alerta que recibe el asesor cuando un lead es transferido.
 function buildAdvisorAlert(org, lead, motivo, propertyInteres, especialidad, cita, allyMatch) {
   const intencion = lead.intencion;
@@ -145,4 +165,4 @@ function buildAdvisorAlert(org, lead, motivo, propertyInteres, especialidad, cit
   return lines.join("\n");
 }
 
-module.exports = { buildClientLink, buildAdvisorAlert };
+module.exports = { buildClientLink, buildAdvisorAlert, buildAllyClientMatchAlert };

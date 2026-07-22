@@ -1,6 +1,6 @@
 const { test } = require("node:test");
 const assert = require("node:assert");
-const { buildClientLink, buildAdvisorAlert } = require("../src/notifications/advisor");
+const { buildClientLink, buildAdvisorAlert, buildAllyClientMatchAlert } = require("../src/notifications/advisor");
 
 const org = { name: "Diamond" };
 const ventaAdvisor = { name: "Asesor Ventas", phone: "573028536489", especialidad: "venta" };
@@ -110,4 +110,35 @@ test("COMPRADOR con propiedad de interes: la alerta la muestra", () => {
   const alert = buildAdvisorAlert(org, lead, "Calificado", prop, "venta");
   assert.match(alert, /Propiedad de interes: 9702941/);
   assert.doesNotMatch(alert, /QUIERE VENDER/);
+});
+
+// --- buildAllyClientMatchAlert ---
+
+test("buildAllyClientMatchAlert: incluye colega, propiedad y quien pregunto", () => {
+  const allyProperty = {
+    tipo: "Apartamento",
+    zona: "Laureles",
+    precio: "$1.800.000",
+    ref: "10128030",
+    contacto_nombre: "Andrea Restrepo",
+    inmobiliaria_origen: "Century21",
+  };
+  const lead = { nombre: "Marta Gomez", phone: "573001112233" };
+  const alert = buildAllyClientMatchAlert(allyProperty, lead);
+  assert.match(alert, /Andrea Restrepo/);
+  assert.match(alert, /Century21/);
+  assert.match(alert, /Laureles/);
+  assert.match(alert, /Marta Gomez/);
+  assert.match(alert, /573001112233/);
+  assert.match(alert, /[Vv]alida disponibilidad/);
+});
+
+test("buildAllyClientMatchAlert: campos opcionales ausentes no rompen el mensaje", () => {
+  const allyProperty = { contacto_nombre: "Andrea" };
+  const lead = { phone: "573001112233" };
+  const alert = buildAllyClientMatchAlert(allyProperty, lead);
+  assert.match(alert, /Andrea/);
+  assert.match(alert, /Un cliente/);
+  assert.doesNotMatch(alert, /undefined/);
+  assert.doesNotMatch(alert, /null/);
 });
