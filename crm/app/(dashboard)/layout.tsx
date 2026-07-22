@@ -24,7 +24,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
     { href: "/kanban", label: "Kanban" },
     { href: "/leads", label: "Leads" },
     { href: "/aliados", label: "Red de aliados" },
-    ...(admin ? [{ href: "/marketing", label: "Marketing" }, { href: "/usuarios", label: "Usuarios" }] : []),
+    { href: "/marketing", label: "Marketing" },
+    ...(admin ? [{ href: "/usuarios", label: "Usuarios" }] : []),
   ];
 
   return (

@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { isAdmin } from "@/lib/auth";
 import { dmapJson } from "@/lib/dmap";
 
 // listCoverCandidates ahora suma una llamada a Claude vision cuando la
@@ -13,7 +12,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user || !isAdmin(user)) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
   const { id } = await params;
   const role = new URL(request.url).searchParams.get("role") === "story" ? "story" : "cover";

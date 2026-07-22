@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { isAdmin } from "@/lib/auth";
 import { dmapJson } from "@/lib/dmap";
 
 // El motor IA (GPT Image + critico, hasta 2 rondas) puede tomar ~1-2 min;
@@ -12,7 +11,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user || !isAdmin(user)) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
   const { id } = await params;
   const { role, notes, criticInstructions, sourceImageUrl } = await request.json();

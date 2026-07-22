@@ -8,7 +8,8 @@ export default async function MarketingLayout({ children }: { children: React.Re
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user || !isAdmin(user)) redirect("/inbox");
+  if (!user) redirect("/inbox");
+  const admin = isAdmin(user);
 
   return (
     <div className="mx-auto max-w-6xl p-4 sm:p-6">
@@ -22,7 +23,7 @@ export default async function MarketingLayout({ children }: { children: React.Re
         <NavLink href="/marketing/cola">Cola</NavLink>
         <NavLink href="/marketing/plantillas">Plantillas</NavLink>
         <NavLink href="/marketing/analytics">Analytics</NavLink>
-        <NavLink href="/marketing/configuracion">Configuración</NavLink>
+        {admin && <NavLink href="/marketing/configuracion">Configuración</NavLink>}
       </nav>
       {children}
     </div>

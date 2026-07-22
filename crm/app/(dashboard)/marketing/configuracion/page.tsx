@@ -1,4 +1,6 @@
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { isAdmin } from "@/lib/auth";
 import { getDefaultOrgId, type SocialConnectionRow } from "@/lib/marketing";
 import { dmapJson } from "@/lib/dmap";
 import MetaConnect from "@/components/marketing/meta-connect";
@@ -14,8 +16,16 @@ interface SettingsResponse {
   creative_engine?: "ai" | "template" | "designer" | "hybrid";
 }
 
+// Unica pantalla de Marketing que sigue siendo solo-admin (conexiones de Meta
+// y credenciales de Wasi): el layout padre ya no bloquea, asi que el guard
+// vive aca.
 export default async function ConfiguracionPage() {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user || !isAdmin(user)) redirect("/marketing");
+
   const orgId = await getDefaultOrgId(supabase);
   if (!orgId) return <p className="text-slate-500">No hay ninguna organización configurada todavía.</p>;
 

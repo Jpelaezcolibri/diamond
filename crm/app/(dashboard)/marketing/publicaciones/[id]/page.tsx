@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getTeamRoster } from "@/lib/team";
 import type { PublicationAssetRow, PublicationEventRow, PublicationRow, PublicationTargetRow, SocialConnectionRow } from "@/lib/marketing";
 import ContentStudio from "@/components/marketing/content-studio";
 
@@ -32,6 +33,9 @@ export default async function PublicationDetailPage({ params }: { params: Promis
     supabase.from("publication_targets").select("*").eq("publication_id", id),
   ]);
 
+  const roster = publication.approved_by ? await getTeamRoster() : null;
+  const approvedByName = publication.approved_by ? roster?.[publication.approved_by]?.nombre || null : null;
+
   return (
     <ContentStudio
       publication={publication}
@@ -39,6 +43,7 @@ export default async function PublicationDetailPage({ params }: { params: Promis
       events={(events || []) as PublicationEventRow[]}
       connections={(connections || []) as SocialConnectionRow[]}
       targets={(targets || []) as PublicationTargetRow[]}
+      approvedByName={approvedByName}
     />
   );
 }

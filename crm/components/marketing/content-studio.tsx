@@ -110,12 +110,14 @@ export default function ContentStudio({
   events,
   connections,
   targets,
+  approvedByName,
 }: {
   publication: PublicationWithProperty;
   assets: PublicationAssetRow[];
   events: PublicationEventRow[];
   connections: SocialConnectionRow[];
   targets: PublicationTargetRow[];
+  approvedByName?: string | null;
 }) {
   const router = useRouter();
   const isDraft = publication.status === "draft";
@@ -494,9 +496,12 @@ export default function ContentStudio({
             {publication.properties?.operacion} {publication.properties?.precio}
           </p>
         </div>
-        <span className={`rounded-full px-3 py-1 text-xs font-medium ${PUBLICATION_STATUS_COLORS[publication.status]}`}>
-          {PUBLICATION_STATUS_LABELS[publication.status]}
-        </span>
+        <div className="flex flex-col items-end gap-1">
+          <span className={`rounded-full px-3 py-1 text-xs font-medium ${PUBLICATION_STATUS_COLORS[publication.status]}`}>
+            {PUBLICATION_STATUS_LABELS[publication.status]}
+          </span>
+          {approvedByName && <span className="text-xs text-slate-400">Aprobado por {approvedByName}</span>}
+        </div>
       </div>
 
       {message && (
