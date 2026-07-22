@@ -1,5 +1,6 @@
 import { env } from "../config/env.js";
 import { FatalError } from "../lib/errors.js";
+import { fetchImageBuffer } from "../lib/fetch-image.js";
 import { logger } from "../lib/logger.js";
 import {
   COST_PER_GEMINI_IMAGE_USD,
@@ -382,14 +383,18 @@ export interface CarouselDeps {
   fetchFn?: typeof fetch;
   prepare?: typeof prepareCarouselPhoto;
   upload?: typeof uploadCreative;
+  /** Inyectable para tests: evita las esperas reales del backoff. */
+  sleep?: (ms: number) => Promise<void>;
 }
 
 /**
  * Slides del carrusel a partir de las fotos reales rankeadas (sin el cover:
  * el creative IA ya protagoniza esa foto y va de slide 1). Cada foto se
  * recorta a 1080x1080 y se sube al bucket (Meta exige URL publica; ademas
- * unifica el ratio de todos los hijos del carrusel). Una foto que falle se
- * omite con warn — un slide menos no debe tumbar la generacion completa.
+ * unifica el ratio de todos los hijos del carrusel). La descarga de Wasi se
+ * reintenta (ver fetchImageBuffer) para no perder slides por un fallo
+ * transitorio del CDN; si aun asi falla, ese slide se omite con warn — un
+ * slide menos no debe tumbar la generacion completa.
  */
 export async function produceCarouselSlides(
   orgId: string,
@@ -406,9 +411,7 @@ export async function produceCarouselSlides(
     carouselPhotoUrls.map(async (url, i): Promise<CreateAssetInput | null> => {
       const position = i + 1; // position 0 es el cover creative
       try {
-        const response = await fetchFn(url);
-        if (!response.ok) throw new Error(`descarga fallo con status ${response.status}`);
-        const source = Buffer.from(await response.arrayBuffer());
+        const source = await fetchImageBuffer(url, { fetchFn, ...(deps.sleep ? { sleep: deps.sleep } : {}) });
         const rendered = await prepare(source);
         const uploaded = await upload(orgId, publicationId, "carousel", position, rendered.buffer);
         return {

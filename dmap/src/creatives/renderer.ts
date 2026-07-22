@@ -7,6 +7,7 @@ import { resolveLayout } from "./layouts/index.js";
 import type { BrandProfile } from "./brand.js";
 import type { CreativeData } from "./layouts/types.js";
 import { CREATIVE_SIZES, type CreativeSizeKey } from "../config/constants.js";
+import { fetchImageBuffer } from "../lib/fetch-image.js";
 
 export interface RenderedCreative {
   buffer: Buffer;
@@ -43,10 +44,10 @@ export async function renderSatoriTree(tree: unknown, size: { width: number; hei
   return { buffer: jpeg, width: size.width, height: size.height, format: "jpeg" };
 }
 
+/** Descarga con reintentos: es el piso del fallback de creatives (template),
+ *  no puede caerse por un blip transitorio de Wasi. */
 async function downloadImage(imageUrl: string): Promise<Buffer> {
-  const response = await fetch(imageUrl);
-  if (!response.ok) throw new Error(`No se pudo descargar ${imageUrl}: ${response.status}`);
-  return Buffer.from(await response.arrayBuffer());
+  return fetchImageBuffer(imageUrl);
 }
 
 /**

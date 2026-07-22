@@ -260,14 +260,18 @@ describe("produceAsset (seleccion de motor + fallback)", () => {
 describe("produceCarouselSlides", () => {
   const okResponse = () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) }) as unknown as Response;
 
+  const errResponse = (status: number) => ({ ok: false, status, arrayBuffer: async () => new ArrayBuffer(0) }) as unknown as Response;
+
   function makeDeps() {
     return {
-      fetchFn: vi.fn(async () => okResponse()),
+      fetchFn: vi.fn<typeof fetch>(async () => okResponse()),
       prepare: vi.fn(async () => ({ buffer: Buffer.from("jpg"), width: 1080, height: 1080, format: "jpeg" as const })),
       upload: vi.fn(async (_org: string, pub: string, role: string, position: number) => ({
         storagePath: `org-1/${pub}/${role}-${position}.jpg`,
         publicUrl: `https://storage.example.com/org-1/${pub}/${role}-${position}.jpg`
-      }))
+      })),
+      // Sin esperas reales del backoff en los tests.
+      sleep: async () => {}
     };
   }
 
@@ -287,9 +291,12 @@ describe("produceCarouselSlides", () => {
     expect(slides[1]!.source_image_url).toBe("https://image.wasi.co/c");
   });
 
-  it("una foto que falla se omite sin tumbar los demas slides (y conserva su position original)", async () => {
+  it("una foto que falla en TODOS los intentos se omite sin tumbar los demas slides (conserva su position)", async () => {
     const deps = makeDeps();
-    deps.fetchFn.mockImplementationOnce(async () => ({ ok: false, status: 404 }) as unknown as Response);
+    // Falla siempre para la foto "rota" (agota los reintentos); el resto ok.
+    deps.fetchFn.mockImplementation(async (input: Parameters<typeof fetch>[0]) =>
+      String(input).includes("rota") ? errResponse(404) : okResponse()
+    );
     const slides = await produceCarouselSlides(
       "org-1",
       "pub-1",
@@ -300,6 +307,18 @@ describe("produceCarouselSlides", () => {
     expect(slides).toHaveLength(1);
     expect(slides[0]!.position).toBe(2);
     expect(slides[0]!.source_image_url).toBe("https://image.wasi.co/c");
+  });
+
+  it("un fallo transitorio de Wasi se reintenta y el slide se recupera (no se pierde)", async () => {
+    const deps = makeDeps();
+    // Primer intento de la foto falla (5xx), el reintento entrega la imagen.
+    deps.fetchFn
+      .mockImplementationOnce(async () => errResponse(503))
+      .mockImplementation(async () => okResponse());
+    const slides = await produceCarouselSlides("org-1", "pub-1", ["https://image.wasi.co/flaky"], "Foto", deps);
+    expect(slides).toHaveLength(1);
+    expect(slides[0]!.position).toBe(1);
+    expect(deps.fetchFn.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
   it("sin fotos extra devuelve vacio sin llamar red ni storage", async () => {
