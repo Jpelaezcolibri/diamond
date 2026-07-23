@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { ESTADO_COLORS, ESTADO_LABELS, type Conversation, type Message } from "@/lib/types";
+import { ESTADO_COLORS, ESTADO_LABELS, absoluteDateTime, dayLabel, type Conversation, type Message } from "@/lib/types";
 
 function hora(iso: string) {
   try {
@@ -11,6 +11,16 @@ function hora(iso: string) {
   } catch {
     return "";
   }
+}
+
+function DaySeparator({ label }: { label: string }) {
+  return (
+    <div className="my-2 flex justify-center">
+      <span className="rounded-lg bg-white/90 px-3 py-1 text-[11px] font-medium text-slate-500 shadow-sm">
+        {label}
+      </span>
+    </div>
+  );
 }
 
 function MediaContent({ m }: { m: Message }) {
@@ -200,37 +210,43 @@ export default function ChatView({
 
       {/* Mensajes — lienzo estilo WhatsApp */}
       <div className="flex-1 space-y-1 overflow-y-auto bg-[#efeae2] p-4" style={{ backgroundImage: "radial-gradient(circle at 1px 1px, rgba(0,0,0,0.04) 1px, transparent 0)", backgroundSize: "18px 18px" }}>
-        {messages.map((m) => {
+        {messages.map((m, i) => {
           const mine = m.role === "assistant";
           const quoted = m.reply_to_id ? byId.get(m.reply_to_id) : null;
+          const prev = messages[i - 1];
+          const showDaySeparator =
+            !prev || new Date(m.created_at).toDateString() !== new Date(prev.created_at).toDateString();
           return (
-            <div key={m.id} className={`group flex ${mine ? "justify-end" : "justify-start"}`}>
-              <div
-                className={`relative max-w-[78%] rounded-lg px-2.5 py-1.5 text-sm shadow-sm ${
-                  mine ? "rounded-tr-none bg-[#d9fdd3]" : "rounded-tl-none bg-white"
-                }`}
-              >
-                {quoted && (
-                  <div className="mb-1 rounded border-l-4 border-emerald-500 bg-black/5 px-2 py-1 text-xs text-slate-600">
-                    <span className="font-semibold">{quoted.role === "user" ? lead?.nombre || "Cliente" : "Diamond"}: </span>
-                    {(quoted.content || "").slice(0, 90)}
-                  </div>
-                )}
-                <MediaContent m={m} />
-                {m.content && !(m.type && m.type !== "text" && m.content.startsWith("[")) && (
-                  <p className="whitespace-pre-wrap break-words">{m.content}</p>
-                )}
-                <div className="mt-0.5 flex items-center justify-end gap-1 text-[10px] text-slate-400">
-                  {hora(m.created_at)}
-                  {mine && <span className="text-sky-500">✓✓</span>}
-                </div>
-                <button
-                  onClick={() => setReplyTo(m)}
-                  title="Responder"
-                  className="absolute -top-2 right-1 hidden rounded-full border border-slate-200 bg-white px-1.5 text-xs shadow group-hover:block"
+            <div key={m.id}>
+              {showDaySeparator && <DaySeparator label={dayLabel(m.created_at)} />}
+              <div className={`group flex ${mine ? "justify-end" : "justify-start"}`}>
+                <div
+                  className={`relative max-w-[78%] rounded-lg px-2.5 py-1.5 text-sm shadow-sm ${
+                    mine ? "rounded-tr-none bg-[#d9fdd3]" : "rounded-tl-none bg-white"
+                  }`}
                 >
-                  ↩
-                </button>
+                  {quoted && (
+                    <div className="mb-1 rounded border-l-4 border-emerald-500 bg-black/5 px-2 py-1 text-xs text-slate-600">
+                      <span className="font-semibold">{quoted.role === "user" ? lead?.nombre || "Cliente" : "Diamond"}: </span>
+                      {(quoted.content || "").slice(0, 90)}
+                    </div>
+                  )}
+                  <MediaContent m={m} />
+                  {m.content && !(m.type && m.type !== "text" && m.content.startsWith("[")) && (
+                    <p className="whitespace-pre-wrap break-words">{m.content}</p>
+                  )}
+                  <div className="mt-0.5 flex items-center justify-end gap-1 text-[10px] text-slate-400">
+                    <span title={absoluteDateTime(m.created_at)}>{hora(m.created_at)}</span>
+                    {mine && <span className="text-sky-500">✓✓</span>}
+                  </div>
+                  <button
+                    onClick={() => setReplyTo(m)}
+                    title="Responder"
+                    className="absolute -top-2 right-1 hidden rounded-full border border-slate-200 bg-white px-1.5 text-xs shadow group-hover:block"
+                  >
+                    ↩
+                  </button>
+                </div>
               </div>
             </div>
           );
