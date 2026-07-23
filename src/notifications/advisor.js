@@ -128,6 +128,21 @@ function buildAllyClientMatchAlert(allyProperty, lead) {
   ].join("\n");
 }
 
+// Aviso INMEDIATO al asesor cuando se le agenda una visita/cita con dia y hora
+// validados contra su agenda — viaja apenas se confirma la cita, sin esperar
+// la transferencia (ver ctx.appointmentAlert en tools.js).
+function buildAppointmentAlert(advisor, lead, cita) {
+  const tipoLabel = { visita: "una visita", llamada: "una llamada", asesoria: "una asesoría" }[cita.tipo] || "una cita";
+  const clienteNombre = lead.nombre || "un cliente";
+  const clienteTelefono = lead.phone ? ` (+${lead.phone})` : "";
+  const fechaHora = formatCitaFechaHora(cita.fecha_hora);
+  const cuando = fechaHora ? `el ${fechaHora.fecha} a las ${fechaHora.hora}` : cita.descripcion || "próximamente";
+  const inmueble = lead.property_ref_origen ? `\nPropiedad de interés: ${lead.property_ref_origen}` : "";
+  const calLink = buildCalendarLink(cita, lead);
+  const cal = calLink ? `\nAgendar en tu calendario: ${calLink}` : "";
+  return `Nueva cita agendada!\nTienes ${tipoLabel} con ${clienteNombre}${clienteTelefono} ${cuando}.${inmueble}${cal}`;
+}
+
 // Mensaje de alerta que recibe el asesor cuando un lead es transferido.
 function buildAdvisorAlert(org, lead, motivo, propertyInteres, especialidad, cita, allyMatch) {
   const intencion = lead.intencion;
@@ -165,4 +180,4 @@ function buildAdvisorAlert(org, lead, motivo, propertyInteres, especialidad, cit
   return lines.join("\n");
 }
 
-module.exports = { buildClientLink, buildAdvisorAlert, buildAllyClientMatchAlert };
+module.exports = { buildClientLink, buildAdvisorAlert, buildAllyClientMatchAlert, buildAppointmentAlert };

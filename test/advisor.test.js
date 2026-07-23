@@ -1,6 +1,6 @@
 const { test } = require("node:test");
 const assert = require("node:assert");
-const { buildClientLink, buildAdvisorAlert, buildAllyClientMatchAlert } = require("../src/notifications/advisor");
+const { buildClientLink, buildAdvisorAlert, buildAllyClientMatchAlert, buildAppointmentAlert } = require("../src/notifications/advisor");
 
 const org = { name: "Diamond" };
 const ventaAdvisor = { name: "Asesor Ventas", phone: "573028536489", especialidad: "venta" };
@@ -141,4 +141,31 @@ test("buildAllyClientMatchAlert: campos opcionales ausentes no rompen el mensaje
   assert.match(alert, /Un cliente/);
   assert.doesNotMatch(alert, /undefined/);
   assert.doesNotMatch(alert, /null/);
+});
+
+// --- buildAppointmentAlert ---
+
+test("buildAppointmentAlert: incluye tipo, cliente, dia/hora legible y propiedad", () => {
+  const advisor = { name: "Camila", phone: "573009990000" };
+  const lead = { nombre: "Marta Gomez", phone: "573001112233", property_ref_origen: "9702941" };
+  const cita = { tipo: "visita", fecha_hora: "2026-07-24T15:00:00-05:00", descripcion: "manana a las 3" };
+  const alert = buildAppointmentAlert(advisor, lead, cita);
+  assert.match(alert, /Nueva cita agendada/);
+  assert.match(alert, /visita/i);
+  assert.match(alert, /Marta Gomez/);
+  assert.match(alert, /573001112233/);
+  assert.match(alert, /24 de julio/); // fecha legible es-CO
+  assert.match(alert, /3:00/);        // hora local Colombia
+  assert.match(alert, /9702941/);     // propiedad de interes
+  assert.doesNotMatch(alert, /undefined/);
+});
+
+test("buildAppointmentAlert: sin fecha parseable cae a la descripcion del cliente", () => {
+  const advisor = { name: "Camila", phone: "573009990000" };
+  const lead = { nombre: "Ana", phone: "573002" };
+  const cita = { tipo: "llamada", fecha_hora: null, descripcion: "el fin de semana" };
+  const alert = buildAppointmentAlert(advisor, lead, cita);
+  assert.match(alert, /llamada/i);
+  assert.match(alert, /el fin de semana/);
+  assert.doesNotMatch(alert, /calendar\.google\.com/); // sin fecha, sin link de calendario
 });

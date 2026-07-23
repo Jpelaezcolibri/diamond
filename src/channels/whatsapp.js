@@ -173,7 +173,7 @@ router.post("/webhook", async (req, res) => {
     // anuncio de clic-a-WhatsApp (Meta adjunta este objeto automaticamente).
     const adReferral = message.referral || null;
 
-    const { reply, transfer, allyAlert, assistantMessageId } = await procesarMensaje({
+    const { reply, transfer, allyAlert, appointmentAlert, assistantMessageId } = await procesarMensaje({
       org,
       phone: userPhone,
       text: userText,
@@ -194,6 +194,9 @@ router.post("/webhook", async (req, res) => {
     }
     if (allyAlert) {
       await sendWhatsApp(org, allyAlert.advisorPhone, allyAlert.advisorAlert, { fromPhoneId: phoneNumberId });
+    }
+    if (appointmentAlert) {
+      await sendWhatsApp(org, appointmentAlert.advisorPhone, appointmentAlert.advisorAlert, { fromPhoneId: phoneNumberId });
     }
   } catch (e) {
     console.error("[whatsapp] Error procesando webhook:", e);

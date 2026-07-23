@@ -101,7 +101,7 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
     }
   }
 
-  const ctx = { org, lead, propertyInteres: null, transfer: null, cita: null, allyMatch: null, allyAlert: null, lastUserMessage: text };
+  const ctx = { org, lead, propertyInteres: null, transfer: null, cita: null, allyMatch: null, allyAlert: null, appointmentAlert: null, lastUserMessage: text };
   if (lead.property_ref_origen) {
     const origen = await properties.findByRef(org.id, lead.property_ref_origen);
     if (origen?.disponible) ctx.propertyInteres = origen;
@@ -201,7 +201,11 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
   // se transfiera o califique (ver ctx.allyAlert en tools.js).
   const allyAlert = ctx.allyAlert || null;
 
-  return { reply, lead, transfer, allyAlert, assistantMessageId: assistantMsg?.id || null };
+  // Aviso inmediato al asesor cuando se le confirma una cita con dia/hora
+  // validados contra su agenda — independiente de transfer (ver agendar_cita).
+  const appointmentAlert = ctx.appointmentAlert || null;
+
+  return { reply, lead, transfer, allyAlert, appointmentAlert, assistantMessageId: assistantMsg?.id || null };
 }
 
 module.exports = { procesarMensaje };

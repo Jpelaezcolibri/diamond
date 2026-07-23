@@ -3,8 +3,9 @@ const leads = require("../data/leads");
 const advisors = require("../data/advisors");
 const allyProperties = require("../data/ally-properties");
 const propertyContext = require("../data/property-context");
+const appointments = require("../data/appointments");
 const { computeScore, isQualified } = require("./qualification");
-const { buildClientLink, buildAllyClientMatchAlert } = require("../notifications/advisor");
+const { buildClientLink, buildAllyClientMatchAlert, buildAppointmentAlert } = require("../notifications/advisor");
 const { LEGAL_TOPICS, LEGAL_DISCLAIMER } = require("./knowledge");
 
 const TOOL_DEFINITIONS = [
@@ -68,7 +69,7 @@ const TOOL_DEFINITIONS = [
   {
     name: "agendar_cita",
     description:
-      "Registra la cita o preferencia de contacto del cliente con el asesor (dia y hora). Usala cuando el cliente indique cuando quiere que lo contacten, cuando quiere visitar un inmueble, o cuando agenda una asesoria (ej para vender). Deja la cita lista y estructurada para el asesor. Llamala ANTES de transferir_a_asesor cuando el cliente ya dio dia/hora, para que el asesor reciba todo junto.",
+      "Registra la cita o preferencia de contacto del cliente con el asesor (dia y hora). Usala cuando el cliente indique cuando quiere que lo contacten, cuando quiere visitar un inmueble, o cuando agenda una asesoria (ej para vender). Si das fecha y hora concretas, el sistema valida la agenda del asesor (horario laboral y que no haya otra cita a esa hora): si el resultado dice que NO se pudo agendar, pidele al cliente otro dia u hora y vuelve a intentar — no insistas con el mismo horario ni inventes horas libres. Llamala ANTES de transferir_a_asesor cuando el cliente ya dio dia/hora, para que el asesor reciba todo junto.",
     input_schema: {
       type: "object",
       properties: {
@@ -255,6 +256,43 @@ async function executeTool(name, input, ctx) {
       estado: "solicitada",
       creada_at: new Date().toISOString(),
     };
+
+    // Con dia/hora concretos: resolver el asesor de la especialidad (misma
+    // logica que transferir_a_asesor, sin el input.especialidad que aqui no
+    // existe) y validar SU agenda antes de confirmar. Sin fecha_hora (cliente
+    // vago) no hay nada que validar: se guarda como texto, como siempre.
+    if (cita.fecha_hora) {
+      const ESP_POR_INTENCION = { vender: "venta", comprar: "venta", arrendar: "arriendo", vehiculos: "vehiculos" };
+      const especialidad =
+        ESP_POR_INTENCION[ctx.lead.intencion] || (ctx.propertyInteres?.operacion || "").toLowerCase() || "venta";
+      let advisor = null;
+      try {
+        advisor = await advisors.findForTransfer(ctx.org, especialidad);
+      } catch (e) {
+        console.warn("[tools] No se pudo resolver el asesor para validar la agenda:", e.message);
+      }
+      if (advisor) {
+        let dispo = { disponible: true };
+        try {
+          dispo = await appointments.checkAvailability(ctx.org.id, advisor, cita.fecha_hora, { excludeLeadId: ctx.lead.id });
+        } catch (e) {
+          console.warn("[tools] No se pudo validar la disponibilidad de la agenda:", e.message);
+        }
+        if (!dispo.disponible) {
+          const motivo =
+            dispo.motivo === "fuera_de_horario"
+              ? "ese horario esta fuera del horario de atencion del asesor"
+              : "el asesor ya tiene otra cita a esa hora";
+          // NO se persiste la cita: se le pide al cliente otro horario.
+          return `No se pudo agendar: ${motivo}. Ofrecele al cliente proponer OTRO dia u hora; no inventes horarios libres, preguntale que otro momento le sirve y vuelve a intentar agendar.`;
+        }
+        // Estampa el asesor dueno de la agenda (para el calendario grupal y el
+        // anti-choque) y prepara el aviso inmediato de la cita.
+        if (advisor.auth_user_id) cita.advisor_id = advisor.auth_user_id;
+        ctx.appointmentAlert = { advisorPhone: advisor.phone, advisorAlert: buildAppointmentAlert(advisor, ctx.lead, cita) };
+      }
+    }
+
     // En memoria: la cita viaja al asesor en la alerta aunque la persistencia falle.
     ctx.cita = cita;
     ctx.lead.cita = cita;
@@ -266,7 +304,10 @@ async function executeTool(name, input, ctx) {
     } catch (e) {
       console.warn("[tools] No se pudo persistir la cita (revisar migracion leads.cita):", e.message);
     }
-    return `Cita registrada: ${cita.descripcion}${cita.fecha_hora ? ` (${cita.fecha_hora})` : ""} — tipo ${cita.tipo}. Cuando transfieras al asesor la vera en la alerta. Confirma al cliente con calidez, repitiendo el dia y la hora, y deja claro el siguiente paso.`;
+    const notificado = ctx.appointmentAlert
+      ? " El asesor ya fue notificado de la cita."
+      : " Cuando transfieras al asesor la vera en la alerta.";
+    return `Cita registrada: ${cita.descripcion}${cita.fecha_hora ? ` (${cita.fecha_hora})` : ""} — tipo ${cita.tipo}.${notificado} Confirma al cliente con calidez, repitiendo el dia y la hora, y deja claro el siguiente paso.`;
   }
 
   if (name === "consultar_guia_legal") {
