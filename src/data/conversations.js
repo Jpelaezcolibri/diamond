@@ -101,6 +101,47 @@ async function resetForLead(leadId) {
   if (error) throw error;
 }
 
+// Candidatos a seguimiento automatico de Sofi (Capa B Fase 1): conversaciones
+// ACTIVAS en modo bot cuyo cliente lleva entre minSilenceMin y maxSilenceMin
+// sin escribir (last_activity_at solo se actualiza con mensajes ENTRANTES del
+// cliente, asi que es exactamente el reloj de silencio y de la ventana de 24h).
+// El filtro de estado del lead y del flag de seguimiento se hace aca; el de
+// "el ultimo mensaje fue de Sofi" lo hace el worker mensaje a mensaje.
+async function followupCandidates(orgId, { minSilenceMin, maxSilenceMin, estados }) {
+  if (!supabase) return [];
+  const now = Date.now();
+  const desde = new Date(now - maxSilenceMin * 60 * 1000).toISOString();
+  const hasta = new Date(now - minSilenceMin * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from("conversations")
+    .select("*, leads!inner(*)")
+    .eq("org_id", orgId)
+    .eq("estado", "activa")
+    .or("modo.is.null,modo.eq.bot")
+    .gte("last_activity_at", desde)
+    .lte("last_activity_at", hasta)
+    .in("leads.estado", estados)
+    .limit(50);
+  if (error) throw error;
+  return (data || []).filter((c) => !c.leads?.seguimiento?.t24_sent_at);
+}
+
+// Ultimo mensaje de una conversacion (para saber quien hablo de ultimo).
+async function lastMessage(conversationId) {
+  if (!supabase) {
+    const msgs = memory.messages.filter((m) => m.conversation_id === conversationId);
+    return msgs[msgs.length - 1] || null;
+  }
+  const { data } = await supabase
+    .from("messages")
+    .select("role, content, created_at")
+    .eq("conversation_id", conversationId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data;
+}
+
 // Cambia el modo de atencion de una conversacion: 'bot' (Sofi) | 'humano' (asesor via CRM)
 async function setModo(conversationId, modo) {
   if (!supabase) {
@@ -114,4 +155,14 @@ async function setModo(conversationId, modo) {
   return data;
 }
 
-module.exports = { findOrCreate, appendMessage, getRecentMessages, resetForLead, setModo, setWaMessageId, findByWaMessageId };
+module.exports = {
+  findOrCreate,
+  appendMessage,
+  getRecentMessages,
+  resetForLead,
+  setModo,
+  setWaMessageId,
+  findByWaMessageId,
+  followupCandidates,
+  lastMessage,
+};

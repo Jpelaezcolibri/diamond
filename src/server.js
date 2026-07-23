@@ -63,4 +63,5 @@ app.listen(config.port, () => {
   // Temporizador de recordatorios de cita (solo con base real: en modo demo
   // no hay citas persistidas que recordar).
   if (config.supabaseUrl) require("./scheduler/reminders").start();
+  if (config.supabaseUrl) require("./scheduler/followups").start();
 });

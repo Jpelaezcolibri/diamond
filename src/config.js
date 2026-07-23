@@ -37,6 +37,20 @@ const config = {
     windowMin: parseInt(process.env.REMINDER_WINDOW_MIN || "60", 10),
     intervalMin: parseInt(process.env.REMINDER_INTERVAL_MIN || "10", 10),
   },
+
+  // Seguimiento automatico de Sofi al cliente que dejo de responder (Capa B
+  // Fase 1, ver diamond-os/sofi-conversacion-2.0.md). Un unico toque contextual
+  // dentro de la ventana de 24h de WhatsApp (texto libre, sin plantilla).
+  // Requiere la migracion 2026-07-23_lead_seguimiento (columna leads.seguimiento);
+  // si falta, el worker se auto-desactiva con un warn.
+  followups: {
+    enabled: process.env.FOLLOWUPS_ENABLED !== "false",
+    silenceMin: parseInt(process.env.FOLLOWUP_SILENCE_MIN || "120", 10), // 2h de silencio del cliente
+    maxSilenceMin: parseInt(process.env.FOLLOWUP_MAX_SILENCE_MIN || "1200", 10), // tope 20h: margen antes del cierre de la ventana de 24h
+    intervalMin: parseInt(process.env.FOLLOWUP_INTERVAL_MIN || "15", 10),
+    quietStartHour: parseInt(process.env.FOLLOWUP_QUIET_START || "20", 10), // silencio 8pm...
+    quietEndHour: parseInt(process.env.FOLLOWUP_QUIET_END || "8", 10), // ...a 8am (hora Colombia)
+  },
 };
 
 if (!config.anthropicApiKey) {
