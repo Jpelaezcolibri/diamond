@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { leadIdForConversation, assertOwnsLead } from "@/lib/lead-access";
+import { leadIdForConversation, assertOwnsLead, claimLeadIfFree } from "@/lib/lead-access";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -20,6 +20,8 @@ export async function POST(request: Request) {
   if (!leadId) return NextResponse.json({ error: "Conversación no encontrada" }, { status: 404 });
   const denied = await assertOwnsLead(admin, user, leadId);
   if (denied) return denied;
+  // Escribirle al cliente = atenderlo: el lead queda bajo el owner del asesor.
+  await claimLeadIfFree(admin, user, leadId);
 
   const res = await fetch(
     `${process.env.BOT_API_URL}/api/conversations/${conversationId}/send`,

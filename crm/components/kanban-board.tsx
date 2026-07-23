@@ -57,6 +57,12 @@ function LeadCard({
         <span title={absoluteDateTime(lead.created_at)}>Ingreso: {relativeTime(lead.created_at)}</span>
         {lastActivity && <span title={absoluteDateTime(lastActivity)}>· Act.: {relativeTime(lastActivity)}</span>}
       </p>
+      {lead.transferido_a_nombre && (
+        <p className="mt-1 truncate text-[10px] font-medium text-emerald-700">
+          ➜ {lead.transferido_a_nombre}
+          {lead.transferido_at ? ` · ${absoluteDateTime(lead.transferido_at)}` : ""}
+        </p>
+      )}
       <div className="mt-2 flex items-center justify-between gap-2">
         <OwnerBadge
           leadId={lead.id}

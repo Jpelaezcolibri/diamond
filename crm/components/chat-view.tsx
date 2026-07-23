@@ -196,6 +196,12 @@ export default function ChatView({
               {modo === "bot" ? "🤖 Sofi atendiendo" : "🙋 Asesor al mando"}
               {lead?.property_ref_origen ? ` · ${lead.property_ref_origen}` : ""}
             </p>
+            {lead?.transferido_a_nombre && (
+              <p className="truncate text-[11px] text-emerald-700" title={lead.transferido_at ? absoluteDateTime(lead.transferido_at) : undefined}>
+                ➜ Transferido a {lead.transferido_a_nombre}
+                {lead.transferido_at ? ` · ${absoluteDateTime(lead.transferido_at)}` : ""}
+              </p>
+            )}
           </div>
         </div>
         <button
@@ -216,6 +222,22 @@ export default function ChatView({
           const prev = messages[i - 1];
           const showDaySeparator =
             !prev || new Date(m.created_at).toDateString() !== new Date(prev.created_at).toDateString();
+          // Nota de evento (ej. "Transferido a...") — centrada, sin burbuja.
+          if (m.role === "system") {
+            return (
+              <div key={m.id}>
+                {showDaySeparator && <DaySeparator label={dayLabel(m.created_at)} />}
+                <div className="my-2 flex justify-center">
+                  <span
+                    title={absoluteDateTime(m.created_at)}
+                    className="rounded-lg bg-amber-50 px-3 py-1 text-center text-[11px] font-medium text-amber-800 shadow-sm ring-1 ring-amber-200"
+                  >
+                    {m.content}
+                  </span>
+                </div>
+              </div>
+            );
+          }
           return (
             <div key={m.id}>
               {showDaySeparator && <DaySeparator label={dayLabel(m.created_at)} />}

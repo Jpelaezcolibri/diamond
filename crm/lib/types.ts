@@ -17,6 +17,11 @@ export type Lead = {
   ad_referral: { headline?: string; source_id?: string; source_url?: string; ctwa_clid?: string } | null;
   owner_id: string | null;
   owner_assigned_at: string | null;
+  /** Registro de transferencia (migracion 2026-07-23_lead_transferencia).
+   *  Opcionales: si la migracion no ha corrido, simplemente no llegan. */
+  transferido_advisor_id?: string | null;
+  transferido_a_nombre?: string | null;
+  transferido_at?: string | null;
   /** Cierre del negocio (Sprint "Cero Leads Perdidos"): estado cerrado_ganado | cerrado_perdido. */
   closed_at?: string | null;
   valor_cierre?: number | null;
@@ -84,7 +89,8 @@ export const ALLY_ESTADO_COLORS: Record<string, string> = {
 export type Message = {
   id: string;
   conversation_id: string;
-  role: "user" | "assistant";
+  /** 'system' = nota de evento (ej. "Transferido a...") — se muestra centrada, no como burbuja. */
+  role: "user" | "assistant" | "system";
   content: string;
   type?: "text" | "image" | "audio" | "document" | "video" | null;
   media_url?: string | null;

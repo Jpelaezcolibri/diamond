@@ -14,6 +14,21 @@ export async function leadIdForConversation(admin: AdminClient, conversationId: 
 // owner ni admin). Usar antes de cualquier accion que "atienda" al cliente:
 // enviar mensaje, cambiar modo bot/humano, etc. Solo lectura — no reclama
 // ownership (ver claim/estado routes para el update atomico que sí lo hace).
+// Atender un cliente reclama su ownership: si el lead esta libre, queda bajo
+// el asesor que lo esta atendiendo (tomar control del chat o escribirle).
+// Los admins triagean sin auto-asignarse, igual que en el kanban. El update es
+// condicional y atomico (`owner_id is null`) para que dos asesores simultaneos
+// no se pisen; si ya tiene dueno, no hace nada.
+export async function claimLeadIfFree(admin: AdminClient, user: User, leadId: string): Promise<void> {
+  if (isAdmin(user)) return;
+  const now = new Date().toISOString();
+  await admin
+    .from("leads")
+    .update({ owner_id: user.id, owner_assigned_at: now, updated_at: now })
+    .eq("id", leadId)
+    .is("owner_id", null);
+}
+
 export async function assertOwnsLead(admin: AdminClient, user: User, leadId: string): Promise<NextResponse | null> {
   const { data: lead, error } = await admin.from("leads").select("owner_id").eq("id", leadId).maybeSingle();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
