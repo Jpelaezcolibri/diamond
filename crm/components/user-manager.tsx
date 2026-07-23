@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { ROLES } from "@/lib/auth";
 
+type Horario = { dias: number[]; desde: string; hasta: string };
+
 type TeamUser = {
   id: string;
   email: string;
@@ -10,6 +12,7 @@ type TeamUser = {
   role: string;
   roleLabel: string;
   phone: string;
+  horario: Horario | null;
   created_at: string;
   last_sign_in_at: string | null;
 };
@@ -22,6 +25,10 @@ const ROLE_BADGE: Record<string, string> = {
   asesor_otros: "bg-slate-100 text-slate-700",
 };
 
+// Etiqueta corta por dia (0=domingo). Horario laboral por defecto: L-V 8-18.
+const DAY_LABELS = ["D", "L", "M", "M", "J", "V", "S"];
+const DEFAULT_HORARIO: Horario = { dias: [1, 2, 3, 4, 5], desde: "08:00", hasta: "18:00" };
+
 export default function UserManager({ currentUserId }: { currentUserId: string }) {
   const [users, setUsers] = useState<TeamUser[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -31,8 +38,16 @@ export default function UserManager({ currentUserId }: { currentUserId: string }
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("asesor_ventas");
+  const [horario, setHorario] = useState<Horario>(DEFAULT_HORARIO);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+
+  function toggleDia(d: number) {
+    setHorario((h) => ({
+      ...h,
+      dias: h.dias.includes(d) ? h.dias.filter((x) => x !== d) : [...h.dias, d].sort(),
+    }));
+  }
 
   async function load() {
     const res = await fetch("/api/users");
@@ -54,6 +69,7 @@ export default function UserManager({ currentUserId }: { currentUserId: string }
     setNombre("");
     setPhone("");
     setRole("asesor_ventas");
+    setHorario(DEFAULT_HORARIO);
   }
 
   function startEdit(u: TeamUser) {
@@ -63,6 +79,7 @@ export default function UserManager({ currentUserId }: { currentUserId: string }
     setPhone(u.phone);
     setRole(u.role);
     setPassword("");
+    setHorario(u.horario || DEFAULT_HORARIO);
     setMsg(null);
   }
 
@@ -76,7 +93,7 @@ export default function UserManager({ currentUserId }: { currentUserId: string }
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(
         isEditing
-          ? { userId: editingId, nombre, phone, role, password: password || undefined }
+          ? { userId: editingId, nombre, phone, role, password: password || undefined, horario: horario.dias.length ? horario : null }
           : { email, password, nombre, phone, role }
       ),
     });
@@ -181,6 +198,44 @@ export default function UserManager({ currentUserId }: { currentUserId: string }
             </button>
           )}
         </div>
+
+        {editingId && (
+          <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg bg-slate-50 p-3">
+            <span className="text-xs font-medium text-slate-600">Horario de atención (para agendar visitas):</span>
+            <div className="flex gap-1">
+              {DAY_LABELS.map((label, d) => (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => toggleDia(d)}
+                  className={`h-7 w-7 rounded-full text-xs font-medium ${
+                    horario.dias.includes(d) ? "bg-slate-900 text-white" : "bg-white text-slate-500 border border-slate-300"
+                  }`}
+                  title={["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"][d]}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <label className="flex items-center gap-1 text-xs text-slate-600">
+              de
+              <input
+                type="time"
+                value={horario.desde}
+                onChange={(e) => setHorario((h) => ({ ...h, desde: e.target.value }))}
+                className="rounded-lg border border-slate-300 px-2 py-1 text-sm outline-none focus:border-slate-500"
+              />
+              a
+              <input
+                type="time"
+                value={horario.hasta}
+                onChange={(e) => setHorario((h) => ({ ...h, hasta: e.target.value }))}
+                className="rounded-lg border border-slate-300 px-2 py-1 text-sm outline-none focus:border-slate-500"
+              />
+            </label>
+          </div>
+        )}
+
         {msg && <p className="mt-2 text-xs text-slate-600">{msg}</p>}
         <p className="mt-2 text-xs text-slate-400">
           El celular ubica al asesor en su cola de venta/arriendo/otros para las alertas de WhatsApp del bot. Todos ven

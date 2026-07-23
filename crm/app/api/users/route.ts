@@ -18,6 +18,21 @@ async function requireAdmin() {
   return { user };
 }
 
+// Valida y normaliza el horario laboral del asesor
+// ({ dias:[0-6], desde:"HH:MM", hasta:"HH:MM" }). Devuelve null si es
+// invalido o vacio (el bot cae a su DEFAULT_HORARIO cuando es null).
+function normalizeHorario(raw: unknown): { dias: number[]; desde: string; hasta: string } | null {
+  if (!raw || typeof raw !== "object") return null;
+  const h = raw as { dias?: unknown; desde?: unknown; hasta?: unknown };
+  const dias = Array.isArray(h.dias) ? h.dias.filter((d): d is number => typeof d === "number" && d >= 0 && d <= 6) : [];
+  const hhmm = /^([01]\d|2[0-3]):[0-5]\d$/;
+  if (dias.length === 0) return null;
+  if (typeof h.desde !== "string" || !hhmm.test(h.desde)) return null;
+  if (typeof h.hasta !== "string" || !hhmm.test(h.hasta)) return null;
+  if (h.desde >= h.hasta) return null;
+  return { dias: [...new Set(dias)].sort(), desde: h.desde, hasta: h.hasta };
+}
+
 // El CRM asume una sola organizacion por ahora (igual que el resto de paginas,
 // que tampoco filtran por org_id) — se toma la primera existente.
 async function currentOrgId(admin: ReturnType<typeof createAdminClient>) {
@@ -31,13 +46,29 @@ export async function GET() {
   if (auth.error) return auth.error;
 
   const admin = createAdminClient();
-  const [{ data: userList, error }, { data: advisorRows }] = await Promise.all([
+  // La columna advisors.horario es de una migracion nueva; si aun no corrio,
+  // se reintenta sin ella para que la gestion de usuarios no se caiga.
+  async function fetchAdvisors() {
+    const withHorario = await admin
+      .from("advisors")
+      .select("auth_user_id, phone, especialidad, activo, horario")
+      .not("auth_user_id", "is", null);
+    if (!withHorario.error) return withHorario.data;
+    const fallback = await admin
+      .from("advisors")
+      .select("auth_user_id, phone, especialidad, activo")
+      .not("auth_user_id", "is", null);
+    return fallback.data;
+  }
+  const [{ data: userList, error }, advisorRows] = await Promise.all([
     admin.auth.admin.listUsers({ page: 1, perPage: 200 }),
-    admin.from("advisors").select("auth_user_id, phone, especialidad, activo").not("auth_user_id", "is", null),
+    fetchAdvisors(),
   ]);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const byAuthId = new Map((advisorRows || []).map((a) => [a.auth_user_id as string, a]));
+  const byAuthId = new Map(
+    (advisorRows || []).map((a) => [a.auth_user_id as string, a as { phone?: string; horario?: unknown }])
+  );
 
   const users = userList!.users.map((u) => {
     const role = userRole(u);
@@ -48,6 +79,7 @@ export async function GET() {
       role,
       roleLabel: roleLabel(role),
       phone: byAuthId.get(u.id)?.phone || "",
+      horario: byAuthId.get(u.id)?.horario || null,
       created_at: u.created_at,
       last_sign_in_at: u.last_sign_in_at,
     };
@@ -142,7 +174,7 @@ export async function PATCH(request: Request) {
   const auth = await requireAdmin();
   if (auth.error) return auth.error;
 
-  const { userId, nombre, phone, role, password } = await request.json();
+  const { userId, nombre, phone, role, password, horario } = await request.json();
   if (!userId) return NextResponse.json({ error: "Falta userId" }, { status: 400 });
   if (!nombre?.trim()) {
     return NextResponse.json({ error: "El nombre es obligatorio" }, { status: 400 });
@@ -153,6 +185,10 @@ export async function PATCH(request: Request) {
   }
   if (password && password.length < 6) {
     return NextResponse.json({ error: "La contraseña nueva debe tener al menos 6 caracteres" }, { status: 400 });
+  }
+  const normalizedHorario = normalizeHorario(horario);
+  if (horario && !normalizedHorario) {
+    return NextResponse.json({ error: "Horario inválido (días 0-6, formato de hora HH:MM, desde < hasta)" }, { status: 400 });
   }
 
   const validRole: Role = ROLES.some((r) => r.value === role) ? (role as Role) : "asesor_otros";
@@ -196,15 +232,16 @@ export async function PATCH(request: Request) {
       .eq("org_id", orgId)
       .eq("auth_user_id", userId)
       .maybeSingle();
+    const horarioPatch = normalizedHorario ? { horario: normalizedHorario } : {};
     const sync = linkedAdvisor
       ? await admin
           .from("advisors")
-          .update({ name: nombre.trim(), phone: normalizedPhone, ...(especialidad ? { especialidad } : {}) })
+          .update({ name: nombre.trim(), phone: normalizedPhone, ...(especialidad ? { especialidad } : {}), ...horarioPatch })
           .eq("id", linkedAdvisor.id)
       : especialidad
         ? await admin
             .from("advisors")
-            .insert({ org_id: orgId, name: nombre.trim(), phone: normalizedPhone, especialidad, activo: true, auth_user_id: userId })
+            .insert({ org_id: orgId, name: nombre.trim(), phone: normalizedPhone, especialidad, activo: true, auth_user_id: userId, ...horarioPatch })
         : { error: null };
     if (sync.error) {
       warning = `Usuario actualizado, pero no quedó sincronizada su cola de asesor: ${sync.error.message}`;
