@@ -149,11 +149,15 @@ function buildAdvisorAlert(org, lead, motivo, propertyInteres, especialidad, cit
   const esVendedor = intencion === "vender";
   const encabezadoIntencion = INTENCION_LABEL[intencion];
   const citaObj = cita || lead.cita;
+  // La alerta se construye en el instante de la transferencia: "ahora" ES la
+  // fecha/hora de la transferencia (hora Colombia).
+  const transferidoEn = formatCitaFechaHora(new Date().toISOString());
 
   const lines = [
     `Nuevo lead ${org.name}!${
       encabezadoIntencion ? ` — ${encabezadoIntencion}` : especialidad ? ` (${especialidad})` : ""
     }`,
+    transferidoEn && `Transferido: ${transferidoEn.fecha}, ${transferidoEn.hora}`,
     `Cliente: ${lead.nombre || "Sin nombre"}`,
     `Numero: +${lead.phone}`,
     lead.presupuesto && `Presupuesto: ${lead.presupuesto}`,
@@ -180,4 +184,4 @@ function buildAdvisorAlert(org, lead, motivo, propertyInteres, especialidad, cit
   return lines.join("\n");
 }
 
-module.exports = { buildClientLink, buildAdvisorAlert, buildAllyClientMatchAlert, buildAppointmentAlert };
+module.exports = { buildClientLink, buildAdvisorAlert, buildAllyClientMatchAlert, buildAppointmentAlert, formatCitaFechaHora };

@@ -169,3 +169,12 @@ test("buildAppointmentAlert: sin fecha parseable cae a la descripcion del client
   assert.match(alert, /el fin de semana/);
   assert.doesNotMatch(alert, /calendar\.google\.com/); // sin fecha, sin link de calendario
 });
+
+// --- transferencia con fecha/hora ---
+
+test("buildAdvisorAlert: incluye la linea 'Transferido:' con fecha y hora de la transferencia", () => {
+  const lead = { nombre: "Pedro", phone: "573001234567", score: 80 };
+  const alert = buildAdvisorAlert(org, lead, "Calificado", null, "venta");
+  // La alerta se construye en el instante de la transferencia: "ahora" en Colombia.
+  assert.match(alert, /Transferido: .+, \d{1,2}:\d{2}/);
+});

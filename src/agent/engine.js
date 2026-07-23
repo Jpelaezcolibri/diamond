@@ -6,7 +6,7 @@ const properties = require("../data/properties");
 const { buildSystemPrompt } = require("./prompts");
 const { TOOL_DEFINITIONS, executeTool } = require("./tools");
 const { isQualified } = require("./qualification");
-const { buildAdvisorAlert } = require("../notifications/advisor");
+const { buildAdvisorAlert, formatCitaFechaHora } = require("../notifications/advisor");
 const { detectSellerIntent } = require("./intent");
 
 const client = new Anthropic({ apiKey: config.anthropicApiKey });
@@ -187,6 +187,34 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
   if (ctx.transfer) {
     Object.assign(lead, await leads.update(lead.id, { estado: "transferido" }));
     const advisor = ctx.transfer.advisor;
+    const transferidoAt = new Date().toISOString();
+    // Registro de a quien y cuando se transfirio. Best-effort: si las columnas
+    // aun no existen (migracion 2026-07-23_lead_transferencia pendiente), la
+    // transferencia sigue funcionando igual que antes.
+    try {
+      Object.assign(
+        lead,
+        await leads.update(lead.id, {
+          transferido_advisor_id: advisor.id || null,
+          transferido_a_nombre: advisor.name,
+          transferido_at: transferidoAt,
+        })
+      );
+    } catch (e) {
+      console.warn("[engine] No se pudo persistir la transferencia (revisar migracion lead_transferencia):", e.message);
+    }
+    // Nota de sistema en el historial de la conversacion — queda guardada en
+    // Sofi y visible en el CRM. Best-effort: requiere el role 'system' de la
+    // misma migracion.
+    try {
+      const en = formatCitaFechaHora(transferidoAt);
+      const nota = en
+        ? `Transferido a ${advisor.name} — ${en.fecha}, ${en.hora}`
+        : `Transferido a ${advisor.name}`;
+      await conversations.appendMessage(conv.id, "system", nota);
+    } catch (e) {
+      console.warn("[engine] No se pudo guardar la nota de transferencia (revisar migracion lead_transferencia):", e.message);
+    }
     transfer = {
       motivo: ctx.transfer.motivo,
       especialidad: ctx.transfer.especialidad,

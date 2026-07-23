@@ -65,11 +65,14 @@ async function findByWaMessageId(waMessageId) {
   return data;
 }
 
-// Ultimos N mensajes en orden cronologico, para el historial de Claude
+// Ultimos N mensajes en orden cronologico, para el historial de Claude.
+// Excluye los mensajes 'system' (notas de eventos como "Transferido a..."):
+// son para el historial del CRM, y la API de Anthropic solo acepta
+// user/assistant dentro de `messages`.
 async function getRecentMessages(conversationId, limit = 12) {
   if (!supabase) {
     return memory.messages
-      .filter((m) => m.conversation_id === conversationId)
+      .filter((m) => m.conversation_id === conversationId && m.role !== "system")
       .slice(-limit)
       .map((m) => ({ role: m.role, content: m.content }));
   }
@@ -77,6 +80,7 @@ async function getRecentMessages(conversationId, limit = 12) {
     .from("messages")
     .select("role, content")
     .eq("conversation_id", conversationId)
+    .in("role", ["user", "assistant"])
     .order("created_at", { ascending: false })
     .limit(limit);
   if (error) throw error;
