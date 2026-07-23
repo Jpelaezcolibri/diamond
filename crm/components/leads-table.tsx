@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CATEGORIAS, ESTADO_COLORS, ESTADO_LABELS, type Lead } from "@/lib/types";
+import { CATEGORIAS, ESTADO_COLORS, ESTADO_LABELS, absoluteDateTime, relativeTime, type Lead } from "@/lib/types";
 import type { TeamMember } from "@/lib/team";
 import Avatar from "./avatar";
 import ScoreBadge from "./score-badge";
@@ -72,6 +72,7 @@ export default function LeadsTable({
               <th className="px-3 py-3 sm:px-4">Estado</th>
               <th className="hidden px-4 py-3 md:table-cell">Tablero</th>
               <th className="hidden px-4 py-3 md:table-cell">Propiedad</th>
+              <th className="hidden px-4 py-3 sm:table-cell">Actividad</th>
               <th className="px-3 py-3 sm:px-4">Asesor</th>
               {admin && <th className="px-4 py-3"></th>}
             </tr>
@@ -110,6 +111,23 @@ export default function LeadsTable({
                   {CATEGORIAS.find((c) => c.key === (l.categoria || "otros"))?.label || l.categoria}
                 </td>
                 <td className="hidden px-4 py-3 text-slate-600 md:table-cell">{l.property_ref_origen || "—"}</td>
+                <td className="hidden whitespace-nowrap px-4 py-3 sm:table-cell">
+                  <p className="text-xs text-slate-600" title={absoluteDateTime(l.updated_at)}>
+                    Últ. actividad: {relativeTime(l.updated_at)}
+                  </p>
+                  <p className="text-[11px] text-slate-400" title={absoluteDateTime(l.created_at)}>
+                    Ingreso: {relativeTime(l.created_at)}
+                  </p>
+                  {l.transferido_a_nombre && (
+                    <p
+                      className="text-[11px] font-medium text-emerald-700"
+                      title={l.transferido_at ? absoluteDateTime(l.transferido_at) : undefined}
+                    >
+                      ➜ {l.transferido_a_nombre}
+                      {l.transferido_at ? ` · ${absoluteDateTime(l.transferido_at)}` : ""}
+                    </p>
+                  )}
+                </td>
                 <td className="px-3 py-3 sm:px-4">
                   <OwnerBadge
                     leadId={l.id}
@@ -129,7 +147,7 @@ export default function LeadsTable({
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={admin ? 7 : 6} className="px-4 py-10 text-center text-slate-400">
+                <td colSpan={admin ? 8 : 7} className="px-4 py-10 text-center text-slate-400">
                   {leads.length === 0 ? "Sin leads todavía." : "Sin resultados para esa búsqueda."}
                 </td>
               </tr>

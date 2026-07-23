@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ALLY_ESTADO_COLORS, ALLY_ESTADO_LABELS, ALLY_ESTADOS, type AllyProperty } from "@/lib/types";
+import { ALLY_ESTADO_COLORS, ALLY_ESTADO_LABELS, ALLY_ESTADOS, absoluteDateTime, type AllyProperty } from "@/lib/types";
+import type { TeamMember } from "@/lib/team";
 
 const EDITABLE_FIELDS: Array<{ key: keyof AllyProperty; label: string }> = [
   { key: "ref", label: "Referencia" },
@@ -14,7 +15,7 @@ const EDITABLE_FIELDS: Array<{ key: keyof AllyProperty; label: string }> = [
   { key: "notas", label: "Notas del asesor" },
 ];
 
-export default function AliadosTable({ items }: { items: AllyProperty[] }) {
+export default function AliadosTable({ items, roster }: { items: AllyProperty[]; roster: Record<string, TeamMember> }) {
   const router = useRouter();
   const [q, setQ] = useState("");
   const [filtroEstado, setFiltroEstado] = useState<string>("todos");
@@ -106,7 +107,12 @@ export default function AliadosTable({ items }: { items: AllyProperty[] }) {
           </thead>
           <tbody>
             {filtered.map((a) => (
-              <tr key={a.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/80">
+              <tr
+                key={a.id}
+                onClick={() => setEditing(a)}
+                title="Ver / editar la propiedad"
+                className="cursor-pointer border-b border-slate-100 last:border-0 hover:bg-slate-50/80"
+              >
                 <td className="px-4 py-3">
                   <p className="font-semibold text-slate-900">{a.titulo || a.tipo || "Sin título"}</p>
                   <p className="text-xs text-slate-400">
@@ -123,6 +129,11 @@ export default function AliadosTable({ items }: { items: AllyProperty[] }) {
                   <p className="text-xs text-slate-400">
                     {a.inmobiliaria_origen || "—"} {a.contacto_telefono && `· +${a.contacto_telefono}`}
                   </p>
+                  {a.registrado_por && roster[a.registrado_por] && (
+                    <p className="text-[11px] font-medium text-[#8a6a1f]">
+                      🧑‍💼 Ingresada por {roster[a.registrado_por].nombre}
+                    </p>
+                  )}
                 </td>
                 <td className="px-4 py-3">
                   <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${ALLY_ESTADO_COLORS[a.estado] || "bg-slate-100"}`}>
@@ -132,7 +143,10 @@ export default function AliadosTable({ items }: { items: AllyProperty[] }) {
                 <td className="px-4 py-3">
                   <div className="flex justify-end gap-1.5 whitespace-nowrap">
                     <button
-                      onClick={() => setEditing(a)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditing(a);
+                      }}
                       className="rounded-full border border-slate-200 px-2.5 py-1 text-xs text-slate-500 hover:bg-slate-50"
                     >
                       Editar
@@ -140,7 +154,10 @@ export default function AliadosTable({ items }: { items: AllyProperty[] }) {
                     {a.estado !== "confirmada" && (
                       <button
                         disabled={busyId === a.id}
-                        onClick={() => cambiarEstado(a.id, "confirmada")}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void cambiarEstado(a.id, "confirmada");
+                        }}
                         className="rounded-full border border-emerald-200 px-2.5 py-1 text-xs text-emerald-700 hover:bg-emerald-50 disabled:opacity-40"
                       >
                         Confirmar
@@ -149,7 +166,10 @@ export default function AliadosTable({ items }: { items: AllyProperty[] }) {
                     {a.estado !== "no_disponible" && (
                       <button
                         disabled={busyId === a.id}
-                        onClick={() => cambiarEstado(a.id, "no_disponible")}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void cambiarEstado(a.id, "no_disponible");
+                        }}
                         className="rounded-full border border-red-200 px-2.5 py-1 text-xs text-red-700 hover:bg-red-50 disabled:opacity-40"
                       >
                         No disponible
@@ -171,9 +191,33 @@ export default function AliadosTable({ items }: { items: AllyProperty[] }) {
       </div>
 
       {editing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-            <h2 className="mb-1 text-lg font-semibold text-slate-900">Editar propiedad de aliado</h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setEditing(null)}>
+          <div
+            className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-1 flex items-start justify-between gap-2">
+              <h2 className="text-lg font-semibold text-slate-900">{editing.titulo || editing.tipo || "Propiedad de aliado"}</h2>
+              <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${ALLY_ESTADO_COLORS[editing.estado] || "bg-slate-100"}`}>
+                {ALLY_ESTADO_LABELS[editing.estado] || editing.estado}
+              </span>
+            </div>
+
+            {/* Ficha del colega y trazabilidad — solo lectura */}
+            <div className="mb-3 rounded-lg bg-[#faf8f3] p-3 text-xs text-slate-600">
+              <p>
+                <span className="font-semibold">Colega:</span> {editing.contacto_nombre || "Sin nombre"}
+                {editing.inmobiliaria_origen && ` · ${editing.inmobiliaria_origen}`}
+                {editing.contacto_telefono && ` · +${editing.contacto_telefono}`}
+              </p>
+              {editing.registrado_por && roster[editing.registrado_por] && (
+                <p className="mt-0.5 font-medium text-[#8a6a1f]">
+                  🧑‍💼 Ingresada por {roster[editing.registrado_por].nombre}
+                </p>
+              )}
+              <p className="mt-0.5 text-slate-400">Registrada el {absoluteDateTime(editing.created_at)}</p>
+            </div>
+
             {editing.mensaje_original && (
               <p className="mb-4 rounded-lg bg-slate-50 p-2 text-xs text-slate-500">
                 Mensaje original: “{editing.mensaje_original}”
@@ -191,6 +235,35 @@ export default function AliadosTable({ items }: { items: AllyProperty[] }) {
                 </div>
               ))}
             </div>
+
+            {/* Aprobar / marcar no disponible desde el detalle */}
+            <div className="mt-4 flex flex-wrap gap-2">
+              {editing.estado !== "confirmada" && (
+                <button
+                  disabled={busyId === editing.id}
+                  onClick={async () => {
+                    await cambiarEstado(editing.id, "confirmada");
+                    setEditing(null);
+                  }}
+                  className="rounded-full border border-emerald-200 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-40"
+                >
+                  ✓ Confirmar disponible
+                </button>
+              )}
+              {editing.estado !== "no_disponible" && (
+                <button
+                  disabled={busyId === editing.id}
+                  onClick={async () => {
+                    await cambiarEstado(editing.id, "no_disponible");
+                    setEditing(null);
+                  }}
+                  className="rounded-full border border-red-200 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-40"
+                >
+                  ✕ Ya no disponible
+                </button>
+              )}
+            </div>
+
             <div className="mt-5 flex justify-end gap-2">
               <button onClick={() => setEditing(null)} className="rounded-lg px-4 py-2 text-sm text-slate-500 hover:bg-slate-50">
                 Cancelar

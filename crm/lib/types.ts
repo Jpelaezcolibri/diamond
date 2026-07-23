@@ -62,6 +62,8 @@ export type AllyProperty = {
   lead_id: string | null;
   mensaje_original: string | null;
   estado: "pendiente" | "confirmada" | "no_disponible" | "expirada";
+  /** Asesor (auth user) que registro la propiedad desde Sofi-Comando; null = flujo viejo (colega directo al bot). */
+  registrado_por?: string | null;
   confirmada_por: string | null;
   confirmada_at: string | null;
   notas: string | null;

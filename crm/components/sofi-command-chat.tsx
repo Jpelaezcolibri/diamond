@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { absoluteDateTime, dayLabel } from "@/lib/types";
 
 export type CommandMessage = {
   id: string;
@@ -15,6 +16,17 @@ function hora(iso: string) {
   } catch {
     return "";
   }
+}
+
+// Mismo separador de dia que chat-view.tsx ("Hoy", "Ayer", "14 de julio").
+function DaySeparator({ label }: { label: string }) {
+  return (
+    <div className="my-2 flex justify-center">
+      <span className="rounded-lg bg-white/90 px-3 py-1 text-[11px] font-medium text-slate-500 shadow-sm">
+        {label}
+      </span>
+    </div>
+  );
 }
 
 // Chat del Centro de Comando (SOFI). Espeja el patron de chat-view.tsx pero sin
@@ -117,18 +129,24 @@ export default function SofiCommandChat({
         {messages.length === 0 && !error && (
           <p className="mt-8 text-center text-sm text-slate-500">SOFI está preparando tu día…</p>
         )}
-        {messages.map((m) => {
+        {messages.map((m, i) => {
           const mine = m.role === "user";
+          const prev = messages[i - 1];
+          const showDaySeparator =
+            !prev || new Date(m.created_at).toDateString() !== new Date(prev.created_at).toDateString();
           return (
-            <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
-              <div
-                className={`relative max-w-[78%] rounded-lg px-3 py-2 text-sm shadow-sm ${
-                  mine ? "rounded-tr-none bg-[#d9fdd3]" : "rounded-tl-none bg-white"
-                }`}
-              >
-                <p className="whitespace-pre-wrap break-words">{m.content}</p>
-                <div className="mt-0.5 flex items-center justify-end gap-1 text-[10px] text-slate-400">
-                  {hora(m.created_at)}
+            <div key={m.id}>
+              {showDaySeparator && <DaySeparator label={dayLabel(m.created_at)} />}
+              <div className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+                <div
+                  className={`relative max-w-[78%] rounded-lg px-3 py-2 text-sm shadow-sm ${
+                    mine ? "rounded-tr-none bg-[#d9fdd3]" : "rounded-tl-none bg-white"
+                  }`}
+                >
+                  <p className="whitespace-pre-wrap break-words">{m.content}</p>
+                  <div className="mt-0.5 flex items-center justify-end gap-1 text-[10px] text-slate-400">
+                    <span title={absoluteDateTime(m.created_at)}>{hora(m.created_at)}</span>
+                  </div>
                 </div>
               </div>
             </div>
