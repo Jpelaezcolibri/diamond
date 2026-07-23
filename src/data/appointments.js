@@ -99,6 +99,33 @@ async function checkAvailability(orgId, advisor, fechaHoraIso, { excludeLeadId =
   return { disponible: true };
 }
 
+// ¿A este lead le toca recordatorio ya? Cita con hora + asesor asignado, que
+// cae dentro de la proxima ventana (aun no paso), y que no se avisó todavia.
+function isReminderDue(lead, nowMs, windowMin) {
+  const c = lead && lead.cita;
+  if (!c || !c.fecha_hora || !c.advisor_id || c.recordatorio_enviado) return false;
+  const t = new Date(c.fecha_hora).getTime();
+  if (isNaN(t)) return false;
+  return t > nowMs && t <= nowMs + windowMin * 60 * 1000;
+}
+
+// Leads con cita proxima que necesitan recordatorio, dentro del alcance de la
+// org. Trae las citas de la org y filtra en JS (volumen bajo).
+async function dueReminders(orgId, { windowMin = 60, nowMs = null } = {}) {
+  const now = nowMs == null ? Date.now() : nowMs;
+  if (!supabase) {
+    return memory.leads.filter((l) => l.org_id === orgId && isReminderDue(l, now, windowMin));
+  }
+  const { data, error } = await supabase
+    .from("leads")
+    .select("id, nombre, phone, property_ref_origen, cita")
+    .eq("org_id", orgId)
+    .not("cita", "is", null)
+    .limit(500);
+  if (error) throw error;
+  return (data || []).filter((l) => isReminderDue(l, now, windowMin));
+}
+
 module.exports = {
   DEFAULT_HORARIO,
   DURACION_MIN,
@@ -106,4 +133,6 @@ module.exports = {
   dentroDeHorario,
   hayChoque,
   checkAvailability,
+  isReminderDue,
+  dueReminders,
 };

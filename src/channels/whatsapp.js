@@ -45,6 +45,41 @@ async function sendWhatsApp(org, to, text, opts = {}) {
   return json.messages?.[0]?.id || null;
 }
 
+// Envia una PLANTILLA aprobada de WhatsApp (HSM) — unica forma de escribirle
+// a alguien fuera de la ventana de 24h (ej. recordatorios proactivos al
+// asesor). bodyParams son los valores de {{1}}..{{n}} del cuerpo, en orden.
+// Devuelve el wamid o null si fallo (ej. plantilla aun no aprobada).
+async function sendWhatsAppTemplate(org, to, { name, language = "es", bodyParams = [], fromPhoneId } = {}) {
+  const { token, phoneId } = credsFor(org, fromPhoneId);
+  if (!token || !phoneId) {
+    console.warn("[whatsapp] Sin token/phoneId — plantilla no enviada:", name);
+    return null;
+  }
+  const body = {
+    messaging_product: "whatsapp",
+    to,
+    type: "template",
+    template: {
+      name,
+      language: { code: language },
+      ...(bodyParams.length
+        ? { components: [{ type: "body", parameters: bodyParams.map((t) => ({ type: "text", text: String(t) })) }] }
+        : {}),
+    },
+  };
+  const res = await fetch(`https://graph.facebook.com/v18.0/${phoneId}/messages`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    console.error("[whatsapp] Error enviando plantilla:", res.status, JSON.stringify(json));
+    return null;
+  }
+  return json.messages?.[0]?.id || null;
+}
+
 // Sube un archivo a Meta y devuelve el media_id
 async function uploadMediaToMeta(org, buffer, mime, filename = "archivo", fromPhoneId) {
   const { token, phoneId } = credsFor(org, fromPhoneId);
@@ -205,5 +240,6 @@ router.post("/webhook", async (req, res) => {
 
 module.exports = router;
 module.exports.sendWhatsApp = sendWhatsApp;
+module.exports.sendWhatsAppTemplate = sendWhatsAppTemplate;
 module.exports.uploadMediaToMeta = uploadMediaToMeta;
 module.exports.sendWhatsAppMedia = sendWhatsAppMedia;

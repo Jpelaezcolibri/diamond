@@ -25,6 +25,18 @@ const config = {
   // Landing (web/): Sofi y el link para el asesor apuntan aqui en vez del
   // link externo de Wasi/inmo.co (ver src/lib/slug.js).
   landingBaseUrl: process.env.LANDING_BASE_URL || "https://diamondinmobiliaria.com",
+
+  // Recordatorios de cita al asesor (temporizador in-process, ver
+  // src/scheduler/reminders.js). Envia la plantilla aprobada de WhatsApp
+  // ~1h antes de cada cita. Encendido por defecto; si la plantilla aun no
+  // esta aprobada el envio falla en silencio y se reintenta el siguiente tick.
+  reminders: {
+    enabled: process.env.REMINDERS_ENABLED !== "false",
+    templateName: process.env.WHATSAPP_REMINDER_TEMPLATE || "recordatorio_cita",
+    templateLang: process.env.WHATSAPP_REMINDER_LANG || "es",
+    windowMin: parseInt(process.env.REMINDER_WINDOW_MIN || "60", 10),
+    intervalMin: parseInt(process.env.REMINDER_INTERVAL_MIN || "10", 10),
+  },
 };
 
 if (!config.anthropicApiKey) {

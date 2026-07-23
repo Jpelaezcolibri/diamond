@@ -60,4 +60,7 @@ app.delete("/test/:phone", async (req, res) => {
 app.listen(config.port, () => {
   const modo = config.supabaseUrl ? "Supabase" : "DEMO en memoria (sin SUPABASE_URL)";
   console.log(`Bot inmobiliario corriendo en puerto ${config.port} — datos: ${modo}`);
+  // Temporizador de recordatorios de cita (solo con base real: en modo demo
+  // no hay citas persistidas que recordar).
+  if (config.supabaseUrl) require("./scheduler/reminders").start();
 });
