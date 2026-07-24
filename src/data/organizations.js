@@ -29,4 +29,14 @@ async function getDefault() {
   return data;
 }
 
-module.exports = { findByWhatsappPhoneId, getDefault };
+// Todas las orgs activas — usado por los schedulers (followups, reminders):
+// antes solo procesaban getDefault() (la primera org), asi que el dia que
+// exista una org #2 sus seguimientos/recordatorios nunca corrian.
+async function listActive() {
+  if (!supabase) return memory.organizations;
+  const { data, error } = await supabase.from("organizations").select("*").eq("status", "active");
+  if (error) throw error;
+  return data || [];
+}
+
+module.exports = { findByWhatsappPhoneId, getDefault, listActive };

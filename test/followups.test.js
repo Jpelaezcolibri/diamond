@@ -1,6 +1,6 @@
 const { test } = require("node:test");
 const assert = require("node:assert");
-const { inQuietHours, hourInBogota } = require("../src/scheduler/followups");
+const { inQuietHours, hourInBogota, buildFollowupSystemPrompt } = require("../src/scheduler/followups");
 
 const CFG = { quietStartHour: 20, quietEndHour: 8 };
 
@@ -19,4 +19,16 @@ test("inQuietHours: horario habil 8am-8pm (se permite el seguimiento)", () => {
 test("hourInBogota devuelve una hora valida 0-23", () => {
   const h = hourInBogota(new Date("2026-07-23T15:30:00Z")); // 10:30 am en Bogota
   assert.equal(h, 10);
+});
+
+test("buildFollowupSystemPrompt usa el nombre de la org, no Diamond/Medellin hardcodeado", () => {
+  const prompt = buildFollowupSystemPrompt({ name: "Otra Inmobiliaria" });
+  assert.match(prompt, /Otra Inmobiliaria/);
+  assert.doesNotMatch(prompt, /Medellin/i);
+  assert.doesNotMatch(prompt, /Diamond/i);
+});
+
+test("buildFollowupSystemPrompt sin org cae a un texto generico", () => {
+  const prompt = buildFollowupSystemPrompt(null);
+  assert.match(prompt, /la inmobiliaria/);
 });

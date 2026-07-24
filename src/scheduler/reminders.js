@@ -45,37 +45,41 @@ function reminderParams(advisor, lead) {
 
 async function runOnce() {
   if (!config.reminders.enabled) return { sent: 0 };
-  const org = await organizations.getDefault();
-  if (!org) return { sent: 0 };
 
-  const due = await appointments.dueReminders(org.id, { windowMin: config.reminders.windowMin });
+  // Antes solo se procesaba organizations.getDefault() (la primera org): el
+  // dia que exista una org #2 sus recordatorios de cita nunca corrian.
+  const orgs = await organizations.listActive();
+
   let sent = 0;
-  for (const lead of due) {
-    try {
-      const advisor = await advisors.findByAuthUserId(org.id, lead.cita.advisor_id);
-      if (!advisor || !advisor.phone) continue;
+  for (const org of orgs) {
+    const due = await appointments.dueReminders(org.id, { windowMin: config.reminders.windowMin });
+    for (const lead of due) {
+      try {
+        const advisor = await advisors.findByAuthUserId(org.id, lead.cita.advisor_id);
+        if (!advisor || !advisor.phone) continue;
 
-      // Claim atomico ANTES de enviar (ver src/data/leads.js#claimAppointmentReminder):
-      // si dos ticks corrieran a la vez, solo uno gana el claim — el otro se
-      // salta este lead en vez de mandar el mismo recordatorio dos veces.
-      const claimed = await leads.claimAppointmentReminder(lead.id);
-      if (!claimed) continue; // otro tick/proceso ya lo esta manejando
+        // Claim atomico ANTES de enviar (ver src/data/leads.js#claimAppointmentReminder):
+        // si dos ticks corrieran a la vez, solo uno gana el claim — el otro se
+        // salta este lead en vez de mandar el mismo recordatorio dos veces.
+        const claimed = await leads.claimAppointmentReminder(lead.id);
+        if (!claimed) continue; // otro tick/proceso ya lo esta manejando
 
-      const { ok } = await sendWhatsAppTemplate(org, advisor.phone, {
-        name: config.reminders.templateName,
-        language: config.reminders.templateLang,
-        bodyParams: reminderParams(advisor, lead),
-      });
-      if (ok) {
-        sent++;
-      } else {
-        // Revertir el claim: si la plantilla aun no esta aprobada (o el
-        // envio falla), se reintenta en el proximo tick en vez de quedar
-        // marcado como enviado sin haberlo estado de verdad.
-        await leads.update(lead.id, { cita: { ...lead.cita, recordatorio_enviado: false } });
+        const { ok } = await sendWhatsAppTemplate(org, advisor.phone, {
+          name: config.reminders.templateName,
+          language: config.reminders.templateLang,
+          bodyParams: reminderParams(advisor, lead),
+        });
+        if (ok) {
+          sent++;
+        } else {
+          // Revertir el claim: si la plantilla aun no esta aprobada (o el
+          // envio falla), se reintenta en el proximo tick en vez de quedar
+          // marcado como enviado sin haberlo estado de verdad.
+          await leads.update(lead.id, { cita: { ...lead.cita, recordatorio_enviado: false } });
+        }
+      } catch (e) {
+        console.error("[reminders] error con lead", lead.id, e.message);
       }
-    } catch (e) {
-      console.error("[reminders] error con lead", lead.id, e.message);
     }
   }
   if (sent) console.log(`[reminders] ${sent} recordatorio(s) enviado(s)`);

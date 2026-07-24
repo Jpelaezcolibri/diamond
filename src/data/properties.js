@@ -7,9 +7,20 @@ const { buildSlug } = require("../lib/slug");
 // SIEMPRE el de la landing propia, nunca el de Wasi/inmo.co (que trae la
 // columna `link` tal cual desde el sync) — evita mandar trafico y marca a
 // un dominio de terceros. Mismo algoritmo de slug que web/lib/slug.ts.
-function withLandingLink(p) {
+// landingBaseUrl: dominio de la org (organizations.landing_base_url); si no
+// se pasa (o la org no lo tiene configurado) cae al env global — asi una org
+// nueva sin ese campo aun sigue funcionando, solo con el dominio de Diamond
+// por defecto en vez de fallar.
+function withLandingLink(p, landingBaseUrl = config.landingBaseUrl) {
   if (!p) return p;
-  return { ...p, link: `${config.landingBaseUrl}/propiedades/${buildSlug(p.titulo, p.ref)}` };
+  return { ...p, link: `${landingBaseUrl || config.landingBaseUrl}/propiedades/${buildSlug(p.titulo, p.ref)}` };
+}
+
+// search/findByRef aceptan el org completo (para resolver landing_base_url
+// por tenant) o, por compatibilidad, solo el orgId como string — en ese caso
+// el link cae al dominio global de config (ver withLandingLink).
+function resolveOrg(orgOrId) {
+  return orgOrId && typeof orgOrId === "object" ? orgOrId : { id: orgOrId };
 }
 
 // Palabras utiles de una zona de busqueda: fuera articulos y conectores,
@@ -59,12 +70,14 @@ function matchesFilters(p, f) {
 }
 
 // Busca propiedades disponibles de la org. filters: {ref, zona, tipo, precio_max, habitaciones_min}
-async function search(orgId, filters = {}, limit = 5) {
+async function search(orgOrId, filters = {}, limit = 5) {
+  const org = resolveOrg(orgOrId);
+  const orgId = org.id;
   if (!supabase) {
     return memory.properties
       .filter((p) => p.org_id === orgId && p.disponible && matchesFilters(p, filters))
       .slice(0, limit)
-      .map(withLandingLink);
+      .map((p) => withLandingLink(p, org.landing_base_url));
   }
   let query = supabase.from("properties").select("*").eq("org_id", orgId).eq("disponible", true);
   if (filters.ref) query = query.ilike("ref", filters.ref);
@@ -81,14 +94,16 @@ async function search(orgId, filters = {}, limit = 5) {
   if (error) throw error;
   // precio es texto — el filtro de precio se aplica en codigo
   const result = filters.precio_max ? data.filter((p) => matchesFilters(p, { precio_max: filters.precio_max })) : data;
-  return result.slice(0, limit).map(withLandingLink);
+  return result.slice(0, limit).map((p) => withLandingLink(p, org.landing_base_url));
 }
 
 // Busca por referencia exacta, incluidas las no disponibles (para informar que ya no esta)
-async function findByRef(orgId, ref) {
+async function findByRef(orgOrId, ref) {
+  const org = resolveOrg(orgOrId);
+  const orgId = org.id;
   if (!supabase) {
     const found = memory.properties.find((p) => p.org_id === orgId && p.ref.toUpperCase() === ref.toUpperCase()) || null;
-    return withLandingLink(found);
+    return withLandingLink(found, org.landing_base_url);
   }
   const { data, error } = await supabase
     .from("properties")
@@ -97,7 +112,7 @@ async function findByRef(orgId, ref) {
     .ilike("ref", ref)
     .maybeSingle();
   if (error) throw error;
-  return withLandingLink(data);
+  return withLandingLink(data, org.landing_base_url);
 }
 
 module.exports = { search, findByRef, matchesFilters, zonaTokens, distinctiveTokens, withLandingLink };

@@ -145,10 +145,10 @@ async function executeTool(name, input, ctx) {
   if (name === "buscar_propiedades") {
     let results;
     if (input.ref) {
-      const prop = await properties.findByRef(ctx.org.id, input.ref);
+      const prop = await properties.findByRef(ctx.org, input.ref);
       results = prop ? [prop] : [];
     } else {
-      results = await properties.search(ctx.org.id, input);
+      results = await properties.search(ctx.org, input);
     }
     const disponibles = results.filter((p) => p.disponible);
     if (disponibles.length > 0 && !ctx.propertyInteres) ctx.propertyInteres = disponibles[0];
