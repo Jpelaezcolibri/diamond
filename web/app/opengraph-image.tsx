@@ -1,5 +1,6 @@
 import { ImageResponse } from "next/og";
 import { getTenantConfig } from "@/config/tenant";
+import { localizeText } from "@/config/i18n";
 
 export const runtime = "nodejs";
 export const size = { width: 1200, height: 630 };
@@ -45,7 +46,7 @@ export default function OgImage() {
           {config.brand.name}
         </div>
         <div style={{ fontSize: 28, marginTop: 18, opacity: 0.75, textAlign: "center", display: "flex" }}>
-          {config.brand.tagline}
+          {localizeText(config.brand.tagline, "es")}
         </div>
       </div>
     ),

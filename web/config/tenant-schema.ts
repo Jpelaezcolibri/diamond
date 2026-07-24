@@ -11,8 +11,17 @@ const Hex = z.string().regex(/^#(?:[0-9a-fA-F]{3}){1,2}$/, "Color hex invalido")
 /** Par de colores light/dark para un mismo token. */
 const HexPair = z.object({ light: Hex, dark: Hex });
 
+/**
+ * Texto visible al visitante: un string plano (un solo idioma, retrocompatible)
+ * o bilingüe { es, en } — el toggle de idioma de la landing resuelve el par en
+ * el cliente (ver components/shared/lt.tsx). El copy NO visible (SEO, mensajes
+ * de WhatsApp, alt de imagenes) queda como z.string() a proposito: se sirve
+ * del servidor antes de conocer el idioma del visitante.
+ */
+const LocalizedString = z.union([z.string(), z.object({ es: z.string(), en: z.string() })]);
+
 const CtaSchema = z.object({
-  label: z.string(),
+  label: LocalizedString,
   /** "whatsapp" abre wa.me con el mensaje general; "catalog" navega a /propiedades;
    *  "sell" navega a /vende-tu-propiedad; "form" hace scroll al formulario. */
   action: z.enum(["whatsapp", "catalog", "sell", "form"]),
@@ -25,9 +34,9 @@ const base = { id: z.string(), enabled: z.boolean().default(true) };
 export const HeroSectionSchema = z.object({
   ...base,
   type: z.literal("hero"),
-  eyebrow: z.string().optional(),
-  title: z.string(),
-  subtitle: z.string().optional(),
+  eyebrow: LocalizedString.optional(),
+  title: LocalizedString,
+  subtitle: LocalizedString.optional(),
   image: z.string(),
   imageAlt: z.string(),
   showSearch: z.boolean().default(true),
@@ -43,7 +52,7 @@ export const TrustBarSectionSchema = z.object({
         value: z.number(),
         prefix: z.string().optional(),
         suffix: z.string().optional(),
-        label: z.string(),
+        label: LocalizedString,
         // "properties_count": el valor se reemplaza en runtime por el conteo
         // real de propiedades disponibles (value queda como respaldo si la
         // consulta falla). Evita numeros hardcodeados desactualizados.
@@ -57,19 +66,19 @@ export const TrustBarSectionSchema = z.object({
 export const FeaturedPropertiesSectionSchema = z.object({
   ...base,
   type: z.literal("featured-properties"),
-  eyebrow: z.string().optional(),
-  title: z.string(),
-  subtitle: z.string().optional(),
+  eyebrow: LocalizedString.optional(),
+  title: LocalizedString,
+  subtitle: LocalizedString.optional(),
   count: z.number().min(3).max(6).default(6),
 });
 
 export const WhyUsSectionSchema = z.object({
   ...base,
   type: z.literal("why-us"),
-  eyebrow: z.string().optional(),
-  title: z.string(),
+  eyebrow: LocalizedString.optional(),
+  title: LocalizedString,
   items: z
-    .array(z.object({ title: z.string(), description: z.string(), icon: z.string().optional() }))
+    .array(z.object({ title: LocalizedString, description: LocalizedString, icon: z.string().optional() }))
     .min(2)
     .max(4),
 });
@@ -77,27 +86,27 @@ export const WhyUsSectionSchema = z.object({
 export const HowItWorksSectionSchema = z.object({
   ...base,
   type: z.literal("how-it-works"),
-  eyebrow: z.string().optional(),
-  title: z.string(),
-  steps: z.array(z.object({ title: z.string(), description: z.string() })).min(3).max(4),
+  eyebrow: LocalizedString.optional(),
+  title: LocalizedString,
+  steps: z.array(z.object({ title: LocalizedString, description: LocalizedString })).min(3).max(4),
 });
 
 export const SellCtaSectionSchema = z.object({
   ...base,
   type: z.literal("sell-cta"),
-  eyebrow: z.string().optional(),
-  title: z.string(),
-  subtitle: z.string().optional(),
-  ctaLabel: z.string(),
+  eyebrow: LocalizedString.optional(),
+  title: LocalizedString,
+  subtitle: LocalizedString.optional(),
+  ctaLabel: LocalizedString,
 });
 
 export const TestimonialsSectionSchema = z.object({
   ...base,
   type: z.literal("testimonials"),
-  eyebrow: z.string().optional(),
-  title: z.string(),
+  eyebrow: LocalizedString.optional(),
+  title: LocalizedString,
   items: z
-    .array(z.object({ name: z.string(), role: z.string().optional(), quote: z.string(), result: z.string().optional() }))
+    .array(z.object({ name: z.string(), role: LocalizedString.optional(), quote: LocalizedString, result: LocalizedString.optional() }))
     .min(1)
     .max(6),
 });
@@ -105,8 +114,8 @@ export const TestimonialsSectionSchema = z.object({
 export const FinalCtaSectionSchema = z.object({
   ...base,
   type: z.literal("final-cta"),
-  title: z.string(),
-  subtitle: z.string().optional(),
+  title: LocalizedString,
+  subtitle: LocalizedString.optional(),
   showForm: z.boolean().default(true),
 });
 
@@ -134,7 +143,7 @@ export const TenantConfigSchema = z.object({
   brand: z.object({
     name: z.string(),
     legalName: z.string().optional(),
-    tagline: z.string(),
+    tagline: LocalizedString,
     /** Rutas en /public o URLs absolutas. */
     logo: z.object({ light: z.string(), dark: z.string(), alt: z.string() }).optional(),
     /** Monograma para placeholders de imagen (1-2 letras). */
@@ -200,18 +209,18 @@ export const TenantConfigSchema = z.object({
   }),
 
   catalog: z.object({
-    title: z.string(),
-    subtitle: z.string().optional(),
+    title: LocalizedString,
+    subtitle: LocalizedString.optional(),
     pageSize: z.number().min(6).max(24).default(12),
     defaultOperacion: z.enum(["Venta", "Arriendo", "todas"]).default("todas"),
   }),
 
   sellPage: z.object({
     enabled: z.boolean().default(true),
-    title: z.string(),
-    subtitle: z.string().optional(),
-    benefits: z.array(z.object({ title: z.string(), description: z.string() })).min(2).max(4),
-    steps: z.array(z.object({ title: z.string(), description: z.string() })).min(3).max(4),
+    title: LocalizedString,
+    subtitle: LocalizedString.optional(),
+    benefits: z.array(z.object({ title: LocalizedString, description: LocalizedString })).min(2).max(4),
+    steps: z.array(z.object({ title: LocalizedString, description: LocalizedString })).min(3).max(4),
   }),
 
   /** Flags reservados para v2 — la arquitectura les deja espacio. */

@@ -1,6 +1,7 @@
 import type { SectionOfType } from "@/config/tenant-schema";
 import { Container } from "@/components/layout/container";
 import { AnimatedCounter } from "@/components/shared/animated-counter";
+import { LT } from "@/components/shared/lt";
 import { getProperties } from "@/services/properties";
 
 /**
@@ -28,8 +29,8 @@ export async function TrustBarSection({ section }: { section: SectionOfType<"tru
       <Container>
         <dl className="grid grid-cols-1 divide-y divide-line sm:grid-cols-3 sm:divide-x sm:divide-y-0">
           {section.metrics.map((metric, i) => (
-            <div key={metric.label} className="flex flex-col items-center gap-1 py-8 text-center sm:py-10">
-              <dt className="order-2 text-sm text-muted">{metric.label}</dt>
+            <div key={i} className="flex flex-col items-center gap-1 py-8 text-center sm:py-10">
+              <dt className="order-2 text-sm text-muted"><LT v={metric.label} /></dt>
               <dd className="order-1 font-heading text-4xl tracking-tight md:text-5xl">
                 <AnimatedCounter value={values[i] ?? metric.value} prefix={metric.prefix} suffix={metric.suffix} />
               </dd>

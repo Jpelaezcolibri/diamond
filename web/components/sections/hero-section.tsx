@@ -7,6 +7,7 @@ import type { SectionOfType } from "@/config/tenant-schema";
 import { Container } from "@/components/layout/container";
 import { Button } from "@/components/design-system/button";
 import { HeroSearch } from "@/components/search/hero-search";
+import { LT } from "@/components/shared/lt";
 
 /**
  * Hero cinematografico: una sola idea, foto protagonista a pantalla casi
@@ -36,13 +37,13 @@ export async function HeroSection({ section }: { section: SectionOfType<"hero"> 
         <div className="max-w-3xl text-white">
           {section.eyebrow ? (
             <p className="mb-4 text-xs font-medium uppercase tracking-[0.25em] text-white/80">
-              {section.eyebrow}
+              <LT v={section.eyebrow} />
             </p>
           ) : null}
-          <h1 className="text-4xl leading-[1.08] md:text-6xl">{section.title}</h1>
+          <h1 className="text-4xl leading-[1.08] md:text-6xl"><LT v={section.title} /></h1>
           {section.subtitle ? (
             <p className="mt-5 max-w-xl text-base leading-relaxed text-white/85 md:text-lg">
-              {section.subtitle}
+              <LT v={section.subtitle} />
             </p>
           ) : null}
         </div>
@@ -54,11 +55,11 @@ export async function HeroSection({ section }: { section: SectionOfType<"hero"> 
             <Button asChild size="lg" variant="primary">
               {section.cta.action === "whatsapp" ? (
                 <a href={generalWhatsAppUrl(config)} target="_blank" rel="noopener noreferrer">
-                  {section.cta.label}
+                  <LT v={section.cta.label} />
                 </a>
               ) : (
                 <Link href={section.cta.action === "sell" ? "/vende-tu-propiedad" : "/propiedades"}>
-                  {section.cta.label}
+                  <LT v={section.cta.label} />
                 </Link>
               )}
             </Button>

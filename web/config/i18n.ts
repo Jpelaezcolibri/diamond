@@ -104,6 +104,17 @@ export const dictionary = {
       baths: "{n} baños",
       parking: "{n} parqueaderos",
     },
+    home: {
+      step: "Paso {n}:",
+    },
+    sellPageUi: {
+      eyebrow: "Para propietarios",
+      whatsappCta: "Cuéntanos de tu propiedad",
+      how: "Así funciona",
+      valuationTitle: "Empecemos con una valoración sin compromiso",
+      valuationBody:
+        "Déjanos tus datos y un asesor te contacta para conocer tu propiedad y darte un estimado real de mercado. Sin costos ocultos, sin exclusividades forzadas.",
+    },
     pagination: {
       nav: "Paginación",
       prev: "Página anterior",
@@ -225,6 +236,17 @@ export const dictionary = {
       baths: "{n} bathrooms",
       parking: "{n} parking spots",
     },
+    home: {
+      step: "Step {n}:",
+    },
+    sellPageUi: {
+      eyebrow: "For property owners",
+      whatsappCta: "Tell us about your property",
+      how: "How it works",
+      valuationTitle: "Let's start with a no-obligation valuation",
+      valuationBody:
+        "Leave us your details and an advisor will contact you to learn about your property and give you a real market estimate. No hidden costs, no forced exclusivity.",
+    },
     pagination: {
       nav: "Pagination",
       prev: "Previous page",
@@ -279,4 +301,19 @@ export function translate(language: Language, key: TranslationKey, vars?: Record
   const raw = getByPath(dictionary[language], key);
   if (!vars) return raw;
   return Object.entries(vars).reduce((text, [k, v]) => text.replaceAll(`{${k}}`, String(v)), raw);
+}
+
+/**
+ * Texto de la CONFIG DEL TENANT que puede venir en un solo idioma (string,
+ * retrocompatible) o bilingüe ({ es, en }). Cubre el copy de marketing que no
+ * vive en el diccionario de UI: secciones de la home, catálogo, página de
+ * vender, tagline. Ver LocalizedString en config/tenant-schema.ts.
+ */
+export type LocalizedText = string | { es: string; en: string };
+
+/** Resuelve un LocalizedText al idioma activo (fallback: español). */
+export function localizeText(value: LocalizedText | null | undefined, language: Language): string {
+  if (value == null) return "";
+  if (typeof value === "string") return value;
+  return value[language] ?? value.es;
 }

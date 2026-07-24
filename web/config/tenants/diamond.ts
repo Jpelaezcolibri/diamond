@@ -10,7 +10,10 @@ export const diamond = {
 
   brand: {
     name: "Diamond Inmobiliaria",
-    tagline: "Propiedades seleccionadas en Medellín y toda Colombia",
+    tagline: {
+      es: "Propiedades seleccionadas en Medellín y toda Colombia",
+      en: "Curated properties in Medellín and all of Colombia",
+    },
     logo: { light: "/logo.png", dark: "/logo.png", alt: "Logo Diamond Inmobiliaria" },
     monogram: "D",
     // Marca con alcance nacional (decisión comercial del propietario). El
@@ -72,9 +75,14 @@ export const diamond = {
         type: "hero",
         enabled: true,
         eyebrow: "Diamond Inmobiliaria",
-        title: "El hogar que mereces, en toda Colombia",
-        subtitle:
-          "Desde Medellín para todo el país: propiedades verificadas y acompañamiento real en cada paso.",
+        title: {
+          es: "El hogar que mereces, en toda Colombia",
+          en: "The home you deserve, anywhere in Colombia",
+        },
+        subtitle: {
+          es: "Desde Medellín para todo el país: propiedades verificadas y acompañamiento real en cada paso.",
+          en: "From Medellín to the whole country: verified properties and real guidance at every step.",
+        },
         image:
           "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=2400&auto=format&fit=crop",
         imageAlt: "Casa moderna con jardín al atardecer",
@@ -87,43 +95,60 @@ export const diamond = {
         metrics: [
           // El conteo se resuelve en vivo desde la base (value = respaldo si falla).
           // Respaldo alineado al inventario real (~39) — nunca inflar la cifra.
-          { value: 38, suffix: "+", label: "Propiedades disponibles", source: "properties_count" },
-          { value: 24, suffix: "/7", label: "Atención por WhatsApp" },
-          { value: 1, suffix: " min", label: "Tiempo de respuesta" },
+          {
+            value: 38,
+            suffix: "+",
+            label: { es: "Propiedades disponibles", en: "Available properties" },
+            source: "properties_count",
+          },
+          { value: 24, suffix: "/7", label: { es: "Atención por WhatsApp", en: "WhatsApp support" } },
+          { value: 1, suffix: " min", label: { es: "Tiempo de respuesta", en: "Response time" } },
         ],
       },
       {
         id: "featured",
         type: "featured-properties",
         enabled: true,
-        eyebrow: "Selección",
-        title: "Propiedades destacadas",
-        subtitle: "Una curaduría de nuestro inventario en Medellín y toda Colombia.",
+        eyebrow: { es: "Selección", en: "Selection" },
+        title: { es: "Propiedades destacadas", en: "Featured properties" },
+        subtitle: {
+          es: "Una curaduría de nuestro inventario en Medellín y toda Colombia.",
+          en: "A curated pick from our inventory in Medellín and all of Colombia.",
+        },
         count: 6,
       },
       {
         id: "why-us",
         type: "why-us",
         enabled: true,
-        eyebrow: "Por qué Diamond",
-        title: "Comprar bien empieza por estar bien acompañado",
+        eyebrow: { es: "Por qué Diamond", en: "Why Diamond" },
+        title: {
+          es: "Comprar bien empieza por estar bien acompañado",
+          en: "Buying well starts with the right guidance",
+        },
         items: [
           {
-            title: "Respuesta inmediata, a cualquier hora",
-            description:
-              "Sofi, nuestra asistente, te atiende por WhatsApp en segundos y te conecta con un asesor humano cuando lo necesites.",
+            title: { es: "Respuesta inmediata, a cualquier hora", en: "Immediate response, any time" },
+            description: {
+              es: "Sofi, nuestra asistente, te atiende por WhatsApp en segundos y te conecta con un asesor humano cuando lo necesites.",
+              en: "Sofi, our assistant, replies on WhatsApp in seconds and connects you with a human advisor whenever you need one.",
+            },
             icon: "message-circle",
           },
           {
-            title: "Inventario real y verificado",
-            description:
-              "Cada propiedad publicada existe, está disponible y tiene su ficha completa. Nunca verás un aviso fantasma.",
+            title: { es: "Inventario real y verificado", en: "Real, verified inventory" },
+            description: {
+              es: "Cada propiedad publicada existe, está disponible y tiene su ficha completa. Nunca verás un aviso fantasma.",
+              en: "Every listing exists, is available and has a complete profile. You will never see a ghost listing.",
+            },
             icon: "badge-check",
           },
           {
-            title: "Asesores por especialidad",
-            description:
-              "Venta y arriendo son mundos distintos. Te atiende el asesor que conoce el tuyo, de la visita al cierre.",
+            title: { es: "Asesores por especialidad", en: "Advisors by specialty" },
+            description: {
+              es: "Venta y arriendo son mundos distintos. Te atiende el asesor que conoce el tuyo, de la visita al cierre.",
+              en: "Buying and renting are different worlds. You get the advisor who knows yours, from the visit to the closing.",
+            },
             icon: "users",
           },
         ],
@@ -132,24 +157,39 @@ export const diamond = {
         id: "how",
         type: "how-it-works",
         enabled: true,
-        eyebrow: "Cómo funciona",
-        title: "De la búsqueda a las llaves en cuatro pasos",
+        eyebrow: { es: "Cómo funciona", en: "How it works" },
+        title: {
+          es: "De la búsqueda a las llaves en cuatro pasos",
+          en: "From search to keys in four steps",
+        },
         steps: [
           {
-            title: "Cuéntanos qué buscas",
-            description: "Usa el buscador o escríbenos por WhatsApp. Zona, presupuesto y lo que no puede faltar.",
+            title: { es: "Cuéntanos qué buscas", en: "Tell us what you're looking for" },
+            description: {
+              es: "Usa el buscador o escríbenos por WhatsApp. Zona, presupuesto y lo que no puede faltar.",
+              en: "Use the search or message us on WhatsApp. Area, budget and your must-haves.",
+            },
           },
           {
-            title: "Recibe opciones seleccionadas",
-            description: "Nada de catálogos infinitos: te enviamos solo las propiedades que encajan contigo.",
+            title: { es: "Recibe opciones seleccionadas", en: "Get hand-picked options" },
+            description: {
+              es: "Nada de catálogos infinitos: te enviamos solo las propiedades que encajan contigo.",
+              en: "No endless catalogs: we only send you the properties that truly fit you.",
+            },
           },
           {
-            title: "Visita con un asesor",
-            description: "Coordinamos las visitas y te acompañamos para que veas cada detalle con calma.",
+            title: { es: "Visita con un asesor", en: "Visit with an advisor" },
+            description: {
+              es: "Coordinamos las visitas y te acompañamos para que veas cada detalle con calma.",
+              en: "We coordinate the visits and walk you through every detail, at your pace.",
+            },
           },
           {
-            title: "Cierra con respaldo",
-            description: "Estudio de documentos, negociación y crédito: te acompañamos hasta la firma.",
+            title: { es: "Cierra con respaldo", en: "Close with full support" },
+            description: {
+              es: "Estudio de documentos, negociación y crédito: te acompañamos hasta la firma.",
+              en: "Document review, negotiation and financing: we're with you all the way to signing.",
+            },
           },
         ],
       },
@@ -157,19 +197,24 @@ export const diamond = {
         id: "sell",
         type: "sell-cta",
         enabled: true,
-        eyebrow: "Para propietarios",
-        title: "¿Tienes una propiedad para vender o arrendar?",
-        subtitle:
-          "La publicamos con fotografía profesional, la promovemos con pauta digital y filtramos a los interesados por ti.",
-        ctaLabel: "Vende tu propiedad con nosotros",
+        eyebrow: { es: "Para propietarios", en: "For property owners" },
+        title: {
+          es: "¿Tienes una propiedad para vender o arrendar?",
+          en: "Do you have a property to sell or rent out?",
+        },
+        subtitle: {
+          es: "La publicamos con fotografía profesional, la promovemos con pauta digital y filtramos a los interesados por ti.",
+          en: "We list it with professional photography, promote it with digital ads and screen the prospects for you.",
+        },
+        ctaLabel: { es: "Vende tu propiedad con nosotros", en: "Sell your property with us" },
       },
       {
         id: "testimonials",
         type: "testimonials",
         // Activar cuando existan testimonios reales de clientes Diamond.
         enabled: false,
-        eyebrow: "Clientes",
-        title: "Historias que terminaron en llaves",
+        eyebrow: { es: "Clientes", en: "Clients" },
+        title: { es: "Historias que terminaron en llaves", en: "Stories that ended in keys" },
         items: [
           {
             name: "EJEMPLO — Reemplazar con testimonio real",
@@ -182,43 +227,85 @@ export const diamond = {
         id: "final-cta",
         type: "final-cta",
         enabled: true,
-        title: "Hablemos de tu próxima propiedad",
-        subtitle: "Déjanos tus datos y un asesor te escribe por WhatsApp, o escríbenos directamente.",
+        title: { es: "Hablemos de tu próxima propiedad", en: "Let's talk about your next property" },
+        subtitle: {
+          es: "Déjanos tus datos y un asesor te escribe por WhatsApp, o escríbenos directamente.",
+          en: "Leave us your details and an advisor will message you on WhatsApp, or write to us directly.",
+        },
         showForm: true,
       },
     ],
   },
 
   catalog: {
-    title: "Propiedades",
-    subtitle: "Inventario disponible en Medellín y toda Colombia.",
+    title: { es: "Propiedades", en: "Properties" },
+    subtitle: {
+      es: "Inventario disponible en Medellín y toda Colombia.",
+      en: "Available inventory in Medellín and all of Colombia.",
+    },
     pageSize: 12,
     defaultOperacion: "todas",
   },
 
   sellPage: {
     enabled: true,
-    title: "Vende tu propiedad con Diamond",
-    subtitle: "Publicación profesional, difusión con pauta digital y filtro de interesados. Tú decides, nosotros hacemos el trabajo.",
+    title: { es: "Vende tu propiedad con Diamond", en: "Sell your property with Diamond" },
+    subtitle: {
+      es: "Publicación profesional, difusión con pauta digital y filtro de interesados. Tú decides, nosotros hacemos el trabajo.",
+      en: "Professional listing, digital ad promotion and prospect screening. You decide, we do the work.",
+    },
     benefits: [
       {
-        title: "Publicación profesional",
-        description: "Ficha completa estilo revista: fotografía cuidada, datos verificados y presentación impecable.",
+        title: { es: "Publicación profesional", en: "Professional listing" },
+        description: {
+          es: "Ficha completa estilo revista: fotografía cuidada, datos verificados y presentación impecable.",
+          en: "A complete magazine-style profile: polished photography, verified data and impeccable presentation.",
+        },
       },
       {
-        title: "Difusión que sí llega",
-        description: "Tu propiedad en portales, redes y campañas de pauta segmentada en tu zona.",
+        title: { es: "Difusión que sí llega", en: "Promotion that actually reaches" },
+        description: {
+          es: "Tu propiedad en portales, redes y campañas de pauta segmentada en tu zona.",
+          en: "Your property on portals, social media and targeted ad campaigns in your area.",
+        },
       },
       {
-        title: "Solo interesados reales",
-        description: "Sofi filtra a los curiosos: a ti solo te llegan personas calificadas y con intención.",
+        title: { es: "Solo interesados reales", en: "Only real prospects" },
+        description: {
+          es: "Sofi filtra a los curiosos: a ti solo te llegan personas calificadas y con intención.",
+          en: "Sofi filters out the curious: you only hear from qualified people with real intent.",
+        },
       },
     ],
     steps: [
-      { title: "Cuéntanos de tu propiedad", description: "Ubicación, características y tus expectativas de precio." },
-      { title: "La valoramos juntos", description: "Análisis de mercado real para definir un precio que sí vende." },
-      { title: "La promovemos por ti", description: "Fotos, publicación, pauta y visitas coordinadas por nuestro equipo." },
-      { title: "Cierras con respaldo", description: "Negociación y papeles con acompañamiento jurídico completo." },
+      {
+        title: { es: "Cuéntanos de tu propiedad", en: "Tell us about your property" },
+        description: {
+          es: "Ubicación, características y tus expectativas de precio.",
+          en: "Location, features and your price expectations.",
+        },
+      },
+      {
+        title: { es: "La valoramos juntos", en: "We value it together" },
+        description: {
+          es: "Análisis de mercado real para definir un precio que sí vende.",
+          en: "Real market analysis to set a price that actually sells.",
+        },
+      },
+      {
+        title: { es: "La promovemos por ti", en: "We promote it for you" },
+        description: {
+          es: "Fotos, publicación, pauta y visitas coordinadas por nuestro equipo.",
+          en: "Photos, listing, ads and visits coordinated by our team.",
+        },
+      },
+      {
+        title: { es: "Cierras con respaldo", en: "You close with full support" },
+        description: {
+          es: "Negociación y papeles con acompañamiento jurídico completo.",
+          en: "Negotiation and paperwork with complete legal guidance.",
+        },
+      },
     ],
   },
 

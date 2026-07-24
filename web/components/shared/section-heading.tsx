@@ -1,9 +1,10 @@
 import { cn } from "@/lib/utils";
 
 interface SectionHeadingProps {
-  eyebrow?: string;
-  title: string;
-  subtitle?: string;
+  /** Aceptan nodos para permitir texto localizado (<LT>/<T>), no solo strings. */
+  eyebrow?: React.ReactNode;
+  title: React.ReactNode;
+  subtitle?: React.ReactNode;
   align?: "left" | "center";
   className?: string;
 }

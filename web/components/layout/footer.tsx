@@ -3,6 +3,7 @@ import { Instagram, Facebook, Youtube, MessageCircle } from "lucide-react";
 import { getTenantConfig } from "@/config/tenant";
 import { generalWhatsAppUrl } from "@/lib/whatsapp";
 import { T } from "@/components/shared/t";
+import { LT } from "@/components/shared/lt";
 import { Container } from "./container";
 
 export function Footer() {
@@ -16,7 +17,7 @@ export function Footer() {
         <div className="flex flex-col gap-10 md:flex-row md:items-start md:justify-between">
           <div className="max-w-sm">
             <p className="font-heading text-xl">{config.brand.name}</p>
-            <p className="mt-3 text-sm leading-relaxed text-muted">{config.brand.tagline}</p>
+            <p className="mt-3 text-sm leading-relaxed text-muted"><LT v={config.brand.tagline} /></p>
             {config.contact.address ? (
               <p className="mt-3 text-sm text-muted">{config.contact.address}</p>
             ) : null}

@@ -6,6 +6,8 @@ import { SectionShell } from "@/components/layout/section-shell";
 import { Button } from "@/components/design-system/button";
 import { FadeIn } from "@/components/animations/fade-in";
 import { LeadForm } from "@/components/forms/lead-form";
+import { LT } from "@/components/shared/lt";
+import { T } from "@/components/shared/t";
 
 /** Cierre de la home (Peak-End): formulario corto o CTA directo a WhatsApp. */
 export function FinalCtaSection({ section }: { section: SectionOfType<"final-cta"> }) {
@@ -15,14 +17,14 @@ export function FinalCtaSection({ section }: { section: SectionOfType<"final-cta
     <SectionShell id="contacto" className="border-t border-line bg-surface/60">
       <div className="grid grid-cols-1 items-start gap-12 lg:grid-cols-2">
         <FadeIn>
-          <h2 className="max-w-md text-3xl leading-tight md:text-4xl">{section.title}</h2>
+          <h2 className="max-w-md text-3xl leading-tight md:text-4xl"><LT v={section.title} /></h2>
           {section.subtitle ? (
-            <p className="mt-4 max-w-md text-base leading-relaxed text-muted md:text-lg">{section.subtitle}</p>
+            <p className="mt-4 max-w-md text-base leading-relaxed text-muted md:text-lg"><LT v={section.subtitle} /></p>
           ) : null}
           <Button asChild variant="whatsapp" size="lg" className="mt-8">
             <a href={generalWhatsAppUrl(config)} target="_blank" rel="noopener noreferrer">
               <MessageCircle aria-hidden="true" />
-              Hablemos por WhatsApp
+              <T k="nav.whatsappMobile" />
             </a>
           </Button>
         </FadeIn>

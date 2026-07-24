@@ -9,6 +9,8 @@ import { Pagination } from "@/components/search/pagination";
 import { PropertyCard } from "@/components/property/property-card";
 import { EmptyState } from "@/components/shared/empty-state";
 import { T } from "@/components/shared/t";
+import { LT } from "@/components/shared/lt";
+import { localizeText } from "@/config/i18n";
 
 export const revalidate = 300;
 
@@ -36,8 +38,9 @@ export async function generateMetadata({
     !!filters.habitaciones;
 
   return {
-    title: config.catalog.title,
-    description: config.catalog.subtitle ?? config.seo.description,
+    // Metadata SEO: siempre en español (decision de la spec del toggle).
+    title: localizeText(config.catalog.title, "es"),
+    description: config.catalog.subtitle ? localizeText(config.catalog.subtitle, "es") : config.seo.description,
     alternates: { canonical: "/propiedades" },
     ...(hasActiveFilters ? { robots: { index: false, follow: true } } : {}),
   };
@@ -59,9 +62,9 @@ export default async function CatalogPage({
   return (
     <main>
       <Container className="pb-section-sm pt-12 md:pt-16">
-        <h1 className="text-3xl md:text-4xl">{config.catalog.title}</h1>
+        <h1 className="text-3xl md:text-4xl"><LT v={config.catalog.title} /></h1>
         {config.catalog.subtitle ? (
-          <p className="mt-3 max-w-xl text-base text-muted">{config.catalog.subtitle}</p>
+          <p className="mt-3 max-w-xl text-base text-muted"><LT v={config.catalog.subtitle} /></p>
         ) : null}
       </Container>
 

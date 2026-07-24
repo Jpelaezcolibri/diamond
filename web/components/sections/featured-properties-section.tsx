@@ -7,6 +7,8 @@ import { SectionHeading } from "@/components/shared/section-heading";
 import { PropertyCard } from "@/components/property/property-card";
 import { Button } from "@/components/design-system/button";
 import { Stagger } from "@/components/animations/fade-in";
+import { LT } from "@/components/shared/lt";
+import { T } from "@/components/shared/t";
 
 /** Curaduria de inventario: pocas cards, enormes, fotografia protagonista. */
 export async function FeaturedPropertiesSection({
@@ -21,14 +23,14 @@ export async function FeaturedPropertiesSection({
     <SectionShell>
       <div className="flex flex-wrap items-end justify-between gap-6">
         <SectionHeading
-          eyebrow={section.eyebrow}
-          title={section.title}
-          subtitle={section.subtitle}
+          eyebrow={section.eyebrow ? <LT v={section.eyebrow} /> : undefined}
+          title={<LT v={section.title} />}
+          subtitle={section.subtitle ? <LT v={section.subtitle} /> : undefined}
           className="mb-0 md:mb-0"
         />
         <Button asChild variant="link" className="mb-1">
           <Link href="/propiedades">
-            Ver todas las propiedades
+            <T k="emptyState.viewAll" />
             <ArrowRight aria-hidden="true" />
           </Link>
         </Button>
