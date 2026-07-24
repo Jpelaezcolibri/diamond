@@ -47,6 +47,20 @@ router.post("/api/assistant/message", async (req, res) => {
   }
 });
 
+// Pagina hacia atras el historial del usuario (scroll-up tipo WhatsApp).
+router.post("/api/assistant/history", async (req, res) => {
+  try {
+    const { orgId, viewerUid, role, before } = req.body || {};
+    if (!viewerUid || !role || !before) return res.status(400).json({ error: "Faltan datos" });
+    const scope = await resolveScope({ orgId, viewerUid, role });
+    const out = await sofiComando.historyPage(scope, { before });
+    res.json(out);
+  } catch (e) {
+    console.error("[assistant] history:", e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Cierra el dia: resumen + siembra de la cola de manana.
 router.post("/api/assistant/close", async (req, res) => {
   try {

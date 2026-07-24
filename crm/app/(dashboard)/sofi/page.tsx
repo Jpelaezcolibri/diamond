@@ -15,7 +15,7 @@ export default async function SofiPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const r = await callBot<{ sessionId: string; messages: CommandMessage[] }>("/api/assistant/session", {
+  const r = await callBot<{ sessionId: string; messages: CommandMessage[]; hasMore?: boolean }>("/api/assistant/session", {
     viewerUid: user.id,
     role: userRole(user),
     userName: userNombre(user),
@@ -25,6 +25,7 @@ export default async function SofiPage() {
     <SofiCommandChat
       sessionId={r.ok ? r.data.sessionId : null}
       initialMessages={r.ok ? r.data.messages : []}
+      initialHasMore={r.ok ? Boolean(r.data.hasMore) : false}
       initialError={r.ok ? null : r.error}
     />
   );

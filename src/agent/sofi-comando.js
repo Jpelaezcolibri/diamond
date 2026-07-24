@@ -167,9 +167,9 @@ function renderClose({ userName, metrics, follow, tomorrowQueue }) {
 // mensaje. Devuelve { sessionId, messages }.
 async function openSession(scope, { userName } = {}) {
   const session = await command.ensureSession(scope);
-  let messages = await command.getRecentCommandMessages(session.id, HISTORY_LIMIT);
+  const sessionMessages = await command.getRecentCommandMessages(session.id, 1);
 
-  if (!messages.length) {
+  if (!sessionMessages.length) {
     let briefing;
     try {
       const [metrics, follow, seed, recordatorios] = await Promise.all([
@@ -184,10 +184,17 @@ async function openSession(scope, { userName } = {}) {
       briefing = renderBriefingFallback({ userName });
     }
     await command.appendCommandMessage(session.id, "assistant", briefing);
-    messages = await command.getRecentCommandMessages(session.id, HISTORY_LIMIT);
   }
 
-  return { sessionId: session.id, messages };
+  // El chat del CRM muestra el historial CONTINUO del usuario (todas sus
+  // sesiones): hoy + ayer al abrir; lo anterior se pagina con /history.
+  const { messages, hasMore } = await command.getUserCommandMessages(scope);
+  return { sessionId: session.id, messages, hasMore };
+}
+
+// Pagina hacia atras el historial del usuario (scroll-up tipo WhatsApp).
+async function historyPage(scope, { before }) {
+  return command.getUserCommandMessages(scope, { before });
 }
 
 // Turno de chat: corre el loop tool-use con las tools de comando. Devuelve
@@ -279,6 +286,7 @@ module.exports = {
   openSession,
   processMessage,
   closeSession,
+  historyPage,
   // Exportadas para tests: funciones puras.
   renderBriefing,
   renderClose,

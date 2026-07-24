@@ -35,10 +35,12 @@ function DaySeparator({ label }: { label: string }) {
 export default function SofiCommandChat({
   sessionId,
   initialMessages,
+  initialHasMore = false,
   initialError,
 }: {
   sessionId: string | null;
   initialMessages: CommandMessage[];
+  initialHasMore?: boolean;
   initialError: string | null;
 }) {
   const [messages, setMessages] = useState<CommandMessage[]>(initialMessages);
@@ -46,11 +48,52 @@ export default function SofiCommandChat({
   const [sending, setSending] = useState(false);
   const [closing, setClosing] = useState(false);
   const [error, setError] = useState<string | null>(initialError);
+  const [hasMore, setHasMore] = useState(initialHasMore);
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  // Distingue "llego un mensaje nuevo" (autoscroll abajo) de "cargue historial
+  // viejo" (mantener la posicion) — sin esto, paginar te patea al fondo.
+  const prependingRef = useRef(false);
 
   useEffect(() => {
+    if (prependingRef.current) {
+      prependingRef.current = false;
+      return;
+    }
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Scroll-up al tope: trae la pagina anterior del historial (tipo WhatsApp).
+  async function loadOlder() {
+    if (loadingOlder || !hasMore || messages.length === 0) return;
+    setLoadingOlder(true);
+    const el = scrollRef.current;
+    const prevHeight = el?.scrollHeight || 0;
+    const res = await fetch("/api/assistant", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "history", before: messages[0].created_at }),
+    }).catch(() => null);
+    if (res && res.ok) {
+      const data = await res.json().catch(() => ({}));
+      if (Array.isArray(data.messages) && data.messages.length > 0) {
+        prependingRef.current = true;
+        setMessages((prev) => [...data.messages, ...prev]);
+        // Mantiene a la vista el mensaje donde estaba el usuario.
+        requestAnimationFrame(() => {
+          if (el) el.scrollTop = el.scrollHeight - prevHeight;
+        });
+      }
+      setHasMore(Boolean(data.hasMore));
+    }
+    setLoadingOlder(false);
+  }
+
+  function handleScroll() {
+    const el = scrollRef.current;
+    if (el && el.scrollTop < 40) void loadOlder();
+  }
 
   function append(role: "user" | "assistant", content: string) {
     setMessages((prev) => [
@@ -125,7 +168,15 @@ export default function SofiCommandChat({
       </div>
 
       {/* Mensajes */}
-      <div className="flex-1 space-y-1 overflow-y-auto bg-[#efeae2] p-4" style={{ backgroundImage: "radial-gradient(circle at 1px 1px, rgba(0,0,0,0.04) 1px, transparent 0)", backgroundSize: "18px 18px" }}>
+      <div ref={scrollRef} onScroll={handleScroll} className="flex-1 space-y-1 overflow-y-auto bg-[#efeae2] p-4" style={{ backgroundImage: "radial-gradient(circle at 1px 1px, rgba(0,0,0,0.04) 1px, transparent 0)", backgroundSize: "18px 18px" }}>
+        {loadingOlder && (
+          <p className="py-1 text-center text-xs text-slate-400">Cargando historial…</p>
+        )}
+        {!loadingOlder && hasMore && messages.length > 0 && (
+          <button onClick={() => void loadOlder()} className="mx-auto block rounded-lg bg-white/90 px-3 py-1 text-[11px] font-medium text-slate-500 shadow-sm hover:text-slate-700">
+            Cargar mensajes anteriores
+          </button>
+        )}
         {messages.length === 0 && !error && (
           <p className="mt-8 text-center text-sm text-slate-500">SOFI está preparando tu día…</p>
         )}

@@ -14,7 +14,7 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
   const body = await request.json().catch(() => ({}));
-  const action = body.action as "session" | "message" | "close";
+  const action = body.action as "session" | "message" | "close" | "history";
   const identity = { viewerUid: user.id, role: userRole(user), userName: userNombre(user) };
 
   if (action === "session") {
@@ -27,6 +27,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Faltan datos" }, { status: 400 });
     }
     const r = await callBot("/api/assistant/message", { ...identity, sessionId: body.sessionId, text: body.text });
+    return r.ok ? NextResponse.json(r.data) : NextResponse.json({ error: r.error }, { status: r.status });
+  }
+
+  if (action === "history") {
+    if (!body.before) return NextResponse.json({ error: "Faltan datos" }, { status: 400 });
+    const r = await callBot("/api/assistant/history", { ...identity, before: body.before });
     return r.ok ? NextResponse.json(r.data) : NextResponse.json({ error: r.error }, { status: r.status });
   }
 

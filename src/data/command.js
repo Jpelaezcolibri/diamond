@@ -439,6 +439,69 @@ async function appendCommandMessage(sessionId, role, content) {
   return data;
 }
 
+// Inicio de AYER en hora de Bogota (UTC-5 fijo), como ISO — el corte de lo
+// que el chat del CRM carga al abrir: hoy + ayer; lo anterior se pagina.
+function bogotaYesterdayStartIso(nowMs = Date.now()) {
+  const key = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Bogota" }).format(new Date(nowMs - 86400000));
+  return new Date(`${key}T00:00:00-05:00`).toISOString();
+}
+
+// Historial del usuario a traves de TODAS sus sesiones (no solo la abierta),
+// para que el chat del CRM se sienta continuo como WhatsApp. Sin `before`
+// trae hoy + ayer; con `before` (ISO) pagina hacia atras. Devuelve
+// { messages (cronologico), hasMore }.
+async function getUserCommandMessages(scope, { before = null, limit = 80 } = {}) {
+  if (!supabase) {
+    const sessionIds = demo.sessions
+      .filter((s) => s.org_id === scope.orgId && s.user_id === scope.viewerUid)
+      .map((s) => s.id);
+    let rows = demo.messages.filter((m) => sessionIds.includes(m.session_id));
+    rows = before
+      ? rows.filter((m) => m.created_at < before)
+      : rows.filter((m) => m.created_at >= bogotaYesterdayStartIso());
+    const page = rows.slice(-limit);
+    return { messages: page, hasMore: rows.length > page.length || Boolean(!before && rows.length && demo.messages.some((m) => sessionIds.includes(m.session_id) && m.created_at < bogotaYesterdayStartIso())) };
+  }
+  const { data: sessions, error: sessionsError } = await supabase
+    .from("command_sessions")
+    .select("id")
+    .eq("org_id", scope.orgId)
+    .eq("user_id", scope.viewerUid)
+    .order("opened_at", { ascending: false })
+    .limit(200);
+  if (sessionsError) throw sessionsError;
+  const ids = (sessions || []).map((s) => s.id);
+  if (ids.length === 0) return { messages: [], hasMore: false };
+
+  let query = supabase
+    .from("command_messages")
+    .select("id, role, content, created_at")
+    .in("session_id", ids)
+    .order("created_at", { ascending: false })
+    .limit(limit + 1); // uno extra para saber si hay mas atras
+  if (before) query = query.lt("created_at", before);
+  else query = query.gte("created_at", bogotaYesterdayStartIso());
+  const { data, error } = await query;
+  if (error) throw error;
+
+  const rows = data || [];
+  let hasMore = rows.length > limit;
+  const page = rows.slice(0, limit).reverse();
+  // Sin `before` y sin desborde de pagina: puede haber historial anterior a
+  // ayer — un probe barato de 1 fila decide si mostrar "cargar mas".
+  if (!before && !hasMore) {
+    const oldest = page[0]?.created_at || bogotaYesterdayStartIso();
+    const { data: older } = await supabase
+      .from("command_messages")
+      .select("id")
+      .in("session_id", ids)
+      .lt("created_at", oldest)
+      .limit(1);
+    hasMore = Boolean(older && older.length);
+  }
+  return { messages: page, hasMore };
+}
+
 // Historial en orden cronologico (para el CRM y para el loop de Claude).
 async function getRecentCommandMessages(sessionId, limit = 12) {
   if (!supabase) {
@@ -520,6 +583,8 @@ module.exports = {
   getSession,
   appendCommandMessage,
   getRecentCommandMessages,
+  getUserCommandMessages,
+  bogotaYesterdayStartIso,
   setActiveContext,
   closeSession,
   lastClosedTomorrowQueue,
