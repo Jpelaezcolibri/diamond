@@ -5,6 +5,7 @@
 const command = require("../data/command");
 const properties = require("../data/properties");
 const allyProperties = require("../data/ally-properties");
+const advisors = require("../data/advisors");
 
 const COMMAND_TOOL_DEFINITIONS = [
   {
@@ -141,6 +142,31 @@ const COMMAND_TOOL_DEFINITIONS = [
         contacto_telefono: { type: "string", description: "Telefono del colega, si lo dieron" },
       },
       required: ["contacto_nombre"],
+    },
+  },
+  {
+    name: "marcar_propiedad",
+    description:
+      "Marca una propiedad del inventario propio a nombre de un asesor (su captador). Desde ese momento, cuando un cliente muestre interes en esa propiedad, el captador recibe el aviso y el lead se le transfiere a el. Usala cuando digan 'marca la propiedad X a nombre de Y' o 'esa propiedad es de Y'. Cualquier miembro del equipo puede marcar.",
+    input_schema: {
+      type: "object",
+      properties: {
+        ref: { type: "string", description: "Referencia de la propiedad (codigo Wasi), ej 10207832" },
+        asesor: { type: "string", description: "Nombre (o parte del nombre) del asesor captador, ej Natalia" },
+      },
+      required: ["ref", "asesor"],
+    },
+  },
+  {
+    name: "consultar_captador",
+    description:
+      "Consulta quien es el captador de una propiedad (por ref) o que propiedades tiene marcadas un asesor (por nombre). Usala para 'de quien es la ref X' o 'que propiedades tiene Natalia'.",
+    input_schema: {
+      type: "object",
+      properties: {
+        ref: { type: "string", description: "Referencia de la propiedad" },
+        asesor: { type: "string", description: "Nombre del asesor" },
+      },
     },
   },
   {
@@ -332,6 +358,52 @@ async function executeCommandTool(name, input, ctx) {
         registrado_por: scope.viewerUid,
       });
       return `Propiedad de ${input.contacto_nombre} registrada en la red de aliados. Si un cliente pregunta por algo similar, te avisaremos a ti primero para que valides disponibilidad.`;
+    }
+    case "marcar_propiedad": {
+      const prop = await properties.findByRef(scope.orgId, input?.ref || "");
+      if (!prop) {
+        return `No encontre la referencia ${input?.ref} en el inventario. Verifica el codigo con el asesor o buscala con buscar_inventario.`;
+      }
+      const matches = await advisors.searchByName(scope.orgId, input?.asesor || "");
+      if (matches.length === 0) {
+        return `No encontre ningun asesor que coincida con "${input?.asesor}" en el equipo — no marque nada. Pregunta de nuevo el nombre (puede estar escrito distinto o no estar registrado).`;
+      }
+      if (matches.length > 1) {
+        const lista = matches.map((a) => a.name).join(", ");
+        return `Hay ${matches.length} asesores que coinciden (${lista}) — pregunta cual es antes de marcar. No marque nada.`;
+      }
+      const nuevo = matches[0];
+      let anterior = null;
+      if (prop.captador_id && prop.captador_id !== nuevo.id) {
+        try {
+          anterior = await advisors.findById(scope.orgId, prop.captador_id);
+        } catch { /* la mencion del anterior es informativa, no bloquea */ }
+      }
+      await properties.setCaptador(scope.orgId, prop.id, nuevo.id);
+      const reemplazo = anterior ? ` (reemplaza a ${anterior.name})` : "";
+      return `Listo: la propiedad ${prop.ref} — ${prop.titulo} quedo marcada a nombre de ${nuevo.name}${reemplazo}. Cuando un cliente muestre interes, le avisamos y el lead se le transfiere.`;
+    }
+    case "consultar_captador": {
+      if (input?.ref) {
+        const prop = await properties.findByRef(scope.orgId, input.ref);
+        if (!prop) return `No encontre la referencia ${input.ref} en el inventario.`;
+        if (!prop.captador_id) return `La propiedad ${prop.ref} — ${prop.titulo} no tiene captador asignado.`;
+        const owner = await advisors.findById(scope.orgId, prop.captador_id);
+        return owner
+          ? `La propiedad ${prop.ref} — ${prop.titulo} esta marcada a nombre de ${owner.name}.`
+          : `La propiedad ${prop.ref} tiene un captador asignado pero no encontre su ficha de asesor (pudo ser eliminado).`;
+      }
+      if (input?.asesor) {
+        const matches = await advisors.searchByName(scope.orgId, input.asesor);
+        if (matches.length === 0) return `No encontre ningun asesor que coincida con "${input.asesor}".`;
+        if (matches.length > 1) {
+          return `Hay ${matches.length} asesores que coinciden (${matches.map((a) => a.name).join(", ")}) — pregunta cual.`;
+        }
+        const props = await properties.listByCaptador(scope.orgId, matches[0].id);
+        if (props.length === 0) return `${matches[0].name} no tiene propiedades marcadas a su nombre.`;
+        return `Propiedades de ${matches[0].name}:\n` + JSON.stringify(props, null, 2);
+      }
+      return "Dime la referencia de la propiedad o el nombre del asesor que quieres consultar.";
     }
     case "crear_recordatorio": {
       let leadId = null;
