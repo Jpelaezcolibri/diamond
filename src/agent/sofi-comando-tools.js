@@ -344,7 +344,10 @@ async function executeCommandTool(name, input, ctx) {
         fechaHoraIso: input?.fecha_hora_iso || null,
         leadId,
       });
-      return `Recordatorio guardado${leadId ? " y vinculado al cliente" : ""}: "${creado.descripcion}". Solo tu lo vas a ver.`;
+      const visibilidad = creado.fecha_hora
+        ? "Va a aparecer en el Calendario del equipo, visible para todos."
+        : "Solo tu lo vas a ver.";
+      return `Recordatorio guardado${leadId ? " y vinculado al cliente" : ""}: "${creado.descripcion}". ${visibilidad}`;
     }
     case "consultar_recordatorios": {
       const pendientes = await command.recordatoriosPendientes(scope);

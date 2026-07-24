@@ -10,11 +10,11 @@ function asesorScope() {
   return Object.freeze({ orgId: "org-1", viewerUid: "uid-asesor-1", role: "asesor_ventas", isAdmin: false });
 }
 
-test("crear_recordatorio: guarda con el scope del asesor, sin cliente vinculado si no hay match unico", async (t) => {
+test("crear_recordatorio: con fecha/hora avisa que queda en el Calendario del equipo", async (t) => {
   const created = [];
   t.mock.method(command, "crearRecordatorio", async (scope, fields) => {
     created.push({ scope, fields });
-    return { id: "rec-1", ...fields };
+    return { id: "rec-1", descripcion: fields.descripcion, fecha_hora: fields.fechaHoraIso, lead_id: fields.leadId };
   });
   t.mock.method(command, "buscarLeads", async () => []);
 
@@ -28,6 +28,21 @@ test("crear_recordatorio: guarda con el scope del asesor, sin cliente vinculado 
   assert.strictEqual(created[0].scope.viewerUid, "uid-asesor-1");
   assert.strictEqual(created[0].fields.descripcion, "llamar a Pedro por el credito");
   assert.strictEqual(created[0].fields.leadId, null);
+  assert.match(out, /Calendario del equipo/);
+});
+
+test("crear_recordatorio: sin fecha/hora sigue siendo una nota privada", async (t) => {
+  t.mock.method(command, "crearRecordatorio", async (scope, fields) => {
+    return { id: "rec-3", descripcion: fields.descripcion, fecha_hora: fields.fechaHoraIso, lead_id: fields.leadId };
+  });
+  t.mock.method(command, "buscarLeads", async () => []);
+
+  const out = await executeCommandTool(
+    "crear_recordatorio",
+    { descripcion: "revisar contrato de arriendo" },
+    { scope: asesorScope(), session: null }
+  );
+
   assert.match(out, /Solo tu lo vas a ver/);
 });
 
