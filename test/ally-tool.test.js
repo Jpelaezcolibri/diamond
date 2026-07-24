@@ -63,7 +63,7 @@ test("registrar_propiedad_aliado: si falla la persistencia, no rompe la conversa
     throw new Error("tabla ally_properties no existe (migracion pendiente)");
   });
   const ctx = baseCtx();
-  const result = await executeTool("registrar_propiedad_aliado", { zona: "Guatape" }, ctx);
+  const result = await executeTool("registrar_propiedad_aliado", { zona: "Guatape", contacto_nombre: "Natalia Velez" }, ctx);
   assert.match(result, /agradece/i);
 });
 
