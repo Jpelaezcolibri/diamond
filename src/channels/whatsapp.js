@@ -4,8 +4,10 @@ const organizations = require("../data/organizations");
 const conversations = require("../data/conversations");
 const supabase = require("../data/supabase");
 const { procesarMensaje } = require("../agent/engine");
+const { verifyMetaSignature } = require("../lib/signature");
 
 const router = express.Router();
+let warnedNoAppSecret = false;
 
 // overridePhoneId: phone_number_id explicito (el numero por el que entro la
 // conversacion) — tiene prioridad sobre el numero por defecto de la org, para
@@ -156,6 +158,21 @@ router.get("/webhook", (req, res) => {
 
 // Mensajes entrantes
 router.post("/webhook", async (req, res) => {
+  // Sin esta verificacion cualquiera con la URL del webhook (publica en
+  // Railway) puede inyectar mensajes falsos y hacer que Sofi le escriba a
+  // cualquier numero desde el WhatsApp real de la org. Si META_APP_SECRET no
+  // esta configurado se deja pasar (dev/staging) con un warn una sola vez.
+  if (config.metaAppSecret) {
+    const valid = verifyMetaSignature(req.rawBody, req.headers["x-hub-signature-256"], config.metaAppSecret);
+    if (!valid) {
+      console.error("[whatsapp] Firma invalida en webhook — rechazado");
+      return res.sendStatus(403);
+    }
+  } else if (!warnedNoAppSecret) {
+    warnedNoAppSecret = true;
+    console.warn("[whatsapp] META_APP_SECRET no configurado — webhook sin verificar firma");
+  }
+
   res.sendStatus(200); // responder rapido; procesar async
 
   try {

@@ -20,6 +20,17 @@ async function sendTelegram(chatId, text) {
 }
 
 router.post("/telegram", async (req, res) => {
+  // Sin validar el secret_token cualquiera con la URL puede simular mensajes
+  // de cualquier chat_id y usar el bot como proxy de spam. Se configura al
+  // registrar el webhook (setWebhook con secret_token=TELEGRAM_SECRET_TOKEN).
+  if (config.telegramSecretToken) {
+    const header = req.headers["x-telegram-bot-api-secret-token"];
+    if (header !== config.telegramSecretToken) {
+      console.error("[telegram] Secret token invalido — rechazado");
+      return res.sendStatus(403);
+    }
+  }
+
   res.sendStatus(200);
 
   try {

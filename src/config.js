@@ -11,9 +11,18 @@ const config = {
 
   // Canales
   telegramToken: process.env.TELEGRAM_TOKEN || "",
+  // Secret token registrado junto al webhook de Telegram (setWebhook con
+  // secret_token). Sin el, cualquiera que conozca la URL puede simular
+  // mensajes de cualquier chat_id. Ver src/channels/telegram.js.
+  telegramSecretToken: process.env.TELEGRAM_SECRET_TOKEN || "",
 
   // API interna para el CRM
   botApiKey: process.env.BOT_API_KEY || "",
+
+  // App Secret de Meta para verificar la firma HMAC del webhook de WhatsApp
+  // (header X-Hub-Signature-256). Sin esto cualquiera con la URL del webhook
+  // puede inyectar mensajes falsos. Ver src/lib/signature.js.
+  metaAppSecret: process.env.META_APP_SECRET || "",
 
   // Fallback single-tenant para WhatsApp (si la org en BD no tiene token propio)
   whatsapp: {

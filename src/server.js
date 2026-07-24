@@ -8,10 +8,16 @@ const conversations = require("./data/conversations");
 const { procesarMensaje } = require("./agent/engine");
 
 const app = express();
-app.use(express.json());
+// verify: conserva el body crudo en req.rawBody para poder validar la firma
+// HMAC de Meta (X-Hub-Signature-256) en el webhook de WhatsApp — el hash se
+// calcula sobre los bytes exactos que Meta envio, no sobre el JSON re-serializado.
+app.use(express.json({ verify: (req, res, buf) => { req.rawBody = buf; } }));
 
 app.use(whatsapp);
-app.use(telegram);
+// Sin TELEGRAM_TOKEN el canal no tiene forma de responder; montarlo igual
+// solo expone una ruta que procesa mensajes sin poder confirmar el secret
+// token de forma util (ver channels/telegram.js).
+if (config.telegramToken) app.use(telegram);
 // assistant antes que crm: el middleware "/api" de crm.js matchea tambien
 // /api/assistant/* y exige Supabase; montar assistant primero deja que su
 // propio guard maneje la ruta sin acoplarse a crm.js.
@@ -23,7 +29,19 @@ app.get("/", (req, res) => {
 });
 
 // ── Endpoints de prueba local (sin WhatsApp ni Telegram) ─────────
-app.post("/test", async (req, res) => {
+// Exponen lectura/escritura arbitraria de leads por telefono: sin proteger,
+// cualquiera con la URL puede leer PII de un lead real o borrar sus datos.
+// Mismo guard x-api-key que usa el CRM (src/api/crm.js). Si BOT_API_KEY no
+// esta configurado (dev local sin CRM) quedan abiertos, igual que hoy.
+function requireTestApiKey(req, res, next) {
+  if (!config.botApiKey) return next();
+  if (req.headers["x-api-key"] !== config.botApiKey) {
+    return res.status(401).json({ error: "API key invalida" });
+  }
+  next();
+}
+
+app.post("/test", requireTestApiKey, async (req, res) => {
   const { phone = "test_user", message, adReferral } = req.body;
   if (!message) return res.status(400).json({ error: "Falta el campo 'message'" });
   try {
@@ -42,7 +60,7 @@ app.post("/test", async (req, res) => {
   }
 });
 
-app.delete("/test/:phone", async (req, res) => {
+app.delete("/test/:phone", requireTestApiKey, async (req, res) => {
   try {
     const org = await organizations.getDefault();
     const lead = await leads.findOrCreate(org.id, req.params.phone, "test");
