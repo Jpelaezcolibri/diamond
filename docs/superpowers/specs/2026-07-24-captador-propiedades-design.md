@@ -17,8 +17,10 @@ propiedad sea de ella.
    interés en una propiedad marcada, el captador recibe un WhatsApp. Si el
    lead se transfiere, se transfiere al captador, no al asesor de la
    especialidad.
-2. **Solo el admin marca.** Los asesores pueden consultar ("¿de quién es la
-   ref X?", "¿qué propiedades tiene Natalia?") pero no asignar ni reasignar.
+2. **Cualquiera marca.** (Corregido por Juan 2026-07-24: antes era solo
+   admin.) Cualquier usuario de Sofi-Comando puede marcar y reasignar con
+   "sofi, marca la propiedad 10207832 a nombre de Natalia". Si el asesor no
+   existe o el nombre es ambiguo, Sofi vuelve a preguntar — nunca adivina.
 3. **Manda la última propiedad de interés.** Al transferir, si la propiedad
    que el cliente está mirando (`ctx.propertyInteres`) tiene captador → va al
    captador; si no → flujo actual por especialidad. La intención "vender"
@@ -45,12 +47,11 @@ resuelve exactamente este problema para inventario ajeno.
 
 ### 2. Sofi-Comando (CRM) — `src/agent/sofi-comando-tools.js`
 
-- **Tool nueva `marcar_propiedad`** `{ ref, asesor }`:
-  - Si `!scope.isAdmin` → respuesta honesta: solo el admin puede marcar.
+- **Tool nueva `marcar_propiedad`** `{ ref, asesor }` (cualquier rol):
   - Busca la propiedad por ref en el inventario propio; si no existe, lo dice.
   - Busca el asesor por nombre en `advisors` (nueva función
     `advisors.searchByName(orgId, q)` con `ilike`): 0 matches → lo dice y
-    sugiere revisar el nombre; >1 → lista los candidatos y pide precisar.
+    vuelve a preguntar el nombre; >1 → lista los candidatos y pide precisar.
   - Guarda `captador_id` y confirma. Si la propiedad ya tenía otro captador,
     lo menciona ("reemplaza a X").
 - **Tool nueva `consultar_captador`** `{ ref?, asesor? }` (todos los roles):
@@ -120,9 +121,10 @@ transferencia) no cambia.
 
 ## Testing
 
-- `test/command-marcar-propiedad.test.js`: admin marca OK; no-admin rechazado;
-  ref inexistente; asesor ambiguo; asesor inexistente; reasignación menciona
-  al anterior; consultar_captador por ref y por asesor.
+- `test/command-marcar-propiedad.test.js`: marca OK (cualquier rol); ref
+  inexistente; asesor ambiguo pide precisar; asesor inexistente vuelve a
+  preguntar; reasignación menciona al anterior; consultar_captador por ref y
+  por asesor.
 - `test/captador-alert.test.js`: interés dispara alerta una sola vez (dedup);
   sin captador no hay alerta; captador inactivo no recibe.
 - `test/captador-transfer.test.js`: transferencia va al captador con propiedad
