@@ -3,6 +3,7 @@ import { getTenantConfig } from "@/config/tenant";
 import { generalWhatsAppUrl } from "@/lib/whatsapp";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Container } from "@/components/layout/container";
+import { T } from "@/components/shared/t";
 
 export default function NotFound() {
   const config = getTenantConfig();
@@ -10,8 +11,8 @@ export default function NotFound() {
     <main>
       <Container className="py-section">
         <EmptyState
-          title="Esta página no existe (o la propiedad ya no está disponible)"
-          description="Puede que el inmueble se haya vendido o arrendado. Nuestro inventario cambia todos los días — mira lo que hay disponible o cuéntanos qué buscas."
+          title={<T k="emptyState.notFoundTitle" />}
+          description={<T k="emptyState.notFoundDescription" />}
           whatsappUrl={generalWhatsAppUrl(config)}
           clearHref="/propiedades"
         />

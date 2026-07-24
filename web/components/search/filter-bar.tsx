@@ -12,6 +12,7 @@ import { NativeSelect, Input } from "@/components/design-system/input";
 import { Button } from "@/components/design-system/button";
 import { formatPriceShort } from "@/lib/price";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "@/components/shared/language-provider";
 
 // Techos de precio segun operacion (COP). Max 5 controles visibles (Hick's Law).
 const VENTA_CAPS = [300_000_000, 500_000_000, 800_000_000, 1_200_000_000, 2_000_000_000, 4_000_000_000];
@@ -34,6 +35,7 @@ export function FilterBar({ zonas, tipos, operaciones }: FilterBarProps) {
   // Supabase incluido); sin useTransition el usuario no tenía ninguna señal
   // de que el clic "hizo algo" mientras esa respuesta llega.
   const [isPending, startTransition] = React.useTransition();
+  const { t } = useLanguage();
 
   const [filters, setFilters] = useQueryStates(
     {
@@ -56,13 +58,15 @@ export function FilterBar({ zonas, tipos, operaciones }: FilterBarProps) {
     void setFilters({ ...patch, pagina: null });
   }
 
+  const operacionLabel = filters.operacion === "Arriendo" ? t("heroSearch.operationRent") : t("heroSearch.operationBuy");
+
   const active: { label: string; clear: () => void }[] = [];
-  if (filters.operacion) active.push({ label: filters.operacion, clear: () => update({ operacion: null, precioMax: null }) });
+  if (filters.operacion) active.push({ label: operacionLabel, clear: () => update({ operacion: null, precioMax: null }) });
   if (filters.tipo) active.push({ label: filters.tipo, clear: () => update({ tipo: null }) });
   if (filters.zona) active.push({ label: filters.zona, clear: () => update({ zona: null }) });
   if (filters.q) active.push({ label: `"${filters.q}"`, clear: () => update({ q: null }) });
-  if (filters.precioMax) active.push({ label: `Hasta ${formatPriceShort(filters.precioMax)}`, clear: () => update({ precioMax: null }) });
-  if (filters.habitaciones) active.push({ label: `${filters.habitaciones}+ hab`, clear: () => update({ habitaciones: null }) });
+  if (filters.precioMax) active.push({ label: t("filterBar.upToPrice", { price: formatPriceShort(filters.precioMax) }), clear: () => update({ precioMax: null }) });
+  if (filters.habitaciones) active.push({ label: t("filterBar.roomsPlus", { n: filters.habitaciones }), clear: () => update({ habitaciones: null }) });
 
   return (
     <div className="sticky top-16 z-30 -mx-5 border-b border-line bg-background/90 px-5 py-3 backdrop-blur-md sm:-mx-8 sm:px-8 md:top-20">
@@ -80,23 +84,23 @@ export function FilterBar({ zonas, tipos, operaciones }: FilterBarProps) {
         )}
 
         <NativeSelect
-          aria-label="Operación"
+          aria-label={t("filterBar.operation")}
           value={filters.operacion ?? ""}
           onChange={(e) => update({ operacion: (e.target.value || null) as "Venta" | "Arriendo" | null, precioMax: null })}
           className="h-10 w-auto min-w-32 text-sm"
         >
-          <option value="">Comprar o arrendar</option>
-          {operaciones.includes("Venta") ? <option value="Venta">Comprar</option> : null}
-          {operaciones.includes("Arriendo") ? <option value="Arriendo">Arrendar</option> : null}
+          <option value="">{t("heroSearch.operationAll")}</option>
+          {operaciones.includes("Venta") ? <option value="Venta">{t("heroSearch.operationBuy")}</option> : null}
+          {operaciones.includes("Arriendo") ? <option value="Arriendo">{t("heroSearch.operationRent")}</option> : null}
         </NativeSelect>
 
         <NativeSelect
-          aria-label="Tipo de inmueble"
+          aria-label={t("filterBar.type")}
           value={filters.tipo ?? ""}
           onChange={(e) => update({ tipo: e.target.value || null })}
           className="h-10 w-auto min-w-28 text-sm"
         >
-          <option value="">Tipo</option>
+          <option value="">{t("filterBar.typeShort")}</option>
           {tipos.map((tipo) => (
             <option key={tipo} value={tipo}>
               {tipo}
@@ -105,12 +109,12 @@ export function FilterBar({ zonas, tipos, operaciones }: FilterBarProps) {
         </NativeSelect>
 
         <NativeSelect
-          aria-label="Zona"
+          aria-label={t("filterBar.zone")}
           value={filters.zona ?? ""}
           onChange={(e) => update({ zona: e.target.value || null })}
           className="h-10 w-auto min-w-28 max-w-48 text-sm"
         >
-          <option value="">Zona</option>
+          <option value="">{t("filterBar.zone")}</option>
           {zonas.map((zona) => (
             <option key={zona} value={zona}>
               {zona}
@@ -119,12 +123,12 @@ export function FilterBar({ zonas, tipos, operaciones }: FilterBarProps) {
         </NativeSelect>
 
         <NativeSelect
-          aria-label="Precio máximo"
+          aria-label={t("filterBar.priceMax")}
           value={filters.precioMax ?? ""}
           onChange={(e) => update({ precioMax: e.target.value ? Number(e.target.value) : null })}
           className="h-10 w-auto min-w-28 text-sm"
         >
-          <option value="">Precio máx.</option>
+          <option value="">{t("filterBar.priceMaxShort")}</option>
           {caps.map((cap) => (
             <option key={cap} value={cap}>
               {formatPriceShort(cap)}
@@ -133,12 +137,12 @@ export function FilterBar({ zonas, tipos, operaciones }: FilterBarProps) {
         </NativeSelect>
 
         <NativeSelect
-          aria-label="Habitaciones mínimas"
+          aria-label={t("filterBar.rooms")}
           value={filters.habitaciones ?? ""}
           onChange={(e) => update({ habitaciones: e.target.value ? Number(e.target.value) : null })}
           className="h-10 w-auto min-w-24 text-sm"
         >
-          <option value="">Habitaciones</option>
+          <option value="">{t("filterBar.roomsShort")}</option>
           {[1, 2, 3, 4].map((n) => (
             <option key={n} value={n}>
               {n}+
@@ -148,25 +152,25 @@ export function FilterBar({ zonas, tipos, operaciones }: FilterBarProps) {
 
         <div className="ml-auto flex items-center gap-2">
           <label htmlFor="orden" className="hidden text-xs text-muted lg:block">
-            Ordenar
+            {t("filterBar.order")}
           </label>
           <NativeSelect
             id="orden"
-            aria-label="Ordenar por"
+            aria-label={t("filterBar.order")}
             value={filters.orden}
             onChange={(e) => void setFilters({ orden: e.target.value as (typeof ORDEN)[number], pagina: null })}
             className="h-10 w-auto text-sm"
           >
-            <option value="reciente">Más recientes</option>
-            <option value="precio-asc">Menor precio</option>
-            <option value="precio-desc">Mayor precio</option>
-            <option value="area-desc">Mayor área</option>
+            <option value="reciente">{t("filterBar.orderRecent")}</option>
+            <option value="precio-asc">{t("filterBar.orderPriceAsc")}</option>
+            <option value="precio-desc">{t("filterBar.orderPriceDesc")}</option>
+            <option value="area-desc">{t("filterBar.orderAreaDesc")}</option>
           </NativeSelect>
         </div>
       </div>
 
       <p role="status" className="sr-only">
-        {isPending ? "Actualizando resultados…" : ""}
+        {isPending ? t("filterBar.updating") : ""}
       </p>
 
       {active.length ? (
@@ -179,7 +183,7 @@ export function FilterBar({ zonas, tipos, operaciones }: FilterBarProps) {
             >
               {chip.label}
               <X className="size-3" aria-hidden="true" />
-              <span className="sr-only">Quitar filtro {chip.label}</span>
+              <span className="sr-only">{chip.label}</span>
             </button>
           ))}
           <Button
@@ -193,7 +197,7 @@ export function FilterBar({ zonas, tipos, operaciones }: FilterBarProps) {
               })
             }
           >
-            Limpiar todo
+            {t("filterBar.clearAll")}
           </Button>
         </div>
       ) : null}

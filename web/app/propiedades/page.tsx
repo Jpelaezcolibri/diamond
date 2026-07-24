@@ -8,6 +8,7 @@ import { FilterBar } from "@/components/search/filter-bar";
 import { Pagination } from "@/components/search/pagination";
 import { PropertyCard } from "@/components/property/property-card";
 import { EmptyState } from "@/components/shared/empty-state";
+import { T } from "@/components/shared/t";
 
 export const revalidate = 300;
 
@@ -68,15 +69,17 @@ export default async function CatalogPage({
 
       <Container className="py-10 md:py-14">
         <p className="text-sm text-muted" role="status">
-          {page.total === 0
-            ? "Sin resultados con estos filtros"
-            : `${page.total} ${page.total === 1 ? "propiedad" : "propiedades"}`}
+          {page.total === 0 ? (
+            <T k="catalogPage.noResults" />
+          ) : (
+            <T k={page.total === 1 ? "catalogPage.countOne" : "catalogPage.countOther"} vars={{ n: page.total }} />
+          )}
         </p>
 
         {page.total === 0 ? (
           <EmptyState
-            title="No encontramos propiedades con esos filtros"
-            description="Prueba ampliando la zona o el presupuesto. También puedes contarnos qué buscas y te avisamos cuando llegue al inventario."
+            title={<T k="emptyState.noResultsTitle" />}
+            description={<T k="emptyState.noResultsDescription" />}
             whatsappUrl={generalWhatsAppUrl(config)}
             clearHref="/propiedades"
           />

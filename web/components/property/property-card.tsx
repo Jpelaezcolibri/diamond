@@ -3,6 +3,7 @@ import type { Property } from "@/types/property";
 import { Badge } from "@/components/design-system/badge";
 import { PropertyImage } from "./property-image";
 import { PropertySpecs } from "./property-specs";
+import { T } from "@/components/shared/t";
 import { cn } from "@/lib/utils";
 import { isNewProperty } from "@/lib/property-freshness";
 
@@ -39,7 +40,7 @@ export function PropertyCard({
           />
           <div className="absolute left-3 top-3 flex gap-2">
             <Badge>{property.operacion}</Badge>
-            {isNewProperty(property.createdAt) && <Badge variant="accent">Nuevo</Badge>}
+            {isNewProperty(property.createdAt) && <Badge variant="accent"><T k="propertyPage.newBadge" /></Badge>}
           </div>
         </div>
 

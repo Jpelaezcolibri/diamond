@@ -4,6 +4,7 @@ import { getFontPreset } from "@/config/fonts";
 import { buildThemeCss } from "@/lib/theme";
 import { NuqsAdapter } from "nuqs/adapters/next/app";
 import { ThemeProvider } from "@/components/shared/theme-provider";
+import { LanguageProvider } from "@/components/shared/language-provider";
 import { Header } from "@/components/navigation/header";
 import { Footer } from "@/components/layout/footer";
 import { WhatsAppFab } from "@/components/navigation/whatsapp-fab";
@@ -47,11 +48,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <JsonLd data={organizationJsonLd(config)} />
         <NuqsAdapter>
           <ThemeProvider mode={config.theme.darkMode}>
-            <Header />
-            <div className="flex-1">{children}</div>
-            <Footer />
-            <WhatsAppFab href={generalWhatsAppUrl(config)} />
-            <VerticeSignature position="bottom-left" />
+            <LanguageProvider>
+              <Header />
+              <div className="flex-1">{children}</div>
+              <Footer />
+              <WhatsAppFab href={generalWhatsAppUrl(config)} />
+              <VerticeSignature position="bottom-left" />
+            </LanguageProvider>
           </ThemeProvider>
         </NuqsAdapter>
       </body>

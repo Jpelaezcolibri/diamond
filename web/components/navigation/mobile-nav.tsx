@@ -5,22 +5,26 @@ import Link from "next/link";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Menu, X, MessageCircle } from "lucide-react";
 import { Button } from "@/components/design-system/button";
+import { useLanguage } from "@/components/shared/language-provider";
+import { T } from "@/components/shared/t";
+import type { TranslationKey } from "@/config/i18n";
 
 interface MobileNavProps {
-  links: { href: string; label: string }[];
+  links: { href: string; key: string }[];
   whatsappUrl: string;
   brandName: string;
 }
 
 export function MobileNav({ links, whatsappUrl, brandName }: MobileNavProps) {
   const [open, setOpen] = React.useState(false);
+  const { t } = useLanguage();
 
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
       <Dialog.Trigger asChild>
         <button
           className="flex h-10 w-10 items-center justify-center rounded-brand text-foreground md:hidden"
-          aria-label="Abrir menú"
+          aria-label={t("nav.openMenu")}
         >
           <Menu className="size-5" aria-hidden="true" />
         </button>
@@ -36,7 +40,7 @@ export function MobileNav({ links, whatsappUrl, brandName }: MobileNavProps) {
             <Dialog.Close asChild>
               <button
                 className="flex h-10 w-10 items-center justify-center rounded-brand text-muted"
-                aria-label="Cerrar menú"
+                aria-label={t("nav.closeMenu")}
               >
                 <X className="size-5" aria-hidden="true" />
               </button>
@@ -49,7 +53,7 @@ export function MobileNav({ links, whatsappUrl, brandName }: MobileNavProps) {
               onClick={() => setOpen(false)}
               className="rounded-brand px-3 py-3 text-base hover:bg-foreground/5"
             >
-              Inicio
+              <T k="nav.home" />
             </Link>
             {links.map((link) => (
               <Link
@@ -58,7 +62,7 @@ export function MobileNav({ links, whatsappUrl, brandName }: MobileNavProps) {
                 onClick={() => setOpen(false)}
                 className="rounded-brand px-3 py-3 text-base hover:bg-foreground/5"
               >
-                {link.label}
+                <T k={`nav.${link.key}` as TranslationKey} />
               </Link>
             ))}
           </nav>
@@ -67,7 +71,7 @@ export function MobileNav({ links, whatsappUrl, brandName }: MobileNavProps) {
             <Button asChild variant="whatsapp" className="w-full">
               <a href={whatsappUrl} target="_blank" rel="noopener noreferrer">
                 <MessageCircle aria-hidden="true" />
-                Hablemos por WhatsApp
+                <T k="nav.whatsappMobile" />
               </a>
             </Button>
           </div>

@@ -6,6 +6,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { ChevronLeft, ChevronRight, X, Images } from "lucide-react";
 import type { Property } from "@/types/property";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "@/components/shared/language-provider";
 
 interface PropertyGalleryProps {
   property: Property;
@@ -21,6 +22,7 @@ export function PropertyGallery({ property, placeholder }: PropertyGalleryProps)
   const images = property.images;
   const [open, setOpen] = React.useState(false);
   const [index, setIndex] = React.useState(0);
+  const { t } = useLanguage();
 
   const show = (i: number) => {
     setIndex(i);
@@ -52,7 +54,7 @@ export function PropertyGallery({ property, placeholder }: PropertyGalleryProps)
         <button
           onClick={() => show(0)}
           className="group relative aspect-[3/2] overflow-hidden rounded-brand-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          aria-label="Ampliar foto principal"
+          aria-label={t("propertyGallery.expandMain")}
         >
           <Image
             src={images[0]}
@@ -66,7 +68,7 @@ export function PropertyGallery({ property, placeholder }: PropertyGalleryProps)
           {images.length > 1 ? (
             <span className="absolute bottom-3 right-3 inline-flex items-center gap-1.5 rounded-full bg-black/60 px-3 py-1.5 text-xs text-white backdrop-blur-sm">
               <Images className="size-3.5" aria-hidden="true" />
-              {images.length} fotos
+              {t("propertyGallery.photosCount", { n: images.length })}
             </span>
           ) : null}
         </button>
@@ -78,7 +80,7 @@ export function PropertyGallery({ property, placeholder }: PropertyGalleryProps)
                 key={src}
                 onClick={() => show(i + 1)}
                 className="relative hidden aspect-[3/2] overflow-hidden rounded-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent md:block"
-                aria-label={`Ampliar foto ${i + 2}`}
+                aria-label={t("propertyGallery.expandN", { n: i + 2 })}
               >
                 <Image src={src} alt={alt(i + 1)} fill unoptimized sizes="17vw" className="object-cover" />
               </button>
@@ -94,7 +96,7 @@ export function PropertyGallery({ property, placeholder }: PropertyGalleryProps)
             className="fixed inset-0 z-50 flex items-center justify-center p-4 outline-none md:p-10"
             aria-describedby={undefined}
           >
-            <Dialog.Title className="sr-only">Galería de {property.titulo}</Dialog.Title>
+            <Dialog.Title className="sr-only">{t("propertyGallery.galleryOf", { title: property.titulo })}</Dialog.Title>
             <div className="relative h-full w-full max-w-5xl">
               <Image
                 src={images[index]}
@@ -109,7 +111,7 @@ export function PropertyGallery({ property, placeholder }: PropertyGalleryProps)
             <Dialog.Close asChild>
               <button
                 className="absolute right-4 top-4 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
-                aria-label="Cerrar galería"
+                aria-label={t("propertyGallery.close")}
               >
                 <X className="size-5" aria-hidden="true" />
               </button>
@@ -120,14 +122,14 @@ export function PropertyGallery({ property, placeholder }: PropertyGalleryProps)
                 <button
                   onClick={prev}
                   className="absolute left-4 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
-                  aria-label="Foto anterior"
+                  aria-label={t("propertyGallery.prev")}
                 >
                   <ChevronLeft className="size-5" aria-hidden="true" />
                 </button>
                 <button
                   onClick={next}
                   className="absolute right-4 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
-                  aria-label="Foto siguiente"
+                  aria-label={t("propertyGallery.next")}
                 >
                   <ChevronRight className="size-5" aria-hidden="true" />
                 </button>

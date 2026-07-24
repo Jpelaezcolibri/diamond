@@ -3,6 +3,7 @@
 import * as React from "react";
 import { MessageCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "@/components/shared/language-provider";
 
 interface WhatsAppFabProps {
   href: string;
@@ -13,8 +14,10 @@ interface WhatsAppFabProps {
  * Boton flotante de WhatsApp — regla del playbook: siempre alcanzable,
  * nunca tapa CTAs. Aparece tras 400px de scroll para no competir con el hero.
  */
-export function WhatsAppFab({ href, label = "Escríbenos por WhatsApp" }: WhatsAppFabProps) {
+export function WhatsAppFab({ href, label }: WhatsAppFabProps) {
   const [visible, setVisible] = React.useState(false);
+  const { t } = useLanguage();
+  const resolvedLabel = label ?? t("whatsappFab.label");
 
   React.useEffect(() => {
     const onScroll = () => setVisible(window.scrollY > 400);
@@ -28,7 +31,7 @@ export function WhatsAppFab({ href, label = "Escríbenos por WhatsApp" }: WhatsA
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      aria-label={label}
+      aria-label={resolvedLabel}
       data-fab
       className={cn(
         "fixed bottom-5 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full",

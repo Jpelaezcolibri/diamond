@@ -5,6 +5,7 @@ import * as React from "react";
 import { Search } from "lucide-react";
 import { Button } from "@/components/design-system/button";
 import { Input, NativeSelect } from "@/components/design-system/input";
+import { useLanguage } from "@/components/shared/language-provider";
 
 interface HeroSearchProps {
   zonas: string[];
@@ -19,6 +20,7 @@ interface HeroSearchProps {
 export function HeroSearch({ zonas, operaciones }: HeroSearchProps) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
+  const { t } = useLanguage();
 
   function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -42,13 +44,13 @@ export function HeroSearch({ zonas, operaciones }: HeroSearchProps) {
     >
       <NativeSelect
         name="operacion"
-        aria-label="Operación"
+        aria-label={t("filterBar.operation")}
         defaultValue="todas"
         className="border-0 bg-transparent sm:w-52"
       >
-        <option value="todas">Comprar o arrendar</option>
-        {operaciones.includes("Venta") ? <option value="Venta">Comprar</option> : null}
-        {operaciones.includes("Arriendo") ? <option value="Arriendo">Arrendar</option> : null}
+        <option value="todas">{t("heroSearch.operationAll")}</option>
+        {operaciones.includes("Venta") ? <option value="Venta">{t("heroSearch.operationBuy")}</option> : null}
+        {operaciones.includes("Arriendo") ? <option value="Arriendo">{t("heroSearch.operationRent")}</option> : null}
       </NativeSelect>
 
       <div className="hidden h-6 w-px bg-line sm:block" aria-hidden="true" />
@@ -57,8 +59,8 @@ export function HeroSearch({ zonas, operaciones }: HeroSearchProps) {
         name="q"
         type="search"
         list="ref-zonas"
-        placeholder="¿Dónde quieres vivir? Zona, barrio o ciudad"
-        aria-label="Zona, barrio o ciudad"
+        placeholder={t("heroSearch.placeholder")}
+        aria-label={t("heroSearch.placeholder")}
         // min-w-0: sin esto el input no encoge bajo su ancho intrínseco y
         // desborda el viewport en móviles de 320px.
         className="min-w-0 flex-1 border-0 bg-transparent"
@@ -72,7 +74,7 @@ export function HeroSearch({ zonas, operaciones }: HeroSearchProps) {
 
       <Button type="submit" size="md" className="sm:px-7" disabled={pending}>
         <Search aria-hidden="true" />
-        Buscar
+        {t("heroSearch.submit")}
       </Button>
     </form>
   );

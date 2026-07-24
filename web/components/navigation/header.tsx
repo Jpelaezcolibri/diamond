@@ -5,11 +5,13 @@ import { getTenantConfig } from "@/config/tenant";
 import { generalWhatsAppUrl } from "@/lib/whatsapp";
 import { Container } from "@/components/layout/container";
 import { Button } from "@/components/design-system/button";
+import { T } from "@/components/shared/t";
+import { LanguageToggle } from "./language-toggle";
 import { MobileNav } from "./mobile-nav";
 
 const NAV_LINKS = [
-  { href: "/propiedades", label: "Propiedades" },
-  { href: "/vende-tu-propiedad", label: "Vende tu propiedad" },
+  { href: "/propiedades", key: "properties" },
+  { href: "/vende-tu-propiedad", key: "sell" },
 ] as const;
 
 export function Header() {
@@ -43,22 +45,26 @@ export function Header() {
               href={link.href}
               className="text-sm text-muted transition-colors hover:text-foreground"
             >
-              {link.label}
+              <T k={`nav.${link.key}`} />
             </Link>
           ))}
+          <LanguageToggle />
           <Button asChild variant="whatsapp" size="sm">
             <a href={generalWhatsAppUrl(config)} target="_blank" rel="noopener noreferrer">
               <MessageCircle aria-hidden="true" />
-              WhatsApp
+              <T k="nav.whatsapp" />
             </a>
           </Button>
         </nav>
 
-        <MobileNav
-          links={[...NAV_LINKS]}
-          whatsappUrl={generalWhatsAppUrl(config)}
-          brandName={config.brand.name}
-        />
+        <div className="flex items-center gap-2 md:hidden">
+          <LanguageToggle />
+          <MobileNav
+            links={NAV_LINKS.map((l) => ({ href: l.href, key: l.key }))}
+            whatsappUrl={generalWhatsAppUrl(config)}
+            brandName={config.brand.name}
+          />
+        </div>
       </Container>
     </header>
   );

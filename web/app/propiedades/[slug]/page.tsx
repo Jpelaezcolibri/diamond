@@ -18,6 +18,7 @@ import { PropertyImage } from "@/components/property/property-image";
 import { PropertySpecs } from "@/components/property/property-specs";
 import { PropertyCard } from "@/components/property/property-card";
 import { LeadForm } from "@/components/forms/lead-form";
+import { T } from "@/components/shared/t";
 
 export const revalidate = 300;
 export const dynamicParams = true;
@@ -89,7 +90,7 @@ export default async function PropertyPage({ params }: { params: Promise<Params>
 
       <Container width="wide" className="pt-6 md:pt-10">
         <div className="mb-4">
-          <BackButton fallbackHref="/propiedades" label="Volver a propiedades" />
+          <BackButton fallbackHref="/propiedades" />
         </div>
         <PropertyGallery
           property={property}
@@ -103,8 +104,14 @@ export default async function PropertyPage({ params }: { params: Promise<Params>
           <div>
             <div className="flex flex-wrap items-center gap-3">
               <Badge variant="accent">{property.operacion}</Badge>
-              {isNewProperty(property.createdAt) && <Badge>Nuevo</Badge>}
-              <span className="text-xs uppercase tracking-[0.18em] text-muted">Ref. {property.ref}</span>
+              {isNewProperty(property.createdAt) && (
+                <Badge>
+                  <T k="propertyPage.newBadge" />
+                </Badge>
+              )}
+              <span className="text-xs uppercase tracking-[0.18em] text-muted">
+                <T k="propertyPage.ref" /> {property.ref}
+              </span>
             </div>
 
             {context?.heroMessage ? (
@@ -132,7 +139,9 @@ export default async function PropertyPage({ params }: { params: Promise<Params>
               <p className="font-heading text-3xl tracking-tight tabular-nums md:text-4xl">
                 {property.precio.formatted}
                 {property.operacion === "Arriendo" ? (
-                  <span className="ml-1 text-base text-muted">/ mes</span>
+                  <span className="ml-1 text-base text-muted">
+                    <T k="propertyPage.perMonth" />
+                  </span>
                 ) : null}
               </p>
               <PropertySpecs property={property} variant="detail" />
@@ -140,10 +149,11 @@ export default async function PropertyPage({ params }: { params: Promise<Params>
 
             {property.administracion ? (
               <p className="mt-4 text-sm text-muted">
-                Administración: <span className="text-foreground">{property.administracion}</span>
+                <T k="propertyPage.admin" /> <span className="text-foreground">{property.administracion}</span>
                 {property.estrato ? (
                   <>
-                    {" · "}Estrato <span className="text-foreground">{property.estrato}</span>
+                    {" · "}
+                    <T k="propertyPage.estrato" /> <span className="text-foreground">{property.estrato}</span>
                   </>
                 ) : null}
               </p>
@@ -151,7 +161,9 @@ export default async function PropertyPage({ params }: { params: Promise<Params>
 
             {property.descripcion ? (
               <div className="mt-10">
-                <h2 className="text-xl md:text-2xl">Sobre esta propiedad</h2>
+                <h2 className="text-xl md:text-2xl">
+                  <T k="propertyPage.about" />
+                </h2>
                 <p className="mt-4 max-w-prose whitespace-pre-line text-base leading-relaxed text-foreground/85">
                   {property.descripcion}
                 </p>
@@ -160,7 +172,9 @@ export default async function PropertyPage({ params }: { params: Promise<Params>
 
             {context && context.benefits.length > 0 ? (
               <div className="mt-10">
-                <h2 className="text-xl md:text-2xl">Por qué te va a encantar</h2>
+                <h2 className="text-xl md:text-2xl">
+                  <T k="propertyPage.whyLove" />
+                </h2>
                 <ul className="mt-4 space-y-3">
                   {context.benefits.map((beneficio) => (
                     <li key={beneficio} className="flex items-start gap-2.5 text-base text-foreground/85">
@@ -174,7 +188,9 @@ export default async function PropertyPage({ params }: { params: Promise<Params>
 
             {property.caracteristicas.length ? (
               <div className="mt-10">
-                <h2 className="text-xl md:text-2xl">Características</h2>
+                <h2 className="text-xl md:text-2xl">
+                  <T k="propertyPage.features" />
+                </h2>
                 <ul className="mt-4 grid grid-cols-1 gap-x-8 gap-y-2.5 sm:grid-cols-2">
                   {property.caracteristicas.map((item) => (
                     <li key={item} className="flex items-start gap-2.5 text-sm text-foreground/85">
@@ -194,7 +210,7 @@ export default async function PropertyPage({ params }: { params: Promise<Params>
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1.5 text-muted underline-offset-4 hover:text-foreground hover:underline"
                 >
-                  Ver ficha original
+                  <T k="propertyPage.viewOriginal" />
                   <ExternalLink className="size-3.5" aria-hidden="true" />
                 </a>
               </p>
@@ -204,22 +220,26 @@ export default async function PropertyPage({ params }: { params: Promise<Params>
           {/* Columna de conversion (sticky en desktop) */}
           <aside className="lg:sticky lg:top-28 lg:self-start">
             <div className="rounded-brand-lg border border-line bg-surface p-6 shadow-card">
-              <p className="text-sm text-muted">¿Te interesa esta propiedad?</p>
-              <p className="mt-1 font-heading text-lg">Habla ya con nuestro equipo</p>
+              <p className="text-sm text-muted">
+                <T k="propertyPage.interested" />
+              </p>
+              <p className="mt-1 font-heading text-lg">
+                <T k="propertyPage.talkToTeam" />
+              </p>
               <Button asChild variant="whatsapp" size="lg" className="mt-5 w-full">
                 <a href={whatsappUrl} target="_blank" rel="noopener noreferrer">
                   <MessageCircle aria-hidden="true" />
-                  Quiero verla — WhatsApp
+                  <T k="propertyPage.wantToSee" />
                 </a>
               </Button>
               <p className="mt-3 text-center text-xs text-muted">
-                Respuesta inmediata · Ref. {property.ref} precargada
+                <T k="propertyPage.immediateResponse" vars={{ ref: property.ref }} />
               </p>
             </div>
 
             <details className="group mt-4 rounded-brand-lg border border-line bg-surface p-6">
               <summary className="cursor-pointer text-sm font-medium marker:content-none">
-                Prefiero que me contacten →
+                <T k="propertyPage.preferContact" />
               </summary>
               <div className="mt-5">
                 <LeadForm context="property" propertyRef={property.ref} className="border-0 p-0 shadow-none md:p-0" />
@@ -232,7 +252,9 @@ export default async function PropertyPage({ params }: { params: Promise<Params>
       {similares.length ? (
         <section className="border-t border-line py-section-sm">
           <Container>
-            <h2 className="text-2xl md:text-3xl">Propiedades similares</h2>
+            <h2 className="text-2xl md:text-3xl">
+              <T k="propertyPage.similar" />
+            </h2>
             <div className="mt-8 grid grid-cols-1 gap-x-6 gap-y-12 sm:grid-cols-2 lg:grid-cols-3">
               {similares.map((similar) => (
                 <PropertyCard key={similar.ref} property={similar} />
@@ -248,7 +270,7 @@ export default async function PropertyPage({ params }: { params: Promise<Params>
         <Button asChild variant="whatsapp" size="md">
           <a href={whatsappUrl} target="_blank" rel="noopener noreferrer">
             <MessageCircle aria-hidden="true" />
-            Quiero verla
+            <T k="propertyPage.wantToSeeShort" />
           </a>
         </Button>
       </div>

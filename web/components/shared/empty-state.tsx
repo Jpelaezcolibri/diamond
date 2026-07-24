@@ -1,10 +1,12 @@
+import type { ReactNode } from "react";
 import { SearchX, MessageCircle } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/design-system/button";
+import { T } from "./t";
 
 interface EmptyStateProps {
-  title: string;
-  description: string;
+  title: ReactNode;
+  description: ReactNode;
   whatsappUrl?: string;
   clearHref?: string;
 }
@@ -19,14 +21,16 @@ export function EmptyState({ title, description, whatsappUrl, clearHref }: Empty
       <div className="mt-7 flex flex-wrap justify-center gap-3">
         {clearHref ? (
           <Button asChild variant="outline">
-            <Link href={clearHref}>Ver todas las propiedades</Link>
+            <Link href={clearHref}>
+              <T k="emptyState.viewAll" />
+            </Link>
           </Button>
         ) : null}
         {whatsappUrl ? (
           <Button asChild variant="whatsapp">
             <a href={whatsappUrl} target="_blank" rel="noopener noreferrer">
               <MessageCircle aria-hidden="true" />
-              Cuéntanos qué buscas
+              <T k="emptyState.tellUs" />
             </a>
           </Button>
         ) : null}

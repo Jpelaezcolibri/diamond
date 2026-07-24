@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Instagram, Facebook, Youtube, MessageCircle } from "lucide-react";
 import { getTenantConfig } from "@/config/tenant";
 import { generalWhatsAppUrl } from "@/lib/whatsapp";
+import { T } from "@/components/shared/t";
 import { Container } from "./container";
 
 export function Footer() {
@@ -22,23 +23,23 @@ export function Footer() {
           </div>
 
           <nav aria-label="Footer" className="flex flex-col gap-2 text-sm">
-            <p className="mb-1 text-xs font-medium uppercase tracking-[0.18em] text-muted">Explora</p>
+            <p className="mb-1 text-xs font-medium uppercase tracking-[0.18em] text-muted"><T k="footer.explore" /></p>
             <Link href="/propiedades" className="text-foreground/80 hover:text-foreground">
-              Propiedades
+              <T k="nav.properties" />
             </Link>
             <Link href="/propiedades?operacion=Venta" className="text-foreground/80 hover:text-foreground">
-              En venta
+              <T k="footer.forSale" />
             </Link>
             <Link href="/propiedades?operacion=Arriendo" className="text-foreground/80 hover:text-foreground">
-              En arriendo
+              <T k="footer.forRent" />
             </Link>
             <Link href="/vende-tu-propiedad" className="text-foreground/80 hover:text-foreground">
-              Vende tu propiedad
+              <T k="nav.sell" />
             </Link>
           </nav>
 
           <div className="flex flex-col gap-2 text-sm">
-            <p className="mb-1 text-xs font-medium uppercase tracking-[0.18em] text-muted">Contacto</p>
+            <p className="mb-1 text-xs font-medium uppercase tracking-[0.18em] text-muted"><T k="footer.contact" /></p>
             <a
               href={generalWhatsAppUrl(config)}
               target="_blank"
@@ -74,7 +75,7 @@ export function Footer() {
 
         <div className="mt-12 flex flex-col gap-2 border-t border-line pt-6 text-xs text-muted md:flex-row md:items-center md:justify-between">
           <p>
-            © {year} {config.brand.legalName ?? config.brand.name}. Todos los derechos reservados.
+            © {year} {config.brand.legalName ?? config.brand.name}. <T k="footer.rights" />
           </p>
           <p>
             {config.brand.city}, {config.brand.country}

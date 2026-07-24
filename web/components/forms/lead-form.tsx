@@ -9,6 +9,7 @@ import { trackPixelLead } from "@/lib/pixel";
 import { Button } from "@/components/design-system/button";
 import { Input, NativeSelect } from "@/components/design-system/input";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "@/components/shared/language-provider";
 
 interface LeadFormProps {
   /** Origen del formulario (define el copy y el dato propertyRef). */
@@ -51,6 +52,7 @@ function Field({
 export function LeadForm({ context, propertyRef, className }: LeadFormProps) {
   const [status, setStatus] = React.useState<"idle" | "sending" | "success" | "error">("idle");
   const renderedAt = React.useRef(Date.now());
+  const { t } = useLanguage();
 
   const {
     register,
@@ -93,10 +95,8 @@ export function LeadForm({ context, propertyRef, className }: LeadFormProps) {
     return (
       <div className={cn("rounded-brand-lg border border-line bg-surface p-8 text-center", className)}>
         <CheckCircle2 className="mx-auto size-10 text-whatsapp" aria-hidden="true" />
-        <p className="mt-4 font-heading text-xl">¡Listo! Te estamos abriendo WhatsApp…</p>
-        <p className="mt-2 text-sm text-muted">
-          Si no se abre automáticamente, escríbenos directo y te atendemos de una.
-        </p>
+        <p className="mt-4 font-heading text-xl">{t("leadForm.successTitle")}</p>
+        <p className="mt-2 text-sm text-muted">{t("leadForm.successBody")}</p>
       </div>
     );
   }
@@ -108,17 +108,17 @@ export function LeadForm({ context, propertyRef, className }: LeadFormProps) {
       className={cn("rounded-brand-lg border border-line bg-surface p-6 shadow-card md:p-8", className)}
     >
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-        <Field label="Nombre" htmlFor="lead-nombre" error={errors.nombre?.message}>
+        <Field label={t("leadForm.name")} htmlFor="lead-nombre" error={errors.nombre?.message}>
           <Input
             id="lead-nombre"
             autoComplete="name"
-            placeholder="¿Cómo te llamas?"
+            placeholder={t("leadForm.namePlaceholder")}
             aria-invalid={!!errors.nombre}
             {...register("nombre")}
           />
         </Field>
 
-        <Field label="Celular (WhatsApp)" htmlFor="lead-telefono" error={errors.telefono?.message}>
+        <Field label={t("leadForm.phone")} htmlFor="lead-telefono" error={errors.telefono?.message}>
           <Input
             id="lead-telefono"
             type="tel"
@@ -129,34 +129,34 @@ export function LeadForm({ context, propertyRef, className }: LeadFormProps) {
           />
         </Field>
 
-        <Field label="Qué quieres hacer" htmlFor="lead-operacion" error={errors.operacion?.message}>
+        <Field label={t("leadForm.operation")} htmlFor="lead-operacion" error={errors.operacion?.message}>
           <NativeSelect id="lead-operacion" {...register("operacion")}>
-            <option value="comprar">Comprar</option>
-            <option value="arrendar">Arrendar</option>
-            <option value="vender">Vender mi propiedad</option>
+            <option value="comprar">{t("leadForm.operationBuy")}</option>
+            <option value="arrendar">{t("leadForm.operationRent")}</option>
+            <option value="vender">{t("leadForm.operationSell")}</option>
           </NativeSelect>
         </Field>
 
-        <Field label="Zona de interés (opcional)" htmlFor="lead-zona" error={errors.zona?.message}>
-          <Input id="lead-zona" placeholder="Envigado, Sabaneta…" {...register("zona")} />
+        <Field label={t("leadForm.zone")} htmlFor="lead-zona" error={errors.zona?.message}>
+          <Input id="lead-zona" placeholder={t("leadForm.zonePlaceholder")} {...register("zona")} />
         </Field>
 
         <div className="sm:col-span-2">
-          <Field label="Presupuesto aproximado (opcional)" htmlFor="lead-presupuesto" error={errors.presupuesto?.message}>
-            <Input id="lead-presupuesto" placeholder="Ej: entre 300 y 500 millones" {...register("presupuesto")} />
+          <Field label={t("leadForm.budget")} htmlFor="lead-presupuesto" error={errors.presupuesto?.message}>
+            <Input id="lead-presupuesto" placeholder={t("leadForm.budgetPlaceholder")} {...register("presupuesto")} />
           </Field>
         </div>
       </div>
 
       {/* Honeypot anti-spam: invisible para humanos */}
       <div className="sr-only" aria-hidden="true">
-        <label htmlFor="lead-gotcha">No llenar este campo</label>
+        <label htmlFor="lead-gotcha">{t("leadForm.honeypot")}</label>
         <input id="lead-gotcha" type="text" tabIndex={-1} autoComplete="off" {...register("_gotcha")} />
       </div>
 
       {status === "error" ? (
         <p role="alert" className="mt-4 text-sm text-danger">
-          No pudimos enviar tus datos. Intenta de nuevo o escríbenos directo por WhatsApp.
+          {t("leadForm.errorBody")}
         </p>
       ) : null}
 
@@ -164,18 +164,16 @@ export function LeadForm({ context, propertyRef, className }: LeadFormProps) {
         {status === "sending" ? (
           <>
             <LoaderCircle className="animate-spin" aria-hidden="true" />
-            Enviando…
+            {t("leadForm.sending")}
           </>
         ) : (
           <>
-            Continuar en WhatsApp
+            {t("leadForm.submit")}
             <ArrowRight aria-hidden="true" />
           </>
         )}
       </Button>
-      <p className="mt-3 text-center text-xs text-muted">
-        Al enviar aceptas ser contactado por WhatsApp. Tus datos no se comparten con terceros.
-      </p>
+      <p className="mt-3 text-center text-xs text-muted">{t("leadForm.disclaimer")}</p>
     </form>
   );
 }
