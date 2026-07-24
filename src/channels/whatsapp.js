@@ -248,7 +248,7 @@ router.post("/webhook", async (req, res) => {
       // anuncio de clic-a-WhatsApp (Meta adjunta este objeto automaticamente).
       const adReferral = message.referral || null;
 
-      const { reply, transfer, allyAlert, appointmentAlert, assistantMessageId } = await procesarMensaje({
+      const { reply, transfer, allyAlert, appointmentAlert, captadorAlert, assistantMessageId } = await procesarMensaje({
         org,
         phone: userPhone,
         text: userText,
@@ -273,6 +273,9 @@ router.post("/webhook", async (req, res) => {
       }
       if (appointmentAlert) {
         await sendWhatsApp(org, appointmentAlert.advisorPhone, appointmentAlert.advisorAlert, { fromPhoneId: phoneNumberId });
+      }
+      if (captadorAlert) {
+        await sendWhatsApp(org, captadorAlert.advisorPhone, captadorAlert.advisorAlert, { fromPhoneId: phoneNumberId });
       }
     });
   } catch (e) {

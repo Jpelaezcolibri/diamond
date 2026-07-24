@@ -128,6 +128,20 @@ function buildAllyClientMatchAlert(allyProperty, lead) {
   ].join("\n");
 }
 
+// Aviso INMEDIATO al asesor CAPTADOR de una propiedad del inventario propio
+// cuando un cliente muestra interes en ella — viaja apenas se detecta, sin
+// esperar calificacion ni transferencia (dedup en property_owner_alerts).
+function buildCaptadorInterestAlert(property, lead) {
+  const clienteNombre = lead.nombre || "Un cliente";
+  const clienteTelefono = lead.phone ? ` (+${lead.phone})` : "";
+  const zona = property.zona ? ` en ${property.zona}` : "";
+  return [
+    "Cliente interesado en tu propiedad!",
+    `${clienteNombre}${clienteTelefono} esta preguntando por la ref ${property.ref} — ${property.titulo}${zona}.`,
+    "Sofi lo esta atendiendo; si califica, te lo transfiere directo.",
+  ].join("\n");
+}
+
 // Aviso INMEDIATO al asesor cuando se le agenda una visita/cita con dia y hora
 // validados contra su agenda — viaja apenas se confirma la cita, sin esperar
 // la transferencia (ver ctx.appointmentAlert en tools.js).
@@ -184,4 +198,4 @@ function buildAdvisorAlert(org, lead, motivo, propertyInteres, especialidad, cit
   return lines.join("\n");
 }
 
-module.exports = { buildClientLink, buildAdvisorAlert, buildAllyClientMatchAlert, buildAppointmentAlert, formatCitaFechaHora };
+module.exports = { buildClientLink, buildAdvisorAlert, buildAllyClientMatchAlert, buildAppointmentAlert, buildCaptadorInterestAlert, formatCitaFechaHora };

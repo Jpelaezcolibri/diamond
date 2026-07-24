@@ -3,7 +3,7 @@ const leads = require("../data/leads");
 const conversations = require("../data/conversations");
 const properties = require("../data/properties");
 const { buildSystemPrompt } = require("./prompts");
-const { TOOL_DEFINITIONS, executeTool } = require("./tools");
+const { TOOL_DEFINITIONS, executeTool, maybeCaptadorAlert } = require("./tools");
 const { isQualified } = require("./qualification");
 const { buildAdvisorAlert, formatCitaFechaHora } = require("../notifications/advisor");
 const { detectSellerIntent } = require("./intent");
@@ -100,10 +100,14 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
     }
   }
 
-  const ctx = { org, lead, propertyInteres: null, transfer: null, cita: null, allyMatch: null, allyAlert: null, appointmentAlert: null, lastUserMessage: text };
+  const ctx = { org, lead, propertyInteres: null, transfer: null, cita: null, allyMatch: null, allyAlert: null, appointmentAlert: null, captadorAlert: null, lastUserMessage: text };
   if (lead.property_ref_origen) {
     const origen = await properties.findByRef(org, lead.property_ref_origen);
-    if (origen?.disponible) ctx.propertyInteres = origen;
+    if (origen?.disponible) {
+      ctx.propertyInteres = origen;
+      // El lead entro por el ad de una propiedad marcada: avisar al captador.
+      await maybeCaptadorAlert(ctx, origen);
+    }
     // La propiedad de origen define el tablero del lead (compra/alquiler)
     if (origen && (!lead.categoria || lead.categoria === "otros")) {
       const categoria = (origen.operacion || "").toLowerCase() === "arriendo" ? "alquiler" : "compra";
@@ -232,7 +236,12 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
   // validados contra su agenda — independiente de transfer (ver agendar_cita).
   const appointmentAlert = ctx.appointmentAlert || null;
 
-  return { reply, lead, transfer, allyAlert, appointmentAlert, assistantMessageId: assistantMsg?.id || null };
+  // Aviso inmediato al asesor CAPTADOR de una propiedad propia cuando este
+  // cliente mostro interes en ella — independiente de transfer (ver
+  // maybeCaptadorAlert en tools.js).
+  const captadorAlert = ctx.captadorAlert || null;
+
+  return { reply, lead, transfer, allyAlert, appointmentAlert, captadorAlert, assistantMessageId: assistantMsg?.id || null };
 }
 
 module.exports = { procesarMensaje };

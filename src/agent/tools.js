@@ -5,7 +5,8 @@ const allyProperties = require("../data/ally-properties");
 const propertyContext = require("../data/property-context");
 const appointments = require("../data/appointments");
 const { computeScore, isQualified } = require("./qualification");
-const { buildClientLink, buildAllyClientMatchAlert, buildAppointmentAlert } = require("../notifications/advisor");
+const propertyOwnerAlerts = require("../data/property-owner-alerts");
+const { buildClientLink, buildAllyClientMatchAlert, buildAppointmentAlert, buildCaptadorInterestAlert } = require("../notifications/advisor");
 const { LEGAL_TOPICS, LEGAL_DISCLAIMER } = require("./knowledge");
 
 const TOOL_DEFINITIONS = [
@@ -139,6 +140,23 @@ const TOOL_DEFINITIONS = [
   },
 ];
 
+// Si la propiedad de interes tiene captador, arma el aviso inmediato para su
+// asesor (una sola vez por lead+propiedad). Best-effort: si la migracion del
+// captador no corrio, el bot sigue sin aviso. Lo llama buscar_propiedades y
+// tambien engine.js cuando el lead entra por un ad (property_ref_origen).
+async function maybeCaptadorAlert(ctx, property) {
+  if (!property || !property.captador_id || ctx.captadorAlert) return;
+  try {
+    const esNuevo = await propertyOwnerAlerts.registerAlert(ctx.org.id, property.id, ctx.lead.id);
+    if (!esNuevo) return;
+    const advisor = await advisors.findById(ctx.org.id, property.captador_id);
+    if (!advisor || advisor.activo === false) return;
+    ctx.captadorAlert = { advisorPhone: advisor.phone, advisorAlert: buildCaptadorInterestAlert(property, ctx.lead) };
+  } catch (e) {
+    console.warn("[tools] No se pudo generar el aviso al captador (revisar migracion property_captador):", e.message);
+  }
+}
+
 // Ejecuta una tool. ctx: { org, lead, propertyInteres, transfer } — el engine lee
 // ctx.lead (actualizado) y ctx.transfer despues del loop.
 async function executeTool(name, input, ctx) {
@@ -152,6 +170,7 @@ async function executeTool(name, input, ctx) {
     }
     const disponibles = results.filter((p) => p.disponible);
     if (disponibles.length > 0 && !ctx.propertyInteres) ctx.propertyInteres = disponibles[0];
+    if (disponibles.length > 0) await maybeCaptadorAlert(ctx, disponibles[0]);
     // Las propiedades que busca definen su tablero (compra/alquiler) aunque no haya dado ref
     if (disponibles.length > 0 && (!ctx.lead.categoria || ctx.lead.categoria === "otros")) {
       const categoria = (disponibles[0].operacion || "").toLowerCase() === "arriendo" ? "alquiler" : "compra";
@@ -379,4 +398,4 @@ async function executeTool(name, input, ctx) {
   return `Herramienta desconocida: ${name}`;
 }
 
-module.exports = { TOOL_DEFINITIONS, executeTool };
+module.exports = { TOOL_DEFINITIONS, executeTool, maybeCaptadorAlert };
