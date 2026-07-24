@@ -349,7 +349,19 @@ async function executeTool(name, input, ctx) {
       input.especialidad ||
       (ctx.propertyInteres?.operacion || "").toLowerCase() ||
       "venta";
-    const advisor = await advisors.findForTransfer(ctx.org, especialidad);
+    // La propiedad de interes con captador manda: el negocio es del asesor
+    // que la capto — salvo vendedores y vehiculos, que siguen su flujo.
+    let advisor = null;
+    const sigueFlujoEspecial = intencion === "vender" || intencion === "vehiculos" || especialidad === "vehiculos";
+    if (!sigueFlujoEspecial && ctx.propertyInteres?.captador_id) {
+      try {
+        const captador = await advisors.findById(ctx.org.id, ctx.propertyInteres.captador_id);
+        if (captador && captador.activo !== false) advisor = captador;
+      } catch (e) {
+        console.warn("[tools] No se pudo resolver el captador para transferir (revisar migracion property_captador):", e.message);
+      }
+    }
+    if (!advisor) advisor = await advisors.findForTransfer(ctx.org, especialidad);
     if (!advisor) {
       return "No hay asesor configurado para esta organizacion. Pide disculpas y dile al cliente que pronto lo contactaran.";
     }
