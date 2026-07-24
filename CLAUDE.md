@@ -46,9 +46,12 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
   `origin/main` y desplegados. Confirmar igualmente con
   `git log origin/main..HEAD` antes de asumir que un commit local está en
   producción (Railway despliega desde GitHub).
-- **Migración pendiente de correr en Supabase:**
+- **Migraciones pendientes de correr en Supabase:**
   `db/migrations/2026-07-09_dmap_default_designer.sql` (default del motor de
-  creativos → designer para orgs nuevas).
+  creativos → designer para orgs nuevas) y
+  `db/migrations/2026-07-24_advisor_reminders_calendario_equipo.sql`
+  (recordatorios con fecha visibles para todo el equipo en el Calendario del
+  equipo).
 - **Pendientes de negocio:** teléfonos reales de asesores de arriendo/
   vehículos en `advisors` · corregir precio de la ref `9921388` en Wasi ·
   verificación de empresa en Meta · confirmar las 3 propiedades exclusivas
