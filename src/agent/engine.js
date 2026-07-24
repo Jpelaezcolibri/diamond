@@ -1,4 +1,3 @@
-const Anthropic = require("@anthropic-ai/sdk");
 const config = require("../config");
 const leads = require("../data/leads");
 const conversations = require("../data/conversations");
@@ -8,8 +7,7 @@ const { TOOL_DEFINITIONS, executeTool } = require("./tools");
 const { isQualified } = require("./qualification");
 const { buildAdvisorAlert, formatCitaFechaHora } = require("../notifications/advisor");
 const { detectSellerIntent } = require("./intent");
-
-const client = new Anthropic({ apiKey: config.anthropicApiKey });
+const { getClient } = require("../lib/anthropic");
 
 const MAX_TOOL_ITERATIONS = 5;
 const HISTORY_LIMIT = 12;
@@ -53,6 +51,7 @@ const REF_PATTERN = /\b([A-Z]{2}\d{3}|\d{6,8})\b/;
 // por un anuncio pago de los organicos, sin tocar `source` (canal).
 // Devuelve { reply, lead, transfer } — transfer: { motivo, advisorAlert } si aplico.
 async function procesarMensaje({ org, phone, text, source = "whatsapp", messageExtras = {}, phoneNumberId = null, adReferral = null }) {
+  const client = getClient();
   const lead = await leads.findOrCreate(org.id, phone, source);
 
   // Deep link / click-to-WhatsApp: la primera mencion de una ref queda como origen

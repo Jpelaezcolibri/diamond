@@ -18,14 +18,48 @@ function credsFor(org, overridePhoneId) {
   return { token, phoneId };
 }
 
+const SEND_TIMEOUT_MS = 15000;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// POST comun a /messages con timeout + 1 reintento con backoff corto ante
+// error de red o 5xx (un 4xx — ej. numero invalido, plantilla no aprobada —
+// no se reintenta, es un fallo permanente). Devuelve SIEMPRE {ok, wamid,
+// error} en vez de wamid|null: antes un fallo se veia identico a un exito
+// para quien llamaba (el CRM mostraba como "enviado" un mensaje que Meta
+// jamas entrego). Ver conversations.setDelivery.
+async function graphSendMessage(phoneId, token, body, label) {
+  let lastError = null;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const res = await fetch(`https://graph.facebook.com/v18.0/${phoneId}/messages`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok) return { ok: true, wamid: json.messages?.[0]?.id || null, error: null };
+      lastError = json?.error?.message || `http_${res.status}`;
+      console.error(`[whatsapp] Error enviando ${label} (intento ${attempt}):`, res.status, JSON.stringify(json));
+      if (res.status < 500 || attempt === 2) return { ok: false, wamid: null, error: lastError };
+    } catch (e) {
+      lastError = e.name === "TimeoutError" || e.name === "AbortError" ? "timeout" : e.message;
+      console.error(`[whatsapp] Error de red enviando ${label} (intento ${attempt}):`, lastError);
+      if (attempt === 2) return { ok: false, wamid: null, error: lastError };
+    }
+    await sleep(500 * attempt); // backoff corto antes del reintento
+  }
+  return { ok: false, wamid: null, error: lastError };
+}
+
 // Envia texto. opts.contextWaId: wamid del mensaje que se esta respondiendo (cita).
 // opts.fromPhoneId: numero de origen explicito (ver credsFor).
-// Devuelve el wamid del mensaje enviado (o null).
+// Devuelve {ok, wamid, error}.
 async function sendWhatsApp(org, to, text, opts = {}) {
   const { token, phoneId } = credsFor(org, opts.fromPhoneId);
   if (!token || !phoneId) {
     console.warn("[whatsapp] Sin token/phoneId configurado — mensaje no enviado:", text.slice(0, 80));
-    return null;
+    return { ok: false, wamid: null, error: "sin_credenciales" };
   }
   const body = {
     messaging_product: "whatsapp",
@@ -34,28 +68,18 @@ async function sendWhatsApp(org, to, text, opts = {}) {
     text: { body: text },
   };
   if (opts.contextWaId) body.context = { message_id: opts.contextWaId };
-  const res = await fetch(`https://graph.facebook.com/v18.0/${phoneId}/messages`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    console.error("[whatsapp] Error enviando mensaje:", res.status, JSON.stringify(json));
-    return null;
-  }
-  return json.messages?.[0]?.id || null;
+  return graphSendMessage(phoneId, token, body, "mensaje");
 }
 
 // Envia una PLANTILLA aprobada de WhatsApp (HSM) — unica forma de escribirle
 // a alguien fuera de la ventana de 24h (ej. recordatorios proactivos al
 // asesor). bodyParams son los valores de {{1}}..{{n}} del cuerpo, en orden.
-// Devuelve el wamid o null si fallo (ej. plantilla aun no aprobada).
+// Devuelve {ok, wamid, error} (error si la plantilla aun no esta aprobada).
 async function sendWhatsAppTemplate(org, to, { name, language = "es", bodyParams = [], fromPhoneId } = {}) {
   const { token, phoneId } = credsFor(org, fromPhoneId);
   if (!token || !phoneId) {
     console.warn("[whatsapp] Sin token/phoneId — plantilla no enviada:", name);
-    return null;
+    return { ok: false, wamid: null, error: "sin_credenciales" };
   }
   const body = {
     messaging_product: "whatsapp",
@@ -69,17 +93,7 @@ async function sendWhatsAppTemplate(org, to, { name, language = "es", bodyParams
         : {}),
     },
   };
-  const res = await fetch(`https://graph.facebook.com/v18.0/${phoneId}/messages`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    console.error("[whatsapp] Error enviando plantilla:", res.status, JSON.stringify(json));
-    return null;
-  }
-  return json.messages?.[0]?.id || null;
+  return graphSendMessage(phoneId, token, body, `plantilla ${name}`);
 }
 
 // Sube un archivo a Meta y devuelve el media_id
@@ -236,9 +250,10 @@ router.post("/webhook", async (req, res) => {
     });
 
     if (reply) {
-      const wamid = await sendWhatsApp(org, userPhone, reply, { fromPhoneId: phoneNumberId });
-      if (wamid && assistantMessageId) {
-        await conversations.setWaMessageId(assistantMessageId, wamid);
+      const { ok, wamid, error } = await sendWhatsApp(org, userPhone, reply, { fromPhoneId: phoneNumberId });
+      if (assistantMessageId) {
+        await conversations.setDelivery(assistantMessageId, ok ? "sent" : "failed", error);
+        if (wamid) await conversations.setWaMessageId(assistantMessageId, wamid);
       }
     }
     if (transfer) {

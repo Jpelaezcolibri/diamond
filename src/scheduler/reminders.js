@@ -54,14 +54,14 @@ async function runOnce() {
     try {
       const advisor = await advisors.findByAuthUserId(org.id, lead.cita.advisor_id);
       if (!advisor || !advisor.phone) continue;
-      const wamid = await sendWhatsAppTemplate(org, advisor.phone, {
+      const { ok } = await sendWhatsAppTemplate(org, advisor.phone, {
         name: config.reminders.templateName,
         language: config.reminders.templateLang,
         bodyParams: reminderParams(advisor, lead),
       });
       // Solo marcamos si el envio salio bien: si la plantilla aun no esta
       // aprobada (o falla), se reintenta en el proximo tick.
-      if (wamid) {
+      if (ok) {
         await leads.update(lead.id, { cita: { ...lead.cita, recordatorio_enviado: true } });
         sent++;
       }

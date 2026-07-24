@@ -259,7 +259,13 @@ export default function ChatView({
                   )}
                   <div className="mt-0.5 flex items-center justify-end gap-1 text-[10px] text-slate-400">
                     <span title={absoluteDateTime(m.created_at)}>{hora(m.created_at)}</span>
-                    {mine && <span className="text-sky-500">✓✓</span>}
+                    {mine && m.delivery === "failed" ? (
+                      <span className="font-medium text-red-500" title={m.delivery_error || "No se pudo entregar a WhatsApp"}>
+                        ⚠ no entregado
+                      </span>
+                    ) : (
+                      mine && <span className="text-sky-500">✓✓</span>
+                    )}
                   </div>
                   <button
                     onClick={() => setReplyTo(m)}

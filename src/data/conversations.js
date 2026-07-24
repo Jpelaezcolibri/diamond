@@ -57,6 +57,25 @@ async function setWaMessageId(messageId, waMessageId) {
   await supabase.from("messages").update({ wa_message_id: waMessageId }).eq("id", messageId);
 }
 
+// Marca el estado REAL de entrega de un mensaje saliente ('sent'|'failed') —
+// antes sendWhatsApp devolvia wamid|null y nadie distinguia el null de un
+// envio exitoso: el CRM mostraba como enviado un mensaje de Sofi que Meta
+// nunca entrego (token vencido, numero invalido, etc). Best-effort: requiere
+// la migracion 2026-07-24_message_delivery; si la columna aun no existe, el
+// mensaje ya quedo guardado igual, solo no se puede marcar el estado.
+async function setDelivery(messageId, delivery, error) {
+  if (!supabase || !messageId) return;
+  try {
+    const { error: dbError } = await supabase
+      .from("messages")
+      .update({ delivery, delivery_error: error || null })
+      .eq("id", messageId);
+    if (dbError) throw dbError;
+  } catch (e) {
+    console.warn("[conversations] No se pudo marcar delivery (revisar migracion message_delivery):", e.message);
+  }
+}
+
 // Busca un mensaje local por el wamid de Meta (para resolver respuestas citadas)
 async function findByWaMessageId(waMessageId) {
   if (!supabase || !waMessageId) return null;
@@ -162,6 +181,7 @@ module.exports = {
   resetForLead,
   setModo,
   setWaMessageId,
+  setDelivery,
   findByWaMessageId,
   followupCandidates,
   lastMessage,

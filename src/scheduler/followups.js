@@ -17,14 +17,12 @@
 // - El mensaje lo redacta Claude con el historial: corto, calido, con UNA
 //   pregunta concreta para retomar; queda guardado en la conversacion como
 //   mensaje de Sofi (visible en el CRM).
-const Anthropic = require("@anthropic-ai/sdk");
 const config = require("../config");
 const organizations = require("../data/organizations");
 const leads = require("../data/leads");
 const conversations = require("../data/conversations");
 const { sendWhatsApp } = require("../channels/whatsapp");
-
-const client = new Anthropic({ apiKey: config.anthropicApiKey });
+const { getClient } = require("../lib/anthropic");
 
 // Backstop en memoria contra dobles envios dentro del mismo proceso (si el
 // update del flag falla, el reinicio del server es el unico reintento posible).
@@ -57,7 +55,7 @@ Reglas:
 async function buildFollowupMessage(conversationId) {
   const history = await conversations.getRecentMessages(conversationId, 12);
   if (!history.length) return null;
-  const response = await client.messages.create({
+  const response = await getClient().messages.create({
     model: config.claudeModel,
     max_tokens: 300,
     system: SYSTEM_PROMPT,
@@ -118,9 +116,12 @@ async function runOnce() {
       });
       sentThisProcess.add(lead.id);
 
-      const wamid = await sendWhatsApp(org, lead.phone, texto, { fromPhoneId: conv.whatsapp_phone_id });
+      const { ok, wamid, error } = await sendWhatsApp(org, lead.phone, texto, { fromPhoneId: conv.whatsapp_phone_id });
       const msg = await conversations.appendMessage(conv.id, "assistant", texto);
-      if (wamid && msg?.id) await conversations.setWaMessageId(msg.id, wamid);
+      if (msg?.id) {
+        await conversations.setDelivery(msg.id, ok ? "sent" : "failed", error);
+        if (wamid) await conversations.setWaMessageId(msg.id, wamid);
+      }
       sent++;
       console.log(`[followups] seguimiento enviado a +${lead.phone} (lead ${lead.id})`);
     } catch (e) {

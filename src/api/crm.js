@@ -48,20 +48,21 @@ router.post("/api/conversations/:id/send", async (req, res) => {
     if (!conv) return res.status(404).json({ error: "Conversacion no encontrada" });
 
     const contextWaId = await contextWaIdFor(replyToId);
-    const wamid = await sendWhatsApp(conv.organizations, conv.leads.phone, text.trim(), {
+    const { ok, wamid, error } = await sendWhatsApp(conv.organizations, conv.leads.phone, text.trim(), {
       contextWaId,
       fromPhoneId: conv.whatsapp_phone_id,
     });
-    await conversations.appendMessage(conv.id, "assistant", text.trim(), {
+    const msg = await conversations.appendMessage(conv.id, "assistant", text.trim(), {
       wa_message_id: wamid,
       reply_to_id: replyToId || null,
     });
+    await conversations.setDelivery(msg.id, ok ? "sent" : "failed", error);
     await supabase
       .from("conversations")
       .update({ last_activity_at: new Date().toISOString() })
       .eq("id", conv.id);
 
-    res.json({ ok: true });
+    res.json({ ok: true, delivery: ok ? "sent" : "failed" });
   } catch (e) {
     console.error("[api] Error en send:", e);
     res.status(500).json({ error: e.message });

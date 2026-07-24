@@ -7,15 +7,11 @@
 // (renderBriefing/renderClose) a partir de la salida de las funciones de
 // consulta — sin pasar por el modelo. El LLM solo se usa en processMessage
 // (conversacion de seguimiento y siguiente mejor accion, EXP-013).
-const Anthropic = require("@anthropic-ai/sdk");
 const config = require("../config");
 const command = require("../data/command");
 const { buildCommandSystemPrompt } = require("./sofi-comando-prompts");
 const { COMMAND_TOOL_DEFINITIONS, executeCommandTool } = require("./sofi-comando-tools");
-
-// timeout: un turno de chat no debe quedar colgado indefinidamente si Anthropic
-// no responde; el SDK ya reintenta hasta 2 veces por defecto.
-const client = new Anthropic({ apiKey: config.anthropicApiKey, timeout: 60 * 1000 });
+const { getClient } = require("../lib/anthropic");
 
 const MAX_TOOL_ITERATIONS = 5;
 const HISTORY_LIMIT = 12;
@@ -197,6 +193,7 @@ async function openSession(scope, { userName } = {}) {
 // Turno de chat: corre el loop tool-use con las tools de comando. Devuelve
 // { reply }.
 async function processMessage(scope, sessionId, text, { userName } = {}) {
+  const client = getClient();
   await command.appendCommandMessage(sessionId, "user", text);
   const session = await command.getSession(sessionId);
   const history = await command.getRecentCommandMessages(sessionId, HISTORY_LIMIT);

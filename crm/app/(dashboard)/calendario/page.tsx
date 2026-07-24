@@ -1,5 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getTeamRoster } from "@/lib/team";
+import { fetchSafe } from "@/lib/fetch-safe";
+import ErrorBanner from "@/components/error-banner";
 
 export const dynamic = "force-dynamic";
 
@@ -50,12 +52,11 @@ function dayKey(iso: string): string {
 export default async function CalendarioPage() {
   const supabase = await createClient();
 
-  const [{ data }, roster] = await Promise.all([
-    supabase
-      .from("leads")
-      .select("id, nombre, phone, property_ref_origen, cita")
-      .not("cita", "is", null)
-      .limit(500),
+  const [{ data: citasRaw, hasError, message }, roster] = await Promise.all([
+    fetchSafe<LeadConCita>(
+      supabase.from("leads").select("id, nombre, phone, property_ref_origen, cita").not("cita", "is", null).limit(500),
+      "calendario:leads"
+    ),
     getTeamRoster(),
   ]);
 
@@ -63,7 +64,7 @@ export default async function CalendarioPage() {
   // calendario es agenda, no historial.
   const hoyInicio = new Date();
   hoyInicio.setHours(0, 0, 0, 0);
-  const leads = ((data || []) as LeadConCita[])
+  const leads = citasRaw
     .filter((l) => l.cita?.fecha_hora && new Date(l.cita.fecha_hora) >= hoyInicio)
     .sort((a, b) => new Date(a.cita!.fecha_hora!).getTime() - new Date(b.cita!.fecha_hora!).getTime());
 
@@ -79,6 +80,8 @@ export default async function CalendarioPage() {
       <p className="mb-6 text-sm text-slate-500">
         Visitas, llamadas y asesorías agendadas con clientes. El color indica el asesor asignado.
       </p>
+
+      {hasError && <ErrorBanner message={message} />}
 
       {groups.size === 0 ? (
         <p className="rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center text-sm text-slate-500">

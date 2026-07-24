@@ -99,6 +99,11 @@ export type Message = {
   media_mime?: string | null;
   wa_message_id?: string | null;
   reply_to_id?: string | null;
+  /** Estado real de entrega a WhatsApp (migracion 2026-07-24_message_delivery).
+   *  Opcionales: si la migracion no ha corrido, simplemente no llegan — un
+   *  mensaje sin este campo se trata como enviado (comportamiento previo). */
+  delivery?: "sent" | "failed" | null;
+  delivery_error?: string | null;
   created_at: string;
 };
 
