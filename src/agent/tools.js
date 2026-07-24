@@ -133,9 +133,9 @@ const TOOL_DEFINITIONS = [
         ciudad: { type: "string", description: "Ciudad o municipio" },
         descripcion: { type: "string", description: "Resto de detalles relevantes del anuncio (area, habitaciones, etc) como texto libre" },
         inmobiliaria_origen: { type: "string", description: "Nombre de la inmobiliaria del aliado, si la menciona" },
-        contacto_nombre: { type: "string", description: "Nombre de la persona que comparte la propiedad" },
+        contacto_nombre: { type: "string", description: "Nombre de la persona que comparte la propiedad. OBLIGATORIO: si el mensaje no lo trae y no esta en el historial, NO llames esta herramienta todavia — pregunta primero el nombre del asesor o colega que la ingresa." },
       },
-      required: [],
+      required: ["contacto_nombre"],
     },
   },
 ];
@@ -392,6 +392,11 @@ async function executeTool(name, input, ctx) {
   }
 
   if (name === "registrar_propiedad_aliado") {
+    // Sin el nombre de quien comparte no se registra nada (decision 2026-07-24):
+    // la red de aliados vale por saber a QUIEN avisarle, no por la ficha sola.
+    if (!String(input?.contacto_nombre || "").trim()) {
+      return "NO registre la propiedad: falta el nombre de quien la comparte. Antes que nada, pide el nombre del asesor o colega que esta ingresando la propiedad (y su inmobiliaria si aplica), y vuelve a llamar esta herramienta cuando lo tengas.";
+    }
     // Quien comparte la propiedad NUNCA se califica como lead comprador: no se
     // toca ctx.lead.categoria/estado/score aqui, a diferencia de las demas tools.
     try {

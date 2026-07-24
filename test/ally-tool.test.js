@@ -169,3 +169,32 @@ test("buscar_propiedades: match del flujo viejo SIN dueno (registrado_por null) 
   assert.strictEqual(ctx.allyAlert, null);
   assert.match(result, /AVISO INTERNO/);
 });
+
+// ── Nombre obligatorio (decision 2026-07-24): sin el nombre de quien comparte
+// (asesor propio o colega externo), la propiedad NO se registra — Sofi debe
+// pedir el nombre primero. ──────────────────────────────────────────────────
+
+test("registrar_propiedad_aliado: sin contacto_nombre NO guarda y pide el nombre", async (t) => {
+  const create = t.mock.method(allyProperties, "create", async () => ({}));
+  const ctx = baseCtx();
+  const out = await executeTool(
+    "registrar_propiedad_aliado",
+    { titulo: "Apto en El Poblado", zona: "Las Palmas", precio: "$920.000.000", ref: "8989725" },
+    ctx
+  );
+  assert.strictEqual(create.mock.calls.length, 0);
+  assert.match(out, /nombre/i);
+  assert.doesNotMatch(out, /registrada para la red/);
+});
+
+test("registrar_propiedad_aliado: con nombre en blanco tampoco guarda", async (t) => {
+  const create = t.mock.method(allyProperties, "create", async () => ({}));
+  const ctx = baseCtx();
+  const out = await executeTool(
+    "registrar_propiedad_aliado",
+    { titulo: "Apto", contacto_nombre: "   " },
+    ctx
+  );
+  assert.strictEqual(create.mock.calls.length, 0);
+  assert.match(out, /nombre/i);
+});
