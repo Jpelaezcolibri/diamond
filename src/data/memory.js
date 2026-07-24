@@ -39,6 +39,7 @@ const db = {
   messages: [],
   allyProperties: [],
   allyPropertyAlerts: [],
+  propertyOwnerAlerts: [],
   uid,
 };
 

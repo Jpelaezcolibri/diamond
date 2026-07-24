@@ -115,4 +115,40 @@ async function findByRef(orgOrId, ref) {
   return withLandingLink(data, org.landing_base_url);
 }
 
-module.exports = { search, findByRef, matchesFilters, zonaTokens, distinctiveTokens, withLandingLink };
+// Asigna (o reasigna) el asesor captador de una propiedad. advisorId null
+// desmarca. Devuelve la fila actualizada.
+async function setCaptador(orgId, propertyId, advisorId) {
+  if (!supabase) {
+    const prop = memory.properties.find((p) => p.org_id === orgId && p.id === propertyId);
+    if (!prop) return null;
+    prop.captador_id = advisorId;
+    return prop;
+  }
+  const { data, error } = await supabase
+    .from("properties")
+    .update({ captador_id: advisorId })
+    .eq("org_id", orgId)
+    .eq("id", propertyId)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+// Propiedades disponibles marcadas a nombre de un asesor.
+async function listByCaptador(orgId, advisorId, limit = 20) {
+  if (!supabase) {
+    return memory.properties.filter((p) => p.org_id === orgId && p.captador_id === advisorId && p.disponible);
+  }
+  const { data, error } = await supabase
+    .from("properties")
+    .select("ref, titulo, tipo, operacion, precio, zona, ciudad, disponible")
+    .eq("org_id", orgId)
+    .eq("captador_id", advisorId)
+    .eq("disponible", true)
+    .limit(limit);
+  if (error) throw error;
+  return data || [];
+}
+
+module.exports = { search, findByRef, matchesFilters, zonaTokens, distinctiveTokens, withLandingLink, setCaptador, listByCaptador };
