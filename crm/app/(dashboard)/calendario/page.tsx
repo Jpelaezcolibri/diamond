@@ -1,32 +1,15 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { getTeamRoster } from "@/lib/team";
-import { fetchSafe } from "@/lib/fetch-safe";
+import { getCalendarEvents, bogotaDateKey, type CalendarEvent } from "@/lib/calendar-events";
 import ErrorBanner from "@/components/error-banner";
 
 export const dynamic = "force-dynamic";
 
-// Cita tal como la guarda el bot en leads.cita (jsonb). advisor_id se estampa
-// al agendar con hora validada; puede faltar en citas viejas (flujo anterior).
-type Cita = {
-  descripcion?: string | null;
-  fecha_hora?: string | null;
-  tipo?: string | null;
-  advisor_id?: string | null;
-};
-
-type LeadConCita = {
-  id: string;
-  nombre: string | null;
-  phone: string;
-  property_ref_origen: string | null;
-  cita: Cita | null;
-};
-
-const TIPO_LABEL: Record<string, string> = {
-  visita: "Visita",
-  llamada: "Llamada",
-  asesoria: "Asesoría",
-};
+const MESES = [
+  "enero", "febrero", "marzo", "abril", "mayo", "junio",
+  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+];
+const DIAS_SEMANA = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
 // Paleta estable por asesor: el color sale del hash del id, asi cada asesor
 // mantiene su color entre renders sin guardarlo en ningun lado.
@@ -45,81 +28,159 @@ function colorFor(id: string | null): string {
   return ADVISOR_COLORS[h % ADVISOR_COLORS.length];
 }
 
-function dayKey(iso: string): string {
-  return new Date(iso).toLocaleDateString("es-CO", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
 }
 
-export default async function CalendarioPage() {
+// Año/mes (mes 0-indexado) actuales en hora de Bogota — el default del
+// selector cuando no viene ?mes= en la URL.
+function bogotaYearMonth(): { year: number; month: number } {
+  const key = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Bogota" }).format(new Date());
+  const [y, m] = key.split("-").map(Number);
+  return { year: y, month: m - 1 };
+}
+
+function parseMes(mes?: string): { year: number; month: number } {
+  if (mes && /^\d{4}-\d{2}$/.test(mes)) {
+    const [y, m] = mes.split("-").map(Number);
+    if (m >= 1 && m <= 12) return { year: y, month: m - 1 };
+  }
+  return bogotaYearMonth();
+}
+
+function mesParam(year: number, month: number): string {
+  return `${year}-${pad2(month + 1)}`;
+}
+
+function isoFromUTC(d: Date): string {
+  return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
+}
+
+// Grilla de 6 semanas x 7 dias (42 celdas), empezando en lunes, con los dias
+// del mes anterior/siguiente que rellenan la primera y ultima semana.
+function buildMonthGrid(year: number, month: number): { iso: string; day: number; inMonth: boolean }[] {
+  const first = new Date(Date.UTC(year, month, 1));
+  const firstWeekday = (first.getUTCDay() + 6) % 7; // 0=lunes .. 6=domingo
+  const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  const daysInPrevMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+
+  const cells: { iso: string; day: number; inMonth: boolean }[] = [];
+  for (let i = 0; i < firstWeekday; i++) {
+    const day = daysInPrevMonth - firstWeekday + 1 + i;
+    cells.push({ iso: isoFromUTC(new Date(Date.UTC(year, month - 1, day))), day, inMonth: false });
+  }
+  for (let day = 1; day <= daysInMonth; day++) {
+    cells.push({ iso: isoFromUTC(new Date(Date.UTC(year, month, day))), day, inMonth: true });
+  }
+  let extraDay = 1;
+  while (cells.length < 42) {
+    cells.push({ iso: isoFromUTC(new Date(Date.UTC(year, month + 1, extraDay))), day: extraDay, inMonth: false });
+    extraDay++;
+  }
+  return cells;
+}
+
+function horaBogota(iso: string): string {
+  return new Date(iso).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit", timeZone: "America/Bogota" });
+}
+
+export default async function CalendarioPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ mes?: string }>;
+}) {
+  const { mes } = await searchParams;
+  const { year, month } = parseMes(mes);
+
   const supabase = await createClient();
+  const { events, hasError, message } = await getCalendarEvents(supabase);
 
-  const [{ data: citasRaw, hasError, message }, roster] = await Promise.all([
-    fetchSafe<LeadConCita>(
-      supabase.from("leads").select("id, nombre, phone, property_ref_origen, cita").not("cita", "is", null).limit(500),
-      "calendario:leads"
-    ),
-    getTeamRoster(),
-  ]);
-
-  // Solo citas con fecha/hora concreta y futuras o de hoy en adelante — el
-  // calendario es agenda, no historial.
-  const hoyInicio = new Date();
-  hoyInicio.setHours(0, 0, 0, 0);
-  const leads = citasRaw
-    .filter((l) => l.cita?.fecha_hora && new Date(l.cita.fecha_hora) >= hoyInicio)
-    .sort((a, b) => new Date(a.cita!.fecha_hora!).getTime() - new Date(b.cita!.fecha_hora!).getTime());
-
-  const groups = new Map<string, LeadConCita[]>();
-  for (const l of leads) {
-    const key = dayKey(l.cita!.fecha_hora!);
-    groups.set(key, [...(groups.get(key) || []), l]);
+  const porDia = new Map<string, CalendarEvent[]>();
+  for (const ev of events) {
+    const key = bogotaDateKey(ev.fechaHora);
+    porDia.set(key, [...(porDia.get(key) || []), ev]);
   }
 
+  const cells = buildMonthGrid(year, month);
+  const hoyKey = bogotaDateKey(new Date().toISOString());
+  const prev = month === 0 ? { year: year - 1, month: 11 } : { year, month: month - 1 };
+  const next = month === 11 ? { year: year + 1, month: 0 } : { year, month: month + 1 };
+
   return (
-    <div className="mx-auto max-w-5xl p-4 sm:p-6">
-      <h1 className="mb-1 text-2xl font-bold text-slate-900">Calendario del equipo</h1>
-      <p className="mb-6 text-sm text-slate-500">
-        Visitas, llamadas y asesorías agendadas con clientes. El color indica el asesor asignado.
-      </p>
+    <div className="mx-auto max-w-6xl p-4 sm:p-6">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Calendario del equipo</h1>
+          <p className="text-sm text-slate-500">
+            Visitas, llamadas y asesorías con clientes, más los recordatorios con fecha del equipo. El color indica el asesor.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Link
+            href={`?mes=${mesParam(prev.year, prev.month)}`}
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
+          >
+            ← Anterior
+          </Link>
+          <span className="w-40 text-center text-sm font-semibold capitalize text-slate-900">
+            {MESES[month]} {year}
+          </span>
+          <Link
+            href={`?mes=${mesParam(next.year, next.month)}`}
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
+          >
+            Siguiente →
+          </Link>
+        </div>
+      </div>
 
       {hasError && <ErrorBanner message={message} />}
 
-      {groups.size === 0 ? (
-        <p className="rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center text-sm text-slate-500">
-          No hay citas próximas agendadas.
-        </p>
-      ) : (
-        <div className="space-y-6">
-          {[...groups.entries()].map(([day, items]) => (
-            <div key={day}>
-              <h3 className="mb-2 text-sm font-semibold capitalize text-slate-700">{day}</h3>
-              <ul className="space-y-2">
-                {items.map((l) => {
-                  const asesor = l.cita?.advisor_id ? roster[l.cita.advisor_id]?.nombre : null;
-                  return (
-                    <li
-                      key={l.id}
-                      className={`flex items-center justify-between rounded-2xl border bg-white p-3.5 shadow-sm ${colorFor(l.cita?.advisor_id ?? null)}`}
-                    >
-                      <div>
-                        <p className="font-medium">
-                          {TIPO_LABEL[l.cita?.tipo || ""] || "Cita"} · {l.nombre || `+${l.phone}`}
-                        </p>
-                        <p className="text-xs opacity-80">
-                          {l.property_ref_origen ? `Propiedad ${l.property_ref_origen} · ` : ""}
-                          {asesor ? `Asesor: ${asesor}` : "Sin asesor asignado"}
-                        </p>
-                      </div>
-                      <span className="text-sm font-semibold">
-                        {new Date(l.cita!.fecha_hora!).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" })}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
+      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="grid min-w-[720px] grid-cols-7 border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+          {DIAS_SEMANA.map((d) => (
+            <div key={d} className="px-3 py-2 text-center">
+              {d}
             </div>
           ))}
         </div>
-      )}
+        <div className="grid min-w-[720px] grid-cols-7">
+          {cells.map((cell) => {
+            const dayEvents = porDia.get(cell.iso) || [];
+            const esHoy = cell.iso === hoyKey;
+            return (
+              <div
+                key={cell.iso}
+                className={`min-h-[110px] border-b border-r border-slate-100 p-1.5 last:border-r-0 ${
+                  cell.inMonth ? "bg-white" : "bg-slate-50/60"
+                }`}
+              >
+                <span
+                  className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${
+                    esHoy ? "bg-[#c9a24b] text-white" : cell.inMonth ? "text-slate-700" : "text-slate-300"
+                  }`}
+                >
+                  {cell.day}
+                </span>
+                <div className="mt-1 space-y-1">
+                  {dayEvents.slice(0, 3).map((ev) => (
+                    <div
+                      key={ev.id}
+                      title={`${horaBogota(ev.fechaHora)} · ${ev.titulo}${ev.advisorNombre ? ` · ${ev.advisorNombre}` : ""}`}
+                      className={`truncate rounded-md border px-1.5 py-0.5 text-[11px] font-medium ${colorFor(ev.advisorId)}`}
+                    >
+                      {horaBogota(ev.fechaHora)} {ev.titulo}
+                    </div>
+                  ))}
+                  {dayEvents.length > 3 && (
+                    <div className="px-1.5 text-[11px] font-medium text-slate-400">+{dayEvents.length - 3} más</div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
