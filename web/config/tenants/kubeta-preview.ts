@@ -28,7 +28,7 @@ export const kubetaPreview = {
     },
     socials: {
       instagram: "https://www.instagram.com/diamondinmobiliarialux/",
-      facebook: "https://web.facebook.com/profile.php?id=61590636426343",
+      facebook: "https://www.facebook.com/profile.php?id=61591477960096",
     },
   },
 
