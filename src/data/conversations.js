@@ -31,7 +31,21 @@ async function findOrCreate(orgId, leadId, phoneNumberId) {
   }
   const { data, error } = await supabase
     .from("conversations").insert({ org_id: orgId, lead_id: leadId, whatsapp_phone_id: phoneNumberId || null }).select().single();
-  if (error) throw error;
+  if (error) {
+    // Carrera: el indice unico parcial conversations_one_activa_per_lead
+    // (ver migracion 2026-07-24_conversations_unique_activa) impide dos
+    // conversaciones "activa" para el mismo lead — si dos mensajes casi
+    // simultaneos intentan crearla, uno gana el insert y el otro choca
+    // (codigo 23505). En vez de perder el mensaje, se relee la que gano.
+    if (error.code === "23505") {
+      const { data: retry, error: retryError } = await supabase
+        .from("conversations").select("*").eq("lead_id", leadId).eq("estado", "activa")
+        .order("created_at", { ascending: false }).limit(1).maybeSingle();
+      if (retryError) throw retryError;
+      if (retry) return retry;
+    }
+    throw error;
+  }
   return data;
 }
 

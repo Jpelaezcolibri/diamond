@@ -5,6 +5,7 @@ const conversations = require("../data/conversations");
 const supabase = require("../data/supabase");
 const { procesarMensaje } = require("../agent/engine");
 const { verifyMetaSignature } = require("../lib/signature");
+const { enqueue } = require("../lib/user-queue");
 
 const router = express.Router();
 let warnedNoAppSecret = false;
@@ -207,64 +208,73 @@ router.post("/webhook", async (req, res) => {
 
     const userPhone = message.from;
 
-    // Respuesta citada: Meta manda context.id (wamid del mensaje citado)
-    let replyToId = null;
-    if (message.context?.id) {
-      const ref = await conversations.findByWaMessageId(message.context.id);
-      replyToId = ref?.id || null;
-    }
-
-    // Normalizar el contenido segun el tipo
-    let userText = null;
-    const extras = { wa_message_id: message.id, reply_to_id: replyToId };
-    if (message.type === "text" && message.text?.body) {
-      userText = message.text.body.trim();
-    } else if (["image", "audio", "document", "video"].includes(message.type)) {
-      const mediaObj = message[message.type] || {};
-      const persisted = await persistIncomingMedia(org, mediaObj.id);
-      extras.type = message.type;
-      extras.media_url = persisted?.url || null;
-      extras.media_mime = persisted?.mime || mediaObj.mime_type || null;
-      userText = mediaObj.caption?.trim() ||
-        (message.type === "image" ? "[Imagen recibida]" :
-         message.type === "audio" ? "[Nota de voz recibida]" :
-         message.type === "video" ? "[Video recibido]" : "[Documento recibido]");
-    } else {
-      return; // tipos no soportados (stickers, reacciones, ubicacion)
-    }
-
-    console.log(`[whatsapp][${org.name}][${userPhone}] (${message.type}) ${userText}`);
-
-    // Presente solo en el primer mensaje de una conversacion originada en un
-    // anuncio de clic-a-WhatsApp (Meta adjunta este objeto automaticamente).
-    const adReferral = message.referral || null;
-
-    const { reply, transfer, allyAlert, appointmentAlert, assistantMessageId } = await procesarMensaje({
-      org,
-      phone: userPhone,
-      text: userText,
-      source: "whatsapp",
-      messageExtras: extras,
-      phoneNumberId,
-      adReferral,
-    });
-
-    if (reply) {
-      const { ok, wamid, error } = await sendWhatsApp(org, userPhone, reply, { fromPhoneId: phoneNumberId });
-      if (assistantMessageId) {
-        await conversations.setDelivery(assistantMessageId, ok ? "sent" : "failed", error);
-        if (wamid) await conversations.setWaMessageId(assistantMessageId, wamid);
+    // Serializa TODO el procesamiento de este cliente (incluye el envio de
+    // la respuesta): sin esto, 2-3 mensajes seguidos del mismo numero
+    // (patron normal de un chat real) disparan procesarMensaje en paralelo
+    // — el segundo insert de lead/conversacion choca con el otro, y dos
+    // llamadas a Claude con historiales desincronizados producen doble
+    // respuesta o silencio. Keys distintas (otros clientes) no se bloquean
+    // entre si. Ver src/lib/user-queue.js.
+    await enqueue(`${org.id}:${userPhone}`, async () => {
+      // Respuesta citada: Meta manda context.id (wamid del mensaje citado)
+      let replyToId = null;
+      if (message.context?.id) {
+        const ref = await conversations.findByWaMessageId(message.context.id);
+        replyToId = ref?.id || null;
       }
-    }
-    if (transfer) {
-      await sendWhatsApp(org, transfer.advisorPhone, transfer.advisorAlert, { fromPhoneId: phoneNumberId });
-    }
-    if (allyAlert) {
-      await sendWhatsApp(org, allyAlert.advisorPhone, allyAlert.advisorAlert, { fromPhoneId: phoneNumberId });
-    }
-    if (appointmentAlert) {
-      await sendWhatsApp(org, appointmentAlert.advisorPhone, appointmentAlert.advisorAlert, { fromPhoneId: phoneNumberId });
-    }
+
+      // Normalizar el contenido segun el tipo
+      let userText = null;
+      const extras = { wa_message_id: message.id, reply_to_id: replyToId };
+      if (message.type === "text" && message.text?.body) {
+        userText = message.text.body.trim();
+      } else if (["image", "audio", "document", "video"].includes(message.type)) {
+        const mediaObj = message[message.type] || {};
+        const persisted = await persistIncomingMedia(org, mediaObj.id);
+        extras.type = message.type;
+        extras.media_url = persisted?.url || null;
+        extras.media_mime = persisted?.mime || mediaObj.mime_type || null;
+        userText = mediaObj.caption?.trim() ||
+          (message.type === "image" ? "[Imagen recibida]" :
+           message.type === "audio" ? "[Nota de voz recibida]" :
+           message.type === "video" ? "[Video recibido]" : "[Documento recibido]");
+      } else {
+        return; // tipos no soportados (stickers, reacciones, ubicacion)
+      }
+
+      console.log(`[whatsapp][${org.name}][${userPhone}] (${message.type}) ${userText}`);
+
+      // Presente solo en el primer mensaje de una conversacion originada en un
+      // anuncio de clic-a-WhatsApp (Meta adjunta este objeto automaticamente).
+      const adReferral = message.referral || null;
+
+      const { reply, transfer, allyAlert, appointmentAlert, assistantMessageId } = await procesarMensaje({
+        org,
+        phone: userPhone,
+        text: userText,
+        source: "whatsapp",
+        messageExtras: extras,
+        phoneNumberId,
+        adReferral,
+      });
+
+      if (reply) {
+        const { ok, wamid, error } = await sendWhatsApp(org, userPhone, reply, { fromPhoneId: phoneNumberId });
+        if (assistantMessageId) {
+          await conversations.setDelivery(assistantMessageId, ok ? "sent" : "failed", error);
+          if (wamid) await conversations.setWaMessageId(assistantMessageId, wamid);
+        }
+      }
+      if (transfer) {
+        await sendWhatsApp(org, transfer.advisorPhone, transfer.advisorAlert, { fromPhoneId: phoneNumberId });
+      }
+      if (allyAlert) {
+        await sendWhatsApp(org, allyAlert.advisorPhone, allyAlert.advisorAlert, { fromPhoneId: phoneNumberId });
+      }
+      if (appointmentAlert) {
+        await sendWhatsApp(org, appointmentAlert.advisorPhone, appointmentAlert.advisorAlert, { fromPhoneId: phoneNumberId });
+      }
+    });
   } catch (e) {
     console.error("[whatsapp] Error procesando webhook:", e);
   }

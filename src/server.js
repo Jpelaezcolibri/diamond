@@ -6,6 +6,7 @@ const organizations = require("./data/organizations");
 const leads = require("./data/leads");
 const conversations = require("./data/conversations");
 const { procesarMensaje } = require("./agent/engine");
+const { enqueue } = require("./lib/user-queue");
 
 const app = express();
 // verify: conserva el body crudo en req.rawBody para poder validar la firma
@@ -46,13 +47,17 @@ app.post("/test", requireTestApiKey, async (req, res) => {
   if (!message) return res.status(400).json({ error: "Falta el campo 'message'" });
   try {
     const org = await organizations.getDefault();
-    const { reply, lead, transfer } = await procesarMensaje({
-      org,
-      phone,
-      text: message,
-      source: "test",
-      adReferral: adReferral || null,
-    });
+    // Misma cola por usuario que los canales reales (ver src/lib/user-queue.js)
+    // — dos POST /test seguidos al mismo phone no deben intercalarse.
+    const { reply, lead, transfer } = await enqueue(`${org.id}:${phone}`, () =>
+      procesarMensaje({
+        org,
+        phone,
+        text: message,
+        source: "test",
+        adReferral: adReferral || null,
+      })
+    );
     res.json({ reply, lead, transfer });
   } catch (e) {
     console.error("[test] Error:", e);

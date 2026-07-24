@@ -4,6 +4,7 @@ const express = require("express");
 const config = require("../config");
 const organizations = require("../data/organizations");
 const { procesarMensaje } = require("../agent/engine");
+const { enqueue } = require("../lib/user-queue");
 
 const router = express.Router();
 const API = () => `https://api.telegram.org/bot${config.telegramToken}`;
@@ -49,24 +50,28 @@ router.post("/telegram", async (req, res) => {
     const org = await organizations.getDefault();
     console.log(`[telegram][${chatId}] ${userText}`);
 
-    const { reply, transfer, allyAlert, appointmentAlert } = await procesarMensaje({
-      org,
-      phone: chatId,
-      text: userText,
-      source: "telegram",
-    });
+    // Misma cola por usuario que WhatsApp (ver src/lib/user-queue.js): evita
+    // respuestas dobles/desincronizadas si el mismo chat manda mensajes seguidos.
+    await enqueue(`${org.id}:${chatId}`, async () => {
+      const { reply, transfer, allyAlert, appointmentAlert } = await procesarMensaje({
+        org,
+        phone: chatId,
+        text: userText,
+        source: "telegram",
+      });
 
-    if (reply) await sendTelegram(chatId, reply);
-    if (transfer) {
-      // En demo la alerta se envia al mismo chat, marcada, para que se vea el flujo
-      await sendTelegram(chatId, `🔔 [ALERTA QUE RECIBE EL ASESOR]\n\n${transfer.advisorAlert}`);
-    }
-    if (allyAlert) {
-      await sendTelegram(chatId, `🔔 [ALERTA INMEDIATA AL DUENO DEL ALIADO]\n\n${allyAlert.advisorAlert}`);
-    }
-    if (appointmentAlert) {
-      await sendTelegram(chatId, `🔔 [ALERTA DE CITA AGENDADA]\n\n${appointmentAlert.advisorAlert}`);
-    }
+      if (reply) await sendTelegram(chatId, reply);
+      if (transfer) {
+        // En demo la alerta se envia al mismo chat, marcada, para que se vea el flujo
+        await sendTelegram(chatId, `🔔 [ALERTA QUE RECIBE EL ASESOR]\n\n${transfer.advisorAlert}`);
+      }
+      if (allyAlert) {
+        await sendTelegram(chatId, `🔔 [ALERTA INMEDIATA AL DUENO DEL ALIADO]\n\n${allyAlert.advisorAlert}`);
+      }
+      if (appointmentAlert) {
+        await sendTelegram(chatId, `🔔 [ALERTA DE CITA AGENDADA]\n\n${appointmentAlert.advisorAlert}`);
+      }
+    });
   } catch (e) {
     console.error("[telegram] Error procesando update:", e);
   }

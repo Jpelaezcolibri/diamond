@@ -109,11 +109,14 @@ async function runOnce() {
       const texto = await buildFollowupMessage(conv.id);
       if (!texto) continue;
 
-      // Marca ANTES de enviar: si el update falla no se envia (nunca spam);
-      // si el envio falla despues, se pierde este toque (aceptable en Fase 1).
-      await leads.update(lead.id, {
-        seguimiento: { ...(lead.seguimiento || {}), t24_sent_at: new Date().toISOString() },
-      });
+      // Claim atomico ANTES de enviar (ver src/data/leads.js#claimFollowup):
+      // el UPDATE lleva su propio WHERE ...is null, asi que si dos ticks (o
+      // dos replicas, a futuro) corrieran a la vez sobre el mismo lead, solo
+      // uno gana el claim — el otro se salta el lead en vez de duplicar el
+      // toque. Si el envio falla despues, se pierde este toque (aceptable en
+      // Fase 1: un solo intento por diseno, igual que antes).
+      const claimed = await leads.claimFollowup(lead.id);
+      if (!claimed) continue; // otro tick/proceso ya lo esta manejando
       sentThisProcess.add(lead.id);
 
       const { ok, wamid, error } = await sendWhatsApp(org, lead.phone, texto, { fromPhoneId: conv.whatsapp_phone_id });

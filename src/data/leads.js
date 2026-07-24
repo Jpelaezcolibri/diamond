@@ -21,7 +21,20 @@ async function findOrCreate(orgId, phone, source = "whatsapp") {
   if (existing) return existing;
   const { data, error } = await supabase
     .from("leads").insert({ org_id: orgId, phone, source }).select().single();
-  if (error) throw error;
+  if (error) {
+    // Carrera: 2-3 mensajes casi simultaneos del mismo cliente (patron normal
+    // de chat, o dos procesos/instancias) pueden insertar el mismo (org_id,
+    // phone) entre el select y este insert — choca contra el unique de la
+    // tabla (codigo 23505 de Postgres). Antes esto tiraba el mensaje del
+    // cliente sin respuesta; ahora se relee la fila que gano la carrera.
+    if (error.code === "23505") {
+      const { data: retry, error: retryError } = await supabase
+        .from("leads").select("*").eq("org_id", orgId).eq("phone", phone).maybeSingle();
+      if (retryError) throw retryError;
+      if (retry) return retry;
+    }
+    throw error;
+  }
   data._isNew = true; // recien creado: se queda en "nuevo" hasta que vuelva a escribir
   return data;
 }
@@ -42,4 +55,38 @@ async function update(leadId, fields) {
   return data;
 }
 
-module.exports = { findOrCreate, update };
+// Claims atomicos para los schedulers (src/scheduler/followups.js y
+// reminders.js): antes marcaban con un update() normal, que es un
+// select-en-la-cabeza-del-dev-then-write — dos ticks corriendo a la vez (o,
+// a futuro, dos replicas de Railway) podian ver el mismo lead como
+// candidato y enviarle el aviso dos veces. Estas dos funciones llaman a
+// funciones de Postgres (ver migracion 2026-07-24_claim_functions) que
+// hacen el UPDATE con su propio WHERE ...is null en una sola sentencia
+// atomica — algo que el cliente de Supabase no puede expresar sobre un
+// campo dentro de un jsonb. Devuelven true solo si ESTA llamada gano el
+// claim; false si alguien mas ya lo habia marcado.
+async function claimFollowup(leadId) {
+  if (!supabase) {
+    const lead = memory.leads.find((l) => l.id === leadId);
+    if (!lead || lead.seguimiento?.t24_sent_at) return false;
+    lead.seguimiento = { ...(lead.seguimiento || {}), t24_sent_at: new Date().toISOString() };
+    return true;
+  }
+  const { data, error } = await supabase.rpc("claim_followup", { p_lead_id: leadId });
+  if (error) throw error;
+  return data === true;
+}
+
+async function claimAppointmentReminder(leadId) {
+  if (!supabase) {
+    const lead = memory.leads.find((l) => l.id === leadId);
+    if (!lead || lead.cita?.recordatorio_enviado) return false;
+    lead.cita = { ...(lead.cita || {}), recordatorio_enviado: true };
+    return true;
+  }
+  const { data, error } = await supabase.rpc("claim_appointment_reminder", { p_lead_id: leadId });
+  if (error) throw error;
+  return data === true;
+}
+
+module.exports = { findOrCreate, update, claimFollowup, claimAppointmentReminder };
