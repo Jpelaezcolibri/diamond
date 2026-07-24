@@ -146,7 +146,7 @@ const COMMAND_TOOL_DEFINITIONS = [
   {
     name: "crear_recordatorio",
     description:
-      "Crea un recordatorio PERSONAL para el asesor que esta chateando ahora mismo — nunca lo ve otro asesor, ni el admin. Usala cuando pida que le recuerdes algo: una cita, una llamada, una tarea. Si menciona un cliente que existe en el CRM, se lo vincula automaticamente.",
+      "Crea un recordatorio para el asesor que esta chateando ahora mismo. Si tiene fecha/hora (una cita, visita o llamada agendada), queda visible para TODO el equipo en el Calendario del equipo del CRM; sin fecha/hora es una nota personal que solo el ve. Usala cuando pida que le recuerdes algo. Si menciona un cliente que existe en el CRM, se lo vincula automaticamente.",
     input_schema: {
       type: "object",
       properties: {
