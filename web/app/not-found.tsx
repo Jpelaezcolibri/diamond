@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { getTenantConfig } from "@/config/tenant";
-import { generalWhatsAppUrl } from "@/lib/whatsapp";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Container } from "@/components/layout/container";
 import { T } from "@/components/shared/t";
@@ -13,7 +12,8 @@ export default function NotFound() {
         <EmptyState
           title={<T k="emptyState.notFoundTitle" />}
           description={<T k="emptyState.notFoundDescription" />}
-          whatsappUrl={generalWhatsAppUrl(config)}
+          waNumber={config.contact.whatsapp.number}
+          waMessage={config.contact.whatsapp.generalMessage}
           clearHref="/propiedades"
         />
         <p className="sr-only">

@@ -2,17 +2,21 @@ import type { ReactNode } from "react";
 import { SearchX, MessageCircle } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/design-system/button";
+import type { LocalizedText } from "@/config/i18n";
 import { T } from "./t";
+import { WaLink } from "./wa-link";
 
 interface EmptyStateProps {
   title: ReactNode;
   description: ReactNode;
-  whatsappUrl?: string;
+  /** Numero + mensaje bilingue: el CTA de WhatsApp se arma en el idioma activo. */
+  waNumber?: string;
+  waMessage?: LocalizedText;
   clearHref?: string;
 }
 
 /** Estado vacio con salida clara: limpiar filtros o hablar con un humano. */
-export function EmptyState({ title, description, whatsappUrl, clearHref }: EmptyStateProps) {
+export function EmptyState({ title, description, waNumber, waMessage, clearHref }: EmptyStateProps) {
   return (
     <div className="flex flex-col items-center py-24 text-center">
       <SearchX className="size-10 text-muted" strokeWidth={1.25} aria-hidden="true" />
@@ -26,12 +30,12 @@ export function EmptyState({ title, description, whatsappUrl, clearHref }: Empty
             </Link>
           </Button>
         ) : null}
-        {whatsappUrl ? (
+        {waNumber && waMessage ? (
           <Button asChild variant="whatsapp">
-            <a href={whatsappUrl} target="_blank" rel="noopener noreferrer">
+            <WaLink number={waNumber} message={waMessage}>
               <MessageCircle aria-hidden="true" />
               <T k="emptyState.tellUs" />
-            </a>
+            </WaLink>
           </Button>
         ) : null}
       </div>

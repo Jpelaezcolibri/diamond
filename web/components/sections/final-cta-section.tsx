@@ -1,6 +1,6 @@
 import { MessageCircle } from "lucide-react";
 import { getTenantConfig } from "@/config/tenant";
-import { generalWhatsAppUrl } from "@/lib/whatsapp";
+import { WaLink } from "@/components/shared/wa-link";
 import type { SectionOfType } from "@/config/tenant-schema";
 import { SectionShell } from "@/components/layout/section-shell";
 import { Button } from "@/components/design-system/button";
@@ -22,10 +22,10 @@ export function FinalCtaSection({ section }: { section: SectionOfType<"final-cta
             <p className="mt-4 max-w-md text-base leading-relaxed text-muted md:text-lg"><LT v={section.subtitle} /></p>
           ) : null}
           <Button asChild variant="whatsapp" size="lg" className="mt-8">
-            <a href={generalWhatsAppUrl(config)} target="_blank" rel="noopener noreferrer">
+            <WaLink number={config.contact.whatsapp.number} message={config.contact.whatsapp.generalMessage}>
               <MessageCircle aria-hidden="true" />
               <T k="nav.whatsappMobile" />
-            </a>
+            </WaLink>
           </Button>
         </FadeIn>
 

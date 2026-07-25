@@ -2,7 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { getTenantConfig } from "@/config/tenant";
 import { getFilterOptions } from "@/services/properties";
-import { generalWhatsAppUrl } from "@/lib/whatsapp";
+import { WaLink } from "@/components/shared/wa-link";
 import type { SectionOfType } from "@/config/tenant-schema";
 import { Container } from "@/components/layout/container";
 import { Button } from "@/components/design-system/button";
@@ -54,9 +54,9 @@ export async function HeroSection({ section }: { section: SectionOfType<"hero"> 
           ) : section.cta ? (
             <Button asChild size="lg" variant="primary">
               {section.cta.action === "whatsapp" ? (
-                <a href={generalWhatsAppUrl(config)} target="_blank" rel="noopener noreferrer">
+                <WaLink number={config.contact.whatsapp.number} message={config.contact.whatsapp.generalMessage}>
                   <LT v={section.cta.label} />
-                </a>
+                </WaLink>
               ) : (
                 <Link href={section.cta.action === "sell" ? "/vende-tu-propiedad" : "/propiedades"}>
                   <LT v={section.cta.label} />

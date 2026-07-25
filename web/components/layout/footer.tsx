@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { Instagram, Facebook, Youtube, MessageCircle } from "lucide-react";
 import { getTenantConfig } from "@/config/tenant";
-import { generalWhatsAppUrl } from "@/lib/whatsapp";
 import { T } from "@/components/shared/t";
 import { LT } from "@/components/shared/lt";
+import { WaLink } from "@/components/shared/wa-link";
 import { Container } from "./container";
 
 export function Footer() {
@@ -41,14 +41,13 @@ export function Footer() {
 
           <div className="flex flex-col gap-2 text-sm">
             <p className="mb-1 text-xs font-medium uppercase tracking-[0.18em] text-muted"><T k="footer.contact" /></p>
-            <a
-              href={generalWhatsAppUrl(config)}
-              target="_blank"
-              rel="noopener noreferrer"
+            <WaLink
+              number={config.contact.whatsapp.number}
+              message={config.contact.whatsapp.generalMessage}
               className="inline-flex items-center gap-2 text-foreground/80 hover:text-foreground"
             >
               <MessageCircle className="size-4" aria-hidden="true" /> WhatsApp
-            </a>
+            </WaLink>
             {config.contact.email ? (
               <a href={`mailto:${config.contact.email}`} className="text-foreground/80 hover:text-foreground">
                 {config.contact.email}

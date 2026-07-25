@@ -156,10 +156,12 @@ export const TenantConfigSchema = z.object({
     whatsapp: z.object({
       /** E.164 sin "+", ej "573044653609". */
       number: z.string().regex(/^\d{10,15}$/),
-      /** {ref} se reemplaza por la referencia de la propiedad. */
-      propertyMessage: z.string(),
-      generalMessage: z.string(),
-      sellerMessage: z.string(),
+      /** {ref} se reemplaza por la referencia de la propiedad. El par EN es la
+       *  señal con la que Sofi detecta el idioma del lead — mantenerlo alineado
+       *  con src/agent/intent.js:detectClientLanguage. */
+      propertyMessage: LocalizedString,
+      generalMessage: LocalizedString,
+      sellerMessage: LocalizedString,
     }),
     phone: z.string().optional(),
     email: z.string().email().optional(),

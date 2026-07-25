@@ -7,15 +7,17 @@ import { Menu, X, MessageCircle } from "lucide-react";
 import { Button } from "@/components/design-system/button";
 import { useLanguage } from "@/components/shared/language-provider";
 import { T } from "@/components/shared/t";
-import type { TranslationKey } from "@/config/i18n";
+import { WaLink } from "@/components/shared/wa-link";
+import type { TranslationKey, LocalizedText } from "@/config/i18n";
 
 interface MobileNavProps {
   links: { href: string; key: string }[];
-  whatsappUrl: string;
+  waNumber: string;
+  waMessage: LocalizedText;
   brandName: string;
 }
 
-export function MobileNav({ links, whatsappUrl, brandName }: MobileNavProps) {
+export function MobileNav({ links, waNumber, waMessage, brandName }: MobileNavProps) {
   const [open, setOpen] = React.useState(false);
   const { t } = useLanguage();
 
@@ -69,10 +71,10 @@ export function MobileNav({ links, whatsappUrl, brandName }: MobileNavProps) {
 
           <div className="mt-auto">
             <Button asChild variant="whatsapp" className="w-full">
-              <a href={whatsappUrl} target="_blank" rel="noopener noreferrer">
+              <WaLink number={waNumber} message={waMessage}>
                 <MessageCircle aria-hidden="true" />
                 <T k="nav.whatsappMobile" />
-              </a>
+              </WaLink>
             </Button>
           </div>
         </Dialog.Content>

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { MessageCircle, Camera, Megaphone, Filter, ShieldCheck } from "lucide-react";
 import { getTenantConfig } from "@/config/tenant";
-import { sellerWhatsAppUrl } from "@/lib/whatsapp";
+import { WaLink } from "@/components/shared/wa-link";
 import { Container } from "@/components/layout/container";
 import { SectionShell } from "@/components/layout/section-shell";
 import { Button } from "@/components/design-system/button";
@@ -44,10 +44,10 @@ export default function SellPage() {
               <p className="mt-5 text-base leading-relaxed text-muted md:text-lg"><LT v={sellPage.subtitle} /></p>
             ) : null}
             <Button asChild variant="whatsapp" size="lg" className="mt-8">
-              <a href={sellerWhatsAppUrl(config)} target="_blank" rel="noopener noreferrer">
+              <WaLink number={config.contact.whatsapp.number} message={config.contact.whatsapp.sellerMessage}>
                 <MessageCircle aria-hidden="true" />
                 <T k="sellPageUi.whatsappCta" />
-              </a>
+              </WaLink>
             </Button>
           </div>
         </Container>

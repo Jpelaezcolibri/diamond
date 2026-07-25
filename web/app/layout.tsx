@@ -10,7 +10,6 @@ import { Footer } from "@/components/layout/footer";
 import { WhatsAppFab } from "@/components/navigation/whatsapp-fab";
 import { VerticeSignature } from "@/components/shared/VerticeSignature";
 import { MetaPixel } from "@/components/shared/meta-pixel";
-import { generalWhatsAppUrl } from "@/lib/whatsapp";
 import { organizationJsonLd } from "@/lib/seo";
 import { JsonLd } from "@/components/shared/json-ld";
 import "@/styles/globals.css";
@@ -52,7 +51,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Header />
               <div className="flex-1">{children}</div>
               <Footer />
-              <WhatsAppFab href={generalWhatsAppUrl(config)} />
+              <WhatsAppFab number={config.contact.whatsapp.number} message={config.contact.whatsapp.generalMessage} />
               <VerticeSignature position="bottom-left" />
             </LanguageProvider>
           </ThemeProvider>

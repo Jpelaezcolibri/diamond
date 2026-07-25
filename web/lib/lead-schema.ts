@@ -24,6 +24,9 @@ export const LeadFormSchema = z.object({
     .or(z.literal("")),
   /** Contexto de origen para saber que formulario convirtio. */
   context: z.enum(["home", "property", "seller"]).default("home"),
+  /** Idioma activo del visitante al enviar: el lead nace marcado y la URL de
+   *  WhatsApp de respuesta sale con el prellenado en su idioma. */
+  idioma: z.enum(["es", "en"]).optional(),
   /** event_id compartido Pixel <-> CAPI (dedup). UUID generado en el cliente. */
   eventId: z
     .string()

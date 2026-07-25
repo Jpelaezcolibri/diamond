@@ -19,11 +19,11 @@ const CATEGORIA: Record<string, string> = {
   vender: "otros",
 };
 
-function whatsappFor(context: string, propertyRef: string | undefined) {
+function whatsappFor(context: string, propertyRef: string | undefined, lang: "es" | "en" = "es") {
   const config = getTenantConfig();
-  if (context === "property" && propertyRef) return propertyWhatsAppUrl(config, propertyRef);
-  if (context === "seller") return sellerWhatsAppUrl(config);
-  return generalWhatsAppUrl(config);
+  if (context === "property" && propertyRef) return propertyWhatsAppUrl(config, propertyRef, lang);
+  if (context === "seller") return sellerWhatsAppUrl(config, lang);
+  return generalWhatsAppUrl(config, lang);
 }
 
 /**
@@ -56,7 +56,7 @@ export async function POST(request: Request) {
   // Anti-spam: honeypot lleno o submit en <2s → 200 fake (sin señal al bot).
   const tooFast = Date.now() - values._ts < 2000;
   if (values._gotcha || tooFast) {
-    return NextResponse.json({ ok: true, whatsappUrl: whatsappFor(values.context, values.propertyRef) });
+    return NextResponse.json({ ok: true, whatsappUrl: whatsappFor(values.context, values.propertyRef, values.idioma) });
   }
 
   const phone = normalizePhone(values.telefono);
@@ -64,7 +64,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "Teléfono inválido" }, { status: 400 });
   }
 
-  const whatsappUrl = whatsappFor(values.context, values.propertyRef);
+  const whatsappUrl = whatsappFor(values.context, values.propertyRef, values.idioma);
   const supabase = createAdminClient();
   const orgId = process.env.TENANT_ORG_ID;
 
@@ -108,7 +108,7 @@ export async function POST(request: Request) {
       if (error) console.error("[REF] Error actualizando lead");
     }
   } else {
-    const { error } = await supabase.from("leads").insert({
+    const row: Record<string, unknown> = {
       org_id: orgId,
       phone,
       nombre: values.nombre,
@@ -118,7 +118,17 @@ export async function POST(request: Request) {
       estado: "nuevo",
       source: "landing",
       property_ref_origen: values.propertyRef ?? null,
-    });
+    };
+    // El lead nace marcado en ingles si el visitante envio el form en EN
+    // (Sofi lo atiende en ingles desde el primer mensaje). Best-effort: si la
+    // columna no existe (migracion 2026-07-24_lead_idioma pendiente), se
+    // reintenta sin ella — nunca perder el lead por el idioma.
+    let { error } = await supabase.from("leads").insert(
+      values.idioma === "en" ? { ...row, idioma: "en" } : row
+    );
+    if (error && values.idioma === "en") {
+      ({ error } = await supabase.from("leads").insert(row));
+    }
     if (error) console.error("[REF] Error insertando lead");
   }
 

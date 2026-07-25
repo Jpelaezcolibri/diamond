@@ -5,7 +5,7 @@ import { getTenantConfig } from "@/config/tenant";
 import { getProperties, getPropertyByRef, getSimilar } from "@/services/properties";
 import { getPropertyContext } from "@/services/property-context";
 import { refFromSlug } from "@/lib/slug";
-import { propertyWhatsAppUrl } from "@/lib/whatsapp";
+import { WaLink } from "@/components/shared/wa-link";
 import { propertyJsonLd } from "@/lib/seo";
 import { isNewProperty } from "@/lib/property-freshness";
 import { Container } from "@/components/layout/container";
@@ -79,7 +79,6 @@ export default async function PropertyPage({ params }: { params: Promise<Params>
   // Canonico: si el titulo cambio, el slug viejo redirige 301.
   if (slug !== property.slug) permanentRedirect(`/propiedades/${property.slug}`);
 
-  const whatsappUrl = propertyWhatsAppUrl(config, property.ref);
   const similares = await getSimilar(property, 3);
   const location = [property.zona, property.ciudad].filter(Boolean).join(", ");
   const context = await getPropertyContext(property.ref);
@@ -227,10 +226,10 @@ export default async function PropertyPage({ params }: { params: Promise<Params>
                 <T k="propertyPage.talkToTeam" />
               </p>
               <Button asChild variant="whatsapp" size="lg" className="mt-5 w-full">
-                <a href={whatsappUrl} target="_blank" rel="noopener noreferrer">
+                <WaLink number={config.contact.whatsapp.number} message={config.contact.whatsapp.propertyMessage} refValue={property.ref}>
                   <MessageCircle aria-hidden="true" />
                   <T k="propertyPage.wantToSee" />
-                </a>
+                </WaLink>
               </Button>
               <p className="mt-3 text-center text-xs text-muted">
                 <T k="propertyPage.immediateResponse" vars={{ ref: property.ref }} />
@@ -268,10 +267,10 @@ export default async function PropertyPage({ params }: { params: Promise<Params>
       <div className="fixed inset-x-0 bottom-0 z-40 flex items-center justify-between gap-3 border-t border-line bg-background/95 px-5 py-3 backdrop-blur-md lg:hidden">
         <p className="font-heading text-lg tracking-tight tabular-nums">{property.precio.formatted}</p>
         <Button asChild variant="whatsapp" size="md">
-          <a href={whatsappUrl} target="_blank" rel="noopener noreferrer">
+          <WaLink number={config.contact.whatsapp.number} message={config.contact.whatsapp.propertyMessage} refValue={property.ref}>
             <MessageCircle aria-hidden="true" />
             <T k="propertyPage.wantToSeeShort" />
-          </a>
+          </WaLink>
         </Button>
       </div>
       <div className="h-16 lg:hidden" aria-hidden="true" />

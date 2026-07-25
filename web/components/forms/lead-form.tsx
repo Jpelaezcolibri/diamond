@@ -52,7 +52,7 @@ function Field({
 export function LeadForm({ context, propertyRef, className }: LeadFormProps) {
   const [status, setStatus] = React.useState<"idle" | "sending" | "success" | "error">("idle");
   const renderedAt = React.useRef(Date.now());
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
 
   const {
     register,
@@ -77,7 +77,7 @@ export function LeadForm({ context, propertyRef, className }: LeadFormProps) {
       const res = await fetch("/api/leads", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...values, eventId, _ts: renderedAt.current }),
+        body: JSON.stringify({ ...values, eventId, idioma: language, _ts: renderedAt.current }),
       });
       const data = (await res.json()) as { ok: boolean; whatsappUrl?: string };
       if (!res.ok || !data.ok) throw new Error("request failed");

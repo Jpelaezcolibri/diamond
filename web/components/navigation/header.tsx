@@ -2,10 +2,10 @@ import Link from "next/link";
 import Image from "next/image";
 import { MessageCircle } from "lucide-react";
 import { getTenantConfig } from "@/config/tenant";
-import { generalWhatsAppUrl } from "@/lib/whatsapp";
 import { Container } from "@/components/layout/container";
 import { Button } from "@/components/design-system/button";
 import { T } from "@/components/shared/t";
+import { WaLink } from "@/components/shared/wa-link";
 import { LanguageToggle } from "./language-toggle";
 import { MobileNav } from "./mobile-nav";
 
@@ -50,10 +50,10 @@ export function Header() {
           ))}
           <LanguageToggle />
           <Button asChild variant="whatsapp" size="sm">
-            <a href={generalWhatsAppUrl(config)} target="_blank" rel="noopener noreferrer">
+            <WaLink number={config.contact.whatsapp.number} message={config.contact.whatsapp.generalMessage}>
               <MessageCircle aria-hidden="true" />
               <T k="nav.whatsapp" />
-            </a>
+            </WaLink>
           </Button>
         </nav>
 
@@ -61,7 +61,8 @@ export function Header() {
           <LanguageToggle />
           <MobileNav
             links={NAV_LINKS.map((l) => ({ href: l.href, key: l.key }))}
-            whatsappUrl={generalWhatsAppUrl(config)}
+            waNumber={config.contact.whatsapp.number}
+            waMessage={config.contact.whatsapp.generalMessage}
             brandName={config.brand.name}
           />
         </div>

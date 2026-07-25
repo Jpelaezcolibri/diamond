@@ -8,8 +8,11 @@ import { propertyWhatsAppUrl } from "@/lib/whatsapp";
 // y en Instagram ademas no es clicable — un link corto de nuestro propio dominio
 // se lee limpio y sigue resolviendo al mismo deep link con la ref precargada
 // (Sofi la sigue detectando igual en engine.js).
-export async function GET(_req: Request, { params }: { params: Promise<{ ref: string }> }) {
+export async function GET(req: Request, { params }: { params: Promise<{ ref: string }> }) {
   const { ref } = await params;
   const config = getTenantConfig();
-  return NextResponse.redirect(propertyWhatsAppUrl(config, ref), { status: 302 });
+  // ?lang=en → prellenado en ingles (para captions/campañas dirigidas a
+  // angloparlantes; Sofi detecta el idioma por el prellenado).
+  const lang = new URL(req.url).searchParams.get("lang") === "en" ? "en" : "es";
+  return NextResponse.redirect(propertyWhatsAppUrl(config, ref, lang), { status: 302 });
 }

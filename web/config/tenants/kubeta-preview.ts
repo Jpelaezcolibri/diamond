@@ -22,9 +22,19 @@ export const kubetaPreview = {
   contact: {
     whatsapp: {
       number: "573044653609",
-      propertyMessage: "Hola, me interesa la propiedad {ref}",
-      generalMessage: "Hola, quiero información sobre sus propiedades",
-      sellerMessage: "Hola, quiero vender mi propiedad con ustedes",
+      // Mismo par EN que diamond.ts — es la señal de idioma que detecta Sofi.
+      propertyMessage: {
+        es: "Hola, me interesa la propiedad {ref}",
+        en: "Hi, I'm interested in property {ref}",
+      },
+      generalMessage: {
+        es: "Hola, quiero información sobre sus propiedades",
+        en: "Hi, I'd like information about your properties",
+      },
+      sellerMessage: {
+        es: "Hola, quiero vender mi propiedad con ustedes",
+        en: "Hi, I want to sell my property with you",
+      },
     },
     socials: {
       instagram: "https://www.instagram.com/diamondinmobiliarialux/",

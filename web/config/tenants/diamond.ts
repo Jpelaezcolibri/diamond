@@ -26,9 +26,20 @@ export const diamond = {
   contact: {
     whatsapp: {
       number: "573044653609",
-      propertyMessage: "Hola, me interesa la propiedad {ref}",
-      generalMessage: "Hola, quiero información sobre sus propiedades",
-      sellerMessage: "Hola, quiero vender mi propiedad con ustedes",
+      // El par EN es la señal con la que Sofi detecta el idioma del lead
+      // (src/agent/intent.js:detectClientLanguage) — no cambiar sin alinear.
+      propertyMessage: {
+        es: "Hola, me interesa la propiedad {ref}",
+        en: "Hi, I'm interested in property {ref}",
+      },
+      generalMessage: {
+        es: "Hola, quiero información sobre sus propiedades",
+        en: "Hi, I'd like information about your properties",
+      },
+      sellerMessage: {
+        es: "Hola, quiero vender mi propiedad con ustedes",
+        en: "Hi, I want to sell my property with you",
+      },
     },
     socials: {
       instagram: "https://www.instagram.com/diamondinmobiliarialux/",

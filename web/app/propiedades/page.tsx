@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { getTenantConfig } from "@/config/tenant";
 import { getProperties, getFilterOptions } from "@/services/properties";
 import { parseFilters, applyFilters, paginate } from "@/lib/filters";
-import { generalWhatsAppUrl } from "@/lib/whatsapp";
 import { Container } from "@/components/layout/container";
 import { FilterBar } from "@/components/search/filter-bar";
 import { Pagination } from "@/components/search/pagination";
@@ -83,7 +82,8 @@ export default async function CatalogPage({
           <EmptyState
             title={<T k="emptyState.noResultsTitle" />}
             description={<T k="emptyState.noResultsDescription" />}
-            whatsappUrl={generalWhatsAppUrl(config)}
+            waNumber={config.contact.whatsapp.number}
+            waMessage={config.contact.whatsapp.generalMessage}
             clearHref="/propiedades"
           />
         ) : (
