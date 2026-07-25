@@ -1,11 +1,60 @@
 const supabase = require("./supabase");
 const memory = require("./memory");
 
-// Busca el asesor activo de la org para una especialidad (venta, arriendo,
-// vehiculos, otro). Fallback: cualquier asesor activo de la org, y si no hay
-// tabla de asesores poblada, el asesor por defecto de la organizacion.
-async function findForTransfer(org, especialidad) {
+// Asesores que entran a la ROTACION de leads organicos de una especialidad:
+// activos, de esa especialidad, y con recibe_transferencias !== false (los
+// marcados en false — decision 2026-07-25 — solo reciben leads por propiedad
+// marcada a su nombre via captador_id; sin la columna, undefined = true).
+// Pura, exportada para tests.
+function rotationCandidates(list, especialidad) {
   const esp = (especialidad || "").toLowerCase();
+  return (list || []).filter((a) => a.activo && a.especialidad === esp && a.recibe_transferencias !== false);
+}
+
+// Round-robin uno a uno: dado el id del ULTIMO asesor que recibio un lead de
+// la rotacion, devuelve el siguiente (orden estable por id para que el "peek"
+// sea deterministico entre cita y transferencia del mismo lead). Pura,
+// exportada para tests.
+function nextInRotation(rotation, lastId) {
+  if (!rotation.length) return null;
+  const sorted = [...rotation].sort((a, b) => String(a.id).localeCompare(String(b.id)));
+  const idx = sorted.findIndex((a) => a.id === lastId);
+  return sorted[(idx + 1) % sorted.length];
+}
+
+// Ultimo asesor DE LA ROTACION que recibio una transferencia en esta org —
+// el estado del round-robin vive en leads.transferido_advisor_id, sin
+// contadores aparte (sobrevive reinicios y replicas). Best-effort: si las
+// columnas transferido_* no existen, arranca del primero.
+async function lastTransferredId(orgId, rotationIds) {
+  try {
+    if (!supabase) {
+      const conTransfer = memory.leads
+        .filter((l) => l.org_id === orgId && l.transferido_advisor_id && rotationIds.includes(l.transferido_advisor_id))
+        .sort((a, b) => String(b.transferido_at || "").localeCompare(String(a.transferido_at || "")));
+      return conTransfer[0]?.transferido_advisor_id || null;
+    }
+    const { data, error } = await supabase
+      .from("leads")
+      .select("transferido_advisor_id")
+      .eq("org_id", orgId)
+      .in("transferido_advisor_id", rotationIds)
+      .order("transferido_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+    return data?.transferido_advisor_id || null;
+  } catch (e) {
+    console.warn("[advisors] No se pudo leer el ultimo transferido (rotacion arranca del primero):", e.message);
+    return null;
+  }
+}
+
+// Busca el asesor de la org que recibe ESTE lead organico: rotacion uno a uno
+// entre los elegibles de la especialidad. Fallbacks: cualquier elegible activo
+// de la org, y si no hay tabla poblada, el asesor por defecto de la
+// organizacion.
+async function findForTransfer(org, especialidad) {
   let list;
   if (!supabase) {
     list = memory.advisors.filter((a) => a.org_id === org.id && a.activo);
@@ -18,9 +67,16 @@ async function findForTransfer(org, especialidad) {
     if (error) throw error;
     list = data || [];
   }
-  const match = list.find((a) => a.especialidad === esp) || list[0];
-  if (match) return match;
-  // Fallback single-advisor: el asesor definido en la organizacion
+  const rotation = rotationCandidates(list, especialidad);
+  if (rotation.length === 1) return rotation[0];
+  if (rotation.length > 1) {
+    const lastId = await lastTransferredId(org.id, rotation.map((a) => a.id));
+    return nextInRotation(rotation, lastId);
+  }
+  // Sin elegibles de la especialidad: cualquier elegible activo (nunca uno
+  // excluido de transferencias), y de ultimas el asesor de la organizacion.
+  const fallback = list.find((a) => a.recibe_transferencias !== false);
+  if (fallback) return fallback;
   return org.advisor_phone
     ? { name: org.advisor_name || "Asesor", phone: org.advisor_phone, especialidad: "general" }
     : null;
@@ -81,4 +137,4 @@ async function searchByName(orgId, q) {
   return data || [];
 }
 
-module.exports = { findForTransfer, findByAuthUserId, findById, searchByName };
+module.exports = { findForTransfer, findByAuthUserId, findById, searchByName, rotationCandidates, nextInRotation };

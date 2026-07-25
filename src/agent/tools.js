@@ -157,6 +157,36 @@ async function maybeCaptadorAlert(ctx, property) {
   }
 }
 
+// Resuelve el asesor que atiende a ESTE lead para una especialidad, en orden:
+// 1. Captador de la propiedad de interes (salvo vender/vehiculos, que siguen
+//    su flujo) — el negocio es de quien capto la propiedad.
+// 2. Asesor ya estampado en la cita — con la rotacion uno a uno, la cita y la
+//    transferencia deben caer en el MISMO asesor.
+// 3. Rotacion por especialidad (findForTransfer).
+// Lo usan agendar_cita y transferir_a_asesor para no divergir entre si.
+async function resolveLeadAdvisor(ctx, especialidad) {
+  const intencion = ctx.lead.intencion;
+  const sigueFlujoEspecial = intencion === "vender" || intencion === "vehiculos" || especialidad === "vehiculos";
+  if (!sigueFlujoEspecial && ctx.propertyInteres?.captador_id) {
+    try {
+      const captador = await advisors.findById(ctx.org.id, ctx.propertyInteres.captador_id);
+      if (captador && captador.activo !== false) return captador;
+    } catch (e) {
+      console.warn("[tools] No se pudo resolver el captador (revisar migracion property_captador):", e.message);
+    }
+  }
+  const citaAdvisorId = ctx.cita?.advisor_id || ctx.lead.cita?.advisor_id || null;
+  if (citaAdvisorId) {
+    try {
+      const citaAdvisor = await advisors.findById(ctx.org.id, citaAdvisorId);
+      if (citaAdvisor && citaAdvisor.activo !== false) return citaAdvisor;
+    } catch (e) {
+      console.warn("[tools] No se pudo resolver el asesor de la cita:", e.message);
+    }
+  }
+  return advisors.findForTransfer(ctx.org, especialidad);
+}
+
 // Ejecuta una tool. ctx: { org, lead, propertyInteres, transfer } — el engine lee
 // ctx.lead (actualizado) y ctx.transfer despues del loop.
 async function executeTool(name, input, ctx) {
@@ -286,7 +316,7 @@ async function executeTool(name, input, ctx) {
         ESP_POR_INTENCION[ctx.lead.intencion] || (ctx.propertyInteres?.operacion || "").toLowerCase() || "venta";
       let advisor = null;
       try {
-        advisor = await advisors.findForTransfer(ctx.org, especialidad);
+        advisor = await resolveLeadAdvisor(ctx, especialidad);
       } catch (e) {
         console.warn("[tools] No se pudo resolver el asesor para validar la agenda:", e.message);
       }
@@ -349,19 +379,7 @@ async function executeTool(name, input, ctx) {
       input.especialidad ||
       (ctx.propertyInteres?.operacion || "").toLowerCase() ||
       "venta";
-    // La propiedad de interes con captador manda: el negocio es del asesor
-    // que la capto — salvo vendedores y vehiculos, que siguen su flujo.
-    let advisor = null;
-    const sigueFlujoEspecial = intencion === "vender" || intencion === "vehiculos" || especialidad === "vehiculos";
-    if (!sigueFlujoEspecial && ctx.propertyInteres?.captador_id) {
-      try {
-        const captador = await advisors.findById(ctx.org.id, ctx.propertyInteres.captador_id);
-        if (captador && captador.activo !== false) advisor = captador;
-      } catch (e) {
-        console.warn("[tools] No se pudo resolver el captador para transferir (revisar migracion property_captador):", e.message);
-      }
-    }
-    if (!advisor) advisor = await advisors.findForTransfer(ctx.org, especialidad);
+    const advisor = await resolveLeadAdvisor(ctx, especialidad);
     if (!advisor) {
       return "No hay asesor configurado para esta organizacion. Pide disculpas y dile al cliente que pronto lo contactaran.";
     }

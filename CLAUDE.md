@@ -49,10 +49,12 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
 - **Migraciones pendientes de correr en Supabase:**
   `db/migrations/2026-07-09_dmap_default_designer.sql` (default del motor de
   creativos → designer para orgs nuevas) y
-  `db/migrations/2026-07-24_property_captador.sql` (captador de propiedades
-  + avisos de interés). Ya corrida:
-  `db/migrations/2026-07-24_advisor_reminders_calendario_equipo.sql`
-  (verificada 2026-07-24).
+  `db/migrations/2026-07-25_advisor_rotacion.sql` (rotación de transferencias:
+  columna `recibe_transferencias` + exclusión de Claudia/Catherine — SIN ella
+  la rotación de venta incluye a los 4 asesores activos). Ya corridas:
+  `2026-07-24_advisor_reminders_calendario_equipo.sql`,
+  `2026-07-24_property_captador.sql` y `2026-07-24_lead_idioma.sql`
+  (verificadas 2026-07-24/25).
 - **Pendientes de negocio:** teléfonos reales de asesores de arriendo/
   vehículos en `advisors` · corregir precio de la ref `9921388` en Wasi ·
   verificación de empresa en Meta · confirmar las 3 propiedades exclusivas

@@ -67,3 +67,20 @@ test("error resolviendo el captador (migracion pendiente) cae a especialidad sin
   await executeTool("transferir_a_asesor", { motivo: "calificado" }, ctx);
   assert.strictEqual(ctx.transfer.advisor.id, "adv-1");
 });
+
+test("la transferencia respeta al asesor ya estampado en la cita (consistencia con round-robin)", async (t) => {
+  t.mock.method(leads, "update", async (id, patch) => patch);
+  const findById = t.mock.method(advisors, "findById", async (orgId, id) => {
+    assert.strictEqual(id, "adv-cita");
+    return { id: "adv-cita", name: "Natalia", phone: "573001878024", especialidad: "venta", activo: true };
+  });
+  const forTransfer = t.mock.method(advisors, "findForTransfer", async () => GENERICO);
+  const ctx = baseCtx({
+    propertyInteres: { id: "prop-2", ref: "111", operacion: "Venta", captador_id: null },
+    cita: { tipo: "visita", fecha_hora: "2026-07-26T15:00:00-05:00", advisor_id: "adv-cita" },
+  });
+  await executeTool("transferir_a_asesor", { motivo: "calificado" }, ctx);
+  assert.strictEqual(ctx.transfer.advisor.id, "adv-cita");
+  assert.strictEqual(forTransfer.mock.calls.length, 0);
+  assert.ok(findById.mock.calls.length >= 1);
+});
