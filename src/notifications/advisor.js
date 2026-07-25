@@ -41,26 +41,45 @@ function formatCitaFechaHora(fechaHoraIso) {
 // el cliente ya paso esa etapa con Sofi.
 function buildClientLink(advisor, lead, propertyInteres, cita) {
   const intencion = lead.intencion;
-  const saludo = lead.nombre ? `Hola, soy ${lead.nombre}. ` : "Hola, ";
+  const en = lead.idioma === "en";
+  const saludo = en
+    ? lead.nombre ? `Hi, I'm ${lead.nombre}. ` : "Hi, "
+    : lead.nombre ? `Hola, soy ${lead.nombre}. ` : "Hola, ";
   const citaObj = cita || lead.cita;
   let texto;
   if (citaObj && (citaObj.fecha_hora || citaObj.descripcion)) {
-    const tipoLabel = CITA_TIPO_LABEL[citaObj.tipo] || "la cita";
+    const tipoLabel = en
+      ? { visita: "the visit", llamada: "the call", asesoria: "the consultation" }[citaObj.tipo] || "the appointment"
+      : CITA_TIPO_LABEL[citaObj.tipo] || "la cita";
     const fechaHora = formatCitaFechaHora(citaObj.fecha_hora);
     texto = fechaHora
-      ? `${saludo}quiero confirmar ${tipoLabel} para el ${fechaHora.fecha} a las ${fechaHora.hora}`
-      : `${saludo}quiero confirmar ${tipoLabel}: ${citaObj.descripcion}`;
+      ? en
+        ? `${saludo}I want to confirm ${tipoLabel} on ${fechaHora.fecha} at ${fechaHora.hora}`
+        : `${saludo}quiero confirmar ${tipoLabel} para el ${fechaHora.fecha} a las ${fechaHora.hora}`
+      : en
+        ? `${saludo}I want to confirm ${tipoLabel}: ${citaObj.descripcion}`
+        : `${saludo}quiero confirmar ${tipoLabel}: ${citaObj.descripcion}`;
   } else if (intencion === "vender") {
-    texto = `${saludo}quiero vender mi propiedad con ustedes`;
+    texto = en ? `${saludo}I want to sell my property with you` : `${saludo}quiero vender mi propiedad con ustedes`;
   } else if (advisor.especialidad === "vehiculos" || intencion === "vehiculos") {
-    texto = `${saludo}estoy interesado en un vehiculo`;
+    texto = en ? `${saludo}I'm interested in a vehicle` : `${saludo}estoy interesado en un vehiculo`;
   } else {
     const ref = propertyInteres?.link || lead.property_ref_origen;
     texto = ref
-      ? `${saludo}estoy interesado en esta propiedad: ${ref}`
-      : `${saludo}estoy interesado en una propiedad`;
+      ? en
+        ? `${saludo}I'm interested in this property: ${ref}`
+        : `${saludo}estoy interesado en esta propiedad: ${ref}`
+      : en
+        ? `${saludo}I'm interested in a property`
+        : `${saludo}estoy interesado en una propiedad`;
   }
   return `https://wa.me/${advisor.phone}?text=${encodeURIComponent(texto)}`;
+}
+
+// Linea de idioma para las alertas al asesor (que van SIEMPRE en español):
+// el asesor debe saber ANTES de llamar que este cliente se atiende en ingles.
+function idiomaLine(lead) {
+  return lead.idioma === "en" ? "Idioma: INGLÉS — este cliente se atiende en inglés" : null;
 }
 
 // Formatea la cita para la alerta. Muestra el texto tal como lo dijo el cliente
@@ -138,8 +157,9 @@ function buildCaptadorInterestAlert(property, lead) {
   return [
     "Cliente interesado en tu propiedad!",
     `${clienteNombre}${clienteTelefono} esta preguntando por la ref ${property.ref} — ${property.titulo}${zona}.`,
+    idiomaLine(lead),
     "Sofi lo esta atendiendo; si califica, te lo transfiere directo.",
-  ].join("\n");
+  ].filter(Boolean).join("\n");
 }
 
 // Aviso INMEDIATO al asesor cuando se le agenda una visita/cita con dia y hora
@@ -152,9 +172,10 @@ function buildAppointmentAlert(advisor, lead, cita) {
   const fechaHora = formatCitaFechaHora(cita.fecha_hora);
   const cuando = fechaHora ? `el ${fechaHora.fecha} a las ${fechaHora.hora}` : cita.descripcion || "próximamente";
   const inmueble = lead.property_ref_origen ? `\nPropiedad de interés: ${lead.property_ref_origen}` : "";
+  const idioma = idiomaLine(lead) ? `\n${idiomaLine(lead)}` : "";
   const calLink = buildCalendarLink(cita, lead);
   const cal = calLink ? `\nAgendar en tu calendario: ${calLink}` : "";
-  return `Nueva cita agendada!\nTienes ${tipoLabel} con ${clienteNombre}${clienteTelefono} ${cuando}.${inmueble}${cal}`;
+  return `Nueva cita agendada!\nTienes ${tipoLabel} con ${clienteNombre}${clienteTelefono} ${cuando}.${inmueble}${idioma}${cal}`;
 }
 
 // Mensaje de alerta que recibe el asesor cuando un lead es transferido.
@@ -174,6 +195,7 @@ function buildAdvisorAlert(org, lead, motivo, propertyInteres, especialidad, cit
     transferidoEn && `Transferido: ${transferidoEn.fecha}, ${transferidoEn.hora}`,
     `Cliente: ${lead.nombre || "Sin nombre"}`,
     `Numero: +${lead.phone}`,
+    idiomaLine(lead),
     lead.presupuesto && `Presupuesto: ${lead.presupuesto}`,
     lead.zona_interes && `Zona: ${lead.zona_interes}`,
     lead.tipo_interes && `Tipo: ${lead.tipo_interes}`,

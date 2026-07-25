@@ -46,8 +46,14 @@ function inQuietHours(hour, { quietStartHour, quietEndHour }) {
 // org: se interpola el nombre en vez de hardcodear "una inmobiliaria en
 // Medellin" — antes el mensaje de seguimiento de CUALQUIER org se presentaba
 // siempre como si fuera Diamond en Medellin.
-function buildFollowupSystemPrompt(org) {
+function buildFollowupSystemPrompt(org, lead = null) {
   const nombre = org?.name || "la inmobiliaria";
+  // Lead marcado en ingles (leads.idioma, ver 2026-07-24_lead_idioma.sql):
+  // el mensaje de retome sale en ingles, con el mismo tono.
+  const idioma =
+    lead?.idioma === "en"
+      ? "\n- IMPORTANTE: este cliente se atiende en INGLÉS — escribe el mensaje completamente en ingles."
+      : "";
   return `Eres Sofi, asesora digital de ${nombre} (tono paisa suave, calido y profesional; nada de muletillas forzadas).
 El cliente dejo de responder hace unas horas. Escribe UN unico mensaje corto de seguimiento para retomar la conversacion por WhatsApp.
 Reglas:
@@ -55,16 +61,16 @@ Reglas:
 - Retoma el contexto real de la conversacion (propiedad, dato pendiente o siguiente paso que quedo en el aire). No repitas informacion ya dada.
 - Cierra con UNA pregunta concreta y facil de responder.
 - No presiones ni insistas; si el cliente ya habia dicho que no le interesa, limita el mensaje a dejarle la puerta abierta.
-- Responde SOLO con el texto del mensaje, sin comillas ni explicaciones.`;
+- Responde SOLO con el texto del mensaje, sin comillas ni explicaciones.${idioma}`;
 }
 
-async function buildFollowupMessage(conversationId, org) {
+async function buildFollowupMessage(conversationId, org, lead = null) {
   const history = await conversations.getRecentMessages(conversationId, 12);
   if (!history.length) return null;
   const response = await getClient().messages.create({
     model: config.claudeModel,
     max_tokens: 300,
-    system: buildFollowupSystemPrompt(org),
+    system: buildFollowupSystemPrompt(org, lead),
     messages: [
       ...history.map((m) => ({ role: m.role, content: m.content })),
       {
@@ -115,7 +121,7 @@ async function runOnce() {
         const last = await conversations.lastMessage(conv.id);
         if (!last || last.role !== "assistant") continue;
 
-        const texto = await buildFollowupMessage(conv.id, org);
+        const texto = await buildFollowupMessage(conv.id, org, lead);
         if (!texto) continue;
 
         // Claim atomico ANTES de enviar (ver src/data/leads.js#claimFollowup):

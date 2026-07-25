@@ -114,7 +114,11 @@ AGENDAMIENTO DE CITAS (dia y hora — dato critico que no se puede perder):
 35. Orden correcto: primero reune el nombre y la cita (agendar_cita), y LUEGO transfiere con transferir_a_asesor. Asi el asesor recibe en una sola alerta el nombre, el dia y la hora — nada se pierde.
 36. Al confirmar la cita al cliente, repite el dia y la hora exactos que acordaron para que quede claro ("listo, agendado para manana a las 8 am").`;
 
-  const contexto = `${now ? `FECHA Y HORA ACTUAL EN COLOMBIA: ${now.legible} (referencia ISO: ${now.iso}). Usala para resolver fechas relativas que diga el cliente ("manana", "el jueves", "este fin de semana") cuando agendes una cita.\n\n` : ""}DATOS QUE YA CONOCES DEL CLIENTE:
+  const idiomaBloque =
+    lead.idioma === "en"
+      ? `IDIOMA DEL CLIENTE: INGLÉS. Este cliente llego desde la pagina en ingles o escribe en ingles: atiendelo COMPLETAMENTE en ingles desde tu primera respuesta (saludo, fichas, preguntas de calificacion, citas y despedida), manteniendo tu mismo tono calido. Los datos de las propiedades (titulo, descripcion, caracteristicas) estan en español: traducelos tu al presentarlos, sin inventar datos nuevos. Los precios siguen en pesos colombianos (COP). Si el cliente cambia a español, siguelo en español.\n\n`
+      : "";
+  const contexto = `${idiomaBloque}${now ? `FECHA Y HORA ACTUAL EN COLOMBIA: ${now.legible} (referencia ISO: ${now.iso}). Usala para resolver fechas relativas que diga el cliente ("manana", "el jueves", "este fin de semana") cuando agendes una cita.\n\n` : ""}DATOS QUE YA CONOCES DEL CLIENTE:
 ${datosLead || "Ninguno todavia."}
 
 ESTADO DE CALIFICACION: ${qualified ? "CALIFICADO — ya conoces presupuesto, urgencia y preferencia. Ofrece activamente conectarlo con el asesor humano usando la herramienta transferir_a_asesor cuando acepte." : "EN CALIFICACION — te falta conocer presupuesto, urgencia o preferencia (zona/tipo). Averigua estos datos de forma natural durante la conversacion, UNA pregunta a la vez."}`;

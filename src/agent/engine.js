@@ -6,7 +6,7 @@ const { buildSystemPrompt } = require("./prompts");
 const { TOOL_DEFINITIONS, executeTool, maybeCaptadorAlert } = require("./tools");
 const { isQualified } = require("./qualification");
 const { buildAdvisorAlert, formatCitaFechaHora } = require("../notifications/advisor");
-const { detectSellerIntent } = require("./intent");
+const { detectSellerIntent, detectClientLanguage } = require("./intent");
 const { getClient } = require("../lib/anthropic");
 
 const MAX_TOOL_ITERATIONS = 5;
@@ -63,6 +63,23 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
   // origen del lead no cambia si mas adelante escribe mencionando otro anuncio).
   if (adReferral && !lead.ad_referral) {
     Object.assign(lead, await leads.update(lead.id, { ad_referral: adReferral }));
+  }
+  // Idioma del cliente, estampado UNA vez. El prellenado EN de la landing es
+  // señal fuerte en cualquier turno; la heuristica organica solo aplica al
+  // PRIMER mensaje (un cliente español que pega un anuncio en ingles despues
+  // no debe voltear la conversacion). Best-effort: sin la columna (migracion
+  // 2026-07-24_lead_idioma pendiente) queda en memoria para este turno.
+  if (!lead.idioma) {
+    const idioma = detectClientLanguage(text);
+    const esPrellenado = idioma === "en" && /^hi\b/i.test(text.trim());
+    if (idioma && (lead._isNew || esPrellenado)) {
+      lead.idioma = idioma;
+      try {
+        Object.assign(lead, await leads.update(lead.id, { idioma }));
+      } catch (e) {
+        console.warn("[engine] No se pudo persistir idioma (revisar migracion lead_idioma):", e.message);
+      }
+    }
   }
   // Un lead recien creado entra al kanban en "nuevo"; pasa a "en_conversacion"
   // cuando vuelve a escribir (segunda interaccion en adelante)
