@@ -27,7 +27,7 @@ export interface VerticeSignatureProps {
   onClick?: () => void;
 }
 
-const DEFAULT_HREF = "https://vertice-studio-mu.vercel.app/";
+const DEFAULT_HREF = "https://verticestudioweb.com/";
 const DEFAULT_TOOLTIP = "Built by Vértice Studio";
 const DEFAULT_VIDEO_SRC = "/vertice-signature.mp4";
 

@@ -26,7 +26,7 @@ que no lo tengan.
 
 | Prop        | Tipo                                                          | Default                                    | Descripción                                     |
 | ----------- | -------------------------------------------------------------- | ------------------------------------------- | ------------------------------------------------ |
-| `href`      | `string`                                                        | `https://vertice-studio-mu.vercel.app/`     | Destino al hacer click (`target="_blank"`).       |
+| `href`      | `string`                                                        | `https://verticestudioweb.com/`             | Destino al hacer click (`target="_blank"`).       |
 | `size`      | `number`                                                        | `52`                                        | Diámetro en px, clamp interno a 48–56.            |
 | `tooltip`   | `string`                                                        | `"Built by Vértice Studio"`                 | Texto del tooltip y del `aria-label`/`title`.     |
 | `position`  | `"bottom-right" \| "bottom-left" \| "footer" \| "custom"`      | `"bottom-right"`                            | Ver abajo.                                        |
@@ -55,7 +55,7 @@ que no lo tengan.
   están scoped dentro del propio CSS Module.
 - **Video parametrizable (`videoSrc`)** — cada proyecto sirve su propia
   copia del asset desde su propio dominio, así que no depende de la
-  disponibilidad de vertice-studio.vercel.app.
+  disponibilidad de verticestudioweb.com.
 - **Posicionamiento por prop, no hardcodeado** — cada sitio decide dónde
   vive el badge según qué rincones ya tiene ocupados.
 - **Accesible por defecto** — funciona con teclado (Enter nativo del
