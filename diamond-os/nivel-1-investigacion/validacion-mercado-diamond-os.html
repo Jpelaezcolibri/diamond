@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Validación de mercado — Diamond OS · Vértice Studio</title>
+<style>
+  :root{
+    --bg:#faf9f7; --panel:#fff; --ink:#16181d; --muted:#5c6370; --line:#e3e1dd;
+    --accent:#1f3b4d; --gold:#b8912f; --red:#a4262c; --amber:#8a6100; --green:#1f6b3f;
+    --chip:#f0eee9;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#14161a; --panel:#1c1f25; --ink:#e9e7e3; --muted:#9aa1ad; --line:#2c313a;
+           --accent:#8fb8cf; --gold:#d9b451; --red:#e88b8f; --amber:#e0b354; --green:#6ec38f;
+           --chip:#252932; }
+  }
+  :root[data-theme="dark"]{ --bg:#14161a; --panel:#1c1f25; --ink:#e9e7e3; --muted:#9aa1ad;
+    --line:#2c313a; --accent:#8fb8cf; --gold:#d9b451; --red:#e88b8f; --amber:#e0b354;
+    --green:#6ec38f; --chip:#252932; }
+  :root[data-theme="light"]{ --bg:#faf9f7; --panel:#fff; --ink:#16181d; --muted:#5c6370;
+    --line:#e3e1dd; --accent:#1f3b4d; --gold:#b8912f; --red:#a4262c; --amber:#8a6100;
+    --green:#1f6b3f; --chip:#f0eee9; }
+
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:16px/1.65 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  .wrap{max-width:940px;margin:0 auto;padding:0 20px 90px}
+  header{padding:52px 0 30px;border-bottom:3px solid var(--accent)}
+  .kicker{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);
+    font-weight:650}
+  h1{font-size:clamp(28px,5vw,42px);line-height:1.15;margin:.35em 0 .25em;letter-spacing:-.02em}
+  .sub{color:var(--muted);font-size:15px}
+  h2{font-size:clamp(20px,3vw,26px);margin:56px 0 6px;letter-spacing:-.01em;
+    padding-top:22px;border-top:1px solid var(--line)}
+  h2 .n{color:var(--gold);font-variant-numeric:tabular-nums;margin-right:.5em;font-weight:700}
+  h3{font-size:17px;margin:30px 0 8px}
+  p{margin:.7em 0}
+  .lead{font-size:18px;color:var(--ink)}
+  code{background:var(--chip);padding:.12em .38em;border-radius:4px;font-size:.87em;
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  a{color:var(--accent)}
+
+  .verdict{background:var(--panel);border:1px solid var(--line);border-left:5px solid var(--amber);
+    border-radius:10px;padding:22px 24px;margin:26px 0}
+  .verdict .tag{display:inline-block;background:var(--amber);color:#fff;font-size:11px;
+    letter-spacing:.12em;text-transform:uppercase;font-weight:700;padding:4px 11px;border-radius:20px}
+  .verdict h3{margin:14px 0 6px;font-size:21px}
+
+  .grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));margin:22px 0}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px}
+  .stat .v{font-size:30px;font-weight:700;letter-spacing:-.03em;font-variant-numeric:tabular-nums;
+    line-height:1.1}
+  .stat .l{font-size:12.5px;color:var(--muted);margin-top:5px;line-height:1.4}
+  .stat.bad .v{color:var(--red)} .stat.warn .v{color:var(--amber)} .stat.ok .v{color:var(--green)}
+
+  .scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:18px 0;
+    border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+  table{border-collapse:collapse;width:100%;font-size:14px;min-width:560px}
+  th,td{padding:10px 13px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:var(--chip);font-size:12px;letter-spacing:.05em;text-transform:uppercase;
+    color:var(--muted);font-weight:700;white-space:nowrap}
+  tr:last-child td{border-bottom:none}
+  td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .hl{background:color-mix(in srgb,var(--amber) 12%,transparent)}
+
+  .funnel{margin:20px 0}
+  .fr{display:flex;align-items:center;gap:14px;padding:7px 0}
+  .fbar{height:26px;border-radius:5px;background:var(--accent);opacity:.85;min-width:3px}
+  .fr:last-child .fbar{background:var(--red);opacity:1}
+  .flab{font-size:14px;flex:1;min-width:0}
+  .fnum{font-variant-numeric:tabular-nums;font-weight:700;width:52px;text-align:right}
+
+  blockquote{margin:14px 0;padding:12px 18px;border-left:3px solid var(--gold);
+    background:var(--panel);border-radius:0 8px 8px 0;font-size:14.5px}
+  blockquote .src{display:block;margin-top:7px;font-size:12px;color:var(--muted)}
+
+  .note{background:var(--panel);border:1px solid var(--line);border-radius:9px;
+    padding:14px 18px;margin:18px 0;font-size:14.5px}
+  .note.warn{border-left:4px solid var(--red)}
+  .note strong{color:var(--ink)}
+
+  ul,ol{padding-left:22px} li{margin:.4em 0}
+  .chip{display:inline-block;background:var(--chip);border-radius:20px;padding:2px 10px;
+    font-size:12px;color:var(--muted);margin-right:5px}
+  footer{margin-top:60px;padding-top:22px;border-top:1px solid var(--line);
+    font-size:13px;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="kicker">Vértice Studio · Nivel 1 — Investigación</div>
+  <h1>¿Existe mercado para Diamond OS en el Valle de Aburrá?</h1>
+  <p class="sub">Validación de mercado B2B · Trabajo de campo del 25–26 de julio de 2026 ·
+  Universo medido, no estimado</p>
+</header>
+
+<div class="verdict">
+  <span class="tag">Veredicto</span>
+  <h3>Continuar con cambios mayores</h3>
+  <p style="margin-bottom:0">El producto funciona y el dolor del sector es real, pero
+  <strong>la tesis comercial actual —vender el stack completo a inmobiliarias del Valle de Aburrá
+  por $1.600.000 COP/mes— no sobrevive al contacto con los datos.</strong> El perfil de cliente
+  ideal son <strong>2 empresas</strong> en todo el gremio local, y al menos
+  <strong>7 competidores colombianos</strong> —tres de ellos de Medellín— ya venden casi lo mismo
+  entre un cuarto y un tercio del precio. Hay un camino viable, pero exige desempacar el producto
+  y cambiar de segmento. No exige tirar el código.</p>
+</div>
+
+<h2><span class="n">1</span>Qué se hizo y qué no</h2>
+
+<p class="lead">Esta investigación no partió de supuestos: descargó y contó.</p>
+
+<p>Se extrajo el directorio público de afiliados de
+<a href="https://lonja.org.co/afiliados-1/">La Lonja de Propiedad Raíz de Medellín y Antioquia</a>
+(530 registros, con su categoría gremial y municipio obtenidos del propio endpoint de filtrado del
+sitio). Después se <strong>descargó el HTML de cada uno de los 331 sitios web listados</strong> y se
+buscaron firmas técnicas para determinar qué software usa cada empresa. Los 67 dominios que no
+respondieron se reintentaron con navegador real. Se midió el inventario publicado leyendo el
+<code>sitemap.xml</code> de cada dominio, y se obtuvo NIT, patrimonio y rango de facturación 2025
+del RUES para las 50 mejores.</p>
+
+<div class="grid">
+  <div class="stat"><div class="v">530</div><div class="l">afiliados extraídos de La Lonja</div></div>
+  <div class="stat"><div class="v">331</div><div class="l">sitios web descargados y analizados</div></div>
+  <div class="stat"><div class="v">23</div><div class="l">fichas financieras del RUES obtenidas</div></div>
+  <div class="stat"><div class="v">40+</div><div class="l">competidores con precio verificado</div></div>
+</div>
+
+<h3>Lo que quedó incompleto — dicho explícitamente</h3>
+<div class="note warn">
+<p style="margin-top:0"><strong>La evidencia de dolores es parcial.</strong> El plan contemplaba
+30–60 testimonios textuales de clientes. Google Maps pasó a "vista limitada" tras las primeras
+consultas y el extractor con IA falló. <strong>Lo que hay es real pero corto: calificaciones
+agregadas de 8 empresas y 3 citas textuales verificadas.</strong> Por eso la columna
+<code>pts_dolor</code> de la base de prospectos está vacía y el score máximo alcanzable hoy es 75,
+no 100. No se rellenó con dolores genéricos de blog.</p>
+<p style="margin-bottom:0"><strong>Tampoco se hizo mystery shopping</strong> (medir cuánto tardan en
+responder un WhatsApp real). Es la señal más valiosa que falta y requiere una decisión previa:
+implica contactar empresas que compiten con Diamond.</p>
+</div>
+
+<h2><span class="n">2</span>El embudo del mercado, medido</h2>
+
+<p>Cada filtro es una medición, no una estimación:</p>
+
+<div class="funnel">
+  <div class="fr"><div class="fbar" style="width:100%"></div><div class="flab">Afiliados a La Lonja</div><div class="fnum">530</div></div>
+  <div class="fr"><div class="fbar" style="width:86%"></div><div class="flab">En el Valle de Aburrá</div><div class="fnum">455</div></div>
+  <div class="fr"><div class="fbar" style="width:45%"></div><div class="flab">Personas jurídicas (SAS/LTDA/SA)</div><div class="fnum">239</div></div>
+  <div class="fr"><div class="fbar" style="width:33%"></div><div class="flab">Con sitio web vivo</div><div class="fnum">177</div></div>
+  <div class="fr"><div class="fbar" style="width:8%"></div><div class="flab">Con inventario real publicado (≥20 fichas)</div><div class="fnum">41</div></div>
+  <div class="fr"><div class="fbar" style="width:5%"></div><div class="flab">Usan Wasi (integración inmediata)</div><div class="fnum">25</div></div>
+  <div class="fr"><div class="fbar" style="width:2.5%"></div><div class="flab">Miden pauta (Meta Pixel instalado)</div><div class="fnum">13</div></div>
+  <div class="fr"><div class="fbar" style="width:1%"></div><div class="flab"><strong>Perfil completo: Wasi + inventario + miden pauta</strong></div><div class="fnum">2</div></div>
+</div>
+
+<div class="note">
+<strong>Las dos empresas que cumplen el perfil completo son Inmobiliaria Johnson S.A.S y
+Bodegas Y Proyectos S.A.S.</strong> Eso no es un mercado SaaS: es una consultoría con dos clientes.
+</div>
+
+<h3>216 de los 455 afiliados del Valle son personas naturales</h3>
+<p>Agentes independientes, no empresas. Se excluyeron del análisis: no sostienen un contrato de
+$1.600.000 COP/mes. Y <strong>48 de los 331 sitios web listados por el propio gremio están
+muertos</strong> — no responden ni con navegador real.</p>
+
+<h2><span class="n">3</span>Qué software usan hoy</h2>
+
+<p>Medido sobre las 177 empresas jurídicas del Valle con web viva:</p>
+
+<div class="scroll"><table>
+<thead><tr><th>Señal detectada</th><th class="num">Empresas</th><th class="num">%</th><th>Lectura</th></tr></thead>
+<tbody>
+<tr><td>Sin CRM inmobiliario detectable</td><td class="num">127</td><td class="num">71,8%</td><td>Operan con Excel, WhatsApp y web estática</td></tr>
+<tr class="hl"><td><strong>Wasi</strong></td><td class="num">22</td><td class="num">12,4%</td><td>Integración inmediata con DMAP</td></tr>
+<tr><td>SIMI</td><td class="num">14</td><td class="num">7,9%</td><td>Requiere conector nuevo</td></tr>
+<tr><td>Wasi y SIMI a la vez</td><td class="num">3</td><td class="num">1,7%</td><td>Catálogo en uno, administración en el otro</td></tr>
+<tr><td>Domus</td><td class="num">1</td><td class="num">0,6%</td><td>—</td></tr>
+<tr class="hl"><td><strong>Meta Pixel instalado</strong></td><td class="num">13</td><td class="num">7,3%</td><td><strong>Casi nadie mide pauta</strong></td></tr>
+<tr><td>Google Analytics / Ads</td><td class="num">57</td><td class="num">32,2%</td><td>Miden tráfico, no conversión de pauta</td></tr>
+<tr><td>Publican un WhatsApp en su web</td><td class="num">101</td><td class="num">57,1%</td><td>El comportamiento ya existe</td></tr>
+<tr><td>Tienen chat o bot automatizado</td><td class="num">6</td><td class="num">3,4%</td><td><strong>El hueco de Sofi</strong></td></tr>
+<tr><td>SEO estructurado inmobiliario (<code>ld+json</code>)</td><td class="num">0</td><td class="num">0,0%</td><td>Ninguna. Ni una sola.</td></tr>
+</tbody></table></div>
+
+<h3>El umbral del 15% se fijó antes de medir, y Wasi lo rozó</h3>
+<p>Antes de empezar se definió: si menos del 15% del universo usa Wasi, el argumento de
+"integración inmediata" muere. El resultado combinado (Wasi solo + Wasi con SIMI) es
+<strong>14,1%</strong>. Aprobado por un pelo, y solo si se cuentan las que ya tienen otro CRM
+encima. <strong>No es cierto que Wasi domine el Valle de Aburrá.</strong></p>
+
+<h3>Hallazgo lateral que golpea la apuesta de la V1</h3>
+<p>Varias inmobiliarias enlazan
+<code>simidocs.siminmobiliarias.com/…?inmo={ID}&amp;tipo=1|2</code> con las etiquetas literales
+"Propietarios" y "Arrendatarios": es el portal donde el propietario y el inquilino consultan su
+estado de cuenta. Se verificó además que <strong>el ERP de SIMI hace recaudo y liquidación
+completos desde hace décadas</strong> — recaudos automáticos, PSE, código de barras, causación de
+arriendos, pre-extracto de giros, pago a propietarios, giros por archivo plano a Bancolombia, y
+sigue evolucionando en 2026.</p>
+<div class="note warn">
+<strong>Consecuencia directa:</strong> <code>diamond-os-v1-alcance-comercial.md</code> eligió
+"recaudo + liquidación" como la <em>única</em> capacidad nueva de la V1, sobre la hipótesis de que
+ahí vive el dolor más crónico. Esa apuesta entra a un espacio <strong>ocupado por el incumbente
+desde hace 30 años</strong>, no a un espacio vacío. Es la decisión más cara del blueprint y hay
+que revisarla antes de escribir código.
+</div>
+
+<h2><span class="n">4</span>La competencia: el campo está mucho más poblado de lo que se creía</h2>
+
+<p><strong>Buena noticia primero:</strong> se auditó a fondo si Wasi está por lanzar un agente de
+WhatsApp con IA — el riesgo de plataforma que habría matado el producto. <strong>No hay
+evidencia de que lo esté construyendo.</strong> Su única IA en producción son descripciones de
+inmuebles racionadas por cuota semanal, su API no tiene un solo endpoint de mensajería, y su feed
+de novedades son puras integraciones de portales. Además tiene un incentivo estructural a no
+construirlo: su API abierta es el moat que le retiene clientes vía terceros.</p>
+
+<p><strong>La mala:</strong> mientras se vigilaba a Wasi, la categoría se llenó.</p>
+
+<div class="scroll"><table>
+<thead><tr><th>Producto</th><th>Origen</th><th>Precio</th><th>¿Califica leads con IA?</th><th>¿Publica pauta?</th></tr></thead>
+<tbody>
+<tr class="hl"><td><strong>VIDA AI</strong></td><td>🇨🇴 <strong>Medellín</strong></td><td><strong>USD 129/mes</strong></td><td>Sí — scoring por presupuesto, zona y urgencia</td><td>No (captura leads de Meta Ads)</td></tr>
+<tr class="hl"><td><strong>Newton.AI</strong></td><td>🇨🇴</td><td><strong>USD 99/mes</strong></td><td>Sí — HOT/WARM/COLD, agenda en Calendar, <strong>rotación equitativa desde un solo número</strong></td><td>No</td></tr>
+<tr class="hl"><td><strong>Yampi.ai</strong></td><td>🇨🇴</td><td><strong>$399.000 – $1.999.000 COP/mes</strong></td><td>Sí — agentes IA + <strong>recaudo y dispersión de arriendos</strong> + <strong>integración Wasi</strong></td><td>No</td></tr>
+<tr><td><strong>Inmobo / Chat Estelar</strong></td><td>🇨🇴 Bogotá</td><td>USD 175 + 5/agente</td><td>Sí, atiende y agenda visitas. Clientes: RE/MAX, Century 21, Keller Williams, Engel &amp; Völkers</td><td>Solo comentarios de IG</td></tr>
+<tr><td><strong>YAVE</strong></td><td>🇨🇴</td><td>$359.000 COP + $109.000 módulo IA</td><td>Sí — ejecuta acciones dentro del CRM</td><td>No (solo atribución)</td></tr>
+<tr><td><strong>Keybe / Biky</strong></td><td>🇨🇴</td><td>USD 790 – 2.280/mes</td><td>Sí</td><td><strong>Sí — el único que gestiona pauta de verdad</strong>, e integra Wasi</td></tr>
+<tr><td>Kommo</td><td>🌎</td><td>USD 15 por usuario/mes</td><td>Agentes IA desde el plan Advanced</td><td>No</td></tr>
+<tr><td>Wasi (el CRM base)</td><td>🇨🇴</td><td>USD 27 / 48 / ~85</td><td>No — solo descripciones de inmuebles</td><td>No</td></tr>
+<tr style="border-top:2px solid var(--accent)"><td><strong>Diamond OS (hoy)</strong></td><td>🇨🇴 Medellín</td><td><strong>$1.600.000 COP/mes ≈ USD 400</strong></td><td>Sí</td><td><strong>Sí — genera el creativo con IA y publica</strong></td></tr>
+</tbody></table></div>
+
+<div class="note warn">
+<p style="margin-top:0"><strong>Léelo sin adornos:</strong> hay un competidor en tu propia ciudad
+(VIDA AI) que califica leads por presupuesto, zona y urgencia —exactamente lo que hace Sofi— con
+API oficial de Meta, por <strong>un tercio de tu precio</strong>. Newton.AI vende por USD 99 la
+rotación de leads desde un solo número, que es la función que acabás de commitear. Y Yampi.ai
+vende, por menos que vos, el producto entero: agentes de WhatsApp + CRM + recaudo de arriendos +
+integración con Wasi.</p>
+<p style="margin-bottom:0"><strong>El terreno que sí queda libre:</strong> ninguno de los 40+
+productos auditados <strong>genera el creativo con IA y publica la campaña</strong>. Keybe gestiona
+pauta pero no la crea; Vambe y Wati solo optimizan o atribuyen. Ese es DMAP, y es genuinamente
+único.</p>
+</div>
+
+<h2><span class="n">5</span>La contradicción central</h2>
+
+<p class="lead">Lo único verdaderamente diferenciado que tenés le habla al segmento más pequeño
+que existe.</p>
+
+<p>DMAP —generar creativos con IA y publicar— no tiene competencia. Pero
+<strong>solo el 7,3% de las inmobiliarias del gremio tiene un Meta Pixel instalado.</strong>
+No hay presupuesto de pauta que desplazar: habría que crearlo. Crear una categoría es el juego más
+caro y más lento que existe, y se hace con capital, no con un desarrollador.</p>
+
+<p>Sofi, en cambio, sí tiene mercado ancho: el 57% ya publica un WhatsApp y solo el 3,4% tiene
+alguna automatización. El comportamiento existe, falta la herramienta. Pero ahí es precisamente
+donde están VIDA AI, Newton, Inmobo, Yampi y otros cuatro, a un tercio del precio.</p>
+
+<p><strong>Hoy los dos se venden juntos, en un paquete único, a un precio único.</strong> Eso obliga
+al cliente a pagar por DMAP —que no sabe que necesita— para acceder a Sofi —que sí necesita—, y a
+compararte con VIDA AI en la única dimensión donde perdés: el precio.</p>
+
+<h2><span class="n">6</span>Tamaño del mercado</h2>
+
+<div class="scroll"><table>
+<thead><tr><th></th><th>Definición</th><th class="num">Empresas</th><th>Fuente</th></tr></thead>
+<tbody>
+<tr><td><strong>TAM</strong></td><td>Empresas de servicios inmobiliarios en Medellín (CIIU 6820 — actividades a cambio de retribución o por contrata)</td><td class="num">1.093</td><td>Cámara de Comercio de Medellín vía Datos Abiertos, dataset <code>i8vm-9jeb</code>. <strong>Dato de 2022</strong></td></tr>
+<tr><td></td><td>De esas, no-micro (pequeña + mediana + grande)</td><td class="num">304</td><td>ídem</td></tr>
+<tr><td><strong>SAM</strong></td><td>Personas jurídicas del Valle de Aburrá con web viva, alcanzables y con contacto verificado</td><td class="num">177</td><td>Medición propia</td></tr>
+<tr class="hl"><td><strong>SOM</strong></td><td>Con inventario real publicado <em>y</em> capacidad de pago demostrada</td><td class="num">41</td><td>Medición propia</td></tr>
+<tr><td><strong>ICP</strong></td><td>Perfil completo para el stack tal como se vende hoy</td><td class="num">2</td><td>Medición propia</td></tr>
+</tbody></table></div>
+
+<div class="note">
+<strong>Divergencia declarada:</strong> el CIIU 6810 ("actividades inmobiliarias con bienes propios
+o arrendados") reporta 6.534 empresas en Medellín, cinco veces más. <strong>No se usó como TAM
+a propósito:</strong> ese código incluye a cualquiera que posea o arriende un inmueble —holdings,
+familias con un apartamento— y no a empresas de servicio inmobiliario. Usarlo habría inflado el
+mercado por un factor de seis. El dato oficial más reciente disponible es de <strong>2022</strong>;
+tratar las cifras como orden de magnitud, no como censo actual.
+</div>
+
+<h2><span class="n">7</span>El precio no encaja con el tamaño de los clientes</h2>
+
+<p>Se obtuvo del RUES el rango de facturación 2025 de 23 de los 50 mejores prospectos:</p>
+
+<div class="scroll"><table>
+<thead><tr><th>Empresa</th><th>Facturación 2025 declarada</th><th>Patrimonio neto</th><th>CRM</th></tr></thead>
+<tbody>
+<tr class="hl"><td>Londoño Gómez S.A.S</td><td>$20.000M – $100.000M COP</td><td class="num">$218.322M</td><td>SIMI</td></tr>
+<tr class="hl"><td>Arrendamientos Envigado S.A.S</td><td>$10.000M – $20.000M COP</td><td class="num">$10.943M</td><td>ninguno</td></tr>
+<tr><td>Bodegas Magno Inversiones S.A.S</td><td>$1.000M – $2.000M COP</td><td class="num">$440M</td><td>Wasi + SIMI</td></tr>
+<tr><td>Bi Home S.A.S</td><td>$1.000M – $2.000M COP</td><td class="num">$48M</td><td>Wasi</td></tr>
+<tr><td>Inmobiliaria J. Uribe S.A.S</td><td>$1.000M – $2.000M COP</td><td class="num">$61M</td><td>Wasi</td></tr>
+<tr><td><em>Otras 14 del top 50</em></td><td><strong>Menor de $1.000M COP</strong></td><td class="num">$20M – $302M</td><td>mayoría Wasi</td></tr>
+</tbody></table></div>
+
+<p><strong>La mayoría de tus mejores prospectos factura menos de mil millones de pesos al año.</strong>
+A $1.600.000/mes son $19,2 millones anuales: hasta un <strong>2% de su facturación total</strong>
+en un solo proveedor de software, compitiendo contra alternativas de USD 99–175. Solo dos empresas
+del top 30 son grandes de verdad — y la más grande de todas, Londoño Gómez, <strong>usa SIMI, no
+Wasi</strong>, así que ni siquiera es una integración inmediata.</p>
+
+<h2><span class="n">8</span>Evidencia de dolor</h2>
+
+<p>Parcial, y se marca como tal. Lo que sí se verificó:</p>
+
+<div class="grid">
+  <div class="stat bad"><div class="v">3,2★</div><div class="l">Arrendamientos Nutibara · 518 reseñas</div></div>
+  <div class="stat bad"><div class="v">3,3★</div><div class="l">Uribienes Sabaneta · 570 reseñas</div></div>
+  <div class="stat bad"><div class="v">3,2★</div><div class="l">La Palma Inmobiliaria · 82 reseñas</div></div>
+  <div class="stat warn"><div class="v">3,7★</div><div class="l">Alberto Álvarez · 323 reseñas</div></div>
+</div>
+
+<p>Los grandes administradores de arriendo del Valle de Aburrá están calificados entre
+<strong>3,2 y 3,7 estrellas con cientos de reseñas cada uno</strong>. Para un negocio de servicio,
+eso es una calificación mala y estadísticamente sólida — no es una muestra de cinco opiniones.</p>
+
+<p>Citas textuales verificadas (Arrendamientos Nutibara, Google Maps, julio 2026):</p>
+
+<blockquote>"Tuve una experiencia muy negativa […] Desde el día 14, estuve coordinando […] la visita
+a un apartamento […] Tras varios días, el mismo hermano de la dueña vino a mostrármelo".
+<span class="src">1 estrella · dolor: coordinación de visitas</span></blockquote>
+
+<blockquote>"Es increíble que para ustedes sea tan difícil pagar 100 mil pesos y para mí sean tan
+necesarios, además de que es un dinero que me pertenece. Desde que empecé con ustedes vi un
+faltante, primero que me cobraron dos veces algo…"
+<span class="src">2 estrellas · dolor: liquidación y giro al propietario</span></blockquote>
+
+<blockquote>"Quise tomar un apartamento de 1.100.000 en arriendo, y juntando ingresos de más de 12
+millones junto a DOS codeudores, NO ME APROBARON."
+<span class="src">1 estrella · dolor: proceso de aprobación</span></blockquote>
+
+<div class="note">
+<strong>Qué significa y qué no.</strong> La segunda cita apunta al dolor de liquidación que la V1
+quería atacar — pero es <em>una</em> cita, y SIMI ya vende la solución. Las otras dos apuntan a
+coordinación y atención, que es territorio de Sofi. <strong>Con tres citas no se valida una
+estrategia de producto.</strong> Cerrar esta brecha —60 reseñas codificadas y mystery shopping
+sobre 30 empresas— es el trabajo pendiente de mayor valor y menor costo de toda la investigación.
+</div>
+
+<h2><span class="n">9</span>Cuatro bloqueantes antes de vender</h2>
+
+<div class="scroll"><table>
+<thead><tr><th>#</th><th>Bloqueante</th><th>Evidencia</th><th>Gravedad</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><strong>No se puede facturar un segundo cliente</strong></td><td>El CRM no filtra por <code>org_id</code>; la RLS de Supabase es <code>using (true)</code>; las rutas de Marketing confían el <code>orgId</code> del cliente; <code>crm/lib/marketing.ts:147</code> resuelve la organización con <code>.limit(1)</code></td><td><strong>Bloqueante duro.</strong> El cliente #2 vería los leads del #1</td></tr>
+<tr><td>2</td><td>Hardcodes de marca "Diamond"</td><td>Prompts de Sofi, guía legal, prompts de DMAP, logo y color del CRM</td><td>Alta — cualquier otro tenant se presenta como Diamond</td></tr>
+<tr><td>3</td><td>Una WABA y verificación de Meta por cliente</td><td>La verificación de la propia Diamond sigue pendiente</td><td>Alta — define el techo real de clientes por trimestre</td></tr>
+<tr><td>4</td><td>Meta empieza a cobrar mensajes de servicio</td><td>Confirmado oficialmente: <strong>1 de octubre de 2026</strong>. La ventana gratuita de 72h de click-to-WhatsApp se mantiene</td><td>Media — protege los leads de anuncio, encarece los orgánicos</td></tr>
+</tbody></table></div>
+
+<h2><span class="n">10</span>Recomendación</h2>
+
+<h3>Matar: "Diamond OS, suite completa, $1.600.000/mes, para inmobiliarias del Valle de Aburrá"</h3>
+<p>Dos clientes potenciales, siete competidores más baratos, tres de ellos locales, y un
+diferenciador que le habla al 7,3% del mercado. Esa combinación no se arregla con mejor
+copywriting ni con más pauta.</p>
+
+<h3>Conservar, y vender por separado</h3>
+<ol>
+<li><strong>Sofi como producto independiente, a precio de mercado.</strong> Mercado de 177
+empresas, no de 2. Compite de frente con VIDA AI y Newton, así que el precio tiene que estar en
+ese orden de magnitud, no en 3×. Lo que sí te diferencia ahí es concreto y demostrable: guía
+legal colombiana verificada, agenda validada contra el horario real del asesor, respeto al asesor
+captador, y atención bilingüe.</li>
+<li><strong>DMAP como servicio operado, no como software.</strong> Nadie más genera el creativo y
+publica. Pero no se lo vendas a quien no pauta: véndeselo a quien ya tiene presupuesto de pauta
+— constructoras y proyectos nuevos, que están en Camacol, no en La Lonja. Ese segmento no se
+investigó y es el siguiente paso obvio.</li>
+<li><strong>La landing REF como producto de entrada.</strong> Cero de las 177 empresas tiene SEO
+estructurado inmobiliario y 48 tienen la web caída. Es el gancho más barato de vender y el que
+menos soporte consume.</li>
+</ol>
+
+<h3>Lo primero, antes de la primera venta</h3>
+<p>Cerrar el aislamiento multi-tenant. No es deuda técnica: hoy, firmar un segundo cliente es
+provocar una fuga de datos del primero.</p>
+
+<footer>
+<p><strong>Fuentes principales:</strong>
+<a href="https://lonja.org.co/afiliados-1/">La Lonja de Propiedad Raíz de Medellín y Antioquia</a> ·
+Cámara de Comercio de Medellín vía Datos Abiertos Colombia (<code>i8vm-9jeb</code>) ·
+informacolombia.com (datos del RUES) · Google Maps ·
+sitios web y tablas de precios públicas de Wasi, SIMI, VIDA AI, Newton.AI, Yampi.ai, Inmobo, YAVE,
+Keybe, Kommo, Leadsales y otros 30 productos · documentación oficial de WhatsApp Business Platform.</p>
+<p><strong>Integridad de datos:</strong> toda cifra de este informe proviene de una fuente citada o
+de una medición directa reproducible. No se estimó ningún número sin declararlo. Las limitaciones
+de la sección 1 y la nota de divergencia de la sección 6 forman parte del resultado, no son
+descargos.</p>
+<p><span class="chip">Vértice Studio</span><span class="chip">26 de julio de 2026</span>
+<span class="chip">Nivel 1 — Investigación</span></p>
+</footer>
+
+</div>
+</body>
+</html>
