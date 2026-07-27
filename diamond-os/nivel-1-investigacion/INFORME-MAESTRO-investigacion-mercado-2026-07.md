@@ -145,6 +145,44 @@ El hueco en este segmento es total, no parcial.
 > el segmento empresarial. No cargar a audiencias de Meta ni a campañas de envío
 > masivo sin autorización.
 
+### Censo completo del nicho — 756 prospectos
+
+Se hizo un censo independiente del gremio, porque la mayoría de los pequeños no
+está en La Lonja. Fuentes que rindieron: **Ciencuadras (285)**, Instagram vía
+buscador (93), buscocasita (56), Fincaraíz (56 — enmascara los teléfonos),
+dominios Wasi (56) y búsqueda web (55).
+
+Unidos a las 216 personas naturales de La Lonja, deduplicados por teléfono y
+nombre, y quitando 28 inmobiliarias grandes que se habían colado por los
+portales (Nutibara, Alberto Álvarez, Abad Faciolince y otras):
+
+**756 prospectos en el Valle de Aburrá.** 603 con teléfono · 310 con correo ·
+176 con web · 119 con Instagram.
+
+| Prioridad | Criterio | Cuántos |
+|---|---|---:|
+| **A** | Ya paga Wasi — plan de entrada (`.inmo.co`) | **59** |
+| **A** | Ya paga Wasi — dominio propio | **13** |
+| B | Web propia, sin CRM detectado | 62 |
+| C | Sin web, solo perfil de portal | 448 |
+| C | Solo Instagram, sin web | 21 |
+| D | Sin teléfono — no alcanzable hoy | 153 |
+
+Distribución: Medellín 526 · Envigado 93 · Bello 49 · Itagüí 42 · Sabaneta 31 ·
+el resto del Valle 15.
+
+**Los 72 de prioridad A son el punto de entrada:** ya demostraron que pagan
+software mensual siendo pequeños. No hay que convencerlos de que el software
+sirve, solo de que el tuyo sirve más.
+
+**Límites del censo, declarados:** Google Maps quedó sin explotar (es
+probablemente lo de mayor rendimiento marginal para los municipios flojos) ·
+se agotaron los créditos de Firecrawl a mitad del trabajo y quedaron 25 fichas
+de buscocasita pendientes · el campo de inventario publicado se anuló porque el
+parser sumaba duplicados y daba cifras absurdas — es recuperable y sería el
+mejor proxy de tamaño disponible · el campo `tipo` refleja lo que dice el
+portal, no una verificación.
+
 ---
 
 ## 5. Competencia (verificada el 25-jul-2026)
@@ -227,10 +265,10 @@ desarrollador.** Sin esto, el modelo no escala.
   inmobiliarias como comprador y cronometrar la respuesta. Requiere decisión
   previa porque implica contactar competidores de Diamond.
 - **SIMI sin verificar** como fuente de búsqueda por URL.
-- **Censo de independientes fuera de La Lonja:** en curso al cierre de este
-  documento.
 - **Segmento constructoras:** no investigado. Es donde sí hay presupuesto de
   pauta, y están en Camacol, no en La Lonja.
+- **Google Maps para el censo del nicho:** sin explotar. Es la fuente con mayor
+  rendimiento marginal pendiente, sobre todo para Bello, Itagüí y Sabaneta.
 
 ---
 
@@ -286,6 +324,8 @@ Todo en `diamond-os/nivel-1-investigacion/`:
 | `prospectos-inmobiliarias-valle-aburra.xlsx` | 239 empresas jurídicas, ordenadas por score, con hoja de metodología y limitaciones |
 | `prospectos-inmobiliarias-valle-aburra.csv` | Lo mismo en CSV |
 | `prospectos-por-valor.csv` | Re-rankeado por **valor entregado ÷ fricción de cierre** |
+| **`nicho-independientes.csv`** | **756 prospectos del nicho objetivo, clasificados por prioridad A/B/C/D** |
+| `censo-independientes-metodo.md` | Método del censo: qué fuente rindió y cuál no |
 | `validacion-mercado-diamond-os.html` | Informe de validación con el veredicto original (segmento grande) |
 | `manual-de-venta.md` | Precios por tier, guion de llamada, 6 objeciones con respuesta |
 | `correos-en-frio.txt` | 25 correos personalizados con el dato medido de cada cuenta |
