@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin } from "@/lib/auth";
+import { callBot } from "@/lib/bot";
 import { fetchSafe } from "@/lib/fetch-safe";
 import ErrorBanner from "@/components/error-banner";
 import GruposPanel, { type Grupo } from "@/components/grupos-panel";
@@ -20,6 +21,12 @@ type Signal = {
   texto_original: string | null;
   matches: { fuente: string; ref: string | null }[] | null;
   created_at: string;
+};
+
+type Metricas = {
+  recibidos: number; prefiltrados: number; clasificados: number; senales: number;
+  duplicados: number; ruido: number; historicos: number; costoUsd: number;
+  lotesFallidos: number; pendientes: number; aliadas: number; alertas: number;
 };
 
 const pesos = (n: number | null) =>
@@ -85,6 +92,12 @@ export default async function GruposPage() {
     ),
   ]);
 
+  // Métricas del embudo: viven en memoria del bot, no en la base. Se piden
+  // acá para no obligar a abrir una terminal cada vez que se quiere mirar el
+  // volumen o el costo. Si el bot no responde, la página igual carga.
+  const metricasRes = await callBot<Metricas>("/api/grupos/metricas", {});
+  const m = metricasRes.ok ? metricasRes.data : null;
+
   const grupos = gruposRes.data || [];
   const senales = senalesRes.data || [];
   const demandas = senales.filter((s) => s.clase === "demanda");
@@ -117,6 +130,49 @@ export default async function GruposPage() {
           </div>
         ))}
       </div>
+
+      {m && (
+        <div className="mb-6 rounded-lg border border-slate-200 bg-white p-4">
+          <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="text-sm font-semibold text-slate-900">El embudo, desde el último reinicio del bot</h2>
+            <span className="text-xs text-slate-400">se reinicia con cada deploy</span>
+          </div>
+          <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
+            {[
+              { n: m.recibidos, t: "mensajes", d: "llegaron de grupos prendidos" },
+              { n: m.prefiltrados, t: "descartados gratis", d: "sin señal inmobiliaria" },
+              { n: m.clasificados, t: "vistos por la IA", d: "los que sobrevivieron" },
+              { n: m.senales, t: "señales", d: "demanda u oferta" },
+              { n: m.historicos, t: "históricos", d: "anteriores al pareo" },
+              { n: m.duplicados, t: "duplicados", d: "evitados" },
+              { n: m.pendientes, t: "en cola", d: "esperando lote" },
+            ].map((c) => (
+              <div key={c.t} title={c.d}>
+                <span className="text-lg font-bold tabular-nums text-slate-900">{c.n}</span>{" "}
+                <span className="text-slate-600">{c.t}</span>
+              </div>
+            ))}
+            <div title="Medido sobre los tokens reales, no estimado">
+              <span className="text-lg font-bold tabular-nums text-slate-900">
+                US${(m.costoUsd || 0).toFixed(4)}
+              </span>{" "}
+              <span className="text-slate-600">de IA</span>
+            </div>
+          </div>
+          {m.lotesFallidos > 0 && (
+            <p className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              {m.lotesFallidos} lote(s) de clasificación fallaron: esos mensajes quedaron sin analizar,
+              así que los números de arriba subestiman lo que hay.
+            </p>
+          )}
+          {m.recibidos > 0 && m.senales === 0 && m.clasificados > 20 && (
+            <p className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              Están entrando mensajes pero no se detecta ninguna señal. Puede ser que estos grupos no
+              sean gremiales, o que el léxico necesite ajuste.
+            </p>
+          )}
+        </div>
+      )}
 
       <h2 className="mb-2 text-lg font-semibold text-slate-900">La línea</h2>
       <VincularLinea sesiones={sesionesRes.data || []} asesores={asesoresRes.data || []} />

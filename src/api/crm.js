@@ -99,6 +99,13 @@ router.post("/api/grupos/importar", async (req, res) => {
   }
 });
 
+// Metricas en vivo del embudo. Viven en memoria del bot (no en la base), asi
+// que el CRM tiene que preguntarlas. Se exponen aca —con BOT_API_KEY— para que
+// mirarlas no obligue a abrir una terminal.
+router.post("/api/grupos/metricas", (req, res) => {
+  res.json({ ok: true, ...require("../groups/buffer").estado() });
+});
+
 router.post("/api/grupos/:id/modo", async (req, res) => {
   const { modo } = req.body || {};
   if (!whatsappGroups.MODOS.includes(modo)) {
