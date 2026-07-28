@@ -160,3 +160,47 @@ test("con nombres presentes no se registra ninguna advertencia", async () => {
   await waha.listarGrupos("s");
   assert.deepStrictEqual(avisos, []);
 });
+
+test("si el listado no trae nombres, se piden los grupos de a uno", async () => {
+  // Una lista de "Grupo sin nombre" no se puede administrar: el usuario no
+  // sabe cuál apagar. El listado masivo de algunas versiones de WAHA no expone
+  // la metadata, pero el detalle individual sí.
+  const pedidos = [];
+  mock.method(globalThis, "fetch", async (url) => {
+    const u = String(url);
+    pedidos.push(u);
+    const body = u.endsWith("/groups")
+      ? [{ id: "1@g.us" }, { id: "2@g.us" }]
+      : { id: u.split("/").pop(), subject: `Nombre de ${u.split("/").pop()}` };
+    return { ok: true, headers: new Map([["content-type", "application/json"]]), text: async () => JSON.stringify(body) };
+  });
+
+  const g = await waha.listarGrupos("s");
+  assert.deepStrictEqual(g.map((x) => x.nombre), ["Nombre de 1%40g.us", "Nombre de 2%40g.us"]);
+  assert.strictEqual(pedidos.length, 3, "uno masivo + uno por grupo");
+});
+
+test("si falla el detalle de un grupo, los demás igual se completan", async () => {
+  mock.method(globalThis, "fetch", async (url) => {
+    const u = String(url);
+    if (u.endsWith("/groups")) {
+      return { ok: true, headers: new Map([["content-type", "application/json"]]), text: async () => JSON.stringify([{ id: "1@g.us" }, { id: "2@g.us" }]) };
+    }
+    if (u.includes("1%40g.us")) return { ok: false, status: 500, headers: new Map(), text: async () => "" };
+    return { ok: true, headers: new Map([["content-type", "application/json"]]), text: async () => JSON.stringify({ subject: "El segundo sí" }) };
+  });
+
+  const g = await waha.listarGrupos("s");
+  assert.strictEqual(g[0].nombre, null);
+  assert.strictEqual(g[1].nombre, "El segundo sí");
+});
+
+test("si el listado YA trae nombres no se piden de a uno", async () => {
+  const pedidos = [];
+  mock.method(globalThis, "fetch", async (url) => {
+    pedidos.push(String(url));
+    return { ok: true, headers: new Map([["content-type", "application/json"]]), text: async () => JSON.stringify([{ id: "1@g.us", subject: "Ya tiene" }]) };
+  });
+  await waha.listarGrupos("s");
+  assert.strictEqual(pedidos.length, 1, "no hay que gastar una llamada por grupo si ya vinieron");
+});

@@ -64,14 +64,41 @@ function autorizado(req) {
 // Extrae lo que necesitamos del payload de WAHA. Para un mensaje de grupo,
 // `from` es el JID del grupo y `participant` es quien lo escribio; en un chat
 // 1-a-1 `participant` no viene. Ver https://waha.devlike.pro/docs/how-to/receive-messages/
+// El nombre del colega viaja en una clave distinta segun el motor: WEBJS usa
+// notifyName, NOWEB tiende a pushName, y a veces va anidado en _data. Sin el,
+// el asesor ve "Colega" y no sabe a quien escribirle — que es justamente lo
+// que tiene que hacer.
+function nombreDelAutor(p) {
+  return (
+    p._data?.notifyName || p.notifyName ||
+    p._data?.pushName || p.pushName ||
+    p.participantName || p._data?.verifiedBizName || null
+  );
+}
+
+// Se registra UNA vez por proceso: si el nombre no aparece, deja las CLAVES del
+// payload en el log para poder corregirlo. Nunca los valores — el contenido de
+// los mensajes es de terceros.
+let avisadoSinAutor = false;
+
 function normalizar(body) {
   const p = body?.payload || {};
+  const autorNombre = nombreDelAutor(p);
+  if (!autorNombre && p.id && !avisadoSinAutor) {
+    avisadoSinAutor = true;
+    console.warn(
+      "[grupos] El mensaje no trae nombre del autor. Claves del payload:",
+      Object.keys(p).join(", "),
+      "| _data:",
+      Object.keys(p._data || {}).join(", ") || "(sin _data)"
+    );
+  }
   return {
     sesion: body?.session || null,
     waMessageId: p.id || null,
     chatId: p.from || null,
     autorId: p.participant || p.author || null,
-    autorNombre: p._data?.notifyName || p.notifyName || null,
+    autorNombre,
     texto: typeof p.body === "string" ? p.body : "",
     fromMe: Boolean(p.fromMe),
     tieneMedia: Boolean(p.hasMedia),

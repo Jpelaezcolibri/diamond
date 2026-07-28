@@ -137,18 +137,39 @@ async function listarGrupos(nombre) {
     }))
     .filter((g) => typeof g.jid === "string" && g.jid.endsWith("@g.us"));
 
-  // Si vinieron grupos pero ninguno con nombre, estamos leyendo la clave
-  // equivocada. Se registran las CLAVES del primero (nunca sus valores: los
-  // nombres de los grupos son datos de terceros) para poder corregirlo sin
-  // tener que entrar a la consola del contenedor.
+  // Si vinieron grupos pero ninguno con nombre, el listado masivo no expone la
+  // metadata. Se piden de a uno: es una llamada por grupo, pero la importacion
+  // se hace una vez y una lista de "Grupo sin nombre" no se puede administrar
+  // — el usuario no sabe cual apagar.
   if (grupos.length > 0 && !grupos.some((g) => g.nombre)) {
     console.warn(
-      `[waha] ${grupos.length} grupo(s) sin nombre. Claves que devuelve WAHA:`,
-      Object.keys(filas[0] || {}).join(", ") || "(objeto vacio)"
+      `[waha] El listado no trae nombres. Claves que devuelve WAHA:`,
+      Object.keys(filas[0] || {}).join(", ") || "(objeto vacio)",
+      `— pidiendo ${grupos.length} grupo(s) de a uno.`
     );
+    await completarNombres(nombre, grupos);
   }
 
   return grupos;
+}
+
+// Pide cada grupo individualmente para sacarle el nombre. De a 4 en paralelo:
+// suficiente para que no tarde y sin castigar a WAHA. Un fallo puntual no
+// rompe la importacion — ese grupo queda sin nombre y los demas siguen.
+async function completarNombres(sesion, grupos, concurrencia = 4) {
+  let i = 0;
+  const worker = async () => {
+    while (i < grupos.length) {
+      const g = grupos[i++];
+      try {
+        const d = await pedir(`/api/${encodeURIComponent(sesion)}/groups/${encodeURIComponent(g.jid)}`);
+        g.nombre = nombreDeGrupo(d) || nombreDeGrupo(d?.groupMetadata || {}) || null;
+      } catch (e) {
+        console.warn(`[waha] No se pudo leer el nombre de un grupo: ${e.message}`);
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(concurrencia, grupos.length) }, worker));
 }
 
 module.exports = { configurado, crearSesion, estadoSesion, qr, listarGrupos };
