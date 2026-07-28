@@ -145,8 +145,9 @@ abre tres huecos que hay que cerrar **antes** de escribir la primera fila:
 `if (ctx.allyMatch.registrado_por)`. Una propiedad detectada por Sofi en un
 grupo no tiene asesor que la haya registrado ⇒ el match ocurre y nadie se
 entera. **Decisión propuesta:** atribuirla al **asesor dueño de la sesión que
-la detectó** — es su grupo y su relación con ese colega, así que es la
-atribución natural y además justa para la comisión.
+la detectó**, en el rol de *puente* — es su grupo y su relación con ese colega
+(ver "El puente entre asesores"). El puente no es dueño del negocio: eso queda
+como decisión de Juan.
 
 **2. Caducidad.** Una propiedad de un grupo se vende y nadie avisa.
 Recomendarle a un cliente real algo que ya no existe es daño de reputación,
@@ -166,6 +167,80 @@ que es exactamente lo que significa "sigue disponible".
 Estas tres decisiones son propuestas del diseño y se implementan en la Fase 2,
 cuando se empiece a escribir en la base. **La Fase 0 no escribe nada**, pero sí
 mide si la extracción da datos lo bastante buenos como para que valga la pena.
+
+## El puente entre asesores
+
+**El escenario:** el asesor A tiene un cliente que busca casa en Belén. La casa
+aparece publicada por un colega externo en un grupo que escucha **la línea del
+asesor B**, no la de A. Hoy ese negocio no ocurre: A no está en ese grupo y no
+se entera.
+
+B es el **puente** — es quien tiene el acceso al grupo y la relación con ese
+colega. Sin él, el match es información muerta.
+
+### Cómo se resuelve
+
+El motor ya existe: [`command.leadsParaPropiedad()`](../../../src/data/command.js)
+cruza una propiedad contra los leads abiertos y devuelve los que calzan, y
+`matchLeadsConPropiedad` es una función pura reutilizable tal cual.
+
+El único cambio: hoy esa consulta filtra por `owner_id` salvo que el que
+pregunta sea admin, así que **nunca cruzaría entre asesores**. Cuando entra una
+oferta desde un grupo, el cruce debe correr con **alcance de organización** —
+es una llamada privilegiada desde el worker, no desde un usuario.
+
+### Quién se entera de qué — el límite de privacidad
+
+El cruce es org-wide, pero **la notificación respeta el aislamiento entre
+asesores que ya rige el CRM**. Cada uno recibe solo lo suyo:
+
+| Recibe | Qué se le dice | Qué **no** se le dice |
+|---|---|---|
+| **Asesor A** (dueño del cliente) | "Apareció una casa en Belén para tu cliente María. La tiene Fulano de Inmobiliaria Y. El contacto va por Andrés, que está en ese grupo." | — |
+| **Asesor B** (el puente) | "Un compañero tiene un cliente para la casa que publicó Fulano en el grupo X. ¿La gestionás?" | **Nada del lead de A**: ni nombre, ni teléfono, ni presupuesto |
+
+B no necesita los datos del cliente de A para hacer su trabajo, que es hablar
+con el colega del grupo. Dárselos rompería el aislamiento que el CRM ya
+sostiene en todas las demás pantallas.
+
+### Decisión de negocio pendiente — de quién es el negocio
+
+A es dueño del cliente; B es dueño de la relación con el grupo. **Quién se
+lleva la comisión, o cómo se reparte, es una decisión de Juan, no del
+diseño.** El sistema registra ambos roles (`lead.owner_id` y la sesión que
+detectó la oferta) para que cualquier regla de reparto sea implementable
+después. No se asume ninguna.
+
+Esto también aclara la atribución propuesta arriba: el asesor dueño de la
+sesión queda como **puente de esa propiedad**, no como dueño del negocio que
+salga de ella.
+
+## Superficie en el CRM
+
+Extiende la sección **`crm/app/(dashboard)/aliados/`** que ya existe, en vez de
+crear una nueva: ya lee `ally_properties`, ya renderiza `AliadosTable` y ya le
+advierte al asesor *"confirma disponibilidad antes de ofrecerlas a un
+cliente"* — la misma preocupación que resuelve la caducidad de 30 días.
+
+Pasa a tener dos pestañas, una por dirección:
+
+**Pestaña "Propiedades disponibles"** — la vista actual, más:
+- badge de **origen**: `detectada en grupo` vs. `registrada por un asesor`;
+- indicador de **frescura** (`visto_en_grupo_at`), con las próximas a vencer
+  destacadas;
+- qué asesor es el **puente** hacia esa propiedad.
+
+**Pestaña "Pedidos de colegas"** — nueva. Las `demanda` detectadas en grupos:
+- qué pide el colega, en qué grupo y cuándo;
+- las refs del inventario de Diamond que hicieron match;
+- estado: `nuevo` · `gestionado` · `descartado`, para que dos asesores no
+  gestionen el mismo pedido;
+- el borrador de respuesta listo para copiar.
+
+**Nota de lenguaje para la UI:** son *clientes de colegas*, no clientes de
+Diamond. La copy debe dejarlo tan explícito como ya lo hace la página de
+aliados con "nunca son inventario propio" — para que nadie los meta en el
+embudo propio por error.
 
 ## Multi-sesión y deduplicación
 
@@ -305,7 +380,23 @@ group_signals           (id, org_id, group_id, wa_message_id, autor_nombre,
                          contacto, texto_original, matches jsonb, estado,
                          created_at)
                         UNIQUE (org_id, group_id, wa_message_id)
+                        -- estado: 'nuevo' | 'gestionado' | 'descartado'
+                        -- (evita que dos asesores gestionen el mismo pedido)
 ```
+
+Columnas nuevas sobre la tabla existente `ally_properties`, para la dirección 1:
+
+```sql
+origen             'asesor' (default, comportamiento actual) | 'grupo'
+group_id           FK al grupo donde se detectó (null si origen='asesor')
+puente_advisor_id  asesor dueño de la sesión que la detectó — el puente
+visto_en_grupo_at  última vez vista en el grupo; una republicación la refresca
+```
+
+`allyProperties.search()` filtra por vencimiento **dentro de la función**, para
+que ninguna consulta pueda saltárselo por olvido: `origen='grupo'` con
+`visto_en_grupo_at` de más de 30 días no se devuelve nunca. Las de
+`origen='asesor'` no caducan — es el comportamiento de hoy y no cambia.
 
 Retención: `group_signals` se purga a los 90 días. Nada más almacena texto crudo.
 
@@ -380,7 +471,14 @@ vinculado. Es exactamente por eso que ninguna línea escribe.
   necesitás*; este resuelve *enterarte de lo que se mueve sin preguntar*.
 - **`src/notifications/advisor.js`** — el canal de aviso al asesor ya existe
   (`buildAdvisorAlert`, `buildAllyClientMatchAlert`). Se reutiliza, no se
-  duplica.
+  duplica. Hace falta un constructor nuevo para el aviso al **puente**, que
+  dice menos, no más: no lleva datos del lead ajeno.
+- **`src/data/command.js`** — `leadsParaPropiedad` y `matchLeadsConPropiedad`
+  son el motor del cruce entre asesores. `matchLeadsConPropiedad` se reutiliza
+  sin tocar; `leadsParaPropiedad` necesita poder correr con alcance de
+  organización desde el worker.
+- **`crm/app/(dashboard)/aliados/`** — se extiende con dos pestañas en vez de
+  crear una sección nueva. `AliadosTable` se reutiliza para la de propiedades.
 - **Bot, CRM, DMAP, web** — sin acoplamiento. El servicio de grupos vive aparte
   en Railway, con su propia sesión y credenciales. Nada de lo que pase ahí puede
   tumbar producción.
