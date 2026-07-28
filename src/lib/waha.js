@@ -53,8 +53,21 @@ async function crearSesion(nombre, { webhookUrl, webhookSecret }) {
   try {
     return await pedir("/api/sessions", { metodo: "POST", body: { name: nombre, start: true, config } });
   } catch (e) {
-    if (e.status === 422 || e.status === 409) return estadoSesion(nombre);
-    throw e;
+    if (e.status !== 422 && e.status !== 409) throw e;
+
+    // La sesion ya existia — pasa si se creo a mano en WAHA antes de conectar
+    // el bot. Devolver el estado a secas dejaria una sesion SIN nuestro
+    // webhook: pareada, recibiendo mensajes, y sin que llegue ni uno. Falla
+    // silenciosa y dificil de diagnosticar, asi que se reaplica la config.
+    try {
+      await pedir(`/api/sessions/${encodeURIComponent(nombre)}`, { metodo: "PUT", body: { config } });
+    } catch (e2) {
+      console.error(
+        `[waha] La sesion "${nombre}" ya existia y NO se pudo actualizar su webhook (${e2.message}). ` +
+        `Revisala a mano en WAHA: sin el webhook apuntando al bot no va a llegar ningun mensaje.`
+      );
+    }
+    return estadoSesion(nombre);
   }
 }
 

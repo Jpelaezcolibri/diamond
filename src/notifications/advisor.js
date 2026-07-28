@@ -144,6 +144,10 @@ function buildAllyClientMatchAlert(allyProperty, lead) {
     "Match con la red de aliados!",
     `${clienteNombre}${clienteTelefono} pregunto por algo similar a la ${tipo}${zona}${precio}${ref} que te comparte ${contacto}${inmobiliaria}.`,
     "Valida disponibilidad con tu colega antes de confirmarle al cliente.",
+    // Regla de Juan: si uno pone el cliente y el otro la propiedad, la
+    // comision se comparte. Decirlo en el aviso evita que dos asesores lo
+    // negocien despues, con el cliente ya en la mano.
+    "La comision se comparte: quien tiene el cliente y quien tiene la propiedad se ponen de acuerdo.",
   ].join("\n");
 }
 
@@ -182,6 +186,7 @@ function buildGroupDemandAlert(demanda, mensaje) {
     ...refs,
     "",
     "Escribile vos desde tu telefono — con tus palabras, no copiando esto tal cual.",
+    "Si la propiedad es de otro asesor de Diamond, la comision se comparte entre ustedes.",
   ].filter((l) => l !== null).join("\n");
 }
 
