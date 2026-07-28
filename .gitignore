@@ -6,6 +6,12 @@ node_modules/
 
 .vercel
 
+# Exports de chats de WhatsApp: datos personales de terceros. Van fuera del
+# repo (ver scripts/group-mining/README.md); esto es la red de seguridad por
+# si alguien los deja adentro.
+scripts/group-mining/exports/
+reporte-grupos.html
+
 # Estado local del agente y artefactos de herramientas
 .claude/
 .playwright-mcp/
