@@ -20,6 +20,29 @@ router.use("/api", (req, res, next) => {
   next();
 });
 
+// ── Grupos de WhatsApp (Fase 1, modo sombra) ────────────────────────────
+//
+// El modo de un grupo es la llave de la privacidad del asesor: define si Sofi
+// lo escucha o no. Por eso pasa por aca, con la service key y autenticado,
+// en vez de que el CRM escriba directo contra Supabase.
+const whatsappGroups = require("../data/whatsapp-groups");
+const organizations = require("../data/organizations");
+
+router.post("/api/grupos/:id/modo", async (req, res) => {
+  const { modo } = req.body || {};
+  if (!whatsappGroups.MODOS.includes(modo)) {
+    return res.status(400).json({ error: `Modo invalido. Use: ${whatsappGroups.MODOS.join(", ")}` });
+  }
+  try {
+    const org = await organizations.getDefault();
+    const grupo = await whatsappGroups.setModo(org.id, req.params.id, modo);
+    console.log(`[grupos] ${grupo.nombre || grupo.jid} -> ${modo}`);
+    res.json({ ok: true, grupo });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 async function getConversation(id) {
   const { data, error } = await supabase
     .from("conversations")
