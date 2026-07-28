@@ -121,6 +121,52 @@ lotes de 20 son ~8 llamadas diarias a Haiku → **menos de 1 USD/mes**. Aun con
 un descarte de solo el 50% no llega a 3 USD. **El embudo convierte el mayor
 riesgo de costo en un no-problema, y la Fase 0 lo demuestra con datos reales.**
 
+## Las dos direcciones del valor — no son el mismo problema
+
+El embudo es común hasta la Etapa 1. De ahí en adelante, `oferta` y `demanda`
+se comportan de forma opuesta y necesitan tratamiento distinto.
+
+| | **Dirección 1 — Oferta** | **Dirección 2 — Demanda** |
+|---|---|---|
+| Qué es | Un colega publica una propiedad disponible | Un colega busca algo específico para su cliente |
+| Para qué sirve | Recomendársela a un cliente propio de Diamond cuando el inventario no da | Ofrecerle a ese colega lo que Diamond sí tiene |
+| Naturaleza | **Acumulativa y persistente** — se guarda y espera | **Efímera y de un solo tiro** — se alerta y muere |
+| Latencia | Irrelevante: sirve dentro de tres semanas | Importa: a los tres días ya no vale |
+| Destino | Fila en `ally_properties` | Alerta al asesor, sin persistencia de valor |
+| Estado del código | **Ya existe y corre en producción** (`tools.js:229` → `allyProperties.search` → `buildAllyClientMatchAlert`). Solo le falta abastecimiento | **No existe.** Es el camino nuevo: `properties.search` + `buildAdvisorAlert` |
+| Riesgo principal | Recomendar algo **desactualizado** a un cliente real | **Fatiga de alertas** en el asesor |
+
+### Dirección 1 — brechas de integración detectadas
+
+Enchufar los grupos al circuito de `ally_properties` que ya corre en producción
+abre tres huecos que hay que cerrar **antes** de escribir la primera fila:
+
+**1. La alerta se muere en silencio.** `tools.js:235` solo dispara la alerta
+`if (ctx.allyMatch.registrado_por)`. Una propiedad detectada por Sofi en un
+grupo no tiene asesor que la haya registrado ⇒ el match ocurre y nadie se
+entera. **Decisión propuesta:** atribuirla al **asesor dueño de la sesión que
+la detectó** — es su grupo y su relación con ese colega, así que es la
+atribución natural y además justa para la comisión.
+
+**2. Caducidad.** Una propiedad de un grupo se vende y nadie avisa.
+Recomendarle a un cliente real algo que ya no existe es daño de reputación,
+no un bug menor. **Decisión propuesta:** columna `visto_en_grupo_at` y
+vencimiento automático a los **30 días**, filtrado dentro de
+`allyProperties.search()` para que ninguna consulta pueda saltárselo. Las
+registradas a mano por un asesor no caducan — solo las de origen grupo.
+
+**3. Deduplicación sin `ref`.** El índice único actual es
+`(org_id, contacto_telefono, ref)`, pero los mensajes de grupo casi nunca
+traen referencia y los colegas republican la misma propiedad cada semana
+("¡sigue disponible!"). **Decisión propuesta:** clave alternativa
+`(org_id, contacto_telefono, tipo, zona, precio)` para las de origen grupo; una
+republicación **refresca `visto_en_grupo_at`** en vez de crear una fila nueva —
+que es exactamente lo que significa "sigue disponible".
+
+Estas tres decisiones son propuestas del diseño y se implementan en la Fase 2,
+cuando se empiece a escribir en la base. **La Fase 0 no escribe nada**, pero sí
+mide si la extracción da datos lo bastante buenos como para que valga la pena.
+
 ## Multi-sesión y deduplicación
 
 Cada asesor que suma su línea es una **sesión WAHA independiente** que aporta
@@ -199,8 +245,10 @@ Un HTML con:
 - **Métricas de embudo:** total de mensajes, descartados en Etapa 0 (%),
   clasificados como demanda / oferta / ruido, matches encontrados.
 - **Proyección de costo** mensual en vivo, extrapolada del volumen real.
-- **Tabla cruda de detecciones** — mensaje original, clasificación, campos
-  extraídos y refs que hicieron match. Es la que Juan revisa a mano.
+- **Tabla cruda de detecciones, separada por dirección** — mensaje original,
+  clasificación, campos extraídos y refs que hicieron match. Es la que Juan
+  revisa a mano. Las `oferta` marcan explícitamente cuáles quedarían
+  **inutilizables** por falta de precio, zona o contacto.
 - **Muestra de 100 mensajes descartados en Etapa 0**, para cazar falsos
   negativos. Es la sección más importante del reporte.
 
@@ -208,14 +256,37 @@ Un HTML con:
 
 Se pasa solo si **todas** se cumplen:
 
+Se mide **cada dirección por separado**: pueden pasar las dos, una sola, o
+ninguna. Si solo pasa una, se construye solo esa mitad — el embudo es el mismo.
+
+**Comunes:**
+
 | Métrica | Umbral | Por qué |
 |---|---|---|
 | Descarte en Etapa 0 | **≥ 70%** | Debajo de eso el costo deja de ser trivial y hay que rediseñar el léxico |
+| Costo proyectado | **≤ 5 USD/mes** | Restricción de presupuesto del equipo |
+
+**Dirección 2 — Demanda:**
+
+| Métrica | Umbral | Por qué |
+|---|---|---|
 | Demandas reales detectadas | **≥ 5/día**, normalizado sobre el rango de fechas real del export | Menos que eso no justifica el sistema. Los exports abarcan meses: el reporte divide por días transcurridos, no por días con actividad |
 | Demandas con ≥1 match en inventario | **≥ 30%** | Es la métrica de negocio: detectar sin poder responder no sirve |
+
+**Dirección 1 — Oferta:**
+
+| Métrica | Umbral | Por qué |
+|---|---|---|
+| Ofertas detectadas | **≥ 10/día**, normalizado igual | Es un inventario que se acumula: importa el caudal, no el pico |
+| Ofertas con datos **utilizables** (tipo + zona + precio + contacto) | **≥ 60%** de las clasificadas como oferta | Una oferta sin precio o sin zona no se le puede recomendar a un cliente: es una fila muerta en `ally_properties` |
+| Ofertas que sobrevivirían la dedup a 30 días | Se reporta, sin umbral | Mide el inventario real vs. el bruto. Sirve para dimensionar, no para decidir |
+
+**Transversales:**
+
+| Métrica | Umbral | Por qué |
+|---|---|---|
 | Precisión de clasificación | **≥ 80%** sobre una muestra de 100 mensajes **clasificados como demanda u oferta**, revisada por Juan | Mide falsos positivos: cuántas alertas serían basura para el asesor |
 | **Falsos negativos** | **≤ 10%** sobre la muestra de 100 descartados en Etapa 0 | **La que más importa**: un mensaje bueno que el embudo mató es un negocio perdido y además invisible |
-| Costo proyectado | **≤ 5 USD/mes** | Restricción de presupuesto del equipo |
 
 Si alguna falla: se ajusta léxico o prompt y se vuelve a correr — es offline y
 gratis iterar. Si tras dos o tres iteraciones sigue fallando, **el proyecto se
@@ -300,7 +371,10 @@ vinculado. Es exactamente por eso que ninguna línea escribe.
 ## Relación con otros módulos
 
 - **`ally_properties`** — las `oferta` detectadas son el alimentador masivo que
-  le faltaba a esa tabla, ya construida junto a su tool en `src/agent/tools.js`.
+  le faltaba a esa tabla. **El circuito de consumo ya corre en producción**
+  (`tools.js:229` → `search` → alerta al asesor); este diseño solo lo abastece.
+  Requiere cerrar las tres brechas de la sección "Dirección 1" —atribución,
+  caducidad y dedup sin `ref`— antes de escribir la primera fila.
 - **[Búsqueda en la red de inmobiliarias](2026-07-26-busqueda-red-inmobiliarias-design.md)**
   — complementario, no solapado: ese resuelve *buscar oferta cuando ya sabés qué
   necesitás*; este resuelve *enterarte de lo que se mueve sin preguntar*.
