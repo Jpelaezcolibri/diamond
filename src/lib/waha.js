@@ -67,7 +67,22 @@ async function crearSesion(nombre, { webhookUrl, webhookSecret }) {
         `Revisala a mano en WAHA: sin el webhook apuntando al bot no va a llegar ningun mensaje.`
       );
     }
-    return estadoSesion(nombre);
+    // Una sesion caida o detenida no se arregla reaplicando config: hay que
+    // reiniciarla. Sin esto, "Vincular linea" no hacia nada util con una
+    // sesion en FAILED y el unico camino visible era volver a molestar al
+    // asesor con el QR — que muchas veces ni siquiera hace falta, porque las
+    // credenciales siguen en el volumen.
+    const estado = await estadoSesion(nombre).catch(() => null);
+    if (estado && ["FAILED", "STOPPED"].includes(estado.status)) {
+      console.warn(`[waha] La sesion ${nombre} esta en ${estado.status}; reiniciando.`);
+      try {
+        await pedir(`/api/sessions/${encodeURIComponent(nombre)}/restart`, { metodo: "POST" });
+        return estadoSesion(nombre);
+      } catch (e3) {
+        console.error(`[waha] No se pudo reiniciar ${nombre}: ${e3.message}`);
+      }
+    }
+    return estado || estadoSesion(nombre);
   }
 }
 

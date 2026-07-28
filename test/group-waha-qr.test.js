@@ -204,3 +204,40 @@ test("si el listado YA trae nombres no se piden de a uno", async () => {
   await waha.listarGrupos("s");
   assert.strictEqual(pedidos.length, 1, "no hay que gastar una llamada por grupo si ya vinieron");
 });
+
+// ══ Recuperar una sesión caída ═══════════════════════════════════════════
+
+test("una sesión en FAILED se reinicia, no se deja como está", async () => {
+  // Reaplicar la config no arregla una sesión caída. Sin reiniciar, el único
+  // camino visible era volver a molestar al asesor con el QR — y muchas veces
+  // no hace falta: las credenciales siguen en el volumen.
+  const rutas = [];
+  mock.method(globalThis, "fetch", async (url, opts) => {
+    const u = String(url);
+    rutas.push(`${opts?.method || "GET"} ${u.replace("http://waha.test:8080", "")}`);
+    if (u.endsWith("/api/sessions") && opts?.method === "POST") {
+      return { ok: false, status: 422, headers: new Map(), text: async () => "{}" };
+    }
+    const cuerpo = rutas.some((r) => r.includes("/restart")) ? { status: "STARTING" } : { status: "FAILED" };
+    return { ok: true, headers: new Map([["content-type", "application/json"]]), text: async () => JSON.stringify(cuerpo) };
+  });
+
+  const r = await waha.crearSesion("s", { webhookUrl: "http://bot/w", webhookSecret: "x" });
+  assert.ok(rutas.some((x) => x === "POST /api/sessions/s/restart"), `no reinició. Rutas: ${rutas.join(" | ")}`);
+  assert.strictEqual(r.status, "STARTING");
+});
+
+test("una sesión sana NO se reinicia — reiniciar de más corta la escucha", async () => {
+  const rutas = [];
+  mock.method(globalThis, "fetch", async (url, opts) => {
+    const u = String(url);
+    rutas.push(`${opts?.method || "GET"} ${u}`);
+    if (u.endsWith("/api/sessions") && opts?.method === "POST") {
+      return { ok: false, status: 422, headers: new Map(), text: async () => "{}" };
+    }
+    return { ok: true, headers: new Map([["content-type", "application/json"]]), text: async () => JSON.stringify({ status: "WORKING" }) };
+  });
+
+  await waha.crearSesion("s", { webhookUrl: "http://bot/w", webhookSecret: "x" });
+  assert.ok(!rutas.some((x) => x.includes("/restart")), "no debería reiniciar una sesión que está funcionando");
+});
