@@ -1,6 +1,6 @@
 const { test } = require("node:test");
 const assert = require("node:assert");
-const { filtrosInventario, filtrosAliados, mismaOperacion, evaluarOferta } = require("../scripts/group-mining/match");
+const { filtrosInventario, filtrosAliados, mismaOperacion, evaluarOferta } = require("../src/groups/match");
 
 const demanda = {
   clase: "demanda", operacion: "venta", tipo: "apartamento", zona: "Laureles",

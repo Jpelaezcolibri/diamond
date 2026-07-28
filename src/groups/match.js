@@ -8,9 +8,9 @@
 //   datos suficientes para recomendarsela a un cliente. En Fase 0 NO se
 //   escribe nada en la base: solo se reporta.
 
-const organizations = require("../../src/data/organizations");
-const properties = require("../../src/data/properties");
-const allyProperties = require("../../src/data/ally-properties");
+const organizations = require("../data/organizations");
+const properties = require("../data/properties");
+const allyProperties = require("../data/ally-properties");
 
 // Los dos modulos usan claves distintas para lo mismo: properties espera
 // precio_max / habitaciones_min y ally-properties espera precioMax. Sin

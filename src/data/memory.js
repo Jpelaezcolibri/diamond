@@ -40,6 +40,9 @@ const db = {
   allyProperties: [],
   allyPropertyAlerts: [],
   propertyOwnerAlerts: [],
+  whatsappSessions: [],
+  whatsappGroups: [],
+  groupSignals: [],
   uid,
 };
 

@@ -1,6 +1,6 @@
 const { test } = require("node:test");
 const assert = require("node:assert");
-const { prefilter, motivoDescarte, tieneSenal } = require("../scripts/group-mining/prefilter");
+const { prefilter, motivoDescarte, tieneSenal } = require("../src/groups/prefilter");
 
 const msg = (texto, extra = {}) => ({
   id: "t#0", grupo: "test", texto, autor: "Colega",

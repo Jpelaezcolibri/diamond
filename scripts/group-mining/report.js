@@ -186,7 +186,7 @@ ${lotesFallidos > 0 ? `<p class="aviso"><strong>${lotesFallidos} lote(s) de clas
 <div class="wrap">${tablaOfertas(cruces.ofertas)}</div>
 
 <h2>Muestra de descartados en Etapa 0</h2>
-<p class="nota"><strong>La sección más importante del reporte.</strong> Es la única forma de ver los falsos negativos: un mensaje bueno que el embudo mató no aparece en ninguna otra parte. Muestreo determinístico, así que dos corridas se pueden comparar. Si encontrás oportunidades reales acá, el arreglo va en <code>scripts/group-mining/lexico.js</code>.</p>
+<p class="nota"><strong>La sección más importante del reporte.</strong> Es la única forma de ver los falsos negativos: un mensaje bueno que el embudo mató no aparece en ninguna otra parte. Muestreo determinístico, así que dos corridas se pueden comparar. Si encontrás oportunidades reales acá, el arreglo va en <code>src/groups/lexico.js</code>.</p>
 <div class="wrap">${tablaDescartados(descartados)}</div>
 `;
 

@@ -9,9 +9,9 @@
 // ademas nunca se ve — por eso el reporte dedica una seccion entera a revisar
 // a mano lo que esta etapa descarto.
 
-const { plano } = require("./parse-export");
+const { plano } = require("./texto");
 const lexico = require("./lexico");
-const { zonaTokens, distinctiveTokens } = require("../../src/data/properties");
+const { zonaTokens, distinctiveTokens } = require("../data/properties");
 
 // Cada zona conocida, reducida a sus tokens distintivos con el MISMO
 // tokenizador que la busqueda de inventario: asi "loma del chocho" en un grupo

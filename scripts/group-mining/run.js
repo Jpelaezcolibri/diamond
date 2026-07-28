@@ -12,7 +12,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const { parseExport, rangoDeFechas } = require("./parse-export");
-const { prefilter } = require("./prefilter");
+const { prefilter } = require("../../src/groups/prefilter");
 
 // Umbral de la primera compuerta (spec, "Criterio de decision").
 const UMBRAL_DESCARTE = 0.7;
@@ -73,7 +73,7 @@ function imprimirEmbudo(stats, rango) {
   const ok = stats.tasaDescarte >= UMBRAL_DESCARTE;
   console.log(
     `\n  Compuerta ≥${pct(UMBRAL_DESCARTE)}: ${ok ? "PASA" : "NO PASA"}` +
-      (ok ? "" : " — ajustá scripts/group-mining/lexico.js antes de gastar en IA")
+      (ok ? "" : " — ajustá src/groups/lexico.js antes de gastar en IA")
   );
 }
 
@@ -104,8 +104,8 @@ async function main() {
     );
   }
 
-  const { classify } = require("./classify");
-  const { cruzar } = require("./match");
+  const { classify } = require("../../src/groups/classify");
+  const { cruzar } = require("../../src/groups/match");
   const { generarReporte } = require("./report");
 
   console.log("\n─── Etapa 1: clasificación ────────────────────────────");

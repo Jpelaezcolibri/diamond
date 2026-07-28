@@ -1,7 +1,7 @@
 const { test } = require("node:test");
 const assert = require("node:assert");
 const { _setClientForTests } = require("../src/lib/anthropic");
-const { classify, armarLotes, formatearLote, costoDe, TAMANO_LOTE } = require("../scripts/group-mining/classify");
+const { classify, armarLotes, formatearLote, costoDe, TAMANO_LOTE } = require("../src/groups/classify");
 
 const msg = (n) => ({ id: `g#${n}`, grupo: "g", autor: "Colega", texto: `mensaje ${n}` });
 

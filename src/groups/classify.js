@@ -21,7 +21,7 @@
 // tokens y el prompt de sistema esta muy por debajo, asi que un cache_control
 // aca no haria nada (silenciosamente) y solo cobraria el premium de escritura.
 
-const { getClient } = require("../../src/lib/anthropic");
+const { getClient } = require("../lib/anthropic");
 
 const MODELO = process.env.CLAUDE_MODEL_GRUPOS || "claude-haiku-4-5";
 const TAMANO_LOTE = 20;

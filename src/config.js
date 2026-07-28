@@ -60,6 +60,18 @@ const config = {
     quietStartHour: parseInt(process.env.FOLLOWUP_QUIET_START || "20", 10), // silencio 8pm...
     quietEndHour: parseInt(process.env.FOLLOWUP_QUIET_END || "8", 10), // ...a 8am (hora Colombia)
   },
+
+  // Escucha de los grupos gremiales via WAHA (Fase 1, modo sombra).
+  // Ver docs/grupos-waha.md y src/channels/whatsapp-group.js.
+  //
+  // Sin GROUPS_WEBHOOK_SECRET el canal NO se monta: un endpoint que recibe
+  // mensajes de WhatsApp sin autenticar es una invitacion abierta.
+  groups: {
+    webhookSecret: process.env.GROUPS_WEBHOOK_SECRET || "",
+    // Interruptor global: deja el servicio vivo pero inerte, sin tocar la
+    // configuracion de ningun grupo. Es el nivel 2 de reversibilidad.
+    enabled: process.env.GROUPS_ENABLED !== "false",
+  },
 };
 
 if (!config.anthropicApiKey) {
