@@ -63,14 +63,29 @@ export default function VincularLinea({ sesiones, asesores }: { sesiones: Sesion
     setAviso(null);
   }
 
-  // El QR caduca en segundos y WAHA lo refresca solo: hay que volver a
-  // pedirlo, no cachearlo. Se deja de sondear apenas queda vinculada.
+  // El QR caduca en segundos, así que mientras se espera el escaneo hay que
+  // pedirlo seguido. En cualquier otro estado, no: WAHA puede estar peleando
+  // por reconectar contra WhatsApp, y consultarlo cada 5 segundos indefinidamente
+  // le suma carga justo cuando menos le sirve.
   useEffect(() => {
     if (!nombre || estado?.status === "WORKING") {
       if (poll.current) clearInterval(poll.current);
       return;
     }
+
+    const rapido = estado?.status === "SCAN_QR_CODE" || estado === null;
+    const cada = rapido ? 5000 : 20000;
+    let intentos = 0;
+
     const tick = async () => {
+      // Tope de ~5 minutos: si en ese rato no se resolvió, no lo va a resolver
+      // el siguiente sondeo. Se corta y se avisa, en vez de martillar para
+      // siempre con la pestaña abierta y olvidada.
+      if (++intentos > (rapido ? 60 : 15)) {
+        if (poll.current) clearInterval(poll.current);
+        setEstado((e) => (e ? { ...e, error: "Dejé de consultar. Recargá la página para volver a intentar." } : e));
+        return;
+      }
       try {
         const r = await llamar("estado", nombre);
         setEstado({ status: r.status, qr: r.qr, error: r.error });
@@ -79,8 +94,9 @@ export default function VincularLinea({ sesiones, asesores }: { sesiones: Sesion
         /* transitorio: el siguiente tick reintenta */
       }
     };
+
     tick();
-    poll.current = setInterval(tick, 5000);
+    poll.current = setInterval(tick, cada);
     return () => {
       if (poll.current) clearInterval(poll.current);
     };
