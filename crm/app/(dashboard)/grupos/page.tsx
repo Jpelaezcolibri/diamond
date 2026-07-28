@@ -1,8 +1,10 @@
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { isAdmin } from "@/lib/auth";
 import { fetchSafe } from "@/lib/fetch-safe";
 import ErrorBanner from "@/components/error-banner";
 import GruposPanel, { type Grupo } from "@/components/grupos-panel";
-import VincularLinea, { type Sesion } from "@/components/vincular-linea";
+import VincularLinea, { type Sesion, type Asesor } from "@/components/vincular-linea";
 
 export const dynamic = "force-dynamic";
 
@@ -56,7 +58,15 @@ function Ficha({ s }: { s: Signal }) {
 export default async function GruposPage() {
   const supabase = await createClient();
 
-  const [gruposRes, senalesRes, sesionesRes] = await Promise.all([
+  // Esconder el link del menú no es control de acceso: acá se ve qué líneas
+  // están vinculadas y el contenido de los grupos gremiales. Mismo guard que
+  // /usuarios.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user || !isAdmin(user)) redirect("/inbox");
+
+  const [gruposRes, senalesRes, sesionesRes, asesoresRes] = await Promise.all([
     fetchSafe<Grupo>(
       supabase.from("whatsapp_groups").select("*").order("nombre"),
       "grupos:whatsapp_groups"
@@ -68,6 +78,10 @@ export default async function GruposPage() {
     fetchSafe<Sesion>(
       supabase.from("whatsapp_sessions").select("*").order("created_at"),
       "grupos:whatsapp_sessions"
+    ),
+    fetchSafe<Asesor>(
+      supabase.from("advisors").select("id, name, phone").eq("activo", true).order("name"),
+      "grupos:advisors"
     ),
   ]);
 
@@ -105,7 +119,7 @@ export default async function GruposPage() {
       </div>
 
       <h2 className="mb-2 text-lg font-semibold text-slate-900">La línea</h2>
-      <VincularLinea sesiones={sesionesRes.data || []} />
+      <VincularLinea sesiones={sesionesRes.data || []} asesores={asesoresRes.data || []} />
 
       <h2 className="mb-2 mt-8 text-lg font-semibold text-slate-900">Qué escucha Sofi</h2>
       <GruposPanel grupos={grupos} />

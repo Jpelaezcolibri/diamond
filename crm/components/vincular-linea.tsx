@@ -7,27 +7,31 @@ export type Sesion = {
   id: string;
   nombre: string;
   estado: string;
+  advisor_id: string | null;
   escucha_desde: string | null;
   ultima_senal_at: string | null;
 };
 
+export type Asesor = { id: string; name: string; phone: string | null };
+
 type Estado = { status: string | null; qr: string | null; error: string | null };
 
-async function llamar(accion: string, nombre: string) {
+async function llamar(accion: string, nombre: string, advisorId?: string | null) {
   const res = await fetch("/api/grupos/sesion", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ accion, nombre }),
+    body: JSON.stringify({ accion, nombre, advisorId: advisorId || null }),
   }).catch(() => null);
   const body = res ? await res.json().catch(() => ({})) : {};
   if (!res || !res.ok) throw new Error(body.error || "El bot no respondió");
   return body;
 }
 
-export default function VincularLinea({ sesiones }: { sesiones: Sesion[] }) {
+export default function VincularLinea({ sesiones, asesores }: { sesiones: Sesion[]; asesores: Asesor[] }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [nombre, setNombre] = useState(sesiones[0]?.nombre || "");
+  const [advisorId, setAdvisorId] = useState(sesiones[0]?.advisor_id || "");
   const [estado, setEstado] = useState<Estado | null>(null);
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -62,7 +66,7 @@ export default function VincularLinea({ sesiones }: { sesiones: Sesion[] }) {
     setError(null);
     setAviso(null);
     try {
-      const r = await llamar(a, nombre);
+      const r = await llamar(a, nombre, advisorId);
       if (a === "importar") setAviso(`${r.nuevos} grupo(s) nuevo(s) de ${r.total}. Todos entran apagados.`);
       startTransition(() => router.refresh());
     } catch (e) {
@@ -87,10 +91,24 @@ export default function VincularLinea({ sesiones }: { sesiones: Sesion[] }) {
             className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
           />
         </label>
+        <label className="flex-1">
+          <span className="mb-1 block text-xs font-medium text-slate-600">Asesor dueño de la línea</span>
+          <select
+            value={advisorId}
+            onChange={(e) => setAdvisorId(e.target.value)}
+            className="w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm"
+          >
+            <option value="">Elegí un asesor…</option>
+            {asesores.map((a) => (
+              <option key={a.id} value={a.id}>{a.name}</option>
+            ))}
+          </select>
+        </label>
         <button
           type="button"
           onClick={() => accion("crear")}
-          disabled={!nombre || ocupado !== null}
+          disabled={!nombre || !advisorId || ocupado !== null}
+          title={advisorId ? "" : "Elegí a quién pertenece la línea"}
           className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
         >
           {ocupado === "crear" ? "Creando…" : "Vincular línea"}
@@ -126,6 +144,13 @@ export default function VincularLinea({ sesiones }: { sesiones: Sesion[] }) {
               </p>
             )}
             {estado.error && <p className="mt-1 text-xs text-red-600">{estado.error}</p>}
+            {sesion && !sesion.advisor_id && (
+              <p className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                Esta sesión no tiene asesor asignado. Sin eso, cuando un colega pida algo que
+                tenemos <strong>no hay a quién avisarle</strong>. Elegí el asesor arriba y volvé a
+                tocar <strong>Vincular línea</strong> — no se desvincula nada, sólo lo asocia.
+              </p>
+            )}
             {vinculada && (
               <p className="mt-2 text-xs text-slate-500">
                 Ya podés importar los grupos. Entran todos apagados: prendé de a uno abajo.
