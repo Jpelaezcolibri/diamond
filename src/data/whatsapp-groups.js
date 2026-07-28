@@ -23,21 +23,60 @@ function ahora() {
 
 // ── Sesiones ─────────────────────────────────────────────────────────────
 
+// escucha_desde se fija UNA vez, al crear la sesion, y no se vuelve a tocar:
+// es el corte temporal. Al vincular un dispositivo WhatsApp puede sincronizar
+// historial, y ese historial es veneno — una propiedad de hace tres meses casi
+// seguro ya se vendio, y recomendarsela a un cliente real es dano de
+// reputacion. Reescribirlo en cada arranque abriria la puerta a reprocesar.
 async function upsertSession(orgId, { nombre, advisorId = null, estado = "pendiente" }) {
+  const ahoraIso = new Date().toISOString();
+  cacheSesiones.delete(`${orgId}:${nombre}`);
+
   if (!supabase) {
     const existente = memory.whatsappSessions.find((s) => s.org_id === orgId && s.nombre === nombre);
-    if (existente) return Object.assign(existente, { estado, updated_at: new Date().toISOString() });
-    const creada = { id: memory.uid(), org_id: orgId, nombre, advisor_id: advisorId, estado, created_at: new Date().toISOString() };
+    if (existente) return Object.assign(existente, { estado, updated_at: ahoraIso });
+    const creada = { id: memory.uid(), org_id: orgId, nombre, advisor_id: advisorId, estado, escucha_desde: ahoraIso, created_at: ahoraIso };
     memory.whatsappSessions.push(creada);
     return creada;
   }
+
+  const { data: existente } = await supabase
+    .from("whatsapp_sessions").select("*").eq("org_id", orgId).eq("nombre", nombre).maybeSingle();
+
+  const patch = { org_id: orgId, nombre, estado, updated_at: ahoraIso };
+  if (advisorId) patch.advisor_id = advisorId;
+  if (!existente?.escucha_desde) patch.escucha_desde = ahoraIso;
+
   const { data, error } = await supabase
     .from("whatsapp_sessions")
-    .upsert({ org_id: orgId, nombre, advisor_id: advisorId, estado, updated_at: new Date().toISOString() }, { onConflict: "org_id,nombre" })
+    .upsert(patch, { onConflict: "org_id,nombre" })
     .select()
     .single();
   if (error) throw error;
   return data;
+}
+
+// Cache de sesiones para el corte temporal del webhook: se consulta por
+// mensaje y no puede pagar un viaje a Supabase cada vez.
+const cacheSesiones = new Map(); // `${orgId}:${nombre}` -> { at, sesion }
+
+async function sesionPorNombre(orgId, nombre) {
+  if (!nombre) return null;
+  const clave = `${orgId}:${nombre}`;
+  const c = cacheSesiones.get(clave);
+  if (c && ahora() - c.at < CACHE_MS) return c.sesion;
+
+  let sesion = null;
+  try {
+    sesion = !supabase
+      ? memory.whatsappSessions.find((s) => s.org_id === orgId && s.nombre === nombre) || null
+      : (await supabase.from("whatsapp_sessions").select("id, nombre, escucha_desde, advisor_id").eq("org_id", orgId).eq("nombre", nombre).maybeSingle()).data;
+  } catch (e) {
+    console.error("[grupos] No se pudo leer la sesión:", e.message);
+    return null; // falla cerrada: sin sesión conocida no se procesa nada
+  }
+  cacheSesiones.set(clave, { at: ahora(), sesion });
+  return sesion;
 }
 
 async function listSessions(orgId) {
@@ -111,18 +150,24 @@ async function listGroups(orgId) {
   return data;
 }
 
+// Prender un grupo fija su escucha_desde en ESE momento. Prender hoy un grupo
+// no puede arrastrar lo que se hablo ahi la semana pasada: apagarlo y volverlo
+// a prender vuelve a correr el corte hacia adelante, nunca hacia atras.
 async function setModo(orgId, groupId, modo) {
   if (!MODOS.includes(modo)) throw new Error(`Modo invalido: ${modo}`);
   invalidar(orgId);
+  const ahoraIso = new Date().toISOString();
+  const patch = { modo, updated_at: ahoraIso };
+  if (modo !== "ignorar") patch.escucha_desde = ahoraIso;
+
   if (!supabase) {
     const g = memory.whatsappGroups.find((x) => x.id === groupId && x.org_id === orgId);
     if (!g) throw new Error("Grupo no encontrado");
-    g.modo = modo;
-    return g;
+    return Object.assign(g, patch);
   }
   const { data, error } = await supabase
     .from("whatsapp_groups")
-    .update({ modo, updated_at: new Date().toISOString() })
+    .update(patch)
     .eq("org_id", orgId)
     .eq("id", groupId)
     .select()
@@ -131,10 +176,28 @@ async function setModo(orgId, groupId, modo) {
   return data;
 }
 
+// Alta masiva de los grupos que devuelve WAHA. Nacen todos en 'ignorar' — que
+// se importen no significa que se escuchen. Si ya existia, solo se completa el
+// nombre: NUNCA se toca el modo ni el corte temporal de uno ya configurado.
+async function importarGrupos(orgId, grupos) {
+  let nuevos = 0;
+  for (const g of grupos) {
+    if (!g.jid) continue;
+    const antes = !supabase
+      ? memory.whatsappGroups.find((x) => x.org_id === orgId && x.jid === g.jid)
+      : (await supabase.from("whatsapp_groups").select("id").eq("org_id", orgId).eq("jid", g.jid).maybeSingle()).data;
+    await registrarGrupo(orgId, { jid: g.jid, nombre: g.nombre });
+    if (!antes) nuevos++;
+  }
+  invalidar(orgId);
+  return { total: grupos.length, nuevos };
+}
+
 // ── Lista blanca ─────────────────────────────────────────────────────────
 
 function invalidar(orgId) {
   cache.delete(orgId);
+  for (const k of [...cacheSesiones.keys()]) if (k.startsWith(`${orgId}:`)) cacheSesiones.delete(k);
 }
 
 // Devuelve Map jid -> {id, modo, nombre} con SOLO los grupos habilitados.
@@ -152,11 +215,11 @@ async function whitelist(orgId) {
   try {
     const grupos = !supabase
       ? memory.whatsappGroups.filter((g) => g.org_id === orgId)
-      : (await supabase.from("whatsapp_groups").select("id, jid, nombre, modo, activo").eq("org_id", orgId)).data || [];
+      : (await supabase.from("whatsapp_groups").select("id, jid, nombre, modo, activo, escucha_desde").eq("org_id", orgId)).data || [];
 
     for (const g of grupos) {
       if (!g.activo || g.modo === "ignorar") continue;
-      porJid.set(g.jid, { id: g.id, modo: g.modo, nombre: g.nombre });
+      porJid.set(g.jid, { id: g.id, modo: g.modo, nombre: g.nombre, escuchaDesde: g.escucha_desde || null });
     }
     cache.set(orgId, { at: ahora(), porJid });
   } catch (e) {
@@ -167,7 +230,7 @@ async function whitelist(orgId) {
 }
 
 module.exports = {
-  upsertSession, listSessions, touchSession,
-  registrarGrupo, listGroups, setModo,
+  upsertSession, listSessions, touchSession, sesionPorNombre,
+  registrarGrupo, listGroups, setModo, importarGrupos,
   whitelist, invalidar, MODOS,
 };

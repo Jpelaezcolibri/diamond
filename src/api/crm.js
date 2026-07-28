@@ -27,6 +27,77 @@ router.use("/api", (req, res, next) => {
 // en vez de que el CRM escriba directo contra Supabase.
 const whatsappGroups = require("../data/whatsapp-groups");
 const organizations = require("../data/organizations");
+const waha = require("../lib/waha");
+
+// Vincular la linea: crea la sesion en WAHA y la registra. El corte temporal
+// (escucha_desde) queda fijado en este instante — nada anterior se procesa.
+router.post("/api/grupos/sesion", async (req, res) => {
+  const { nombre, advisorId } = req.body || {};
+  if (!nombre || !/^[a-z0-9_-]{2,40}$/i.test(nombre)) {
+    return res.status(400).json({ error: "Nombre de sesion invalido (letras, numeros, guiones)" });
+  }
+  if (!config.groups.webhookSecret) {
+    return res.status(400).json({ error: "Falta GROUPS_WEBHOOK_SECRET en el bot" });
+  }
+  try {
+    const org = await organizations.getDefault();
+    const webhookUrl = `${config.groups.publicUrl}/webhook/grupos`;
+    const remota = await waha.crearSesion(nombre, { webhookUrl, webhookSecret: config.groups.webhookSecret });
+    const local = await whatsappGroups.upsertSession(org.id, { nombre, advisorId: advisorId || null });
+    res.json({ ok: true, sesion: local, waha: { status: remota?.status || null } });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
+});
+
+// Estado + QR en una sola llamada: es lo que la pantalla de pareo consulta en
+// bucle, y el QR caduca en segundos — pedirlo aparte duplicaria el polling.
+// Solo se pide el QR si la sesion realmente lo esta esperando.
+router.post("/api/grupos/sesion/estado", async (req, res) => {
+  const { nombre } = req.body || {};
+  if (!nombre) return res.status(400).json({ error: "Falta el nombre de la sesion" });
+  try {
+    const org = await organizations.getDefault();
+    const [remota, locales] = await Promise.all([
+      waha.estadoSesion(nombre).catch((e) => ({ status: "ERROR", error: e.message })),
+      whatsappGroups.listSessions(org.id),
+    ]);
+    const status = remota?.status || null;
+    const qr = status === "SCAN_QR_CODE" ? await waha.qr(nombre).catch(() => null) : null;
+
+    // Si ya quedo vinculada, se marca activa. El corte temporal NO se toca:
+    // se fijo al crear la sesion y reescribirlo abriria la puerta a
+    // reprocesar historial.
+    if (status === "WORKING") await whatsappGroups.upsertSession(org.id, { nombre, estado: "activa" });
+
+    res.json({
+      ok: true,
+      status,
+      qr,
+      error: remota?.error || null,
+      sesion: locales.find((s) => s.nombre === nombre) || null,
+    });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
+});
+
+// Importa de una todos los grupos de la linea, en vez de esperar a que llegue
+// un mensaje en cada uno. Nacen TODOS en 'ignorar': importarlos no es
+// escucharlos.
+router.post("/api/grupos/importar", async (req, res) => {
+  const { sesion } = req.body || {};
+  if (!sesion) return res.status(400).json({ error: "Falta el nombre de la sesion" });
+  try {
+    const org = await organizations.getDefault();
+    const grupos = await waha.listarGrupos(sesion);
+    const r = await whatsappGroups.importarGrupos(org.id, grupos);
+    console.log(`[grupos] importados ${r.nuevos} nuevos de ${r.total} en la sesion ${sesion}`);
+    res.json({ ok: true, ...r });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
+});
 
 router.post("/api/grupos/:id/modo", async (req, res) => {
   const { modo } = req.body || {};

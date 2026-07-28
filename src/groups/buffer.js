@@ -18,6 +18,7 @@
 // documenta test/ally-tool.test.js).
 const clasificador = require("./classify");
 const cruce = require("./match");
+const recomendador = require("./recomendar");
 const groupSignals = require("../data/group-signals");
 
 const { TAMANO_LOTE } = clasificador;
@@ -30,7 +31,13 @@ const buffers = new Map();
 let flushing = false;
 let timer = null;
 
-const metricas = { recibidos: 0, prefiltrados: 0, clasificados: 0, senales: 0, duplicados: 0, ruido: 0, costoUsd: 0, lotesFallidos: 0 };
+const metricas = {
+  recibidos: 0, prefiltrados: 0, clasificados: 0, senales: 0, duplicados: 0,
+  ruido: 0, costoUsd: 0, lotesFallidos: 0,
+  historicos: 0, // descartados por ser anteriores al corte temporal
+  aliadas: 0, // ofertas que entraron a ally_properties
+  alertas: 0, // avisos al asesor por una demanda con match
+};
 
 function estado() {
   const pendientes = [...buffers.values()].reduce((n, b) => n + b.items.length, 0);
@@ -122,6 +129,16 @@ async function procesarLote(org, lote) {
     } catch (e) {
       console.error("[grupos] No se pudo guardar la señal:", e.message);
     }
+  }
+
+  // Fase 2: solo actua sobre los grupos en modo 'sugerir'. En sombra esto no
+  // hace nada — se detecta y se guarda, sin que nadie se entere.
+  try {
+    const { aliadas, alertas } = await recomendador.recomendar(org, { demandas, ofertas });
+    metricas.aliadas += aliadas;
+    metricas.alertas += alertas;
+  } catch (e) {
+    console.error("[grupos] recomendar:", e.message);
   }
 
   console.log(`[grupos] lote de ${lote.length}: ${demandas.length} demanda(s), ${ofertas.length} oferta(s), ${guardadas} guardada(s)`);

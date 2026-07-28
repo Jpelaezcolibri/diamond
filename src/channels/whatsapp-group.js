@@ -75,7 +75,30 @@ function normalizar(body) {
     texto: typeof p.body === "string" ? p.body : "",
     fromMe: Boolean(p.fromMe),
     tieneMedia: Boolean(p.hasMedia),
+    // WAHA manda segundos epoch. Sin fecha NO se asume "ahora": se asume
+    // sospechoso y se descarta (ver esAnteriorAlCorte).
+    tsMs: typeof p.timestamp === "number" ? p.timestamp * 1000 : null,
   };
+}
+
+// CORTE TEMPORAL. Al vincular un dispositivo, WhatsApp puede sincronizar
+// historial. Recomendarle a un cliente una propiedad publicada hace tres meses
+// —que casi seguro ya se vendio— es dano de reputacion, no un bug menor.
+//
+// Se exige que el mensaje sea posterior AL MAS TARDIO de los dos cortes: el de
+// la sesion (desde cuando escucha esa linea) y el del grupo (desde cuando lo
+// prendiste). Prender hoy un grupo no puede arrastrar lo de la semana pasada.
+//
+// Un mensaje sin fecha se descarta: si no podemos probar que es de hoy, no
+// entra. El costo de equivocarse hacia el otro lado es mucho mayor.
+function esAnteriorAlCorte(tsMs, sesion, grupo) {
+  if (typeof tsMs !== "number") return true;
+  const cortes = [sesion?.escucha_desde, grupo?.escuchaDesde]
+    .filter(Boolean)
+    .map((iso) => new Date(iso).getTime())
+    .filter((n) => !Number.isNaN(n));
+  if (cortes.length === 0) return false; // sin corte configurado, no se filtra
+  return tsMs < Math.max(...cortes);
 }
 
 const esGrupo = (chatId) => typeof chatId === "string" && chatId.endsWith("@g.us");
@@ -112,6 +135,14 @@ router.post("/webhook/grupos", async (req, res) => {
 
     // Lo que escribe el propio asesor no es senal del gremio.
     if (ev.fromMe) return res.json({ ok: true });
+
+    // Solo de hoy en adelante — ver esAnteriorAlCorte.
+    const sesion = await whatsappGroups.sesionPorNombre(org.id, ev.sesion);
+    if (esAnteriorAlCorte(ev.tsMs, sesion, grupo)) {
+      buffer.contar("historicos");
+      return res.json({ ok: true });
+    }
+
     if (yaVisto(ev.waMessageId)) return res.json({ ok: true });
 
     buffer.contar("recibidos");
@@ -128,6 +159,11 @@ router.post("/webhook/grupos", async (req, res) => {
       waMessageId: ev.waMessageId,
       esSistema: false,
       esMultimedia: ev.tieneMedia,
+      // Modo del grupo y asesor puente: definen si esto se queda en sombra o
+      // dispara recomendaciones, y a quien se le avisa. Viajan con el mensaje
+      // para que el buffer no tenga que volver a consultarlos al vaciarse.
+      modo: grupo.modo,
+      advisorId: sesion?.advisor_id || null,
     };
     if (motivoDescarte(mensaje) !== null) {
       buffer.contar("prefiltrados");
@@ -156,3 +192,4 @@ module.exports = router;
 module.exports._normalizar = normalizar;
 module.exports._esGrupo = esGrupo;
 module.exports._yaVisto = yaVisto;
+module.exports._esAnteriorAlCorte = esAnteriorAlCorte;

@@ -4,6 +4,23 @@ const { zonaTokens, distinctiveTokens } = require("./properties");
 
 const ESTADOS_ACTIVOS = ["pendiente", "confirmada"];
 
+// Una propiedad que un colega publico en un grupo se vende y nadie avisa.
+// Pasados estos dias deja de ofrecerse: recomendarle a un cliente real algo
+// que ya no existe es dano de reputacion, no un bug menor. Se refresca cada
+// vez que el colega la republica ("sigue disponible"), que es exactamente lo
+// que esa frase significa.
+const DIAS_VIGENCIA_GRUPO = Number(process.env.ALLY_GRUPO_DIAS || 30);
+
+function cortePorVencimiento() {
+  return new Date(Date.now() - DIAS_VIGENCIA_GRUPO * 86400000).toISOString();
+}
+
+function vigente(p) {
+  if (p.origen !== "grupo") return true;
+  if (!p.visto_en_grupo_at) return false;
+  return p.visto_en_grupo_at >= cortePorVencimiento();
+}
+
 function matchesFilters(p, f) {
   if (f.operacion && p.operacion && p.operacion !== f.operacion) return false;
   if (f.tipo && p.tipo && !p.tipo.toLowerCase().includes(f.tipo.toLowerCase())) return false;
@@ -40,7 +57,20 @@ async function create(orgId, fields) {
     mensaje_original: fields.mensaje_original || null,
     registrado_por: fields.registrado_por || null,
     estado: "pendiente",
+    // Origen 'grupo': detectada por Sofi escuchando un grupo gremial. El
+    // puente es el asesor cuya linea la vio — es su grupo y su relacion con
+    // ese colega. No es el dueno del negocio.
+    origen: fields.origen || "asesor",
+    group_id: fields.group_id || null,
+    puente_advisor_id: fields.puente_advisor_id || null,
+    visto_en_grupo_at: fields.visto_en_grupo_at || null,
   };
+
+  // Las de grupo casi nunca traen ref y los colegas republican la misma
+  // propiedad cada semana. La clave es el colega + las caracteristicas, y una
+  // republicacion REFRESCA la fecha en vez de duplicar: eso es exactamente lo
+  // que significa "sigue disponible".
+  if (row.origen === "grupo") return upsertDeGrupo(orgId, row);
 
   if (!supabase) {
     // Dedup en memoria: mismo aliado + misma ref no duplica (mismo criterio
@@ -72,16 +102,72 @@ async function create(orgId, fields) {
   return data;
 }
 
+// Se resuelve leyendo y decidiendo, no con upsert: el indice unico de las de
+// grupo va sobre expresiones (coalesce), y PostgREST no acepta eso como
+// onConflict. El indice queda igual, como red de seguridad.
+function mismaPropiedadDeGrupo(a, row) {
+  const n = (v) => String(v || "").trim().toLowerCase();
+  return a.origen === "grupo"
+    && n(a.contacto_telefono) === n(row.contacto_telefono)
+    && n(a.tipo) === n(row.tipo)
+    && n(a.zona) === n(row.zona)
+    && n(a.precio) === n(row.precio);
+}
+
+async function upsertDeGrupo(orgId, row) {
+  const refresco = {
+    visto_en_grupo_at: row.visto_en_grupo_at || new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+
+  if (!supabase) {
+    const existente = memory.allyProperties.find((a) => a.org_id === orgId && mismaPropiedadDeGrupo(a, row));
+    if (existente) {
+      // Republicar revive una que habia caducado: el colega esta diciendo que
+      // sigue disponible.
+      if (existente.estado === "expirada") existente.estado = "pendiente";
+      return Object.assign(existente, refresco);
+    }
+    const creada = { id: memory.uid(), created_at: new Date().toISOString(), ...row };
+    memory.allyProperties.push(creada);
+    return creada;
+  }
+
+  const { data: candidatas } = await supabase
+    .from("ally_properties").select("*").eq("org_id", orgId).eq("origen", "grupo")
+    .eq("contacto_telefono", row.contacto_telefono || "");
+  const existente = (candidatas || []).find((a) => mismaPropiedadDeGrupo(a, row));
+
+  if (existente) {
+    const patch = { ...refresco };
+    if (existente.estado === "expirada") patch.estado = "pendiente";
+    const { data, error } = await supabase
+      .from("ally_properties").update(patch).eq("id", existente.id).select().single();
+    if (error) throw error;
+    return data;
+  }
+
+  const { data, error } = await supabase.from("ally_properties").insert(row).select().single();
+  if (error) throw error;
+  return data;
+}
+
 // Busca propiedades de aliados activas (pendiente|confirmada) que coincidan
 // con los filtros — usado como fallback silencioso cuando buscar_propiedades
 // no encuentra nada en el inventario propio. filters: {zona, tipo, operacion, precioMax}
 async function search(orgId, filters = {}, limit = 3) {
   if (!supabase) {
     return memory.allyProperties
-      .filter((a) => a.org_id === orgId && ESTADOS_ACTIVOS.includes(a.estado) && matchesFilters(a, filters))
+      .filter((a) => a.org_id === orgId && ESTADOS_ACTIVOS.includes(a.estado) && vigente(a) && matchesFilters(a, filters))
       .slice(0, limit);
   }
   let query = supabase.from("ally_properties").select("*").eq("org_id", orgId).in("estado", ESTADOS_ACTIVOS);
+  // Caducidad de las que vinieron de un grupo. El filtro va DENTRO de search()
+  // a proposito: si viviera en cada llamador, tarde o temprano alguien
+  // consultaria sin el y Sofi le recomendaria a un cliente real una propiedad
+  // que se vendio hace dos meses. Las registradas a mano por un asesor no
+  // caducan — es el comportamiento historico y no cambia.
+  query = query.or(`origen.neq.grupo,visto_en_grupo_at.gte.${cortePorVencimiento()}`);
   if (filters.operacion) query = query.eq("operacion", filters.operacion);
   if (filters.tipo) query = query.ilike("tipo", `%${filters.tipo}%`);
   if (filters.zona) {
@@ -156,4 +242,4 @@ async function registerAlert(orgId, allyPropertyId, leadId) {
   return true;
 }
 
-module.exports = { create, search, findById, list, update, matchesFilters, registerAlert };
+module.exports = { create, search, findById, list, update, matchesFilters, registerAlert, vigente, mismaPropiedadDeGrupo, DIAS_VIGENCIA_GRUPO };

@@ -40,40 +40,51 @@ QR otra vez** — y Railway redespliega en cada push a GitHub.
 En las variables del servicio del bot:
 
 ```
-GROUPS_WEBHOOK_SECRET=<el mismo valor del custom header>
+GROUPS_WEBHOOK_SECRET=<el mismo valor del custom header de WAHA>
 GROUPS_ENABLED=true
 GROUPS_FLUSH_MIN=5
+WAHA_URL=https://<waha>.up.railway.app
+WAHA_API_KEY=<el WHATSAPP_API_KEY de WAHA>
+BOT_PUBLIC_URL=https://<bot>.up.railway.app
 ```
 
 Sin `GROUPS_WEBHOOK_SECRET` el canal **no se monta**: un endpoint que recibe
-mensajes de WhatsApp sin autenticar no debe existir.
+mensajes de WhatsApp sin autenticar no debe existir. Sin `BOT_PUBLIC_URL` el
+pareo crea una sesión que no le reporta a nadie.
 
-## 3. Correr la migración
+## 3. Correr las migraciones
 
-`db/migrations/2026-07-28_grupos_whatsapp.sql` en el SQL Editor de Supabase.
-No hay `db:push` en este repo: se corre a mano.
+En el SQL Editor de Supabase, **en este orden**:
 
-## 4. El pareo — con el asesor presente
+1. `db/migrations/2026-07-28_grupos_whatsapp.sql`
+2. `db/migrations/2026-07-28_grupos_fase2.sql`
 
-**El QR caduca en segundos y se refresca.** No es algo que se le mande por
-chat: hay que hacerlo con él delante, o en videollamada. Son dos minutos.
+No hay `db:push` en este repo: se corren a mano.
 
-```bash
-# 1. Crear la sesión
-curl -X POST https://<waha>/api/sessions \
-  -H "X-Api-Key: $WHATSAPP_API_KEY" -H "Content-Type: application/json" \
-  -d '{"name":"asesor1","start":true}'
+## 4. El pareo — desde el CRM, con el asesor presente
 
-# 2. Abrir el QR en el navegador (se refresca solo)
-#    https://<waha>/api/asesor1/auth/qr?format=image
+Todo se hace en **CRM → Grupos**. El QR caduca en segundos y se renueva solo,
+así que hay que hacerlo con el asesor delante o en videollamada. Son dos
+minutos.
 
-# 3. Confirmar que quedó vinculada
-curl https://<waha>/api/sessions/asesor1 -H "X-Api-Key: $WHATSAPP_API_KEY"
-#    -> "status": "WORKING"
-```
+1. Poné un nombre para la sesión (ej. `asesor-andres`) y tocá **Vincular
+   línea**. Aparece el QR y se refresca solo.
+2. En su teléfono, el asesor va a **⋮ → Dispositivos vinculados → Vincular un
+   dispositivo** y apunta al QR.
+3. El estado pasa a `WORKING`. **Desde ese instante arranca el corte
+   temporal** — la pantalla te muestra la fecha exacta.
 
-En su teléfono, el asesor va a **⋮ → Dispositivos vinculados → Vincular un
-dispositivo** y apunta al QR.
+> ### El corte temporal
+>
+> Al vincular, WhatsApp puede sincronizar historial. Ese historial es veneno
+> para este caso: una propiedad publicada hace tres meses casi seguro ya se
+> vendió, y recomendársela a un cliente real es daño de reputación.
+>
+> **Nada anterior al pareo se procesa**, y va en dos niveles: la sesión marca
+> desde cuándo escucha esa línea, y cada grupo marca desde cuándo lo prendiste.
+> Prender hoy un grupo no arrastra lo que se habló ahí la semana pasada. Un
+> mensaje sin fecha también se descarta: si no se puede probar que es de hoy,
+> no entra.
 
 **Verificá el payload real en el primer mensaje.** El canal asume la forma
 documentada de WAHA (`payload.from` = JID del grupo, `payload.participant` =
@@ -81,22 +92,55 @@ quien escribió). Si el motor `NOWEB` difiere en algún campo, se ve en los logs
 del bot y se ajusta `normalizar()` en
 [src/channels/whatsapp-group.js](../src/channels/whatsapp-group.js).
 
-## 5. Prender los grupos, de a uno
+## 5. Importar los grupos y prenderlos de a uno
 
-Al principio **no pasa nada**: todo grupo nace en modo `ignorar`. A medida que
-lleguen mensajes, los grupos se van registrando solos (sólo el JID — nunca el
-contenido) y aparecen en el CRM, en **Grupos**.
+Con la línea vinculada, tocá **Importar grupos**: trae de una todos los grupos
+en los que está esa línea, sin esperar a que llegue un mensaje en cada uno.
 
-Ahí los prendés uno por uno:
+**Importar no es escuchar.** Entran todos en `ignorar`. Después los prendés uno
+por uno:
 
 | Modo | Qué hace |
 |---|---|
 | **Ignorar** | Sofi no lo ve. Es el default de todo grupo nuevo. |
-| **Sombra** | Detecta y registra, sin avisarle a nadie. **Es el modo de la Fase 1.** |
-| **Sugerir** | Avisaría al asesor con el borrador. Fase 2 — todavía no manda nada. |
+| **Sombra** | Detecta y registra, sin avisarle a nadie. Para evaluar si acierta. |
+| **Sugerir** | Recomienda de verdad — ver abajo. |
 
-Arrancá con **un solo grupo en sombra** durante dos semanas. Después mirás las
-detecciones en el CRM y decidís.
+**Arrancá con un solo grupo en sombra durante dos semanas.** Después mirás las
+detecciones en el CRM y recién ahí lo pasás a `sugerir`. Prender todo el primer
+día es la forma más rápida de descubrir que el léxico necesita ajuste, pero
+sobre alertas reales que le llegan al asesor.
+
+## 6. Qué hace el modo `sugerir`
+
+Las dos direcciones del valor, cada una por su lado:
+
+**Una oferta** (un colega publica una propiedad) entra a `ally_properties`. A
+partir de ahí, el circuito que **ya corre en producción** la usa solo: cuando
+un cliente de Diamond pide algo que no está en el inventario propio, Sofi busca
+en la red de aliados y avisa al asesor. No hubo que construir eso — sólo
+abastecerlo.
+
+- Caduca a los **30 días** (`ALLY_GRUPO_DIAS`). Una propiedad de grupo se vende
+  y nadie avisa; ofrecerla igual es daño de reputación. Cuando el colega la
+  republica ("sigue disponible"), la fecha se **refresca** en vez de duplicar
+  la fila — que es exactamente lo que esa frase significa. Las que registra un
+  asesor a mano **no caducan**: es el comportamiento histórico y no cambia.
+- Una oferta sin precio, sin zona o sin tipo **no entra**: sería una fila
+  muerta que Sofi nunca podría recomendar. Igual queda registrada como señal.
+
+**Una demanda con match** (un colega busca algo que Diamond tiene) le avisa al
+**asesor puente** —el dueño de la línea, que es quien tiene el acceso al grupo
+y la relación con ese colega— por el número oficial de Sofi, con las refs que
+calzan. Sin match no se avisa: la fatiga de alertas es el riesgo principal de
+esta dirección.
+
+El texto llega como **borrador, no como bloque para pegar tal cual**. Si el
+asesor pega quince veces el mismo formato milimétrico, el grupo lo huele tan
+rápido como a un bot. Que pase por sus manos es parte de la defensa.
+
+**Sofi sigue sin escribir en ningún grupo.** El asesor publica él, desde su
+teléfono.
 
 ---
 

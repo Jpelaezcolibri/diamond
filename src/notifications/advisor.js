@@ -147,6 +147,44 @@ function buildAllyClientMatchAlert(allyProperty, lead) {
   ].join("\n");
 }
 
+// Aviso al asesor cuando un COLEGA pide algo en un grupo gremial y Diamond lo
+// tiene. El asesor lee esto, decide, y publica EL desde su telefono: Sofi no
+// escribe en ningun grupo.
+//
+// El texto se entrega como BORRADOR, no como bloque para pegar tal cual. Si el
+// asesor pega quince veces el mismo formato milimetrico, el grupo lo huele tan
+// rapido como a un bot; que pase por sus manos y su forma de escribir es parte
+// de la defensa, no un tramite.
+function buildGroupDemandAlert(demanda, mensaje) {
+  const quien = mensaje.autor || "Un colega";
+  const grupo = mensaje.grupo ? ` en ${mensaje.grupo}` : "";
+  const pedido = [
+    demanda.operacion,
+    demanda.tipo,
+    demanda.zona ? `en ${demanda.zona}` : null,
+    demanda.habitaciones > 0 ? `${demanda.habitaciones} alcobas` : null,
+    demanda.precio_max > 0 ? `hasta $${Number(demanda.precio_max).toLocaleString("es-CO")}` : null,
+  ].filter(Boolean).join(", ");
+
+  const refs = (demanda.matches || []).map((m) => {
+    const precio = m.precio ? ` ${m.precio}` : "";
+    const zona = m.zona ? ` en ${m.zona}` : "";
+    const fuente = m.fuente === "aliado" ? " (red de aliados)" : "";
+    return `· ${m.ref || "sin ref"}${zona}${precio}${fuente}`;
+  });
+
+  return [
+    `${quien} pide${grupo}:`,
+    `"${(mensaje.texto || "").slice(0, 300)}"`,
+    "",
+    pedido ? `Busca: ${pedido}` : null,
+    `Tenemos ${refs.length} opcion(es):`,
+    ...refs,
+    "",
+    "Escribile vos desde tu telefono — con tus palabras, no copiando esto tal cual.",
+  ].filter((l) => l !== null).join("\n");
+}
+
 // Aviso INMEDIATO al asesor CAPTADOR de una propiedad del inventario propio
 // cuando un cliente muestra interes en ella — viaja apenas se detecta, sin
 // esperar calificacion ni transferencia (dedup en property_owner_alerts).
@@ -220,4 +258,4 @@ function buildAdvisorAlert(org, lead, motivo, propertyInteres, especialidad, cit
   return lines.join("\n");
 }
 
-module.exports = { buildClientLink, buildAdvisorAlert, buildAllyClientMatchAlert, buildAppointmentAlert, buildCaptadorInterestAlert, formatCitaFechaHora };
+module.exports = { buildClientLink, buildAdvisorAlert, buildAllyClientMatchAlert, buildGroupDemandAlert, buildAppointmentAlert, buildCaptadorInterestAlert, formatCitaFechaHora };

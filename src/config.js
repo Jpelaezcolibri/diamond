@@ -68,6 +68,9 @@ const config = {
   // mensajes de WhatsApp sin autenticar es una invitacion abierta.
   groups: {
     webhookSecret: process.env.GROUPS_WEBHOOK_SECRET || "",
+    // URL publica del bot: es la que se le da a WAHA para que mande los
+    // webhooks. Sin esto, el pareo crea una sesion que no reporta a nadie.
+    publicUrl: (process.env.BOT_PUBLIC_URL || "").replace(/\/+$/, ""),
     // Interruptor global: deja el servicio vivo pero inerte, sin tocar la
     // configuracion de ningun grupo. Es el nivel 2 de reversibilidad.
     enabled: process.env.GROUPS_ENABLED !== "false",

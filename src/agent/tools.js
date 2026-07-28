@@ -232,11 +232,18 @@ async function executeTool(name, input, ctx) {
       }
       if (posibleMatch.length > 0) {
         ctx.allyMatch = posibleMatch[0];
-        if (ctx.allyMatch.registrado_por) {
+        // puente_advisor_id: las propiedades que Sofi caza en un grupo no
+        // tienen registrado_por (nadie las registro a mano desde el CRM), asi
+        // que sin esto el match ocurria y NADIE se enteraba. Se avisa al
+        // asesor puente, que es quien tiene el acceso al grupo y la relacion
+        // con ese colega.
+        if (ctx.allyMatch.registrado_por || ctx.allyMatch.puente_advisor_id) {
           try {
             const esNuevo = await allyProperties.registerAlert(ctx.org.id, ctx.allyMatch.id, ctx.lead.id);
             if (esNuevo) {
-              const advisor = await advisors.findByAuthUserId(ctx.org.id, ctx.allyMatch.registrado_por);
+              const advisor = ctx.allyMatch.puente_advisor_id
+                ? await advisors.findById(ctx.org.id, ctx.allyMatch.puente_advisor_id)
+                : await advisors.findByAuthUserId(ctx.org.id, ctx.allyMatch.registrado_por);
               if (advisor) {
                 ctx.allyAlert = { advisorPhone: advisor.phone, advisorAlert: buildAllyClientMatchAlert(ctx.allyMatch, ctx.lead) };
               }
