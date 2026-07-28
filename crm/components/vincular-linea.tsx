@@ -38,6 +38,16 @@ export default function VincularLinea({ sesiones, asesores }: { sesiones: Sesion
   const [aviso, setAviso] = useState<string | null>(null);
   const poll = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Cambiar de línea o empezar una nueva. El estado anterior se limpia: dejarlo
+  // mostraría el QR de una sesión mientras se ve el nombre de otra.
+  function seleccionar(s: Sesion | null) {
+    setNombre(s?.nombre || "");
+    setAdvisorId(s?.advisor_id || "");
+    setEstado(null);
+    setError(null);
+    setAviso(null);
+  }
+
   // El QR caduca en segundos y WAHA lo refresca solo: hay que volver a
   // pedirlo, no cachearlo. Se deja de sondear apenas queda vinculada.
   useEffect(() => {
@@ -79,8 +89,53 @@ export default function VincularLinea({ sesiones, asesores }: { sesiones: Sesion
   const vinculada = estado?.status === "WORKING";
   const sesion = sesiones.find((s) => s.nombre === nombre);
 
+  const nombreDeAsesor = (id: string | null) => asesores.find((a) => a.id === id)?.name || null;
+  const esNueva = !sesion;
+
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4">
+      {sesiones.length > 0 && (
+        <div className="mb-4">
+          <p className="mb-2 text-xs font-medium text-slate-600">
+            Líneas vinculadas ({sesiones.length})
+            {/* Leer no suma riesgo, así que la escucha escala sumando asesores:
+                cada uno aporta los grupos en los que ya está. */}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {sesiones.map((s) => {
+              const activa = s.nombre === nombre;
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => seleccionar(s)}
+                  className={[
+                    "rounded-md border px-3 py-2 text-left text-sm transition",
+                    activa ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 hover:bg-slate-50",
+                  ].join(" ")}
+                >
+                  <span className="block font-medium">{s.nombre}</span>
+                  <span className={activa ? "block text-xs text-slate-300" : "block text-xs text-slate-500"}>
+                    {nombreDeAsesor(s.advisor_id) || "sin asesor"}
+                    {s.estado === "activa" ? " · activa" : ""}
+                  </span>
+                </button>
+              );
+            })}
+            <button
+              type="button"
+              onClick={() => seleccionar(null)}
+              className={[
+                "rounded-md border border-dashed px-3 py-2 text-sm transition",
+                esNueva ? "border-slate-900 text-slate-900" : "border-slate-300 text-slate-500 hover:bg-slate-50",
+              ].join(" ")}
+            >
+              + Vincular otra línea
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex-1">
           <span className="mb-1 block text-xs font-medium text-slate-600">Nombre de la sesión</span>
