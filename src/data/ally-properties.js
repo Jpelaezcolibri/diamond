@@ -9,7 +9,13 @@ const ESTADOS_ACTIVOS = ["pendiente", "confirmada"];
 // que ya no existe es dano de reputacion, no un bug menor. Se refresca cada
 // vez que el colega la republica ("sigue disponible"), que es exactamente lo
 // que esa frase significa.
-const DIAS_VIGENCIA_GRUPO = Number(process.env.ALLY_GRUPO_DIAS || 30);
+//
+// 7 dias por decision de Juan (2026-07-28). El criterio no es el espacio —mil
+// propiedades pesan menos que una foto— sino la frescura: a las tres semanas
+// es muy probable que ya se haya vendido. El costo de la ventana corta es que
+// una propiedad que sigue disponible pero nadie republico desaparece; en estos
+// grupos se republica seguido, asi que compensa.
+const DIAS_VIGENCIA_GRUPO = Number(process.env.ALLY_GRUPO_DIAS || 7);
 
 function cortePorVencimiento() {
   return new Date(Date.now() - DIAS_VIGENCIA_GRUPO * 86400000).toISOString();

@@ -141,7 +141,7 @@ un cliente de Diamond pide algo que no está en el inventario propio, Sofi busca
 en la red de aliados y avisa al asesor. No hubo que construir eso — sólo
 abastecerlo.
 
-- Caduca a los **30 días** (`ALLY_GRUPO_DIAS`). Una propiedad de grupo se vende
+- Caduca a los **7 días** (`ALLY_GRUPO_DIAS`). Una propiedad de grupo se vende
   y nadie avisa; ofrecerla igual es daño de reputación. Cuando el colega la
   republica ("sigue disponible"), la fecha se **refresca** en vez de duplicar
   la fila — que es exactamente lo que esa frase significa. Las que registra un
