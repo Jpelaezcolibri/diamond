@@ -16,6 +16,21 @@ export type Asesor = { id: string; name: string; phone: string | null };
 
 type Estado = { status: string | null; qr: string | null; error: string | null };
 
+// Un botón gris sin explicación manda a revisar el lugar equivocado. Cada
+// estado de WAHA tiene un motivo distinto y una espera distinta.
+function motivoImportarDeshabilitado(nombre: string, status: string | null | undefined) {
+  if (!nombre) return "Elegí o creá una línea primero";
+  switch (status) {
+    case "WORKING": return null;
+    case "STARTING": return "La sesión está arrancando. Se habilita sola en unos segundos.";
+    case "SCAN_QR_CODE": return "Falta que el asesor escanee el QR.";
+    case "STOPPED": return "La sesión está detenida. Tocá «Vincular línea» para levantarla.";
+    case "FAILED": return "La sesión falló. Revisá los logs de WAHA.";
+    case null: case undefined: return "Consultando el estado de la sesión…";
+    default: return `La sesión está en ${status}; hay que esperar a WORKING.`;
+  }
+}
+
 async function llamar(accion: string, nombre: string, advisorId?: string | null) {
   const res = await fetch("/api/grupos/sesion", {
     method: "POST",
@@ -172,7 +187,7 @@ export default function VincularLinea({ sesiones, asesores }: { sesiones: Sesion
           type="button"
           onClick={() => accion("importar")}
           disabled={!nombre || !vinculada || ocupado !== null}
-          title={vinculada ? "" : "Primero hay que vincular la línea"}
+          title={motivoImportarDeshabilitado(nombre, estado?.status) || ""}
           className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 disabled:opacity-40"
         >
           {ocupado === "importar" ? "Importando…" : "Importar grupos"}
@@ -206,10 +221,12 @@ export default function VincularLinea({ sesiones, asesores }: { sesiones: Sesion
                 tocar <strong>Vincular línea</strong> — no se desvincula nada, sólo lo asocia.
               </p>
             )}
-            {vinculada && (
+            {vinculada ? (
               <p className="mt-2 text-xs text-slate-500">
                 Ya podés importar los grupos. Entran todos apagados: prendé de a uno abajo.
               </p>
+            ) : (
+              <p className="mt-2 text-xs text-slate-500">{motivoImportarDeshabilitado(nombre, estado.status)}</p>
             )}
           </div>
 

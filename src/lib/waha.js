@@ -153,13 +153,22 @@ async function listarGrupos(nombre) {
   return grupos;
 }
 
-// Pide cada grupo individualmente para sacarle el nombre. De a 4 en paralelo:
-// suficiente para que no tarde y sin castigar a WAHA. Un fallo puntual no
-// rompe la importacion — ese grupo queda sin nombre y los demas siguen.
+// Pide cada grupo individualmente para sacarle el nombre. De a 4 en paralelo.
+//
+// PLAZO DURO: los nombres son comodidad, la importacion es lo importante. Con
+// muchos grupos y un WAHA lento, esto se pasaba del tiempo que el CRM espera al
+// bot y hacia fallar la importacion ENTERA — se perdian los grupos por no
+// conseguir sus nombres. Ahora, pasado el plazo, se devuelve lo que haya.
+const PLAZO_NOMBRES_MS = 12000;
+
 async function completarNombres(sesion, grupos, concurrencia = 4) {
+  const limite = Date.now() + PLAZO_NOMBRES_MS;
   let i = 0;
+  let vencido = false;
+
   const worker = async () => {
     while (i < grupos.length) {
+      if (Date.now() > limite) { vencido = true; return; }
       const g = grupos[i++];
       try {
         const d = await pedir(`/api/${encodeURIComponent(sesion)}/groups/${encodeURIComponent(g.jid)}`);
@@ -169,7 +178,14 @@ async function completarNombres(sesion, grupos, concurrencia = 4) {
       }
     }
   };
+
   await Promise.all(Array.from({ length: Math.min(concurrencia, grupos.length) }, worker));
+  if (vencido) {
+    console.warn(
+      `[waha] Se acabo el plazo para los nombres: ${grupos.filter((g) => g.nombre).length}/${grupos.length} resueltos. ` +
+      "La importacion sigue; volve a importar para completar el resto."
+    );
+  }
 }
 
 module.exports = { configurado, crearSesion, estadoSesion, qr, listarGrupos };
