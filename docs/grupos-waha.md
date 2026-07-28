@@ -27,13 +27,21 @@ incluidas las sesiones múltiples.
 |---|---|---|
 | `WHATSAPP_DEFAULT_ENGINE` | `NOWEB` | **Crítico.** El motor por defecto (`WEBJS`) levanta un Chromium entero y pide 1 GB+ de RAM: no cabe en el plan de ~5 USD/mes. `NOWEB` habla el protocolo por websocket, sin navegador. |
 | `WHATSAPP_API_KEY` | (generá uno largo) | Protege el API de WAHA. |
-| `WHATSAPP_HOOK_URL` | `https://<bot>/webhook/grupos` | A dónde manda los mensajes. |
-| `WHATSAPP_HOOK_EVENTS` | `message` | Sólo mensajes. Nada de `message.ack`, presencia ni typing: es ruido y superficie de exposición. |
-| `WAHA_WEBHOOK_CUSTOM_HEADERS` | `[{"name":"x-api-key","value":"<GROUPS_WEBHOOK_SECRET>"}]` | El secreto con el que el bot autentica el webhook. |
+| `WHATSAPP_RESTART_ALL_SESSIONS` | `True` | Que la sesión vuelva sola tras un redeploy, sin volver a molestar al asesor. |
+
+El webhook **no se configura acá**: lo aplica el bot al crear la sesión, con el
+secreto y los eventos correctos (ver `src/lib/waha.js`). Configurarlo también
+por variables llevaría a dos fuentes de verdad que se pisan.
 
 **Volumen: no es opcional.** Montá uno en `/app/.sessions`. Sin él, cada
 redeploy de Railway borra la sesión y **hay que pedirle al asesor que escanee el
 QR otra vez** — y Railway redespliega en cada push a GitHub.
+
+**No le generes dominio público.** Poné WAHA en el mismo proyecto que el bot y
+que se hablen por la red privada de Railway. Importa más de lo que parece: WAHA
+es quien tiene la sesión de WhatsApp del asesor, y expuesto a internet, quien
+consiga la API key puede mandar mensajes haciéndose pasar por él. Sin dominio,
+esa superficie no existe.
 
 ## 2. Configurar el bot
 
@@ -43,14 +51,26 @@ En las variables del servicio del bot:
 GROUPS_WEBHOOK_SECRET=<el mismo valor del custom header de WAHA>
 GROUPS_ENABLED=true
 GROUPS_FLUSH_MIN=5
-WAHA_URL=https://<waha>.up.railway.app
+WAHA_URL=http://waha.railway.internal:8080
 WAHA_API_KEY=<el WHATSAPP_API_KEY de WAHA>
-BOT_PUBLIC_URL=https://<bot>.up.railway.app
+BOT_PUBLIC_URL=https://${{RAILWAY_PUBLIC_DOMAIN}}
 ```
 
 Sin `GROUPS_WEBHOOK_SECRET` el canal **no se monta**: un endpoint que recibe
 mensajes de WhatsApp sin autenticar no debe existir. Sin `BOT_PUBLIC_URL` el
 pareo crea una sesión que no le reporta a nadie.
+
+> ### El puerto es 8080, no 3000
+>
+> La documentación de WAHA usa 3000 porque ese es su default con Docker suelto.
+> **En Railway no.** Railway inyecta su propia variable `PORT` y WAHA la
+> respeta, así que termina escuchando en 8080.
+>
+> El síntoma de equivocarse es `fetch failed` al vincular la línea — que se
+> parece mucho a un problema de red privada y manda a uno a exponer WAHA
+> públicamente sin necesidad. Antes de tocar nada, mirá los logs de WAHA y
+> buscá la línea `WhatsApp HTTP API is running on: http://[::1]:XXXX`. Ese
+> número es el que va en `WAHA_URL`.
 
 ## 3. Correr las migraciones
 
