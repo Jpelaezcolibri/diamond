@@ -75,11 +75,33 @@ async function estadoSesion(nombre) {
   return pedir(`/api/sessions/${encodeURIComponent(nombre)}`);
 }
 
-// El QR en base64, para mostrarlo en el CRM. Caduca en segundos y se refresca
-// solo: hay que pedirlo de nuevo, no cachearlo.
+// El QR en base64 PNG, listo para un <img src="data:image/png;base64,...">.
+// Caduca en segundos y se refresca solo: hay que pedirlo de nuevo, no cachearlo.
+//
+// Se pide format=image y NO format=raw: raw devuelve el TEXTO del codigo
+// ("2@abc...") que sirve para generar el QR, no una imagen. Metido en un <img>
+// da una imagen rota — sin error, solo el texto alternativo.
+//
+// Segun version, WAHA responde binario o un JSON {mimetype, data}. Se aceptan
+// las dos formas.
 async function qr(nombre) {
-  const r = await pedir(`/api/${encodeURIComponent(nombre)}/auth/qr?format=raw`);
-  return r?.value || r?.qr || null;
+  if (!configurado()) throw new Error("Falta WAHA_URL o WAHA_API_KEY");
+  const res = await fetch(`${BASE()}/api/${encodeURIComponent(nombre)}/auth/qr?format=image`, {
+    headers: { "X-Api-Key": KEY() },
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
+  if (!res.ok) {
+    const e = new Error(`WAHA respondio ${res.status} al pedir el QR`);
+    e.status = res.status;
+    throw e;
+  }
+
+  const tipo = res.headers.get("content-type") || "";
+  if (tipo.includes("application/json")) {
+    const j = await res.json().catch(() => null);
+    return j?.data || j?.base64 || null;
+  }
+  return Buffer.from(await res.arrayBuffer()).toString("base64");
 }
 
 // Todos los grupos en los que esta la linea. Es lo que permite importarlos de
