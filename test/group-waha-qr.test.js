@@ -89,3 +89,74 @@ test("el cliente de WAHA sigue sin implementar ningún envío", () => {
     assert.ok(!codigo.includes(prohibido), `el cliente de WAHA menciona '${prohibido}'`);
   }
 });
+
+// ══ Listado de grupos ════════════════════════════════════════════════════
+
+function mockGrupos(payload) {
+  mock.method(globalThis, "fetch", async () => ({
+    ok: true,
+    headers: new Map([["content-type", "application/json"]]),
+    text: async () => JSON.stringify(payload),
+  }));
+}
+
+test("BUG: el nombre del grupo viaja en claves distintas según el motor", async () => {
+  // WEBJS usa `name`, NOWEB tiende a `subject`, y algunas versiones lo anidan.
+  // Buscar en un solo lugar deja una lista de "Grupo sin nombre" que el usuario
+  // no puede administrar: no sabe cuál apagar.
+  mockGrupos([
+    { id: "1@g.us", name: "Con name" },
+    { id: "2@g.us", subject: "Con subject" },
+    { id: "3@g.us", groupMetadata: { subject: "Anidado" } },
+    { id: "4@g.us", _data: { subject: "En _data" } },
+  ]);
+  const g = await waha.listarGrupos("s");
+  assert.deepStrictEqual(g.map((x) => x.nombre), ["Con name", "Con subject", "Anidado", "En _data"]);
+});
+
+test("el jid se lee tanto plano como serializado", async () => {
+  mockGrupos([
+    { id: "120363@g.us", subject: "Plano" },
+    { id: { _serialized: "120364@g.us" }, subject: "Serializado" },
+    { jid: "120365@g.us", subject: "En jid" },
+  ]);
+  const g = await waha.listarGrupos("s");
+  assert.deepStrictEqual(g.map((x) => x.jid), ["120363@g.us", "120364@g.us", "120365@g.us"]);
+});
+
+test("lo que no sea un grupo se descarta", async () => {
+  mockGrupos([
+    { id: "120363@g.us", subject: "Grupo" },
+    { id: "573001234567@c.us", subject: "Un contacto, no un grupo" },
+    { id: null },
+  ]);
+  const g = await waha.listarGrupos("s");
+  assert.strictEqual(g.length, 1);
+});
+
+test("acepta el listado envuelto en data o groups, no sólo array pelado", async () => {
+  mockGrupos({ data: [{ id: "1@g.us", subject: "A" }] });
+  assert.strictEqual((await waha.listarGrupos("s")).length, 1);
+  mockGrupos({ groups: [{ id: "2@g.us", subject: "B" }] });
+  assert.strictEqual((await waha.listarGrupos("s")).length, 1);
+});
+
+test("si ninguno trae nombre, se registran las CLAVES — nunca los valores", async () => {
+  // Los nombres de los grupos son datos de terceros: al log van las claves para
+  // poder corregir el parseo, jamás su contenido.
+  const avisos = [];
+  mock.method(console, "warn", (...a) => avisos.push(a.join(" ")));
+  mockGrupos([{ id: "1@g.us", tituloRaro: "Inmobiliarias Medellín" }]);
+  await waha.listarGrupos("s");
+  const texto = avisos.join("\n");
+  assert.match(texto, /tituloRaro/, "debería decir qué claves hay");
+  assert.ok(!texto.includes("Inmobiliarias Medellín"), "no puede filtrar el nombre real al log");
+});
+
+test("con nombres presentes no se registra ninguna advertencia", async () => {
+  const avisos = [];
+  mock.method(console, "warn", (...a) => avisos.push(a.join(" ")));
+  mockGrupos([{ id: "1@g.us", subject: "Todo bien" }]);
+  await waha.listarGrupos("s");
+  assert.deepStrictEqual(avisos, []);
+});

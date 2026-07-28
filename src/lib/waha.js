@@ -104,18 +104,51 @@ async function qr(nombre) {
   return Buffer.from(await res.arrayBuffer()).toString("base64");
 }
 
+// El nombre del grupo viaja en una clave distinta segun el motor y la version
+// de WAHA (WEBJS usa `name`, NOWEB tiende a `subject`, y algunas versiones lo
+// anidan en groupMetadata o _data). Se prueban todas: fallar por buscar en el
+// lugar equivocado deja al usuario con una lista de "Grupo sin nombre" que no
+// puede administrar.
+function nombreDeGrupo(g) {
+  return (
+    g.name || g.subject || g.formattedTitle ||
+    g.groupMetadata?.subject || g.groupMetadata?.name ||
+    g._data?.subject || g._data?.name ||
+    g.metadata?.subject || null
+  );
+}
+
+function jidDeGrupo(g) {
+  const v = g.id?._serialized || g.id?.user || g.id || g.jid || g.chatId || null;
+  return typeof v === "string" ? v : null;
+}
+
 // Todos los grupos en los que esta la linea. Es lo que permite importarlos de
 // una en vez de esperar a que llegue un mensaje en cada uno.
 async function listarGrupos(nombre) {
   const r = await pedir(`/api/${encodeURIComponent(nombre)}/groups`);
-  const filas = Array.isArray(r) ? r : r?.data || [];
-  return filas
+  const filas = Array.isArray(r) ? r : r?.data || r?.groups || [];
+
+  const grupos = filas
     .map((g) => ({
-      jid: g.id?._serialized || g.id || null,
-      nombre: g.name || g.subject || g.formattedTitle || null,
+      jid: jidDeGrupo(g),
+      nombre: nombreDeGrupo(g),
       participantes: Array.isArray(g.participants) ? g.participants.length : null,
     }))
     .filter((g) => typeof g.jid === "string" && g.jid.endsWith("@g.us"));
+
+  // Si vinieron grupos pero ninguno con nombre, estamos leyendo la clave
+  // equivocada. Se registran las CLAVES del primero (nunca sus valores: los
+  // nombres de los grupos son datos de terceros) para poder corregirlo sin
+  // tener que entrar a la consola del contenedor.
+  if (grupos.length > 0 && !grupos.some((g) => g.nombre)) {
+    console.warn(
+      `[waha] ${grupos.length} grupo(s) sin nombre. Claves que devuelve WAHA:`,
+      Object.keys(filas[0] || {}).join(", ") || "(objeto vacio)"
+    );
+  }
+
+  return grupos;
 }
 
 module.exports = { configurado, crearSesion, estadoSesion, qr, listarGrupos };
