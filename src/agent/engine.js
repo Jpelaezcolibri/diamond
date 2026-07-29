@@ -2,6 +2,7 @@ const config = require("../config");
 const leads = require("../data/leads");
 const conversations = require("../data/conversations");
 const properties = require("../data/properties");
+const advisors = require("../data/advisors");
 const { buildSystemPrompt } = require("./prompts");
 const { TOOL_DEFINITIONS, executeTool, maybeCaptadorAlert } = require("./tools");
 const { isQualified } = require("./qualification");
@@ -52,8 +53,35 @@ const REF_PATTERN = /\b([A-Z]{2}\d{3}|\d{6,8})\b/;
 // Devuelve { reply, lead, transfer } — transfer: { motivo, advisorAlert } si aplico.
 async function procesarMensaje({ org, phone, text, source = "whatsapp", messageExtras = {}, phoneNumberId = null, adReferral = null }) {
   const client = getClient();
-  const lead = await leads.findOrCreate(org.id, phone, source);
 
+  // ¿Escribe un asesor de la casa? Se resuelve ANTES de tocar el lead: casi
+  // todo lo que sigue (calificacion, categoria, alerta al captador, intencion
+  // de venta) solo tiene sentido con un cliente enfrente. Aplicarselo a un
+  // asesor deja un lead falso en el embudo y hace que Sofi le hable como si
+  // hubiera visto un anuncio.
+  const advisor = await advisors.findByPhone(org.id, phone).catch((e) => {
+    // Falla ABIERTA: si la consulta revienta se lo atiende como cliente, que es
+    // el comportamiento de siempre. Quedarse mudo con un cliente real por no
+    // poder descartar que sea asesor seria mucho peor.
+    console.warn("[engine] No se pudo verificar si el telefono es de un asesor:", e.message);
+    return null;
+  });
+
+  const lead = await leads.findOrCreate(org.id, phone, advisor ? "asesor" : source);
+  // Un asesor que ya tenia lead de antes (le escribio a Sofi antes de que
+  // existiera esta rama) queda marcado, para que el embudo no lo cuente.
+  if (advisor && lead.source !== "asesor") {
+    try {
+      Object.assign(lead, await leads.update(lead.id, { source: "asesor" }));
+    } catch (e) {
+      console.warn("[engine] No se pudo marcar el lead como asesor:", e.message);
+    }
+  }
+
+  // Todo este bloque describe a un CLIENTE: de que anuncio vino, en que idioma
+  // habla, por donde va en el kanban. Un asesor no tiene nada de eso, y
+  // aplicarselo lo mete en el embudo como si fuera una oportunidad de venta.
+  if (!advisor) {
   // Deep link / click-to-WhatsApp: la primera mencion de una ref queda como origen
   const refMatch = text.toUpperCase().match(REF_PATTERN);
   if (refMatch && !lead.property_ref_origen) {
@@ -86,6 +114,7 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
   if (!lead._isNew && lead.estado === "nuevo") {
     Object.assign(lead, await leads.update(lead.id, { estado: "en_conversacion" }));
   }
+  }
 
   const conv = await conversations.findOrCreate(org.id, lead.id, phoneNumberId);
   await conversations.appendMessage(conv.id, "user", text, messageExtras);
@@ -104,7 +133,10 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
   // re-derivarla del historial, el encuadre correcto (link + alerta al asesor)
   // se mantiene aunque la columna `intencion` aun no exista para persistirla.
   // Piso de confiabilidad: no depende de que el modelo registre la intencion.
-  if (lead.intencion !== "vender") {
+  // Un asesor diciendo "tengo un cliente que quiere vender" no es un
+  // propietario declarando que vende: marcarlo dispararia el encuadre de
+  // captacion y una alerta a otro asesor por un negocio que no existe.
+  if (!advisor && lead.intencion !== "vender") {
     const clienteDijoVender = history.some((m) => m.role === "user" && detectSellerIntent(m.content));
     if (clienteDijoVender) {
       lead.intencion = "vender";
@@ -117,8 +149,8 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
     }
   }
 
-  const ctx = { org, lead, propertyInteres: null, transfer: null, cita: null, allyMatch: null, allyAlert: null, appointmentAlert: null, captadorAlert: null, lastUserMessage: text };
-  if (lead.property_ref_origen) {
+  const ctx = { org, lead, advisor, propertyInteres: null, transfer: null, cita: null, allyMatch: null, allyAlert: null, appointmentAlert: null, captadorAlert: null, lastUserMessage: text };
+  if (!advisor && lead.property_ref_origen) {
     const origen = await properties.findByRef(org, lead.property_ref_origen);
     if (origen?.disponible) {
       ctx.propertyInteres = origen;
@@ -132,7 +164,7 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
     }
   }
 
-  const system = buildSystemPrompt({ org, lead, qualified: isQualified(lead), now: nowInBogota() });
+  const system = buildSystemPrompt({ org, lead, qualified: isQualified(lead), now: nowInBogota(), advisor });
 
   const extractText = (r) =>
     r.content.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();

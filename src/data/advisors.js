@@ -116,6 +116,42 @@ async function findById(orgId, id) {
   return data;
 }
 
+// ¿Este telefono es de un asesor nuestro?
+//
+// Sin esto Sofi trata a su propia companera como si fuera una clienta que vio
+// un anuncio: Natalia le escribio "hola buenas tardes" y le respondio "¿que
+// tipo de propiedad estas buscando hoy?". Ademas quedaba un lead falso en el
+// CRM que ensucia el embudo.
+//
+// La comparacion es por los ultimos 10 digitos: la tabla guarda el numero en
+// formatos distintos segun quien lo cargo ("573001878024", "+57 300 187 8024",
+// "3001878024") y WhatsApp siempre entrega el internacional sin signos.
+// Comparar los strings tal cual fallaria justo con los asesores mas viejos.
+const cola = (v) => String(v || "").replace(/\D/g, "").slice(-10);
+
+// Pura y exportada: es la regla que decide si Sofi le habla a alguien como
+// cliente o como companero, y tiene que poder probarse sin tocar la base.
+function mismoTelefono(a, b) {
+  const x = cola(a);
+  return x.length === 10 && x === cola(b);
+}
+
+// Incluye a los INACTIVOS a proposito: un asesor dado de baja tampoco es un
+// cliente, y responderle con el discurso de ventas seria igual de raro.
+function buscarEnLista(lista, phone) {
+  return (lista || []).find((a) => mismoTelefono(a.phone, phone)) || null;
+}
+
+async function findByPhone(orgId, phone) {
+  if (cola(phone).length < 10) return null;
+
+  const lista = !supabase
+    ? memory.advisors.filter((a) => a.org_id === orgId)
+    : (await supabase.from("advisors").select("*").eq("org_id", orgId)).data || [];
+
+  return buscarEnLista(lista, phone);
+}
+
 // Asesores activos cuyo nombre matchea (para "a nombre de Natalia" en
 // Sofi-Comando). Devuelve todos los matches: el consumidor decide si con 0
 // vuelve a preguntar y con >1 pide precisar.
@@ -137,4 +173,4 @@ async function searchByName(orgId, q) {
   return data || [];
 }
 
-module.exports = { findForTransfer, findByAuthUserId, findById, searchByName, rotationCandidates, nextInRotation };
+module.exports = { findForTransfer, findByAuthUserId, findById, findByPhone, mismoTelefono, buscarEnLista, searchByName, rotationCandidates, nextInRotation };

@@ -20,7 +20,45 @@ Te gustaria hablar con un asesor para mas informacion? Responde SI`;
 // - Bloque VOLATIL (fecha, datos del lead, estado): cambia por mensaje y va al
 //   final, despues del marcador, para no invalidar el cache.
 // El contenido es el mismo de siempre; solo cambia el orden de las secciones.
-function buildSystemPrompt({ org, lead, qualified, now }) {
+// Sofi hablando con un ASESOR de la casa, no con un cliente.
+//
+// Sin esto trataba a su propia companera como si fuera una clienta que vio un
+// anuncio: Natalia escribio "hola buenas tardes" y Sofi le contesto "¿que tipo
+// de propiedad estas buscando hoy?". Ademas de raro, es contraproducente: los
+// avisos de los grupos le llegan a ella por este mismo chat, asi que cuando
+// responde algo sobre un pedido, Sofi tiene que entender el contexto de
+// trabajo, no arrancar un embudo de ventas.
+function promptAsesor({ org, advisor, now }) {
+  const stable = `Eres Sofi, la asistente virtual de ${org.name} en Colombia. Eres mujer y paisa (de Medellin).
+
+CON QUIEN ESTAS HABLANDO: ${advisor.name}, asesor(a) de la casa. NO es un cliente. Es tu companero de trabajo y por este mismo chat le llegan los avisos de pedidos que detectas en los grupos gremiales.
+
+COMO TE COMPORTAS CON UN ASESOR:
+- Saludalo por su nombre de pila y preguntale en que lo podes ayudar. Nada mas.
+- NUNCA le ofrezcas propiedades sin que las pida, ni le mandes fichas espontaneas.
+- NUNCA le preguntes presupuesto, zona de interes, urgencia ni forma de pago. No lo estas calificando: no es un lead.
+- NUNCA le ofrezcas "conectarlo con un asesor". El asesor es el.
+- Tono corto y de colega. Sin discurso de ventas, sin emojis de mas, sin cerrar cada mensaje con una pregunta comercial.
+
+QUE SI PODES HACER:
+- Si te pide datos de una propiedad (por referencia, zona, tipo o precio), usa buscar_propiedades y respondele con los datos exactos. Nunca inventes.
+- Si te pregunta por un pedido de un colega que le avisaste, respondele con lo que sepas de esa conversacion.
+- Si te pregunta algo legal o de tramites, usa consultar_guia_legal.
+- Si te pide algo que no podes resolver, decilo derecho y sugerile el CRM.
+
+REGLA DE ORO: ante la duda, preguntale que necesita en vez de suponer. Un asesor que escribe "hola" quiere abrir la conversacion, no recibir un catalogo.`;
+
+  const contexto = `${now ? `FECHA Y HORA ACTUAL EN COLOMBIA: ${now.legible} (referencia ISO: ${now.iso}).\n\n` : ""}ASESOR: ${advisor.name}${advisor.especialidad ? ` — especialidad ${advisor.especialidad}` : ""}.`;
+
+  return [
+    { type: "text", text: stable, cache_control: { type: "ephemeral" } },
+    { type: "text", text: contexto },
+  ];
+}
+
+function buildSystemPrompt({ org, lead, qualified, now, advisor = null }) {
+  if (advisor) return promptAsesor({ org, advisor, now });
+
   const datosLead = [
     lead.nombre && `Nombre: ${lead.nombre}`,
     lead.presupuesto && `Presupuesto: ${lead.presupuesto}`,
