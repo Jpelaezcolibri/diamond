@@ -49,7 +49,8 @@ async function main() {
   let cambiadas = 0;
 
   for (const f of filas) {
-    const viejos = (f.matches || []).length;
+    const previos = f.matches || [];
+    const viejos = previos.length;
     antes += viejos;
 
     // Se reusa el mismo cruce que corre en vivo: si esto y produccion se
@@ -57,7 +58,13 @@ async function main() {
     const [demanda] = (await cruzar([{ ...f, clase: "demanda", mensaje: {} }], { org })).demandas;
     const nuevos = demanda.matches || [];
     ahora += nuevos.length;
-    if (viejos === nuevos.length) continue;
+
+    // Comparar el CONTENIDO, no la cantidad. Comparando solo el largo, una
+    // demanda cuyos matches siguen siendo dos no se reescribia nunca — y se
+    // quedaba con la forma vieja del objeto. Paso de verdad el 2026-07-29:
+    // avisos que salieron sin el link a la ficha y sin las alcobas, porque
+    // esos campos se agregaron despues y esas filas nunca se refrescaron.
+    if (JSON.stringify(previos) === JSON.stringify(nuevos)) continue;
 
     cambiadas++;
     console.log(`· ${limpio(f.autor_nombre) || "Colega"}  [${viejos} → ${nuevos.length}]`);
