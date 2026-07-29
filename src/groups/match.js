@@ -96,22 +96,34 @@ const millones = (n) => (n >= 1000000 ? `$${Math.round(n / 1000000)}M` : `$${n.t
 // La zona pedida se compara SOLO contra la zona de la propiedad. Mezclar la
 // ciudad convertia "Loma del Chocho" en "todo Envigado": ese cruce cruzado
 // explica 656 de los ~731 falsos positivos medidos el 2026-07-29.
+//
+// BUG real (2026-07-29, caso Patricia): la comparacion era por SUBSTRING sobre
+// el string entero de la propiedad — "laureles".includes("laurel") da true.
+// "Laurel" y "Bulevar Alcazar" son unidades de SABANETA, no el barrio
+// Laureles, y ese substring le ofrecia a la asesora 6 apartamentos del barrio
+// equivocado para un cliente de otro municipio. La comparacion ahora es por
+// TOKEN EXACTO: se tokeniza tambien la zona de la propiedad (mismo criterio
+// que la del pedido) y se exige que un token completo aparezca en el otro
+// conjunto — "laurel" ya no cae dentro de "laureles" porque son tokens
+// distintos, pero "bernal" sigue matcheando "Loma de los Bernal" porque ahi
+// SI es un token propio.
 function zonaCoincide(p, c) {
-  const tokens = properties.distinctiveTokens(properties.zonaTokens(c.zona || ""));
-  if (tokens.length === 0) return false;
-  const zona = String(p.zona || "").toLowerCase();
-  return tokens.some((t) => zona.includes(t));
+  const tokensPedido = properties.distinctiveTokens(properties.zonaTokens(c.zona || ""));
+  if (tokensPedido.length === 0) return false;
+  const tokensPropiedad = new Set(properties.zonaTokens(p.zona || ""));
+  return tokensPedido.some((t) => tokensPropiedad.has(t));
 }
 
 // Pero un pedido puede ser legitimamente de municipio ("busco casa en
 // Envigado") y ese negocio es real. Se acepta, contra la CIUDAD de la
 // propiedad y no contra su barrio, y vale menos puntaje: un match de municipio
 // es mas debil que uno de barrio, y la pantalla tiene que poder decirlo.
+// Mismo fix de token exacto que zonaCoincide, y por el mismo motivo.
 function ciudadCoincide(p, c) {
-  const tokens = properties.distinctiveTokens(properties.zonaTokens(c.ciudad || ""));
-  if (tokens.length === 0) return false;
-  const ciudad = String(p.ciudad || "").toLowerCase();
-  return tokens.some((t) => ciudad.includes(t));
+  const tokensPedido = properties.distinctiveTokens(properties.zonaTokens(c.ciudad || ""));
+  if (tokensPedido.length === 0) return false;
+  const tokensCiudad = new Set(properties.zonaTokens(p.ciudad || ""));
+  return tokensPedido.some((t) => tokensCiudad.has(t));
 }
 
 // Devuelve como calza la ubicacion, o null si no calza.

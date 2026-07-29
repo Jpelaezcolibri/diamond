@@ -232,3 +232,19 @@ test("nombrar un barrio y no estar en él no se salva por la ciudad", () => {
   const otroBarrio = apto({ zona: "Robledo", ciudad: "Medellín" });
   assert.strictEqual(evaluarCandidata(otroBarrio, pide({ zona: "Laureles", ciudad: "Medellín" }), "diamond"), null);
 });
+
+test("BUG REAL: 'Laurel' (unidad de Sabaneta) ya NO matchea 'Laureles' (el barrio)", () => {
+  // Caso Patricia, 2026-07-29: "SOLICITO: SABANETA, APARTAMENTO, LAUREL,
+  // BULEVAR ALCAZAR, 3 ALCOBAS" ofrecia 6 apartamentos de Laureles porque la
+  // comparacion era por substring: "laureles".includes("laurel") = true.
+  const pedidoSabaneta = { zona: "Laurel, Bulevar Alcázar", ciudad: "Sabaneta" };
+  const aptoLaureles = { zona: "Laureles", ciudad: "Medellín" };
+  assert.strictEqual(zonaCoincide(aptoLaureles, pedidoSabaneta), false);
+  assert.strictEqual(evaluarCandidata(aptoLaureles, { ...pide(), ...pedidoSabaneta }, "diamond"), null);
+});
+
+test("un token completo SIGUE matcheando aunque sea prefijo de otra palabra", () => {
+  // El fix no puede volverse tan estricto que rompa coincidencias legitimas:
+  // "Belén" pedido debe seguir matcheando una propiedad en "Belén".
+  assert.strictEqual(zonaCoincide({ zona: "Belén" }, { zona: "Belén" }), true);
+});
