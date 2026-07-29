@@ -168,9 +168,38 @@ function jidDeGrupo(g) {
 
 // Todos los grupos en los que esta la linea. Es lo que permite importarlos de
 // una en vez de esperar a que llegue un mensaje en cada uno.
+//
+// SI VIENE VACIO SE FUERZA UN REFRESH. El listado sale del store del motor, y
+// ese store puede estar vacio aunque la sesion este funcionando perfecto: al
+// reconectar, WAHA registra "Reconnection with existing sync data, skipping
+// history sync wait" y NO vuelve a pedir la lista de chats. Paso exactamente
+// eso el 2026-07-29 — la sesion recibia mensajes con normalidad y /groups
+// devolvia cero, asi que los 80 grupos vivian solo con su jid y en pantalla
+// salian todos como "Grupo sin nombre". Sin nombre el asesor no sabe donde ir
+// a responder, que es el punto de todo esto.
 async function listarGrupos(nombre) {
+  let filas = await pedirGrupos(nombre);
+
+  if (filas.length === 0) {
+    console.warn(`[waha] La sesion ${nombre} no devolvio ningun grupo; forzando refresh del store.`);
+    try {
+      await pedir(`/api/${encodeURIComponent(nombre)}/groups/refresh`, { metodo: "POST" });
+      filas = await pedirGrupos(nombre);
+      console.log(`[waha] Tras el refresh: ${filas.length} grupo(s).`);
+    } catch (e) {
+      console.error(`[waha] No se pudo refrescar la lista de grupos: ${e.message}`);
+    }
+  }
+
+  return normalizarGrupos(nombre, filas);
+}
+
+async function pedirGrupos(nombre) {
   const r = await pedir(`/api/${encodeURIComponent(nombre)}/groups`);
-  const filas = Array.isArray(r) ? r : r?.data || r?.groups || [];
+  return Array.isArray(r) ? r : r?.data || r?.groups || [];
+}
+
+async function normalizarGrupos(nombre, filas) {
 
   const grupos = filas
     .map((g) => ({

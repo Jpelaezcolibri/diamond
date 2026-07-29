@@ -54,7 +54,17 @@ export default async function GruposPage() {
   const m = metricasRes.ok ? metricasRes.data : null;
 
   const grupos = gruposRes.data || [];
-  const senales = senalesRes.data || [];
+
+  // De qué grupo salió cada señal. Sin esto el asesor lee un pedido, copia el
+  // borrador… y no sabe a dónde ir a pegarlo. Se resuelve acá y no con un join
+  // en la consulta: los grupos ya vienen completos para el panel de abajo, así
+  // que cruzarlos en memoria no cuesta un viaje más a la base.
+  const nombrePorGrupo = new Map(grupos.map((g) => [g.id, { nombre: g.nombre, jid: g.jid }]));
+  const senales = (senalesRes.data || []).map((s) => ({
+    ...s,
+    grupo_nombre: nombrePorGrupo.get(s.group_id)?.nombre ?? null,
+    grupo_jid: nombrePorGrupo.get(s.group_id)?.jid ?? null,
+  }));
   const demandas = senales.filter((s) => s.clase === "demanda");
   const ofertas = senales.filter((s) => s.clase === "oferta");
   const conMatch = demandas.filter((s) => (s.matches || []).length > 0).length;

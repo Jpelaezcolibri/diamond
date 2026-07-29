@@ -289,3 +289,46 @@ test("una sesión sana NO se reinicia — reiniciar de más corta la escucha", a
   await waha.crearSesion("s", { webhookUrl: "http://bot/w", webhookSecret: "x" });
   assert.ok(!rutas.some((x) => x.includes("/restart")), "no debería reiniciar una sesión que está funcionando");
 });
+
+test("BUG: si el listado viene vacío se fuerza un refresh del store", async () => {
+  // El 2026-07-29 la sesión estaba WORKING y recibiendo mensajes, pero /groups
+  // devolvía cero: al reconectar, WAHA registra "Reconnection with existing
+  // sync data, skipping history sync wait" y nunca vuelve a pedir la lista de
+  // chats. Los 80 grupos quedaban sólo con su jid y en pantalla salían todos
+  // como "Grupo sin nombre" — y sin nombre el asesor no sabe dónde responder.
+  const rutas = [];
+  mock.method(globalThis, "fetch", async (url, opts) => {
+    const u = String(url).replace("http://waha.test:8080", "");
+    rutas.push(`${opts?.method || "GET"} ${u}`);
+    const yaRefresco = rutas.some((r) => r.includes("/refresh"));
+    const cuerpo = u.includes("/refresh") ? {} : yaRefresco ? [{ id: "1@g.us", subject: "Inmobiliarias Medellín" }] : [];
+    return { ok: true, headers: new Map([["content-type", "application/json"]]), text: async () => JSON.stringify(cuerpo) };
+  });
+
+  const g = await waha.listarGrupos("natalia");
+  assert.ok(rutas.includes("POST /api/natalia/groups/refresh"), `no refrescó. Rutas: ${rutas.join(" | ")}`);
+  assert.deepStrictEqual(g.map((x) => x.nombre), ["Inmobiliarias Medellín"]);
+});
+
+test("si el listado ya trae grupos NO se refresca — es una llamada cara al vicio", async () => {
+  const rutas = [];
+  mock.method(globalThis, "fetch", async (url, opts) => {
+    rutas.push(`${opts?.method || "GET"} ${String(url)}`);
+    return {
+      ok: true,
+      headers: new Map([["content-type", "application/json"]]),
+      text: async () => JSON.stringify([{ id: "1@g.us", subject: "Ya estaba" }]),
+    };
+  });
+  await waha.listarGrupos("natalia");
+  assert.ok(!rutas.some((r) => r.includes("/refresh")));
+});
+
+test("si el refresh falla, la importación NO se cae", async () => {
+  // Perder los nombres es molesto; perder la importación entera es peor.
+  mock.method(globalThis, "fetch", async (url, opts) => {
+    if (String(url).includes("/refresh")) return { ok: false, status: 500, headers: new Map(), text: async () => "{}" };
+    return { ok: true, headers: new Map([["content-type", "application/json"]]), text: async () => "[]" };
+  });
+  assert.deepStrictEqual(await waha.listarGrupos("natalia"), []);
+});

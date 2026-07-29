@@ -36,7 +36,23 @@ export type Signal = {
   matches: Match[] | null;
   enviado_at: string | null;
   created_at: string;
+  group_id: string;
+  /** De qué grupo salió. Sin esto el asesor copia el borrador y no sabe dónde pegarlo. */
+  grupo_nombre?: string | null;
+  grupo_jid?: string | null;
 };
+
+/**
+ * WhatsApp NO tiene forma de abrir por link un grupo del que ya sos miembro.
+ * `wa.me/<número>` sirve sólo para personas; lo único que existe para grupos es
+ * el link de invitación (chat.whatsapp.com/CODIGO), que hay que ser admin para
+ * generar y que además es un link para ENTRAR, no para abrir el chat.
+ *
+ * Así que el flujo honesto es: copiar el mensaje, abrir WhatsApp Web y buscar
+ * el grupo por nombre. Todo lo que podemos hacer es que ese último paso sea un
+ * pegar en vez de un "¿cuál era?".
+ */
+const WHATSAPP_WEB = "https://web.whatsapp.com";
 
 const pesos = (n: number | null) => (n && n > 0 ? `$${n.toLocaleString("es-CO")}` : null);
 
@@ -103,7 +119,7 @@ function borrador(s: Signal, matches: Match[]) {
 
 function Ficha({ s, copias, grupos }: { s: Signal; copias: number; grupos: number }) {
   const [abierta, setAbierta] = useState(false);
-  const [copiado, setCopiado] = useState(false);
+  const [copiado, setCopiado] = useState<"mensaje" | "grupo" | null>(null);
   const matches = s.matches || [];
   const tel = telefonoUsable(s.autor_telefono);
 
@@ -114,13 +130,15 @@ function Ficha({ s, copias, grupos }: { s: Signal; copias: number; grupos: numbe
   const propios = matches.filter((m) => m.fuente === "diamond").length;
   const texto = borrador(s, matches);
 
-  async function copiar() {
+  async function copiar(que: "mensaje" | "grupo") {
+    const contenido = que === "mensaje" ? texto : s.grupo_nombre || "";
+    if (!contenido) return;
     try {
-      await navigator.clipboard.writeText(texto);
-      setCopiado(true);
-      setTimeout(() => setCopiado(false), 2000);
+      await navigator.clipboard.writeText(contenido);
+      setCopiado(que);
+      setTimeout(() => setCopiado(null), 2000);
     } catch {
-      /* sin portapapeles: el texto igual está a la vista abajo */
+      /* sin portapapeles: el dato igual está a la vista */
     }
   }
 
@@ -143,6 +161,14 @@ function Ficha({ s, copias, grupos }: { s: Signal; copias: number; grupos: numbe
           </span>
         )}
         <span>{fechaHora(s.created_at)}</span>
+        {/* El grupo, arriba y siempre visible: es el dato que decide a dónde
+            va la respuesta. */}
+        <span
+          className="rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-800"
+          title={s.grupo_nombre ? `Grupo: ${s.grupo_nombre}` : `Grupo sin nombre sincronizado (${s.grupo_jid || "?"})`}
+        >
+          {s.grupo_nombre || "grupo sin nombre"}
+        </span>
         {copias > 1 && (
           <span
             className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600"
@@ -258,28 +284,65 @@ function Ficha({ s, copias, grupos }: { s: Signal; copias: number; grupos: numbe
 
               <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-200 pt-2">
                 {texto ? (
-                  <>
-                    <button
-                      type="button"
-                      onClick={copiar}
-                      className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white"
-                    >
-                      {copiado ? "¡Copiado!" : "Copiar mensaje con los links"}
-                    </button>
-                    {tel && (
-                      <a
-                        href={`https://wa.me/${tel}?text=${encodeURIComponent(texto)}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-white"
+                  <div className="w-full">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => copiar("mensaje")}
+                        className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white"
                       >
-                        Abrir WhatsApp
-                      </a>
-                    )}
-                    <span className="text-[11px] text-slate-500">
-                      Lo escribe el asesor desde su teléfono. Sofi nunca publica en el grupo.
-                    </span>
-                  </>
+                        {copiado === "mensaje" ? "¡Copiado!" : "Copiar mensaje con los links"}
+                      </button>
+                      {tel && (
+                        <a
+                          href={`https://wa.me/${tel}?text=${encodeURIComponent(texto)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-white"
+                          title="Chat privado con el colega. Para el grupo, usá el bloque de abajo."
+                        >
+                          Escribirle en privado
+                        </a>
+                      )}
+                    </div>
+
+                    {/* Responder EN EL GRUPO. WhatsApp no permite abrir por link
+                        un grupo del que ya sos miembro, así que el último paso
+                        es buscarlo por nombre — y para eso el nombre se copia. */}
+                    <div className="mt-2 rounded-md border border-indigo-200 bg-indigo-50 p-2.5">
+                      <p className="text-[11px] font-semibold text-indigo-900">
+                        Para responder en el grupo:{" "}
+                        <span className="font-bold">{s.grupo_nombre || "(grupo sin nombre sincronizado)"}</span>
+                      </p>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => copiar("grupo")}
+                          disabled={!s.grupo_nombre}
+                          className="rounded-md border border-indigo-300 bg-white px-2.5 py-1 text-[11px] font-medium text-indigo-800 disabled:opacity-40"
+                          title="Copia el nombre para pegarlo en el buscador de WhatsApp Web"
+                        >
+                          {copiado === "grupo" ? "¡Nombre copiado!" : "Copiar nombre del grupo"}
+                        </button>
+                        <a
+                          href={WHATSAPP_WEB}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="rounded-md border border-indigo-300 bg-white px-2.5 py-1 text-[11px] font-medium text-indigo-800"
+                        >
+                          Abrir WhatsApp Web ↗
+                        </a>
+                        <span className="text-[11px] text-indigo-700">
+                          Buscá el grupo, pegá el mensaje y enviá vos.
+                        </span>
+                      </div>
+                    </div>
+
+                    <p className="mt-1.5 text-[11px] text-slate-500">
+                      Sofi nunca publica en el grupo: el mensaje sale de la línea del asesor, escrito
+                      por una persona.
+                    </p>
+                  </div>
                 ) : (
                   <span className="text-[11px] text-slate-500">
                     Todo lo que calza es de la red de aliados, no inventario propio: no hay borrador
