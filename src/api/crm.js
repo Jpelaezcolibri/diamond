@@ -112,10 +112,27 @@ router.post("/api/grupos/importar", async (req, res) => {
   if (!sesion) return res.status(400).json({ error: "Falta el nombre de la sesion" });
   try {
     const org = await organizations.getDefault();
-    const grupos = await waha.listarGrupos(sesion);
+    let grupos = await waha.listarGrupos(sesion);
+
+    // Si WAHA no devuelve nada, los grupos que YA conocemos igual necesitan
+    // nombre. Los descubre el webhook con cada mensaje, pero de ahi solo sale
+    // el jid: quedan decenas de "Grupo sin nombre", y sin nombre el asesor no
+    // sabe a que grupo ir a responder. Se les pregunta el nombre de a uno,
+    // que no depende del store vacio del motor.
+    if (grupos.length === 0) {
+      const conocidos = (await whatsappGroups.listGroups(org.id)).filter((g) => !g.nombre);
+      if (conocidos.length > 0) {
+        console.warn(`[grupos] WAHA no listo ningun grupo; resolviendo el nombre de ${conocidos.length} ya conocidos.`);
+        const mapa = await waha.nombresPorJid(sesion, conocidos.map((g) => g.jid));
+        grupos = [...mapa].map(([jid, nombre]) => ({ jid, nombre }));
+        console.log(`[grupos] nombres resueltos: ${grupos.length} de ${conocidos.length}`);
+      }
+    }
+
     const r = await whatsappGroups.importarGrupos(org.id, grupos);
-    console.log(`[grupos] importados ${r.nuevos} nuevos de ${r.total} en la sesion ${sesion}`);
-    res.json({ ok: true, ...r });
+    const conNombre = grupos.filter((g) => g.nombre).length;
+    console.log(`[grupos] importados ${r.nuevos} nuevos de ${r.total} (${conNombre} con nombre) en la sesion ${sesion}`);
+    res.json({ ok: true, ...r, conNombre });
   } catch (e) {
     res.status(502).json({ error: e.message });
   }

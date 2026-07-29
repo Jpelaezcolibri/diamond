@@ -199,6 +199,23 @@ async function pedirGrupos(nombre) {
   return Array.isArray(r) ? r : r?.data || r?.groups || [];
 }
 
+// Ultimo recurso cuando el listado viene vacio: pedirle a WAHA cada grupo por
+// su id, usando los jid que YA tenemos guardados.
+//
+// El webhook registra cada grupo apenas llega un mensaje, pero de ahi solo sale
+// el jid — el nombre nunca viaja en el evento. Asi que la base termina con
+// decenas de grupos anonimos mientras el listado masivo, que si trae nombres,
+// devuelve cero porque el store del motor esta vacio. Consultar de a uno no
+// pasa por ese store, y son datos que ya conocemos: no descubre nada nuevo,
+// solo le pone nombre a lo que ya estaba.
+async function nombresPorJid(sesion, jids) {
+  const grupos = jids.map((jid) => ({ jid, nombre: null }));
+  await completarNombres(sesion, grupos);
+  const mapa = new Map();
+  for (const g of grupos) if (g.nombre) mapa.set(g.jid, g.nombre);
+  return mapa;
+}
+
 async function normalizarGrupos(nombre, filas) {
 
   const grupos = filas
@@ -260,4 +277,4 @@ async function completarNombres(sesion, grupos, concurrencia = 4) {
   }
 }
 
-module.exports = { configurado, crearSesion, estadoSesion, revincular, qr, listarGrupos };
+module.exports = { configurado, crearSesion, estadoSesion, revincular, qr, listarGrupos, nombresPorJid };
