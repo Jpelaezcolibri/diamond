@@ -82,6 +82,28 @@ router.post("/api/grupos/sesion/estado", async (req, res) => {
   }
 });
 
+// Volver a parear desde cero: descarta las credenciales guardadas y pide un QR
+// nuevo. Es la salida cuando WhatsApp deja de aceptar el dispositivo vinculado
+// —la sesion queda en FAILED y reiniciarla no sirve, porque reintenta con las
+// mismas credenciales rechazadas.
+//
+// Mueve tambien el corte temporal a este instante: al vincular un dispositivo
+// nuevo WhatsApp le resincroniza historial, y esos mensajes viejos no se
+// procesan.
+router.post("/api/grupos/sesion/revincular", async (req, res) => {
+  const { nombre } = req.body || {};
+  if (!nombre) return res.status(400).json({ error: "Falta el nombre de la sesion" });
+  try {
+    const org = await organizations.getDefault();
+    const remota = await waha.revincular(nombre);
+    const local = await whatsappGroups.upsertSession(org.id, { nombre, estado: "pendiente", reiniciarCorte: true });
+    console.warn(`[grupos] ${nombre} re-vinculada: credenciales descartadas, corte movido a ${local.escucha_desde}`);
+    res.json({ ok: true, status: remota?.status || null, sesion: local });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
+});
+
 // Importa de una todos los grupos de la linea, en vez de esperar a que llegue
 // un mensaje en cada uno. Nacen TODOS en 'ignorar': importarlos no es
 // escucharlos.

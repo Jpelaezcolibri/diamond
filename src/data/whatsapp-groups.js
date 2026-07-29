@@ -28,13 +28,24 @@ function ahora() {
 // historial, y ese historial es veneno — una propiedad de hace tres meses casi
 // seguro ya se vendio, y recomendarsela a un cliente real es dano de
 // reputacion. Reescribirlo en cada arranque abriria la puerta a reprocesar.
-async function upsertSession(orgId, { nombre, advisorId = null, estado = "pendiente" }) {
+// `reiniciarCorte` mueve escucha_desde a este instante. Se usa SOLO al volver a
+// parear: WhatsApp le resincroniza el historial al dispositivo nuevo, y sin
+// mover el corte entraria todo lo publicado desde el pareo anterior — mensajes
+// viejos, de propiedades que ya no se sabe si estan disponibles, pagando IA por
+// clasificarlos. La regla del negocio es que solo cuenta lo de hoy en adelante.
+async function upsertSession(orgId, { nombre, advisorId = null, estado = "pendiente", reiniciarCorte = false }) {
   const ahoraIso = new Date().toISOString();
   cacheSesiones.delete(`${orgId}:${nombre}`);
 
   if (!supabase) {
     const existente = memory.whatsappSessions.find((s) => s.org_id === orgId && s.nombre === nombre);
-    if (existente) return Object.assign(existente, { estado, updated_at: ahoraIso });
+    if (existente) {
+      return Object.assign(existente, {
+        estado,
+        updated_at: ahoraIso,
+        ...(reiniciarCorte ? { escucha_desde: ahoraIso } : {}),
+      });
+    }
     const creada = { id: memory.uid(), org_id: orgId, nombre, advisor_id: advisorId, estado, escucha_desde: ahoraIso, created_at: ahoraIso };
     memory.whatsappSessions.push(creada);
     return creada;
@@ -45,7 +56,7 @@ async function upsertSession(orgId, { nombre, advisorId = null, estado = "pendie
 
   const patch = { org_id: orgId, nombre, estado, updated_at: ahoraIso };
   if (advisorId) patch.advisor_id = advisorId;
-  if (!existente?.escucha_desde) patch.escucha_desde = ahoraIso;
+  if (reiniciarCorte || !existente?.escucha_desde) patch.escucha_desde = ahoraIso;
 
   const { data, error } = await supabase
     .from("whatsapp_sessions")

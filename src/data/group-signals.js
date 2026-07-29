@@ -111,4 +111,21 @@ async function resumen(orgId, { dias = 14 } = {}) {
   };
 }
 
-module.exports = { create, list, setEstado, resumen, CLASES };
+// Deja constancia de que el aviso al asesor SALIO.
+//
+// Sin esto la pregunta "¿le llego la alerta a la asesora?" no tiene respuesta:
+// el envio no dejaba rastro en ningun lado, ni en la tabla ni en los logs, asi
+// que un fallo silencioso de Meta era indistinguible de un exito. Se identifica
+// por (grupo, wa_message_id) porque es la clave que el flujo ya tiene a mano.
+async function marcarEnviada(orgId, groupId, waMessageId) {
+  if (!supabase) return;
+  const { error } = await supabase
+    .from("group_signals")
+    .update({ enviado_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq("org_id", orgId)
+    .eq("group_id", groupId)
+    .eq("wa_message_id", waMessageId);
+  if (error) console.error("[grupos] No se pudo marcar la señal como enviada:", error.message);
+}
+
+module.exports = { create, list, setEstado, resumen, marcarEnviada, CLASES };

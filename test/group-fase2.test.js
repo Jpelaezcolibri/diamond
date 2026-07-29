@@ -126,7 +126,7 @@ test("en modo sombra NO se toca nada — se detecta y se calla", async () => {
   const crear = mock.method(allyProperties, "create", async () => ({}));
   const enviar = mock.method(whatsapp, "sendWhatsApp", async () => ({ ok: true }));
   const r = await recomendar.recomendar({ id: "o1" }, { demandas: [demanda("sombra")], ofertas: [oferta("sombra")] });
-  assert.deepStrictEqual(r, { aliadas: 0, alertas: 0 });
+  assert.deepStrictEqual(r, { aliadas: 0, alertas: 0, alertasFallidas: 0 });
   assert.strictEqual(crear.mock.callCount(), 0);
   assert.strictEqual(enviar.mock.callCount(), 0);
 });

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { fechaHoraLarga } from "@/lib/fecha";
 
 export type Sesion = {
   id: string;
@@ -25,7 +26,7 @@ function motivoImportarDeshabilitado(nombre: string, status: string | null | und
     case "STARTING": return "La sesión está arrancando. Se habilita sola en unos segundos.";
     case "SCAN_QR_CODE": return "Falta que el asesor escanee el QR.";
     case "STOPPED": return "La sesión está detenida. Tocá «Vincular línea» para levantarla.";
-    case "FAILED": return "La sesión falló. Revisá los logs de WAHA.";
+    case "FAILED": return "WhatsApp dejó de aceptar el dispositivo. Hay que volver a parear con el QR.";
     case null: case undefined: return "Consultando el estado de la sesión…";
     default: return `La sesión está en ${status}; hay que esperar a WORKING.`;
   }
@@ -102,13 +103,28 @@ export default function VincularLinea({ sesiones, asesores }: { sesiones: Sesion
     };
   }, [nombre, estado?.status, router]);
 
-  async function accion(a: "crear" | "importar") {
+  async function accion(a: "crear" | "importar" | "revincular") {
+    // Re-vincular borra las credenciales: obliga al asesor a escanear otra vez.
+    // Es la única acción de esta pantalla que le cuesta tiempo a otra persona,
+    // así que no puede dispararse por un click distraído.
+    if (a === "revincular" && !confirm(
+      "Esto descarta el pareo actual y pide un QR nuevo.\n\n" +
+      "El asesor tiene que estar presente con el teléfono para escanearlo, " +
+      "y hasta que lo haga Sofi no escucha ningún grupo.\n\n¿Seguir?"
+    )) return;
+
     setOcupado(a);
     setError(null);
     setAviso(null);
     try {
       const r = await llamar(a, nombre, advisorId);
       if (a === "importar") setAviso(`${r.nuevos} grupo(s) nuevo(s) de ${r.total}. Todos entran apagados.`);
+      if (a === "revincular") {
+        // Sin esto la pantalla sigue mostrando FAILED hasta el siguiente sondeo
+        // lento, justo cuando hay alguien esperando el QR delante.
+        setEstado({ status: r.status || "STARTING", qr: null, error: null });
+        setAviso("Credenciales descartadas. En unos segundos aparece el QR nuevo.");
+      }
       startTransition(() => router.refresh());
     } catch (e) {
       setError(e instanceof Error ? e.message : "Falló");
@@ -208,6 +224,18 @@ export default function VincularLinea({ sesiones, asesores }: { sesiones: Sesion
         >
           {ocupado === "importar" ? "Importando…" : "Importar grupos"}
         </button>
+        {/* Solo aparece cuando la línea está caída: es la salida cuando WhatsApp
+            dejó de aceptar el dispositivo y reiniciar ya no alcanza. */}
+        {sesion && (estado?.status === "FAILED" || estado?.status === "STOPPED") && (
+          <button
+            type="button"
+            onClick={() => accion("revincular")}
+            disabled={ocupado !== null}
+            className="rounded-md border border-amber-400 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-900 disabled:opacity-40"
+          >
+            {ocupado === "revincular" ? "Descartando…" : "Volver a parear (QR nuevo)"}
+          </button>
+        )}
       </div>
 
       {error && <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
@@ -225,11 +253,18 @@ export default function VincularLinea({ sesiones, asesores }: { sesiones: Sesion
             {sesion?.escucha_desde && (
               <p className="mt-1 text-xs text-slate-500">
                 Escucha desde el{" "}
-                {new Date(sesion.escucha_desde).toLocaleString("es-CO", { dateStyle: "long", timeStyle: "short" })}.
+                {fechaHoraLarga(sesion.escucha_desde)}.
                 Nada anterior a ese momento se procesa, aunque WhatsApp lo sincronice.
               </p>
             )}
             {estado.error && <p className="mt-1 text-xs text-red-600">{estado.error}</p>}
+            {estado.status === "FAILED" && (
+              <p className="mt-2 rounded-md bg-red-50 px-3 py-2 text-xs text-red-800">
+                <strong>Sofi no está escuchando nada.</strong> WhatsApp dejó de aceptar este
+                dispositivo vinculado, así que las credenciales guardadas ya no sirven y reiniciar
+                no arregla nada — hay que volver a escanear con el teléfono del asesor.
+              </p>
+            )}
             {sesion && !sesion.advisor_id && (
               <p className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
                 Esta sesión no tiene asesor asignado. Sin eso, cuando un colega pida algo que

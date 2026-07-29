@@ -90,6 +90,34 @@ async function estadoSesion(nombre) {
   return pedir(`/api/sessions/${encodeURIComponent(nombre)}`);
 }
 
+// Descarta las credenciales guardadas y arranca de cero para pedir un QR nuevo.
+//
+// Hace falta cuando WhatsApp deja de aceptar el dispositivo vinculado. El
+// sintoma es inconfundible en los logs: la sesion llega hasta "logging in..."
+// con el numero correcto y WhatsApp responde "Connection Failure", una y otra
+// vez, hasta que WAHA se rinde con "Session stuck in STARTING status". Las
+// credenciales estan ahi, pero ya no valen.
+//
+// Reiniciar NO arregla eso — reintenta con las mismas credenciales rechazadas y
+// vuelve a morir. Hay que hacer logout: `restart` conserva la autenticacion,
+// `logout` la borra. Despues del logout la sesion queda en STOPPED, asi que se
+// arranca para que emita el QR.
+//
+// Es la unica operacion de este modulo que le cuesta algo a una persona (el
+// asesor tiene que volver a escanear), por eso no se dispara sola en ningun
+// lado: la pide un humano desde el CRM.
+async function revincular(nombre) {
+  const n = encodeURIComponent(nombre);
+  await pedir(`/api/sessions/${n}/logout`, { metodo: "POST" });
+  try {
+    await pedir(`/api/sessions/${n}/start`, { metodo: "POST" });
+  } catch (e) {
+    // Arrancar puede devolver 422 si WAHA ya la levanto solo tras el logout.
+    if (e.status !== 422 && e.status !== 409) throw e;
+  }
+  return estadoSesion(nombre);
+}
+
 // El QR en base64 PNG, listo para un <img src="data:image/png;base64,...">.
 // Caduca en segundos y se refresca solo: hay que pedirlo de nuevo, no cachearlo.
 //
@@ -203,4 +231,4 @@ async function completarNombres(sesion, grupos, concurrencia = 4) {
   }
 }
 
-module.exports = { configurado, crearSesion, estadoSesion, qr, listarGrupos };
+module.exports = { configurado, crearSesion, estadoSesion, revincular, qr, listarGrupos };

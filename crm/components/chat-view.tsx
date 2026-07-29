@@ -4,14 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { ESTADO_COLORS, ESTADO_LABELS, absoluteDateTime, dayLabel, type Conversation, type Message } from "@/lib/types";
-
-function hora(iso: string) {
-  try {
-    return new Date(iso).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" });
-  } catch {
-    return "";
-  }
-}
+import { hora } from "@/lib/fecha";
 
 function DaySeparator({ label }: { label: string }) {
   return (

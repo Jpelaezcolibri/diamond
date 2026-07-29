@@ -227,6 +227,54 @@ test("una sesión en FAILED se reinicia, no se deja como está", async () => {
   assert.strictEqual(r.status, "STARTING");
 });
 
+test("BUG: re-vincular hace logout, no restart — restart reintenta con las credenciales rechazadas", async () => {
+  // El 2026-07-28 la línea de Natalia murió así: WhatsApp dejó de aceptar el
+  // dispositivo, y los 31 intentos de login fallaron con "Connection Failure"
+  // hasta que WAHA se rindió. Con `restart` esto no se recupera nunca, porque
+  // reintenta con las MISMAS credenciales que WhatsApp está rechazando.
+  // `logout` las borra; `restart` las conserva. Es toda la diferencia.
+  const rutas = [];
+  mock.method(globalThis, "fetch", async (url, opts) => {
+    const u = String(url).replace("http://waha.test:8080", "");
+    rutas.push(`${opts?.method || "GET"} ${u}`);
+    const cuerpo = u.includes("/logout") || u.includes("/start") ? {} : { status: "SCAN_QR_CODE" };
+    return { ok: true, headers: new Map([["content-type", "application/json"]]), text: async () => JSON.stringify(cuerpo) };
+  });
+
+  const r = await waha.revincular("natalia");
+  assert.ok(rutas.includes("POST /api/sessions/natalia/logout"), `no hizo logout. Rutas: ${rutas.join(" | ")}`);
+  assert.ok(!rutas.some((x) => x.includes("/restart")), "restart NO sirve acá: conserva las credenciales rechazadas");
+  assert.ok(
+    rutas.indexOf("POST /api/sessions/natalia/logout") < rutas.indexOf("POST /api/sessions/natalia/start"),
+    "primero se borran las credenciales y después se arranca, si no vuelve a levantar con las viejas"
+  );
+  assert.strictEqual(r.status, "SCAN_QR_CODE", "tiene que quedar pidiendo el QR");
+});
+
+test("re-vincular sobrevive a un 422 al arrancar — WAHA a veces la levanta sola", async () => {
+  mock.method(globalThis, "fetch", async (url, opts) => {
+    const u = String(url);
+    if (u.includes("/start")) return { ok: false, status: 422, headers: new Map(), text: async () => "{}" };
+    return {
+      ok: true,
+      headers: new Map([["content-type", "application/json"]]),
+      text: async () => JSON.stringify(u.includes("/logout") ? {} : { status: "SCAN_QR_CODE" }),
+    };
+  });
+  assert.strictEqual((await waha.revincular("natalia")).status, "SCAN_QR_CODE");
+});
+
+test("si el logout falla, NO se sigue adelante", async () => {
+  // Seguir arrancaría la sesión con las credenciales viejas y la dejaría otra
+  // vez en FAILED, pero con el asesor mirando un QR que nunca llega.
+  mock.method(globalThis, "fetch", async (url) =>
+    String(url).includes("/logout")
+      ? { ok: false, status: 500, headers: new Map(), text: async () => "{}" }
+      : { ok: true, headers: new Map(), text: async () => "{}" }
+  );
+  await assert.rejects(() => waha.revincular("natalia"), /500/);
+});
+
 test("una sesión sana NO se reinicia — reiniciar de más corta la escucha", async () => {
   const rutas = [];
   mock.method(globalThis, "fetch", async (url, opts) => {

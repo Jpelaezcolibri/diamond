@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ROLES } from "@/lib/auth";
+import { fechaHora } from "@/lib/fecha";
 
 type Horario = { dias: number[]; desde: string; hasta: string };
 
@@ -270,7 +271,7 @@ export default function UserManager({ currentUserId }: { currentUserId: string }
                   </span>
                 </td>
                 <td className="px-4 py-3 text-slate-500">
-                  {u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleString("es-CO") : "Nunca"}
+                  {u.last_sign_in_at ? fechaHora(u.last_sign_in_at) : "Nunca"}
                 </td>
                 <td className="px-4 py-3 text-right">
                   <button

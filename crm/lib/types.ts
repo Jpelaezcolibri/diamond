@@ -1,3 +1,5 @@
+import { ZONA, diaEnBogota } from "./fecha";
+
 export type Lead = {
   id: string;
   org_id: string;
@@ -183,13 +185,14 @@ export function relativeTime(iso: string): string {
 
 export function absoluteDateTime(iso: string): string {
   try {
-    return new Date(iso).toLocaleString("es-CO", {
+    return new Intl.DateTimeFormat("es-CO", {
+      timeZone: ZONA,
       day: "2-digit",
       month: "short",
       year: "numeric",
       hour: "2-digit",
       minute: "2-digit",
-    });
+    }).format(new Date(iso));
   } catch {
     return "";
   }
@@ -197,17 +200,24 @@ export function absoluteDateTime(iso: string): string {
 
 export function dayLabel(iso: string): string {
   try {
-    const d = new Date(iso);
-    const now = new Date();
-    const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
-    const diffDays = Math.round((startOf(now) - startOf(d)) / 86400000);
-    if (diffDays === 0) return "Hoy";
-    if (diffDays === 1) return "Ayer";
-    return d.toLocaleDateString("es-CO", {
+    // "Hoy" y "Ayer" se comparan sobre el dia calendario EN BOGOTA. Con
+    // getFullYear/getMonth/getDate se leia el reloj del runtime, y en Vercel
+    // (UTC) un mensaje de las 8 p. m. de Medellin ya contaba como del dia
+    // siguiente: aparecia "Hoy" cuando era de ayer.
+    const dia = diaEnBogota(iso);
+    const hoy = diaEnBogota();
+    if (dia === hoy) return "Hoy";
+
+    const ayer = new Date();
+    ayer.setDate(ayer.getDate() - 1);
+    if (dia === diaEnBogota(ayer.toISOString())) return "Ayer";
+
+    return new Intl.DateTimeFormat("es-CO", {
+      timeZone: ZONA,
       day: "numeric",
       month: "long",
-      ...(d.getFullYear() !== now.getFullYear() ? { year: "numeric" as const } : {}),
-    });
+      ...(dia.slice(0, 4) !== hoy.slice(0, 4) ? { year: "numeric" as const } : {}),
+    }).format(new Date(iso));
   } catch {
     return "";
   }

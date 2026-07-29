@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import type { PublicationEventRow } from "@/lib/marketing";
+import { fechaHora } from "@/lib/fecha";
 
 type EventWithPublication = PublicationEventRow & {
   publications: { titulo_comercial: string | null; properties: { ref: string } | null } | null;
@@ -67,7 +68,7 @@ export default function ColaList({ orgId, initialEvents }: { orgId: string; init
                 <p>
                   {STATUS_LABELS[e.from_status || ""] || e.from_status || "—"} → <span className="font-medium text-slate-800">{STATUS_LABELS[e.to_status || ""] || e.to_status}</span>
                 </p>
-                <p>{new Date(e.created_at).toLocaleString("es-CO")}</p>
+                <p>{fechaHora(e.created_at)}</p>
               </div>
             </li>
           ))}

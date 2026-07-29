@@ -6,61 +6,16 @@ import { fetchSafe } from "@/lib/fetch-safe";
 import ErrorBanner from "@/components/error-banner";
 import GruposPanel, { type Grupo } from "@/components/grupos-panel";
 import VincularLinea, { type Sesion, type Asesor } from "@/components/vincular-linea";
+import SenalesGrupos, { type Signal } from "@/components/senales-grupos";
 
 export const dynamic = "force-dynamic";
-
-type Signal = {
-  id: string;
-  clase: "demanda" | "oferta";
-  autor_nombre: string | null;
-  operacion: string | null;
-  tipo: string | null;
-  zona: string | null;
-  precio_max: number | null;
-  habitaciones: number | null;
-  texto_original: string | null;
-  matches: { fuente: string; ref: string | null }[] | null;
-  created_at: string;
-};
 
 type Metricas = {
   recibidos: number; prefiltrados: number; clasificados: number; senales: number;
   duplicados: number; ruido: number; historicos: number; costoUsd: number;
   lotesFallidos: number; pendientes: number; aliadas: number; alertas: number;
+  repetidos: number; alertasFallidas: number;
 };
-
-const pesos = (n: number | null) =>
-  n && n > 0 ? `$${n.toLocaleString("es-CO")}` : null;
-
-function Ficha({ s }: { s: Signal }) {
-  const extraido = [s.operacion, s.tipo, s.zona, s.habitaciones ? `${s.habitaciones} alc` : null, pesos(s.precio_max)]
-    .filter(Boolean)
-    .join(" · ");
-  const matches = s.matches || [];
-
-  return (
-    <li className="border-b border-slate-100 py-3 last:border-0">
-      <div className="flex flex-wrap items-baseline gap-x-2 text-xs text-slate-500">
-        <span className="font-medium text-slate-700">{s.autor_nombre || "Colega"}</span>
-        <span>{new Date(s.created_at).toLocaleString("es-CO", { dateStyle: "short", timeStyle: "short" })}</span>
-      </div>
-      <p className="mt-0.5 text-sm text-slate-800">{s.texto_original}</p>
-      {extraido && <p className="mt-1 text-xs text-slate-500">{extraido}</p>}
-      {s.clase === "demanda" && (
-        <p className="mt-1 text-xs">
-          {matches.length === 0 ? (
-            <span className="text-slate-400">sin match en inventario</span>
-          ) : (
-            <span className="text-emerald-700">
-              {matches.length} match{matches.length > 1 ? "es" : ""}:{" "}
-              {matches.map((m) => m.ref || "s/ref").join(", ")}
-            </span>
-          )}
-        </p>
-      )}
-    </li>
-  );
-}
 
 export default async function GruposPage() {
   const supabase = await createClient();
@@ -79,7 +34,7 @@ export default async function GruposPage() {
       "grupos:whatsapp_groups"
     ),
     fetchSafe<Signal>(
-      supabase.from("group_signals").select("*").order("created_at", { ascending: false }).limit(100),
+      supabase.from("group_signals").select("*").order("created_at", { ascending: false }).limit(300),
       "grupos:group_signals"
     ),
     fetchSafe<Sesion>(
@@ -144,6 +99,7 @@ export default async function GruposPage() {
               { n: m.clasificados, t: "vistos por la IA", d: "los que sobrevivieron" },
               { n: m.senales, t: "señales", d: "demanda u oferta" },
               { n: m.historicos, t: "históricos", d: "anteriores al pareo" },
+              { n: m.repetidos, t: "difundidos", d: "el mismo aviso en varios grupos: se procesa una vez" },
               { n: m.duplicados, t: "duplicados", d: "evitados" },
               { n: m.pendientes, t: "en cola", d: "esperando lote" },
             ].map((c) => (
@@ -159,6 +115,13 @@ export default async function GruposPage() {
               <span className="text-slate-600">de IA</span>
             </div>
           </div>
+          {m.alertasFallidas > 0 && (
+            <p className="mt-2 rounded-md bg-red-50 px-3 py-2 text-xs text-red-800">
+              <strong>{m.alertasFallidas} aviso(s) al asesor no salieron.</strong> Suele ser la
+              ventana de 24 h de Meta: si el asesor no le escribió a Sofi en las últimas 24 horas,
+              WhatsApp rechaza el texto libre y exige una plantilla aprobada.
+            </p>
+          )}
           {m.lotesFallidos > 0 && (
             <p className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
               {m.lotesFallidos} lote(s) de clasificación fallaron: esos mensajes quedaron sin analizar,
@@ -182,28 +145,17 @@ export default async function GruposPage() {
 
       <h2 className="mb-1 mt-8 text-lg font-semibold text-slate-900">Pedidos de colegas</h2>
       <p className="mb-2 text-sm text-slate-500">
-        Clientes de <em>otras</em> inmobiliarias, no de Diamond — no van al embudo propio.
+        Clientes de <em>otras</em> inmobiliarias, no de Diamond — no van al embudo propio. Tocá el
+        botón de matches para ver qué ofrecerle y con qué mensaje.
       </p>
       {senalesRes.hasError && <ErrorBanner message={senalesRes.message} />}
-      <ul className="rounded-lg border border-slate-200 bg-white px-4">
-        {demandas.length === 0 ? (
-          <li className="py-4 text-sm italic text-slate-400">Nada detectado todavía.</li>
-        ) : (
-          demandas.map((s) => <Ficha key={s.id} s={s} />)
-        )}
-      </ul>
+      <SenalesGrupos senales={demandas} clase="demanda" vacio="Nada detectado todavía." />
 
       <h2 className="mb-1 mt-8 text-lg font-semibold text-slate-900">Propiedades de colegas</h2>
       <p className="mb-2 text-sm text-slate-500">
         Nunca son inventario propio. Confirmá disponibilidad antes de ofrecerlas a un cliente.
       </p>
-      <ul className="rounded-lg border border-slate-200 bg-white px-4">
-        {ofertas.length === 0 ? (
-          <li className="py-4 text-sm italic text-slate-400">Nada detectado todavía.</li>
-        ) : (
-          ofertas.map((s) => <Ficha key={s.id} s={s} />)
-        )}
-      </ul>
+      <SenalesGrupos senales={ofertas} clase="oferta" vacio="Nada detectado todavía." />
     </div>
   );
 }

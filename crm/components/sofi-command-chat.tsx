@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { absoluteDateTime, dayLabel } from "@/lib/types";
+import { hora } from "@/lib/fecha";
 
 export type CommandMessage = {
   id: string;
@@ -9,14 +10,6 @@ export type CommandMessage = {
   content: string;
   created_at: string;
 };
-
-function hora(iso: string) {
-  try {
-    return new Date(iso).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" });
-  } catch {
-    return "";
-  }
-}
 
 // Mismo separador de dia que chat-view.tsx ("Hoy", "Ayer", "14 de julio").
 function DaySeparator({ label }: { label: string }) {

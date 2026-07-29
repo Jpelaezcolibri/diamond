@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getDefaultOrgId, PUBLICATION_STATUS_LABELS, type PublicationStatus } from "@/lib/marketing";
+import { fecha } from "@/lib/fecha";
 
 export const dynamic = "force-dynamic";
 
@@ -220,7 +221,7 @@ export default async function AnalyticsPage() {
                           {e.properties?.precio ? `· ${e.properties.precio}` : ""}
                         </p>
                       </td>
-                      <td className="px-4 py-3 text-slate-600">{new Date(e.created_at).toLocaleDateString("es-CO")}</td>
+                      <td className="px-4 py-3 text-slate-600">{fecha(e.created_at)}</td>
                       <td className="px-4 py-3">
                         {firstActive ? (
                           <Link href={`/marketing/publicaciones/${firstActive.id}`} className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${badge.color} hover:underline`}>

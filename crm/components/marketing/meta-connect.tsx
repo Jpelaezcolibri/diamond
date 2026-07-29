@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { SocialConnectionRow } from "@/lib/marketing";
+import { fechaHora } from "@/lib/fecha";
 
 interface AccountSummary {
   platform: "facebook" | "instagram";
@@ -174,7 +175,7 @@ export default function MetaConnect({ orgId, connections }: { orgId: string; con
                     {c.platform === "facebook" ? "📘" : "📸"} {c.external_account_name}
                   </p>
                   <p className="text-xs text-slate-500">
-                    {c.last_validated_at ? `Validada ${new Date(c.last_validated_at).toLocaleString("es-CO")}` : "Sin validar"}
+                    {c.last_validated_at ? `Validada ${fechaHora(c.last_validated_at)}` : "Sin validar"}
                     {c.last_error ? ` · ${c.last_error}` : ""}
                   </p>
                 </div>

@@ -3,6 +3,7 @@ import { getDefaultOrgId, PUBLICATION_STATUS_LABELS, STYLE_VARIANT_LABELS, type 
 import NovedadesSection from "@/components/marketing/novedades-section";
 import SyncButton from "@/components/marketing/sync-button";
 import Link from "next/link";
+import { fechaHora } from "@/lib/fecha";
 
 export const dynamic = "force-dynamic";
 
@@ -193,7 +194,7 @@ export default async function MarketingDashboardPage() {
                     <p className="text-xs text-slate-500">{p.properties?.ref}</p>
                   </div>
                   <span className="text-xs text-slate-500">
-                    {p.scheduled_at ? new Date(p.scheduled_at).toLocaleString("es-CO") : "sin fecha"}
+                    {p.scheduled_at ? fechaHora(p.scheduled_at) : "sin fecha"}
                   </span>
                 </Link>
               </li>

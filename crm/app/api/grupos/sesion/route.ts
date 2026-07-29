@@ -16,7 +16,12 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json().catch(() => ({}));
-  const accion = body.accion as "crear" | "estado" | "importar";
+  const accion = body.accion as "crear" | "estado" | "importar" | "revincular";
+
+  if (accion === "revincular") {
+    const r = await callBot("/api/grupos/sesion/revincular", { nombre: body.nombre });
+    return r.ok ? NextResponse.json(r.data) : NextResponse.json({ error: r.error }, { status: r.status });
+  }
 
   if (accion === "crear") {
     const r = await callBot("/api/grupos/sesion", { nombre: body.nombre, advisorId: body.advisorId || null });

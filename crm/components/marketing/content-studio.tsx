@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { buildFinalCaption } from "@/lib/caption";
 import { CreativeImage } from "@/components/marketing/creative-image";
+import { fechaHora } from "@/lib/fecha";
 import {
   PUBLICATION_STATUS_COLORS,
   PUBLICATION_STATUS_LABELS,
@@ -824,7 +825,7 @@ export default function ContentStudio({
               .reverse()
               .map((e) => (
                 <li key={e.id}>
-                  {new Date(e.created_at).toLocaleString("es-CO")} · {e.from_status || "—"} → {e.to_status} · {e.actor}
+                  {fechaHora(e.created_at)} · {e.from_status || "—"} → {e.to_status} · {e.actor}
                 </li>
               ))}
           </ul>

@@ -14,6 +14,7 @@
 
 const advisors = require("../data/advisors");
 const allyProperties = require("../data/ally-properties");
+const groupSignals = require("../data/group-signals");
 // Se importa el MODULO y no la funcion suelta: destructurar congela la
 // referencia y deja los tests sin forma de mockear el envio — que es
 // justamente lo que hay que poder verificar aca.
@@ -58,19 +59,39 @@ async function guardarOferta(org, oferta) {
   });
 }
 
+// Devuelve 'enviada' | 'fallo' | 'no_aplica'. Los tres casos se distinguen a
+// proposito: antes todo terminaba en un `false` mudo, y un rechazo de Meta era
+// indistinguible de "esta demanda no ameritaba aviso". Con eso no habia forma
+// de contestar si al asesor le habia llegado algo.
 async function avisarDemanda(org, demanda) {
   const m = demanda.mensaje;
-  if (!m.advisorId) return false; // sin asesor puente no hay a quien avisarle
-  if (!demanda.matches || demanda.matches.length === 0) return false;
+  if (!m.advisorId) {
+    console.warn("[grupos] Demanda con match pero la sesión no tiene asesor asignado: nadie recibe el aviso.");
+    return "no_aplica";
+  }
+  if (!demanda.matches || demanda.matches.length === 0) return "no_aplica";
 
   const advisor = await advisors.findById(org.id, m.advisorId);
-  if (!advisor?.phone) return false;
+  if (!advisor?.phone) {
+    console.warn(`[grupos] El asesor ${m.advisorId} no tiene teléfono cargado: no se le puede avisar.`);
+    return "no_aplica";
+  }
 
   const texto = buildGroupDemandAlert(demanda, m);
   // Sale por el numero OFICIAL de Sofi (Cloud API de Meta), no por la linea
   // vinculada: ese es el camino legitimo y su riesgo es cero.
   const r = await canalWhatsapp.sendWhatsApp(org, advisor.phone, texto);
-  return Boolean(r?.ok);
+
+  if (!r?.ok) {
+    // Fuera de la ventana de 24 h, Meta rechaza el texto libre y exige
+    // plantilla. Ese rechazo pasaba en silencio.
+    console.error(`[grupos] El aviso a ${advisor.name} NO salió: ${r?.error || "sin detalle"}`);
+    return "fallo";
+  }
+
+  console.log(`[grupos] Aviso enviado a ${advisor.name}: demanda de ${m.autor || "un colega"} con ${demanda.matches.length} match(es).`);
+  await groupSignals.marcarEnviada(org.id, m.groupId, m.waMessageId);
+  return "enviada";
 }
 
 // senales: demandas y ofertas ya cruzadas. Solo actua sobre las de grupos en
@@ -78,6 +99,7 @@ async function avisarDemanda(org, demanda) {
 async function recomendar(org, { demandas = [], ofertas = [] }) {
   let aliadas = 0;
   let alertas = 0;
+  let alertasFallidas = 0;
 
   for (const o of ofertas) {
     if (o.mensaje?.modo !== "sugerir") continue;
@@ -96,13 +118,16 @@ async function recomendar(org, { demandas = [], ofertas = [] }) {
   for (const d of demandas) {
     if (d.mensaje?.modo !== "sugerir") continue;
     try {
-      if (await avisarDemanda(org, d)) alertas++;
+      const r = await avisarDemanda(org, d);
+      if (r === "enviada") alertas++;
+      else if (r === "fallo") alertasFallidas++;
     } catch (e) {
+      alertasFallidas++;
       console.error("[grupos] No se pudo avisar la demanda:", e.message);
     }
   }
 
-  return { aliadas, alertas };
+  return { aliadas, alertas, alertasFallidas };
 }
 
 module.exports = { recomendar, operacionCanonica, precioTexto, guardarOferta };

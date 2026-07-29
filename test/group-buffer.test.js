@@ -99,12 +99,58 @@ test("la señal guardada lleva el id de WhatsApp, que es la clave de dedup", asy
 });
 
 test("un duplicado se cuenta pero no se guarda dos veces", async () => {
+  // El dedup de la base es la red de seguridad de ULTIMA instancia: cubre lo
+  // que el dedup de contenido no vio (por ejemplo tras un reinicio, que borra
+  // la memoria en RAM). Se le cambia el texto a la segunda copia justamente
+  // para saltear la capa de arriba y ejercitar ESTA.
   buffer.push(ORG, mensaje(1, "demanda"));
   await buffer.flush({ forzar: true });
-  buffer.push(ORG, mensaje(1, "demanda")); // mismo wa_message_id
+  buffer.push(ORG, { ...mensaje(1, "demanda"), texto: "el mismo aviso, redactado distinto" });
   await buffer.flush({ forzar: true });
   assert.strictEqual(guardadas.length, 1);
   assert.strictEqual(buffer.estado().duplicados, 1);
+});
+
+// ══ Dedup entre grupos ═══════════════════════════════════════════════════
+
+test("BUG: el mismo aviso difundido a varios grupos se procesa UNA vez", async () => {
+  // Medido en producción el 2026-07-29: de 494 señales, 312 eran repeticiones,
+  // y 108 de los 111 textos repetidos venían de grupos DISTINTOS. El dedup de
+  // la base no puede verlo (otro group_id, otro wa_message_id) y es correcto
+  // que no pueda: para WhatsApp son mensajes diferentes.
+  const difundido = (grupo, n) => ({
+    id: `m${n}`, waMessageId: `wa_${n}`, groupId: grupo, grupo,
+    autor: "Colega", autorTelefono: "573001112233",
+    texto: "Busco apartamento en Envigado, 3 alcobas, hasta $400 millones", _clase: "demanda",
+  });
+
+  buffer.push(ORG, difundido("g1", 1));
+  buffer.push(ORG, difundido("g2", 2));
+  buffer.push(ORG, difundido("g3", 3));
+  await buffer.flush({ forzar: true });
+
+  assert.deepStrictEqual(lotesClasificados, [1], "la IA sólo debería ver una copia");
+  assert.strictEqual(guardadas.length, 1);
+  assert.strictEqual(buffer.estado().repetidos, 2);
+});
+
+test("el dedup ignora diferencias de espacios y mayúsculas", async () => {
+  const base = { id: "m1", waMessageId: "wa_1", groupId: "g1", grupo: "G", autor: "Colega", autorTelefono: "573001112233", _clase: "demanda" };
+  buffer.push(ORG, { ...base, texto: "Busco Apartamento en Envigado" });
+  buffer.push(ORG, { ...base, groupId: "g2", waMessageId: "wa_2", texto: "busco   apartamento   en envigado  " });
+  await buffer.flush({ forzar: true });
+  assert.strictEqual(buffer.estado().repetidos, 1);
+});
+
+test("dos colegas distintos con el mismo texto NO se deduplican", async () => {
+  // Si dos inmobiliarias publican el mismo inmueble, son dos contactos
+  // distintos para negociar. Colapsarlos perdería una de las dos puertas.
+  const base = { groupId: "g1", grupo: "G", texto: "Vendo apartamento en Laureles $500 millones", _clase: "oferta" };
+  buffer.push(ORG, { ...base, id: "m1", waMessageId: "wa_1", autor: "Ana", autorTelefono: "573001112233" });
+  buffer.push(ORG, { ...base, id: "m2", waMessageId: "wa_2", autor: "Beto", autorTelefono: "573004445566" });
+  await buffer.flush({ forzar: true });
+  assert.strictEqual(buffer.estado().repetidos, 0);
+  assert.strictEqual(guardadas.length, 2);
 });
 
 test("el costo se acumula en las métricas, medido no estimado", async () => {

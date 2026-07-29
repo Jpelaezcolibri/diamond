@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getDefaultOrgId, PUBLICATION_STATUS_COLORS, PUBLICATION_STATUS_LABELS, type PublicationRow } from "@/lib/marketing";
+import { fechaLarga, hora } from "@/lib/fecha";
 
 export const dynamic = "force-dynamic";
 
 function dayKey(iso: string): string {
-  return new Date(iso).toLocaleDateString("es-CO", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  return fechaLarga(iso);
 }
 
 export default async function CalendarioPage() {
@@ -52,7 +53,7 @@ export default async function CalendarioPage() {
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="text-xs text-slate-500">
-                        {new Date(p.scheduled_at!).toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" })}
+                        {hora(p.scheduled_at!)}
                       </span>
                       <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${PUBLICATION_STATUS_COLORS[p.status]}`}>
                         {PUBLICATION_STATUS_LABELS[p.status]}

@@ -16,6 +16,7 @@
 // Se importan los MODULOS, no las funciones sueltas: destructurar congela la
 // referencia original y deja los tests sin forma de mockear (mismo motivo que
 // documenta test/ally-tool.test.js).
+const crypto = require("node:crypto");
 const clasificador = require("./classify");
 const cruce = require("./match");
 const recomendador = require("./recomendar");
@@ -26,6 +27,45 @@ const { TAMANO_LOTE } = clasificador;
 const EDAD_MAX_MS = Number(process.env.GROUPS_FLUSH_MIN || 5) * 60 * 1000;
 const TICK_MS = 60 * 1000;
 
+// ── Dedup entre grupos ───────────────────────────────────────────────────
+//
+// El dedup de la base es por (org, grupo, wa_message_id) y funciona perfecto,
+// pero no puede cubrir esto: los colegas difunden el MISMO aviso a diez grupos
+// a la vez, y Natalia esta en varios. WhatsApp le da a cada copia su propio
+// wa_message_id y cada grupo su group_id, asi que para la base son mensajes
+// distintos — legitimamente.
+//
+// Medido en produccion el 2026-07-29: de 494 senales, 312 eran repeticiones, y
+// 108 de los 111 textos repetidos venian de grupos distintos. Dos tercios de lo
+// que se veia en pantalla era la misma cosa varias veces.
+//
+// Se corta ACA, antes de la IA, porque es el unico punto donde ahorra las tres
+// cosas: el token de clasificacion, la fila en la tabla y —sobre todo— el aviso
+// repetido al asesor. Un colega que difunde a diez grupos le generaba diez
+// WhatsApps identicos.
+//
+// Solo se guarda un hash del contenido, nunca el texto: la invariante de que el
+// ruido no toca disco sigue intacta (y esto ni siquiera toca disco).
+const HUELLA_TTL_MS = Number(process.env.GROUPS_DEDUP_HORAS || 6) * 60 * 60 * 1000;
+const HUELLAS_MAX = 20000;
+const huellas = new Map(); // huella -> ultima vez vista (ms)
+
+function huellaDe(item) {
+  const texto = (item.texto || "").toLowerCase().replace(/\s+/g, " ").trim();
+  const quien = item.autorTelefono || item.autor || "";
+  return crypto.createHash("sha1").update(`${quien}|${texto}`).digest("hex");
+}
+
+// Se poda por edad en cada tick. El tope duro es la red de seguridad: sin el,
+// un dia de trafico alto haria crecer el Map sin limite en un servicio de 512 MB.
+function podarHuellas() {
+  const limite = Date.now() - HUELLA_TTL_MS;
+  for (const [h, at] of huellas) if (at < limite) huellas.delete(h);
+  if (huellas.size > HUELLAS_MAX) {
+    for (const h of [...huellas.keys()].slice(0, huellas.size - HUELLAS_MAX)) huellas.delete(h);
+  }
+}
+
 // orgId -> { items: [], primeroAt: number, org }
 const buffers = new Map();
 let flushing = false;
@@ -35,8 +75,10 @@ const metricas = {
   recibidos: 0, prefiltrados: 0, clasificados: 0, senales: 0, duplicados: 0,
   ruido: 0, costoUsd: 0, lotesFallidos: 0,
   historicos: 0, // descartados por ser anteriores al corte temporal
+  repetidos: 0, // el mismo aviso difundido a varios grupos: se procesa una vez
   aliadas: 0, // ofertas que entraron a ally_properties
   alertas: 0, // avisos al asesor por una demanda con match
+  alertasFallidas: 0, // el aviso se intento y Meta lo rechazo
 };
 
 function estado() {
@@ -52,6 +94,15 @@ function contar(clave, n = 1) {
 
 // item: { id, grupo, groupId, autor, autorTelefono, texto, waMessageId }
 function push(org, item) {
+  // El mismo aviso difundido a otro grupo ya se proceso: se cuenta y se tira.
+  const h = huellaDe(item);
+  const visto = huellas.get(h);
+  huellas.set(h, Date.now());
+  if (visto !== undefined && Date.now() - visto < HUELLA_TTL_MS) {
+    metricas.repetidos++;
+    return;
+  }
+
   let b = buffers.get(org.id);
   if (!b) {
     b = { items: [], primeroAt: Date.now(), org };
@@ -134,9 +185,10 @@ async function procesarLote(org, lote) {
   // Fase 2: solo actua sobre los grupos en modo 'sugerir'. En sombra esto no
   // hace nada — se detecta y se guarda, sin que nadie se entere.
   try {
-    const { aliadas, alertas } = await recomendador.recomendar(org, { demandas, ofertas });
+    const { aliadas, alertas, alertasFallidas } = await recomendador.recomendar(org, { demandas, ofertas });
     metricas.aliadas += aliadas;
     metricas.alertas += alertas;
+    metricas.alertasFallidas += alertasFallidas || 0;
   } catch (e) {
     console.error("[grupos] recomendar:", e.message);
   }
@@ -148,6 +200,7 @@ async function procesarLote(org, lote) {
 function start() {
   if (timer) return;
   timer = setInterval(() => {
+    podarHuellas();
     flush().catch((e) => console.error("[grupos] flush periódico:", e.message));
   }, TICK_MS);
   if (timer.unref) timer.unref();
@@ -162,8 +215,9 @@ function stop() {
 // Solo para tests.
 function _reset() {
   buffers.clear();
+  huellas.clear();
   flushing = false;
   for (const k of Object.keys(metricas)) metricas[k] = 0;
 }
 
-module.exports = { push, flush, start, stop, estado, contar, _reset, EDAD_MAX_MS };
+module.exports = { push, flush, start, stop, estado, contar, _reset, EDAD_MAX_MS, HUELLA_TTL_MS };
