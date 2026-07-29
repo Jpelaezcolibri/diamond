@@ -224,9 +224,26 @@ async function executeTool(name, input, ctx) {
       // ni zona exacta) — solo un aviso interno, para que sea estructuralmente
       // imposible que Sofi le cite un dato preciso al cliente.
       const operacion = ctx.lead.categoria === "alquiler" ? "Arriendo" : ctx.lead.categoria === "compra" ? "Venta" : undefined;
+      const criterios = { zona: input.zona, tipo: input.tipo, operacion, precioMax: input.precio_max };
       let posibleMatch = [];
       try {
-        posibleMatch = await allyProperties.search(ctx.org.id, { zona: input.zona, tipo: input.tipo, operacion, precioMax: input.precio_max });
+        // Tres escalones, de mas a menos confiable, y no se baja al siguiente
+        // mientras el anterior devuelva algo:
+        //
+        //   1. inventario propio      — ya se busco arriba; si hubo, no llegamos aca
+        //   2. aliados de un asesor   — alguien de Diamond hablo con el colega y la verifico
+        //   3. vistas en un grupo     — Sofi las leyo al pasar, nadie confirmo nada
+        //
+        // El escalon 3 existe SOLO en este flujo: hay un cliente propio
+        // esperando y la alternativa es decirle que no tenemos nada. Hacia un
+        // colega no se usa nunca (ver filtrosAliados en src/groups/match.js).
+        posibleMatch = await allyProperties.search(ctx.org.id, { ...criterios, origen: "asesor" });
+        if (posibleMatch.length === 0) {
+          posibleMatch = await allyProperties.search(ctx.org.id, { ...criterios, origen: "grupo" });
+          if (posibleMatch.length > 0) {
+            console.log(`[tools] Sin inventario propio ni aliados de asesor; se usa una propiedad vista en un grupo (${posibleMatch[0].id}).`);
+          }
+        }
       } catch (e) {
         console.warn("[tools] No se pudo buscar en propiedades de aliados:", e.message);
       }

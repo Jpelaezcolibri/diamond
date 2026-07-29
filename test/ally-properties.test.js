@@ -35,3 +35,16 @@ test("matchesFilters: propiedad sin zona/tipo no rompe (campos parciales de la e
   assert.strictEqual(matchesFilters(parcial, { zona: "Guatape" }), false);
   assert.strictEqual(matchesFilters(parcial, {}), true);
 });
+
+test("search filtra por origen: 'asesor' no devuelve las que Sofi vio en un grupo", () => {
+  const deAsesor = { origen: "asesor", tipo: "Apartamento", zona: "Laureles" };
+  const deGrupo = { origen: "grupo", tipo: "Apartamento", zona: "Laureles" };
+  assert.strictEqual(matchesFilters(deAsesor, { origen: "asesor" }), true);
+  assert.strictEqual(matchesFilters(deGrupo, { origen: "asesor" }), false);
+  assert.strictEqual(matchesFilters(deGrupo, { origen: "grupo" }), true);
+});
+
+test("sin filtro de origen siguen viniendo las dos — no se cambia el comportamiento viejo", () => {
+  assert.strictEqual(matchesFilters({ origen: "asesor" }, {}), true);
+  assert.strictEqual(matchesFilters({ origen: "grupo" }, {}), true);
+});

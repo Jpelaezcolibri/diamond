@@ -170,11 +170,21 @@ function buildGroupDemandAlert(demanda, mensaje) {
     demanda.precio_max > 0 ? `hasta $${Number(demanda.precio_max).toLocaleString("es-CO")}` : null,
   ].filter(Boolean).join(", ");
 
-  const refs = (demanda.matches || []).map((m) => {
-    const precio = m.precio ? ` ${m.precio}` : "";
-    const zona = m.zona ? ` en ${m.zona}` : "";
-    const fuente = m.fuente === "aliado" ? " (red de aliados)" : "";
-    return `· ${m.ref || "sin ref"}${zona}${precio}${fuente}`;
+  // Cada opcion con su link a la ficha de la landing propia. Sin el, el asesor
+  // tiene que ir a buscar la referencia a mano antes de poder decir nada — y
+  // estos mensajes llegan mientras esta haciendo otra cosa.
+  //
+  // Solo llegan aca el inventario propio y los aliados que registro un asesor
+  // (ver filtrosAliados en src/groups/match.js): lo que Sofi vio al pasar en un
+  // grupo NO se le ofrece a un colega.
+  const refs = (demanda.matches || []).flatMap((m) => {
+    const linea = [
+      `· ${m.titulo || m.ref || "Propiedad"}`,
+      [m.zona, m.precio, m.habitaciones > 0 ? `${m.habitaciones} alcobas` : null].filter(Boolean).join(" · "),
+      m.fuente === "aliado" ? `De la red de aliados${m.inmobiliaria ? ` (${m.inmobiliaria})` : ""} — confirma disponibilidad antes de ofrecerla.` : null,
+      m.link || null,
+    ].filter(Boolean);
+    return linea.length > 1 ? [linea[0], ...linea.slice(1).map((l) => `  ${l}`)] : linea;
   });
 
   return [
@@ -182,9 +192,10 @@ function buildGroupDemandAlert(demanda, mensaje) {
     `"${(mensaje.texto || "").slice(0, 300)}"`,
     "",
     pedido ? `Busca: ${pedido}` : null,
-    `Tenemos ${refs.length} opcion(es):`,
+    `Tenemos ${(demanda.matches || []).length} opcion(es):`,
     ...refs,
     "",
+    mensaje.grupo ? `Respondele en el grupo "${mensaje.grupo}".` : null,
     "Escribile vos desde tu telefono — con tus palabras, no copiando esto tal cual.",
     "Si la propiedad es de otro asesor de Diamond, la comision se comparte entre ustedes.",
   ].filter((l) => l !== null).join("\n");

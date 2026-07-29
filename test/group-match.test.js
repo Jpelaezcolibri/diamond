@@ -28,7 +28,17 @@ test("los campos vacíos o en cero no se mandan como filtro", () => {
   // Un precio_max: 0 filtraría todo el inventario a nada.
   const sinDatos = { operacion: "", tipo: "", zona: "", precio_max: 0, precio_min: 0, habitaciones: 0 };
   assert.deepStrictEqual(filtrosInventario(sinDatos), {});
-  assert.deepStrictEqual(filtrosAliados(sinDatos), {});
+  // `origen` no es un dato del pedido sino una regla de negocio, así que va
+  // siempre — incluso sin ningún criterio.
+  assert.deepStrictEqual(filtrosAliados(sinDatos), { origen: "asesor" });
+});
+
+test("REGLA: a un colega sólo se le ofrece lo propio o lo que verificó un asesor", () => {
+  // Contestarle a un colega con la propiedad de OTRO colega —que Sofi leyó al
+  // pasar en un grupo y que nadie confirmó— pone a Diamond de intermediaria en
+  // un negocio ajeno con información sin verificar. Las de origen 'grupo' se
+  // usan sólo hacia adentro, para un cliente propio.
+  assert.strictEqual(filtrosAliados(demanda).origen, "asesor");
 });
 
 test("la operación NO se manda a ally-properties (su comparación es estricta)", () => {

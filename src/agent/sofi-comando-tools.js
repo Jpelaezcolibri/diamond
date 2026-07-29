@@ -334,22 +334,44 @@ async function executeCommandTool(name, input, ctx) {
       );
     }
     case "buscar_red_aliados": {
-      const results = await allyProperties.search(
-        scope.orgId,
-        {
-          zona: input?.zona,
-          tipo: input?.tipo,
-          operacion: input?.operacion,
-          precioMax: input?.precio_max,
-        },
-        capLimit(input?.limite)
-      );
-      if (results.length === 0) {
-        return "No hay propiedades de aliados que coincidan con esos criterios en la red.";
+      // Dos escalones de confianza, y NO se baja al segundo si el primero da
+      // algo (regla de negocio, 2026-07-29):
+      //
+      //   'asesor' — un asesor de Diamond hablo con el colega y la registro.
+      //   'grupo'  — Sofi la leyo al pasar en un grupo gremial. Nadie confirmo
+      //              que siga disponible ni que el precio sea ese.
+      //
+      // Mezclarlas hacia que el asesor no pudiera saber cual estaba verificada
+      // y cual no, y eso se paga ofreciendole a un cliente algo que ya se
+      // vendio. El segundo escalon solo aparece cuando no hay nada mejor.
+      const criterios = {
+        zona: input?.zona,
+        tipo: input?.tipo,
+        operacion: input?.operacion,
+        precioMax: input?.precio_max,
+      };
+      const limite = capLimit(input?.limite);
+
+      const verificadas = await allyProperties.search(scope.orgId, { ...criterios, origen: "asesor" }, limite);
+      if (verificadas.length > 0) {
+        return (
+          "Propiedades de la RED DE ALIADOS, registradas por un asesor de Diamond (son de otras " +
+          "inmobiliarias — recuerdale al asesor confirmar disponibilidad y condiciones con el colega " +
+          "antes de ofrecerlas a su cliente):\n" +
+          JSON.stringify(verificadas, null, 2)
+        );
+      }
+
+      const deGrupos = await allyProperties.search(scope.orgId, { ...criterios, origen: "grupo" }, limite);
+      if (deGrupos.length === 0) {
+        return "No hay propiedades de aliados que coincidan con esos criterios, ni registradas por un asesor ni vistas en los grupos.";
       }
       return (
-        "Propiedades de la RED DE ALIADOS (son de otras inmobiliarias — recuerdale al asesor confirmar disponibilidad y condiciones con el colega antes de ofrecerlas a su cliente):\n" +
-        JSON.stringify(results, null, 2)
+        "No hay nada registrado por un asesor en la red, pero SI hay coincidencias entre las propiedades " +
+        "que Sofi vio publicadas en los grupos gremiales. AVISALE AL ASESOR QUE ESTAS NO ESTAN VERIFICADAS: " +
+        "las leyo Sofi al pasar, nadie hablo con el colega y pueden estar vendidas o tener otro precio. " +
+        "Sirven como pista para llamar al colega, no para ofrecerselas a un cliente todavia:\n" +
+        JSON.stringify(deGrupos, null, 2)
       );
     }
     case "registrar_propiedad_colega": {

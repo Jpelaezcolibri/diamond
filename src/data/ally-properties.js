@@ -28,6 +28,13 @@ function vigente(p) {
 }
 
 function matchesFilters(p, f) {
+  // `origen` separa dos cosas que NO valen lo mismo:
+  //   'asesor' — la registro una persona de Diamond, hablo con el colega y la
+  //              verifico. Se puede ofrecer con la cara.
+  //   'grupo'  — Sofi la leyo al pasar en un grupo. Nadie confirmo que siga
+  //              disponible ni que el precio sea ese.
+  // Quien consulta decide cual quiere; por defecto siguen viniendo las dos.
+  if (f.origen && p.origen !== f.origen) return false;
   if (f.operacion && p.operacion && p.operacion !== f.operacion) return false;
   if (f.tipo && p.tipo && !p.tipo.toLowerCase().includes(f.tipo.toLowerCase())) return false;
   if (f.zona) {
@@ -160,7 +167,21 @@ async function upsertDeGrupo(orgId, row) {
 
 // Busca propiedades de aliados activas (pendiente|confirmada) que coincidan
 // con los filtros — usado como fallback silencioso cuando buscar_propiedades
-// no encuentra nada en el inventario propio. filters: {zona, tipo, operacion, precioMax}
+// no encuentra nada en el inventario propio.
+// filters: {zona, tipo, operacion, precioMax, origen}
+//
+// `origen` es la decision importante. Regla de negocio (Juan, 2026-07-29):
+//
+//   · Para RESPONDERLE A UN COLEGA (una demanda detectada en un grupo) solo
+//     valen el inventario propio y los aliados de origen 'asesor'. Contestarle
+//     a un colega con la propiedad de OTRO colega, leida al pasar y sin
+//     confirmar, pone a Diamond a hacer de intermediaria en un negocio ajeno
+//     con informacion que nadie verifico.
+//
+//   · Para un CLIENTE PROPIO, si no hay nada propio ni en la red de aliados,
+//     ahi si se buscan las de origen 'grupo'. Ese fallback vive solo en el
+//     flujo de Sofi (src/agent/tools.js): es cuando hay un cliente real
+//     esperando y la alternativa es decirle que no tenemos nada.
 async function search(orgId, filters = {}, limit = 3) {
   if (!supabase) {
     return memory.allyProperties
@@ -174,6 +195,7 @@ async function search(orgId, filters = {}, limit = 3) {
   // que se vendio hace dos meses. Las registradas a mano por un asesor no
   // caducan — es el comportamiento historico y no cambia.
   query = query.or(`origen.neq.grupo,visto_en_grupo_at.gte.${cortePorVencimiento()}`);
+  if (filters.origen) query = query.eq("origen", filters.origen);
   if (filters.operacion) query = query.eq("operacion", filters.operacion);
   if (filters.tipo) query = query.ilike("tipo", `%${filters.tipo}%`);
   if (filters.zona) {

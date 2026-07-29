@@ -30,7 +30,14 @@ function filtrosInventario(c) {
 }
 
 function filtrosAliados(c) {
-  const f = {};
+  // SOLO las que registro a mano un asesor de Diamond. Las que Sofi leyo en un
+  // grupo (origen 'grupo') quedan afuera a proposito: esta funcion alimenta la
+  // respuesta que se le da a un COLEGA, y contestarle con la propiedad de otro
+  // colega —vista al pasar, sin que nadie confirmara que sigue disponible ni
+  // que el precio sea ese— pone a Diamond de intermediaria en un negocio ajeno
+  // con informacion que no verificamos. Esas se usan solo hacia adentro, para
+  // un cliente propio, en src/agent/tools.js.
+  const f = { origen: "asesor" };
   if (c.tipo) f.tipo = c.tipo;
   if (c.zona || c.ciudad) f.zona = c.zona || c.ciudad;
   if (c.precio_max > 0) f.precioMax = c.precio_max;

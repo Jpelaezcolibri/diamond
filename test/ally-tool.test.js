@@ -198,3 +198,47 @@ test("registrar_propiedad_aliado: con nombre en blanco tampoco guarda", async (t
   assert.strictEqual(create.mock.calls.length, 0);
   assert.match(out, /nombre/i);
 });
+
+// ══ Escalones de confianza (regla de negocio, 2026-07-29) ════════════════
+//
+// Hacia un CLIENTE PROPIO se busca en tres escalones y no se baja al siguiente
+// mientras el anterior devuelva algo:
+//   1. inventario propio
+//   2. aliados registrados por un asesor (alguien habló con el colega y verificó)
+//   3. propiedades vistas en un grupo (Sofi las leyó al pasar, nadie confirmó)
+//
+// Hacia un COLEGA el escalón 3 no existe nunca — eso se prueba en
+// test/group-match.test.js sobre filtrosAliados.
+
+test("buscar_propiedades: primero los aliados de asesor; las de grupo NI se consultan si hay", async (t) => {
+  t.mock.method(properties, "search", async () => []);
+  const consultas = [];
+  t.mock.method(allyProperties, "search", async (orgId, filtros) => {
+    consultas.push(filtros.origen);
+    return filtros.origen === "asesor" ? [{ id: "ally-asesor", zona: "Laureles" }] : [{ id: "ally-grupo", zona: "Laureles" }];
+  });
+
+  const ctx = baseCtx();
+  await executeTool("buscar_propiedades", { zona: "Laureles" }, ctx);
+
+  assert.deepStrictEqual(consultas, ["asesor"], "no debía bajar al escalón de los grupos");
+  assert.strictEqual(ctx.allyMatch.id, "ally-asesor");
+});
+
+test("buscar_propiedades: si no hay nada propio NI de asesor, SÍ se usan las vistas en un grupo", async (t) => {
+  // Es el caso que justifica el escalón: hay un cliente real esperando y la
+  // alternativa es decirle que no tenemos nada.
+  t.mock.method(properties, "search", async () => []);
+  const consultas = [];
+  t.mock.method(allyProperties, "search", async (orgId, filtros) => {
+    consultas.push(filtros.origen);
+    return filtros.origen === "grupo" ? [{ id: "ally-grupo", zona: "Laureles" }] : [];
+  });
+
+  const ctx = baseCtx();
+  const result = await executeTool("buscar_propiedades", { zona: "Laureles" }, ctx);
+
+  assert.deepStrictEqual(consultas, ["asesor", "grupo"]);
+  assert.strictEqual(ctx.allyMatch.id, "ally-grupo");
+  assert.match(result, /AVISO INTERNO/);
+});
