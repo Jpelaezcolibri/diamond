@@ -28,14 +28,38 @@ export default async function GruposPage() {
   } = await supabase.auth.getUser();
   if (!user || !isAdmin(user)) redirect("/inbox");
 
-  const [gruposRes, senalesRes, sesionesRes, asesoresRes] = await Promise.all([
+  // Una sola consulta de señales NO alcanza. Habia un `limit(300)` sobre toda
+  // la tabla, ordenado por fecha, y las dos clases se separaban en memoria: el
+  // 2026-07-29 entraron ~300 señales en una hora y veinte, casi todas ofertas,
+  // y las demandas con match quedaron sepultadas fuera de la ventana. En
+  // pantalla se veian 2 de 14 y parecia que se hubieran borrado.
+  //
+  // Por eso cada cosa trae su propia consulta acotada, y las demandas CON
+  // match —las unicas accionables— van aparte para que ningun volumen de
+  // ofertas pueda desplazarlas.
+  const conMatchQuery = supabase
+    .from("group_signals")
+    .select("*")
+    .eq("clase", "demanda")
+    .neq("matches", "[]")
+    .order("created_at", { ascending: false })
+    .limit(200);
+
+  const [gruposRes, conMatchRes, demandasRes, ofertasRes, sesionesRes, asesoresRes] = await Promise.all([
     fetchSafe<Grupo>(
       supabase.from("whatsapp_groups").select("*").order("nombre"),
       "grupos:whatsapp_groups"
     ),
+    fetchSafe<Signal>(conMatchQuery, "grupos:demandas_con_match"),
     fetchSafe<Signal>(
-      supabase.from("group_signals").select("*").order("created_at", { ascending: false }).limit(300),
-      "grupos:group_signals"
+      supabase.from("group_signals").select("*").eq("clase", "demanda")
+        .order("created_at", { ascending: false }).limit(100),
+      "grupos:demandas"
+    ),
+    fetchSafe<Signal>(
+      supabase.from("group_signals").select("*").eq("clase", "oferta")
+        .order("created_at", { ascending: false }).limit(100),
+      "grupos:ofertas"
     ),
     fetchSafe<Sesion>(
       supabase.from("whatsapp_sessions").select("*").order("created_at"),
@@ -60,14 +84,25 @@ export default async function GruposPage() {
   // en la consulta: los grupos ya vienen completos para el panel de abajo, así
   // que cruzarlos en memoria no cuesta un viaje más a la base.
   const nombrePorGrupo = new Map(grupos.map((g) => [g.id, { nombre: g.nombre, jid: g.jid }]));
-  const senales = (senalesRes.data || []).map((s) => ({
+  const conGrupo = (s: Signal) => ({
     ...s,
     grupo_nombre: nombrePorGrupo.get(s.group_id)?.nombre ?? null,
     grupo_jid: nombrePorGrupo.get(s.group_id)?.jid ?? null,
-  }));
-  const demandas = senales.filter((s) => s.clase === "demanda");
-  const ofertas = senales.filter((s) => s.clase === "oferta");
-  const conMatch = demandas.filter((s) => (s.matches || []).length > 0).length;
+  });
+
+  // Las que tienen match van primero y sin repetirse, después el resto por
+  // fecha. Un pedido accionable no puede quedar debajo de veinte que no lo son.
+  const conMatchLista = (conMatchRes.data || []).map(conGrupo);
+  const yaEstan = new Set(conMatchLista.map((s) => s.id));
+  const demandas = [
+    ...conMatchLista,
+    ...(demandasRes.data || []).filter((s) => !yaEstan.has(s.id)).map(conGrupo),
+  ];
+  const ofertas = (ofertasRes.data || []).map(conGrupo);
+
+  const conMatch = conMatchLista.length;
+  // Lo que falta por mirar. Es el número que importa: los otros sólo crecen.
+  const pendientes = conMatchLista.filter((s) => s.estado === "nuevo").length;
   const escuchando = grupos.filter((g) => g.modo !== "ignorar").length;
 
   return (
@@ -85,7 +120,7 @@ export default async function GruposPage() {
         {[
           { n: escuchando, t: "grupos escuchados", d: `de ${grupos.length} descubiertos` },
           { n: demandas.length, t: "demandas", d: "colegas buscando" },
-          { n: conMatch, t: "con match", d: "atendibles con inventario" },
+          { n: pendientes, t: "por revisar", d: `de ${conMatch} con match` },
           { n: ofertas.length, t: "ofertas", d: "propiedades de colegas" },
         ].map((c) => (
           <div key={c.t} className="rounded-lg border border-slate-200 bg-white p-3">
@@ -158,7 +193,8 @@ export default async function GruposPage() {
         Clientes de <em>otras</em> inmobiliarias, no de Diamond — no van al embudo propio. Tocá el
         botón de matches para ver qué ofrecerle y con qué mensaje.
       </p>
-      {senalesRes.hasError && <ErrorBanner message={senalesRes.message} />}
+      {conMatchRes.hasError && <ErrorBanner message={conMatchRes.message} />}
+      {demandasRes.hasError && <ErrorBanner message={demandasRes.message} />}
       <SenalesGrupos senales={demandas} clase="demanda" vacio="Nada detectado todavía." />
 
       <h2 className="mb-1 mt-8 text-lg font-semibold text-slate-900">Propiedades de colegas</h2>

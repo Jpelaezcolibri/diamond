@@ -145,6 +145,27 @@ router.post("/api/grupos/metricas", (req, res) => {
   res.json({ ok: true, ...require("../groups/buffer").estado() });
 });
 
+// Marcar una senal como revisada (o descartada, o de vuelta a pendiente).
+//
+// Con volumen alto —el 2026-07-29 entraron ~980 senales en un dia— sin una
+// marca de "ya lo mire" el asesor relee los mismos pedidos todos los dias y
+// los nuevos se pierden entre ellos. NO borra nada: solo cambia el estado.
+router.post("/api/grupos/senal/estado", async (req, res) => {
+  const { id, estado } = req.body || {};
+  if (!id) return res.status(400).json({ error: "Falta el id de la senal" });
+  if (!["nuevo", "gestionado", "descartado"].includes(estado)) {
+    return res.status(400).json({ error: "Estado invalido. Use: nuevo, gestionado, descartado" });
+  }
+  try {
+    const org = await organizations.getDefault();
+    const senal = await require("../data/group-signals").setEstado(org.id, id, estado);
+    if (!senal) return res.status(404).json({ error: "Senal no encontrada" });
+    res.json({ ok: true, senal });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 router.post("/api/grupos/:id/modo", async (req, res) => {
   const { modo } = req.body || {};
   if (!whatsappGroups.MODOS.includes(modo)) {

@@ -37,6 +37,8 @@ export type Signal = {
   enviado_at: string | null;
   created_at: string;
   group_id: string;
+  /** nuevo = falta mirarlo · gestionado = ya lo revisó una persona · descartado = no servía. */
+  estado: "nuevo" | "gestionado" | "descartado";
   /** De qué grupo salió. Sin esto el asesor copia el borrador y no sabe dónde pegarlo. */
   grupo_nombre?: string | null;
   grupo_jid?: string | null;
@@ -120,6 +122,31 @@ function borrador(s: Signal, matches: Match[]) {
 function Ficha({ s, copias, grupos }: { s: Signal; copias: number; grupos: number }) {
   const [abierta, setAbierta] = useState(false);
   const [copiado, setCopiado] = useState<"mensaje" | "grupo" | null>(null);
+  // Optimista: marcar es una acción de un clic y esperar el viaje al servidor
+  // para pintar el check se siente roto. Si falla, se revierte y se avisa.
+  const [estado, setEstado] = useState(s.estado);
+  const [guardando, setGuardando] = useState(false);
+  const [errorEstado, setErrorEstado] = useState<string | null>(null);
+
+  async function marcar(nuevo: "gestionado" | "descartado" | "nuevo") {
+    const previo = estado;
+    setEstado(nuevo);
+    setGuardando(true);
+    setErrorEstado(null);
+    try {
+      const res = await fetch("/api/grupos/senal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: s.id, estado: nuevo }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "No se pudo guardar");
+    } catch (e) {
+      setEstado(previo);
+      setErrorEstado(e instanceof Error ? e.message : "No se pudo guardar");
+    } finally {
+      setGuardando(false);
+    }
+  }
   const matches = s.matches || [];
   const tel = telefonoUsable(s.autor_telefono);
 
@@ -169,6 +196,18 @@ function Ficha({ s, copias, grupos }: { s: Signal; copias: number; grupos: numbe
         >
           {s.grupo_nombre || "grupo sin nombre"}
         </span>
+        {/* Con volumen alto, sin marca de "ya lo miré" se vuelven a leer los
+            mismos pedidos todos los días y los nuevos se pierden entre ellos. */}
+        {estado === "gestionado" && (
+          <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800">
+            ✓ Validado
+          </span>
+        )}
+        {estado === "descartado" && (
+          <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">
+            Descartado
+          </span>
+        )}
         {copias > 1 && (
           <span
             className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600"
@@ -337,6 +376,49 @@ function Ficha({ s, copias, grupos }: { s: Signal; copias: number; grupos: numbe
                         </span>
                       </div>
                     </div>
+
+                    <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-slate-200 pt-2">
+                      {estado === "nuevo" ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => marcar("gestionado")}
+                            disabled={guardando}
+                            className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
+                          >
+                            {guardando ? "Guardando…" : "✓ Marcar como validado"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => marcar("descartado")}
+                            disabled={guardando}
+                            className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 disabled:opacity-40"
+                          >
+                            No sirve
+                          </button>
+                          <span className="text-[11px] text-slate-500">
+                            Queda marcado para no volver a revisarlo. No se borra nada.
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-[11px] font-medium text-slate-600">
+                            {estado === "gestionado" ? "Ya revisado." : "Marcado como que no sirve."}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => marcar("nuevo")}
+                            disabled={guardando}
+                            className="rounded-md border border-slate-300 px-2.5 py-1 text-[11px] font-medium text-slate-600 disabled:opacity-40"
+                          >
+                            Volver a marcarlo como pendiente
+                          </button>
+                        </>
+                      )}
+                    </div>
+                    {errorEstado && (
+                      <p className="mt-1.5 rounded-md bg-red-50 px-3 py-2 text-[11px] text-red-700">{errorEstado}</p>
+                    )}
 
                     <p className="mt-1.5 text-[11px] text-slate-500">
                       Sofi nunca publica en el grupo: el mensaje sale de la línea del asesor, escrito
