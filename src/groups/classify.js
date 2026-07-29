@@ -53,12 +53,19 @@ const ESQUEMA = {
           precio_min: { type: "integer", description: "Pesos colombianos. 0 si no se especifica" },
           precio_max: { type: "integer", description: "Pesos colombianos. 0 si no se especifica" },
           habitaciones: { type: "integer", description: "0 si no se especifica" },
+          // Estas cuatro son las que vuelven certero el cruce: con zona y precio
+          // solos, una demanda vaga matchea media ciudad.
+          area_min: { type: "integer", description: "Metros cuadrados minimos. 0 si no se especifica" },
+          banos: { type: "integer", description: "0 si no se especifica" },
+          garajes: { type: "integer", description: "Parqueaderos. 0 si no se especifica" },
+          estrato: { type: "integer", description: "0 si no se especifica" },
           contacto: { type: "string", description: "Telefono o nombre si el mensaje lo trae. Vacio si no" },
           notas: { type: "string", description: "Detalle relevante en pocas palabras" },
         },
         required: [
           "id", "clase", "confianza", "operacion", "tipo", "zona", "ciudad",
-          "precio_min", "precio_max", "habitaciones", "contacto", "notas",
+          "precio_min", "precio_max", "habitaciones", "area_min", "banos",
+          "garajes", "estrato", "contacto", "notas",
         ],
         additionalProperties: false,
       },
@@ -80,7 +87,10 @@ Todo lo demás es **ruido**: saludos, agradecimientos, felicitaciones, conversac
 Reglas de extracción:
 
 - Los precios van SIEMPRE en pesos colombianos, como entero, sin puntos. Convertí las formas coloquiales: "400 millones" y "400 palos" → 400000000; "1.200.000" → 1200000; "2.3 millones" → 2300000. Si el mensaje da un tope ("hasta 400 millones") es precio_max. Si da un piso ("desde 300") es precio_min. Si da un precio único de venta o arriendo, es precio_max.
-- No inventes datos. Si el mensaje no lo dice, dejá el string vacío o el 0.
+- No inventes datos. Si el mensaje no lo dice, dejá el string vacío o el 0. Esto es especialmente importante en \`zona\`: una demanda sin zona NO se puede cruzar contra el inventario, y es mejor dejarla vacía que poner una zona aproximada — una zona inventada manda al asesor a ofrecer algo del barrio equivocado.
+- \`zona\` es el barrio o sector ("Laureles", "Sabaneta", "Loma de los Bernal"). Si el mensaje sólo nombra el municipio ("Envigado", "Medellín"), eso va en \`ciudad\`, no en \`zona\`.
+- \`area_min\` en metros cuadrados: "mínimo 85 m2" → 85; "de 100 metros" → 100.
+- \`banos\`, \`garajes\` y \`estrato\`: sólo si el mensaje los pide explícitamente. "2 baños, parqueadero doble" → banos 2, garajes 2. "estrato 5 o 6" → 5 (el mínimo).
 - Un mensaje de una sola propiedad con foto y ficha es oferta aunque no diga "vendo".
 - Devolvé exactamente un objeto por mensaje de entrada, con su id textual.`;
 

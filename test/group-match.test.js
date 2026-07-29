@@ -108,3 +108,117 @@ test("un precio que sólo viene como mínimo también sirve", () => {
   assert.strictEqual(r.utilizable, true);
   assert.strictEqual(r.propuesta.precio, 500000000);
 });
+
+// ══ Certeza del match ════════════════════════════════════════════════════
+//
+// Medido en producción el 2026-07-29: un solo pedido sacó 10 propiedades de
+// Robledo a Sabaneta. Un contador de matches que incluye cosas así no informa,
+// desinforma — el asesor deja de mirarlo.
+
+const { evaluarCandidata, zonaCoincide } = require("../src/groups/match");
+
+const pide = (extra = {}) => ({
+  operacion: "venta", tipo: "apartamento", zona: "Laureles",
+  precio_min: 0, precio_max: 600000000, habitaciones: 3,
+  area_min: 0, banos: 0, garajes: 0, estrato: 0, ...extra,
+});
+
+const apto = (extra = {}) => ({
+  ref: "9944723", titulo: "Apartamento en Laureles", tipo: "Apartamento",
+  operacion: "Venta", precio: "$550.000.000", zona: "Laureles", ciudad: "Medellín",
+  habitaciones: 3, banos: 2, garaje: 1, estrato: 5, area: "95 m²",
+  link: "https://diamondinmobiliaria.com/propiedades/apto-9944723", ...extra,
+});
+
+test("un match completo trae el link de la landing, nunca el de Wasi", () => {
+  const m = evaluarCandidata(apto(), pide(), "diamond");
+  assert.ok(m, "debería matchear");
+  assert.match(m.link, /diamondinmobiliaria\.com\/propiedades\//);
+  assert.ok(!/wasi/.test(m.link), "el link nunca puede mandar tráfico a Wasi");
+});
+
+test("las razones dicen POR QUE calza: zona, valor y las demás variables", () => {
+  const m = evaluarCandidata(apto(), pide({ area_min: 90, banos: 2, garajes: 1, estrato: 4 }), "diamond");
+  const texto = m.razones.join(" | ");
+  assert.match(texto, /Laureles/);
+  assert.match(texto, /\$550M dentro de \$600M/);
+  assert.match(texto, /3 alcobas/);
+  assert.match(texto, /95 m²/);
+  assert.match(texto, /2 baños/);
+  assert.match(texto, /1 garaje/);
+  assert.match(texto, /estrato 5/);
+});
+
+test("BUG: el precio es una banda, no sólo un techo", () => {
+  // A un cliente con $600M no se le ofrece uno de $150M: cabe en el
+  // presupuesto y no es lo que busca.
+  assert.strictEqual(evaluarCandidata(apto({ precio: "$150.000.000" }), pide(), "diamond"), null);
+  assert.ok(evaluarCandidata(apto({ precio: "$420.000.000" }), pide(), "diamond"));
+});
+
+test("BUG: la zona se compara contra la zona, no contra la ciudad", () => {
+  // "Loma del Chocho" no puede matchear con todo Envigado.
+  const enEnvigado = apto({ zona: "Las Antillas", ciudad: "Envigado" });
+  assert.strictEqual(evaluarCandidata(enEnvigado, pide({ zona: "Envigado" }), "diamond"), null);
+});
+
+test("BUG: pedir 3 alcobas no puede traer una de 6", () => {
+  assert.strictEqual(evaluarCandidata(apto({ habitaciones: 6 }), pide(), "diamond"), null);
+  assert.ok(evaluarCandidata(apto({ habitaciones: 4 }), pide(), "diamond"), "una de más sí sirve");
+});
+
+test("un dato que el inventario no tiene NO descalifica la propiedad", () => {
+  // El área vacía es un hueco de nuestro sync, no un defecto del inmueble.
+  const m = evaluarCandidata(apto({ area: null }), pide({ area_min: 90 }), "diamond");
+  assert.ok(m, "no se puede castigar a la propiedad por lo que no sincronizamos");
+  assert.ok(!m.razones.join(" ").includes("m²"), "pero tampoco puede alegar un área que no conoce");
+});
+
+test("un dato que el inventario SÍ tiene y no cumple, descalifica", () => {
+  assert.strictEqual(evaluarCandidata(apto({ area: "60 m²" }), pide({ area_min: 90 }), "diamond"), null);
+  assert.strictEqual(evaluarCandidata(apto({ banos: 1 }), pide({ banos: 3 }), "diamond"), null);
+  assert.strictEqual(evaluarCandidata(apto({ estrato: 3 }), pide({ estrato: 5 }), "diamond"), null);
+});
+
+test("el que aprovecha el presupuesto puntúa más que el que se queda corto", () => {
+  const alto = evaluarCandidata(apto({ precio: "$580.000.000" }), pide(), "diamond");
+  const bajo = evaluarCandidata(apto({ precio: "$390.000.000" }), pide(), "diamond");
+  assert.ok(alto.puntaje > bajo.puntaje);
+});
+
+test("una demanda de arriendo no matchea una propiedad en venta", () => {
+  assert.strictEqual(evaluarCandidata(apto(), pide({ operacion: "arriendo" }), "diamond"), null);
+});
+
+test("un aliado no lleva link de la landing — no es inventario nuestro", () => {
+  const m = evaluarCandidata(apto({ inmobiliaria_origen: "Colega SAS" }), pide(), "aliado");
+  assert.strictEqual(m.link, null);
+  assert.strictEqual(m.inmobiliaria, "Colega SAS");
+});
+
+test("zonaCoincide ignora genéricos: 'loma' sola no ubica nada", () => {
+  assert.strictEqual(zonaCoincide({ zona: "Loma del Chocho" }, { zona: "Loma de los Bernal" }), false);
+  assert.strictEqual(zonaCoincide({ zona: "Loma de los Bernal" }, { zona: "Loma de Los Bernal" }), true);
+});
+
+test("sin zona en el pedido no hay match posible", () => {
+  assert.strictEqual(evaluarCandidata(apto(), pide({ zona: "" }), "diamond"), null);
+});
+
+test("un pedido de municipio SÍ matchea, pero vale menos que uno de barrio", () => {
+  // "Busco casa en Envigado" es negocio real: no se puede tirar. Pero un match
+  // de municipio es más débil que uno de barrio y la pantalla debe decirlo.
+  const enEnvigado = apto({ zona: "Las Antillas", ciudad: "Envigado" });
+  const porMunicipio = evaluarCandidata(enEnvigado, pide({ zona: "", ciudad: "Envigado" }), "diamond");
+  assert.ok(porMunicipio, "un pedido de municipio no se puede descartar");
+  assert.match(porMunicipio.razones[0], /Ciudad: Envigado/);
+
+  const porBarrio = evaluarCandidata(apto(), pide(), "diamond");
+  assert.ok(porBarrio.puntaje > porMunicipio.puntaje, "el barrio exacto tiene que puntuar más");
+});
+
+test("nombrar un barrio y no estar en él no se salva por la ciudad", () => {
+  // Éste es el bug que generó 656 de los ~731 falsos positivos.
+  const otroBarrio = apto({ zona: "Robledo", ciudad: "Medellín" });
+  assert.strictEqual(evaluarCandidata(otroBarrio, pide({ zona: "Laureles", ciudad: "Medellín" }), "diamond"), null);
+});

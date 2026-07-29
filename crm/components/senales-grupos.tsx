@@ -11,6 +11,14 @@ export type Match = {
   precio?: string | null;
   operacion?: string | null;
   inmobiliaria?: string | null;
+  /** Ficha en la landing de Diamond. Sólo el inventario propio la tiene. */
+  link?: string | null;
+  habitaciones?: number | null;
+  area?: string | null;
+  /** 0-100. Cuánto calza con lo pedido, no una probabilidad de venta. */
+  puntaje?: number | null;
+  /** Por qué calza, en palabras: "Zona: Laureles", "3 alcobas", "95 m²". */
+  razones?: string[] | null;
 };
 
 export type Signal = {
@@ -66,16 +74,30 @@ function Fuente({ fuente }: { fuente: string }) {
   );
 }
 
+/**
+ * El borrador que el asesor le pega al colega.
+ *
+ * Sólo entra el inventario PROPIO: ofrecer la propiedad de un tercer colega es
+ * meter a Diamond de intermediaria en un negocio ajeno. Y cada línea lleva el
+ * link de la landing de Diamond, no el de Wasi — el colega abre nuestra ficha,
+ * con nuestra marca.
+ */
 function borrador(s: Signal, matches: Match[]) {
+  const propios = matches.filter((m) => m.fuente === "diamond");
+  if (propios.length === 0) return "";
+
   const quien = s.autor_nombre ? `Hola ${s.autor_nombre.split(" ")[0]}, ` : "Hola, ";
-  const lineas = matches.map((m) => {
-    const partes = [m.titulo, m.zona, m.precio].filter(Boolean).join(" · ");
-    return `• ${partes}${m.ref ? ` (ref ${m.ref})` : ""}`;
+  const lineas = propios.map((m) => {
+    const ficha = [m.zona, m.habitaciones ? `${m.habitaciones} alcobas` : null, m.area, m.precio]
+      .filter(Boolean)
+      .join(" · ");
+    return `• ${m.titulo || "Propiedad"}\n  ${ficha}${m.link ? `\n  ${m.link}` : ""}`;
   });
+
   return (
-    `${quien}vi tu solicitud en el grupo. Tengo esto que puede servirte:\n\n` +
-    `${lineas.join("\n")}\n\n` +
-    `Si te sirve alguno te paso fotos y coordinamos la visita. Comisión compartida 50/50.`
+    `${quien}vi tu solicitud en el grupo. Tengo esto disponible que te puede servir:\n\n` +
+    `${lineas.join("\n\n")}\n\n` +
+    `Si te sirve alguno coordinamos la visita. Comisión compartida 50/50.`
   );
 }
 
@@ -90,10 +112,11 @@ function Ficha({ s, copias, grupos }: { s: Signal; copias: number; grupos: numbe
     .join(" · ");
 
   const propios = matches.filter((m) => m.fuente === "diamond").length;
+  const texto = borrador(s, matches);
 
   async function copiar() {
     try {
-      await navigator.clipboard.writeText(borrador(s, matches));
+      await navigator.clipboard.writeText(texto);
       setCopiado(true);
       setTimeout(() => setCopiado(false), 2000);
     } catch {
@@ -141,7 +164,12 @@ function Ficha({ s, copias, grupos }: { s: Signal; copias: number; grupos: numbe
       {s.clase === "demanda" && (
         <div className="mt-1.5">
           {matches.length === 0 ? (
-            <span className="text-xs text-slate-400">sin match en inventario</span>
+            // Distinguir "no hay nada que calce" de "el pedido no dice dónde"
+            // importa: lo segundo es un pedido que vale la pena responder a
+            // mano preguntándole la zona al colega.
+            <span className="text-xs text-slate-400">
+              {s.zona ? "sin match en inventario" : "el pedido no dice zona — no se puede cruzar"}
+            </span>
           ) : (
             <button
               type="button"
@@ -155,50 +183,109 @@ function Ficha({ s, copias, grupos }: { s: Signal; copias: number; grupos: numbe
 
           {abierta && matches.length > 0 && (
             <div className="mt-2 rounded-md border border-slate-200 bg-slate-50 p-3">
-              <ul className="space-y-1.5">
-                {matches.map((m, i) => (
-                  <li key={i} className="flex flex-wrap items-baseline gap-x-2 text-xs">
-                    <Fuente fuente={m.fuente} />
-                    {m.ref ? (
+              {/* Lo pedido a la izquierda, lo que calza a la derecha: sin el
+                  pedido al lado hay que acordarse de qué buscaba el colega
+                  mientras se leen seis propiedades. */}
+              <div className="grid gap-3 md:grid-cols-[minmax(0,13rem)_1fr]">
+                <div className="rounded-md border border-slate-200 bg-white p-2.5">
+                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                    Lo que pide
+                  </p>
+                  <dl className="space-y-0.5 text-xs">
+                    {[
+                      ["Operación", s.operacion],
+                      ["Tipo", s.tipo],
+                      ["Zona", s.zona],
+                      ["Hasta", pesos(s.precio_max)],
+                      ["Alcobas", s.habitaciones ? `${s.habitaciones}` : null],
+                    ]
+                      .filter(([, v]) => v)
+                      .map(([k, v]) => (
+                        <div key={k as string} className="flex justify-between gap-2">
+                          <dt className="text-slate-500">{k}</dt>
+                          <dd className="text-right font-medium text-slate-800">{v}</dd>
+                        </div>
+                      ))}
+                  </dl>
+                </div>
+
+                <ul className="space-y-2">
+                  {matches.map((m, i) => (
+                    <li key={i} className="rounded-md border border-slate-200 bg-white p-2.5">
+                      <div className="flex flex-wrap items-baseline gap-x-2">
+                        <Fuente fuente={m.fuente} />
+                        {/* El link SIEMPRE es la ficha de la landing propia.
+                            Mandar al colega a Wasi es regalarle la marca. */}
+                        {m.link ? (
+                          <a
+                            href={m.link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm font-medium text-slate-900 hover:underline"
+                          >
+                            {m.titulo || "Ver ficha"} ↗
+                          </a>
+                        ) : (
+                          <span className="text-sm font-medium text-slate-900">{m.titulo || "Sin título"}</span>
+                        )}
+                        {m.ref && <span className="font-mono text-[11px] text-slate-400">ref {m.ref}</span>}
+                        {typeof m.puntaje === "number" && (
+                          <span
+                            className={[
+                              "ml-auto rounded px-1.5 py-0.5 text-[10px] font-semibold",
+                              m.puntaje >= 80 ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-600",
+                            ].join(" ")}
+                            title="Cuánto calza con lo pedido. No es probabilidad de venta."
+                          >
+                            {m.puntaje}%
+                          </span>
+                        )}
+                      </div>
+                      {m.inmobiliaria && (
+                        <p className="mt-0.5 text-[11px] text-slate-500">de {m.inmobiliaria}</p>
+                      )}
+                      <div className="mt-1.5 flex flex-wrap gap-1">
+                        {(m.razones || []).map((r) => (
+                          <span key={r} className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-700">
+                            {r}
+                          </span>
+                        ))}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-200 pt-2">
+                {texto ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={copiar}
+                      className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white"
+                    >
+                      {copiado ? "¡Copiado!" : "Copiar mensaje con los links"}
+                    </button>
+                    {tel && (
                       <a
-                        href={`https://info.wasi.co/propiedad/${m.ref}`}
+                        href={`https://wa.me/${tel}?text=${encodeURIComponent(texto)}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="font-mono font-medium text-slate-700 hover:underline"
+                        className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-white"
                       >
-                        {m.ref}
+                        Abrir WhatsApp
                       </a>
-                    ) : (
-                      <span className="font-mono text-slate-400">s/ref</span>
                     )}
-                    <span className="text-slate-800">{m.titulo || "Sin título"}</span>
-                    <span className="text-slate-500">{m.zona}</span>
-                    <span className="font-medium text-slate-900">{m.precio}</span>
-                  </li>
-                ))}
-              </ul>
-
-              <div className="mt-3 flex items-center gap-2 border-t border-slate-200 pt-2">
-                <button
-                  type="button"
-                  onClick={copiar}
-                  className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white"
-                >
-                  {copiado ? "¡Copiado!" : "Copiar mensaje para el colega"}
-                </button>
-                {tel && (
-                  <a
-                    href={`https://wa.me/${tel}?text=${encodeURIComponent(borrador(s, matches))}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-white"
-                  >
-                    Abrir WhatsApp
-                  </a>
+                    <span className="text-[11px] text-slate-500">
+                      Lo escribe el asesor desde su teléfono. Sofi nunca publica en el grupo.
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-[11px] text-slate-500">
+                    Todo lo que calza es de la red de aliados, no inventario propio: no hay borrador
+                    que mandar. Primero confirmá disponibilidad con esa inmobiliaria.
+                  </span>
                 )}
-                <span className="text-[11px] text-slate-500">
-                  Lo escribe el asesor desde su teléfono. Sofi nunca publica en el grupo.
-                </span>
               </div>
             </div>
           )}
