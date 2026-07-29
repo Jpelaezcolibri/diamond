@@ -82,3 +82,13 @@ test("un número corto, vacío o nulo no matchea nada", () => {
 test("dos números distintos que terminan parecido no colisionan", () => {
   assert.strictEqual(mismoTelefono("573001878024", "573001878025"), false);
 });
+
+test("el prompt desarma el historial viejo donde Sofi le hablaba como clienta", () => {
+  // Verificado en produccion: Claudia (sin historial) recibio "¡Hola Claudia!
+  // ¿En que te puedo ayudar?", pero Natalia —con 12 mensajes previos de trato
+  // comercial— siguio recibiendo "¿que estas buscando?". El modelo imita su
+  // propio historial, asi que hay que decirle explicitamente que lo ignore.
+  const p = texto(buildSystemPrompt({ org, lead, qualified: false, now: null, advisor: natalia }));
+  assert.match(p, /HISTORIAL CONTAMINADO/);
+  assert.match(p, /NO los continues/);
+});
