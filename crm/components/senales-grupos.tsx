@@ -99,6 +99,13 @@ function Fuente({ fuente }: { fuente: string }) {
  * meter a Diamond de intermediaria en un negocio ajeno. Y cada línea lleva el
  * link de la landing de Diamond, no el de Wasi — el colega abre nuestra ficha,
  * con nuestra marca.
+ *
+ * El link NO va acompañado de una invitación a coordinar la visita (Juan,
+ * 2026-07-29): esa misma ficha es la que se comparte con el cliente final, y
+ * programar la visita implica dar información de contacto — eso lo maneja el
+ * asesor en persona, no un mensaje armado por Sofi. El borrador se limita a
+ * mostrar qué hay disponible y los términos de comisión; el resto de la
+ * conversación con el colega la lleva el asesor.
  */
 function borrador(s: Signal, matches: Match[]) {
   const propios = matches.filter((m) => m.fuente === "diamond");
@@ -115,7 +122,7 @@ function borrador(s: Signal, matches: Match[]) {
   return (
     `${quien}vi tu solicitud en el grupo. Tengo esto disponible que te puede servir:\n\n` +
     `${lineas.join("\n\n")}\n\n` +
-    `Si te sirve alguno coordinamos la visita. Comisión compartida 50/50.`
+    `Comisión compartida 50/50 si te sirve alguna.`
   );
 }
 
