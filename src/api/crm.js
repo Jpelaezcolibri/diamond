@@ -29,9 +29,33 @@ const whatsappGroups = require("../data/whatsapp-groups");
 const organizations = require("../data/organizations");
 const waha = require("../lib/waha");
 
+// GROUPS_ENABLED tiene que ser un interruptor de verdad.
+//
+// El 2026-07-30 WhatsApp baneo la cuenta de la asesora cuya linea estaba
+// vinculada. Al desconectar todo se descubrio que apagar GROUPS_ENABLED NO
+// alcanzaba: frenaba el webhook y el buffer, pero estos endpoints seguian
+// respondiendo, asi que un clic en "Vincular linea" desde el CRM podia volver a
+// parear el numero — justo lo que no puede pasar mientras Meta revisa una
+// cuenta suspendida. Un interruptor que deja una puerta abierta no es un
+// interruptor.
+//
+// Esto cubre SOLO lo que toca WhatsApp a traves de WAHA (parear, ver estado,
+// importar grupos). Leer lo ya guardado y marcar una senal como revisada no
+// tocan la linea de nadie y siguen disponibles.
+function requiereGruposActivos(req, res, next) {
+  if (!config.groups.enabled) {
+    return res.status(423).json({
+      error:
+        "La escucha de grupos esta desactivada (GROUPS_ENABLED=false). " +
+        "No se puede vincular ni consultar ninguna linea de WhatsApp.",
+    });
+  }
+  next();
+}
+
 // Vincular la linea: crea la sesion en WAHA y la registra. El corte temporal
 // (escucha_desde) queda fijado en este instante — nada anterior se procesa.
-router.post("/api/grupos/sesion", async (req, res) => {
+router.post("/api/grupos/sesion", requiereGruposActivos, async (req, res) => {
   const { nombre, advisorId } = req.body || {};
   if (!nombre || !/^[a-z0-9_-]{2,40}$/i.test(nombre)) {
     return res.status(400).json({ error: "Nombre de sesion invalido (letras, numeros, guiones)" });
@@ -53,7 +77,7 @@ router.post("/api/grupos/sesion", async (req, res) => {
 // Estado + QR en una sola llamada: es lo que la pantalla de pareo consulta en
 // bucle, y el QR caduca en segundos — pedirlo aparte duplicaria el polling.
 // Solo se pide el QR si la sesion realmente lo esta esperando.
-router.post("/api/grupos/sesion/estado", async (req, res) => {
+router.post("/api/grupos/sesion/estado", requiereGruposActivos, async (req, res) => {
   const { nombre } = req.body || {};
   if (!nombre) return res.status(400).json({ error: "Falta el nombre de la sesion" });
   try {
@@ -90,7 +114,7 @@ router.post("/api/grupos/sesion/estado", async (req, res) => {
 // Mueve tambien el corte temporal a este instante: al vincular un dispositivo
 // nuevo WhatsApp le resincroniza historial, y esos mensajes viejos no se
 // procesan.
-router.post("/api/grupos/sesion/revincular", async (req, res) => {
+router.post("/api/grupos/sesion/revincular", requiereGruposActivos, async (req, res) => {
   const { nombre } = req.body || {};
   if (!nombre) return res.status(400).json({ error: "Falta el nombre de la sesion" });
   try {
@@ -107,7 +131,7 @@ router.post("/api/grupos/sesion/revincular", async (req, res) => {
 // Importa de una todos los grupos de la linea, en vez de esperar a que llegue
 // un mensaje en cada uno. Nacen TODOS en 'ignorar': importarlos no es
 // escucharlos.
-router.post("/api/grupos/importar", async (req, res) => {
+router.post("/api/grupos/importar", requiereGruposActivos, async (req, res) => {
   const { sesion } = req.body || {};
   if (!sesion) return res.status(400).json({ error: "Falta el nombre de la sesion" });
   try {
