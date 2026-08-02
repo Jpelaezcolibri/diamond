@@ -88,6 +88,10 @@ router.post("/api/grupos/importar-export", upload.array("files", 10), async (req
     importar(org, archivos, {
       dias,
       incremental,
+      // Quien sube el export es quien observa las señales que salgan de el. Lo
+      // resuelve el CRM contra el usuario logueado; si no viene, quedan sin
+      // autor y solo las ve un admin.
+      advisorId: req.body?.advisorId || null,
       onProgreso: (p) => importJobs.progreso(job.id, p),
     })
       .then((stats) => {

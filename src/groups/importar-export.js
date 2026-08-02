@@ -60,7 +60,11 @@ function nombreDeArchivo(nombre) {
 // `incremental` (default) hace que cada grupo arranque donde quedo la vez
 // anterior. Es lo que vuelve viable exportar dos veces al dia: sin esto, cada
 // carga reclasifica —y vuelve a pagar— todo el rango elegido.
-async function importar(org, archivos, { dias = DIAS_DEFAULT, incremental = true, onProgreso = () => {} } = {}) {
+// `advisorId` es quien OBSERVA: el asesor que subio este export. El grupo
+// gremial es compartido —varios asesores estan en los mismos— pero la
+// interpretacion no lo es, y sin autor las señales de dos asesoras que suben el
+// mismo grupo quedan indistinguibles.
+async function importar(org, archivos, { dias = DIAS_DEFAULT, incremental = true, advisorId = null, onProgreso = () => {} } = {}) {
   // El interruptor se consulta ACA y no en el endpoint: clasificar es la parte
   // cara del embudo, y la garantia tiene que valer venga la llamada de donde
   // venga —la pantalla, un script, un worker futuro—. Se relee de la base en
@@ -191,7 +195,7 @@ async function importar(org, archivos, { dias = DIAS_DEFAULT, incremental = true
   let guardados = 0;
   for (const señal of [...demandas, ...ofertas]) {
     try {
-      const { duplicado } = await persistirSeñal(org, señal);
+      const { duplicado } = await persistirSeñal(org, señal, advisorId);
       if (duplicado) stats.duplicadas++;
       else stats.señales++;
     } catch (e) {
@@ -214,10 +218,11 @@ async function importar(org, archivos, { dias = DIAS_DEFAULT, incremental = true
   return stats;
 }
 
-async function persistirSeñal(org, c) {
+async function persistirSeñal(org, c, advisorId = null) {
   const m = c.mensaje;
   return groupSignals.create(org.id, {
     group_id: m.groupId,
+    advisor_id: advisorId,
     // `await` obligatorio: idDeMensaje es async desde que el hash pasa por
     // WebCrypto. Sin el, aca viajaba una Promise como wa_message_id y TODAS las
     // señales de una corrida colisionaban entre si como duplicadas — sin error,

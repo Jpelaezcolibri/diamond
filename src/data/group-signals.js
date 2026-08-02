@@ -14,7 +14,10 @@ const ORIGENES = ["vivo", "export", "reenvio"];
 // el insert las rechaza y se reintenta sin ellas: una senal guardada sin
 // `origen` vale mucho mas que una senal perdida. Se avisa una sola vez para
 // no llenar los logs.
-const COLUMNAS_NUEVAS = ["origen", "fecha_mensaje"];
+// `advisor_id` llega con 2026-08-02_learning_domain.sql y va en la misma
+// lista: en un entorno sin migrar, una señal guardada sin autor vale mucho mas
+// que una señal perdida.
+const COLUMNAS_NUEVAS = ["origen", "fecha_mensaje", "advisor_id"];
 let faltanColumnas = false;
 
 // PGRST204: PostgREST no encuentra la columna en su cache de esquema.
@@ -39,6 +42,12 @@ async function create(orgId, fields) {
     wa_message_id: fields.wa_message_id,
     autor_nombre: fields.autor_nombre || null,
     autor_telefono: fields.autor_telefono || null,
+    // Quien OBSERVO la señal: el asesor que subio el export o que le reenvio
+    // el pedido a Sofi. El grupo gremial es compartido —varios asesores estan
+    // en los mismos— pero la interpretacion no lo es. Es lo que permite que
+    // cada asesor vea lo suyo, y lo que hace posible preguntar "que vio
+    // Natalia" en vez de solo "que aparecio" (P14).
+    advisor_id: fields.advisor_id || null,
     clase: fields.clase,
     confianza: fields.confianza ?? null,
     operacion: fields.operacion || null,
