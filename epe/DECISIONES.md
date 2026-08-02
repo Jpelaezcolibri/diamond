@@ -60,10 +60,51 @@ costaría hashear mensajes que el corte iba a tirar igual.
 de agua de ayer trae dos mensajes, no cien mil. Evaluarlo antes rechazaría
 cargas legítimas.
 
+**D7 — El host lee la IndexedDB local, no el DOM.** *Resuelto el 2026-08-02 con
+medición, no con diseño.*
+
+La pregunta abierta era si WhatsApp Web solo tiene disponible la conversación
+abierta —lo único que renderiza en el DOM— o si su base local guarda todo. Se
+midió en una sesión real, **sin ningún chat abierto**:
+
+```
+model-storage.message      29.597      chat      342
+group-metadata                 21      contact  5.766
+fts-storage.fts-v3-index    7.865
+```
+
+Con cero conversaciones abiertas hay casi 30.000 mensajes de 342 chats
+guardados localmente, y WhatsApp mantiene además su propio índice de búsqueda
+de texto completo — o sea que los guarda **en claro**.
+
+*Consecuencia:* el host lee todos los grupos de la lista blanca sin abrir
+ninguno. No hay que rotar conversación por conversación, que era la alternativa
+cara: más lenta, visible para el asesor, y con mucha más superficie de
+comportamiento anómalo.
+
+**D8 — `signal-storage` es intocable.** La misma medición mostró que el
+navegador guarda el material criptográfico de la cuenta:
+
+```
+signal-storage: identity-store 1.264 · prekey-store 808 ·
+                session-store 6 · signed-prekey-store 1
+```
+
+Son las llaves del cifrado punta a punta. **El host abre exclusivamente
+`model-storage`**, y dentro de ella solo los almacenes que necesita. Ninguna
+otra base se abre, ni siquiera para contar.
+
+No hace falta nada de ahí: los mensajes ya están descifrados en
+`model-storage`. Leer esas llaves no daría ninguna capacidad nueva y convertiría
+un lector pasivo en algo que sí puede comprometer la cuenta del asesor — o sea,
+exactamente lo que P1 existe para impedir.
+
+*Se protege con un test* cuando se escriba el lector: la lista de bases y
+almacenes permitidos vive en una constante, y el test falla si crece.
+
 ## Abierto
 
-- **Alcance de la captura.** WhatsApp Web solo renderiza en el DOM la
-  conversación abierta. Si la IndexedDB local resulta legible, el host lee todos
-  los grupos de la lista blanca sin abrir ninguno. Lo responde
-  `extension-spike/`, que está construido y sin correr. **No afecta al EPE**: el
-  núcleo procesa mensajes ya capturados, venga de donde venga.
+- **Forma del registro de mensaje.** Qué campos trae cada fila de
+  `model-storage.message` — dónde vive el texto, el autor y el jid del grupo.
+  Es implementación del lector, no arquitectura: no cambia ninguna decisión de
+  arriba.
