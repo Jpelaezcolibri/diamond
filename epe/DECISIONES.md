@@ -123,6 +123,28 @@ exactamente lo que P1 existe para impedir.
 *Se protege con un test* cuando se escriba el lector: la lista de bases y
 almacenes permitidos vive en una constante, y el test falla si crece.
 
+**D9 — Las vías oficiales de Meta no dan acceso a los grupos gremiales.**
+*Verificado contra la documentación de Meta el 2026-08-02.*
+
+Se revisaron las tres que existen, porque la pregunta "¿no hay una forma
+oficial?" vuelve sola cada pocas semanas:
+
+| Vía | Por qué no sirve |
+|---|---|
+| **Groups API** (nueva en 2026) | Solo grupos que el negocio crea por API. **Máximo 8 participantes.** No se conecta a grupos preexistentes del WhatsApp de consumidor |
+| **Coexistence** | Textual en la doc de Meta: *"Group chats will not be synchronized"*. La sincronización de historial excluye grupos y `smb_message_echoes` no los emite |
+| **n8n / Make / Zapier** | Su nodo oficial usa la Cloud API, con los mismos límites. Todos los demás nodos de WhatsApp son clientes no oficiales — la categoría exacta que provocó el baneo del 2026-07-30 |
+
+*Conclusión:* **WhatsApp no expone los grupos por ninguna vía oficial, y el
+cuello de botella no es la herramienta de automatización.** Cambiar de
+orquestador no mueve la restricción. La única vía que queda sin riesgo para la
+línea del asesor es leer lo que su propio navegador ya renderizó.
+
+*Nota al margen:* Coexistence sí tiene un uso real para el producto, pero es
+otro — permitiría que las conversaciones 1 a 1 de un asesor con sus clientes
+entren al CRM sin que cambie de herramienta. Es POST-MVP y no resuelve nada de
+lo de grupos.
+
 ## Abierto
 
 - **Forma del registro de mensaje.** Qué campos trae cada fila de
