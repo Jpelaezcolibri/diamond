@@ -19,6 +19,7 @@ const path = require("node:path");
 
 const RAIZ = path.join(__dirname, "..");
 const ENTRADA = path.join(RAIZ, "src/groups/prefilter.js");
+const ENTRADA_EPE = path.join(RAIZ, "epe/core/index.js");
 
 // Lo que NO puede aparecer en la cadena, y por qué.
 const PROHIBIDOS = [
@@ -28,6 +29,9 @@ const PROHIBIDOS = [
   { patron: /require\(["'].*\/config["']\)/, motivo: "config con process.env" },
   { patron: /require\(["'](fs|path|crypto|os|http|https)["']\)/, motivo: "módulo de Node sin prefijo" },
   { patron: /process\.env/, motivo: "variable de entorno" },
+  { patron: /\bchrome\./, motivo: "API de extensión — el núcleo no conoce a su host" },
+  { patron: /\bdocument\./, motivo: "DOM — el núcleo no lee la pantalla, recibe mensajes ya extraídos" },
+  { patron: /\bfetch\(/, motivo: "red — el núcleo nunca habla con nadie" },
 ];
 
 // Sigue los require relativos desde un archivo y devuelve todo lo alcanzable.
@@ -84,6 +88,42 @@ test("la cadena es la esperada — si crece, es una decisión, no un accidente",
     .sort();
 
   assert.deepStrictEqual(cadena, [
+    "src/groups/lexico.js",
+    "src/groups/prefilter.js",
+    "src/groups/texto.js",
+    "src/lib/zonas.js",
+  ]);
+});
+
+test("TODO el núcleo del EPE es puro — es lo que permite que corra en el navegador", () => {
+  // La cadena completa desde la entrada pública, no solo el prefiltro. Es el
+  // criterio de aceptación del Sprint 1: si esto falla, el EPE no puede
+  // empaquetarse y el ~85% de descarte local deja de existir.
+  const cadena = cierreDeDependencias(ENTRADA_EPE);
+  const problemas = [];
+
+  for (const archivo of cadena) {
+    const codigo = fs.readFileSync(archivo, "utf8")
+      .split("\n")
+      .filter((l) => !l.trimStart().startsWith("//"))
+      .join("\n");
+
+    for (const { patron, motivo } of PROHIBIDOS) {
+      if (patron.test(codigo)) problemas.push(`${path.relative(RAIZ, archivo)} → ${motivo}`);
+    }
+  }
+
+  assert.deepStrictEqual(problemas, [], `El núcleo del EPE dejó de ser portable:\n  ${problemas.join("\n  ")}`);
+});
+
+test("la cadena del EPE es la esperada — si crece, es una decisión", () => {
+  const cadena = cierreDeDependencias(ENTRADA_EPE)
+    .map((a) => path.relative(RAIZ, a).replace(/\\/g, "/"))
+    .sort();
+
+  assert.deepStrictEqual(cadena, [
+    "epe/core/hash.js",
+    "epe/core/index.js",
     "src/groups/lexico.js",
     "src/groups/prefilter.js",
     "src/groups/texto.js",
