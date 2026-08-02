@@ -11,7 +11,11 @@
 
 const { plano } = require("./texto");
 const lexico = require("./lexico");
-const { zonaTokens, distinctiveTokens } = require("../data/properties");
+// De ../lib/zonas y NO de ../data/properties: ese modulo arrastra el cliente de
+// Supabase, y este prefiltro tiene que poder correr dentro del navegador del
+// asesor (extension de Chrome), donde nada de eso existe. Es el mismo
+// tokenizador — solo cambio de casa. Lo custodia test/prefilter-puro.test.js.
+const { zonaTokens, distinctiveTokens } = require("../lib/zonas");
 
 // Cada zona conocida, reducida a sus tokens distintivos con el MISMO
 // tokenizador que la busqueda de inventario: asi "loma del chocho" en un grupo

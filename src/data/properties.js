@@ -23,35 +23,11 @@ function resolveOrg(orgOrId) {
   return orgOrId && typeof orgOrId === "object" ? orgOrId : { id: orgOrId };
 }
 
-// Palabras utiles de una zona de busqueda: fuera articulos y conectores,
-// para que "El Poblado" encuentre "Poblado" y "Loma del Chocho" encuentre "Chocho"
-const STOPWORDS = new Set(["el", "la", "los", "las", "de", "del", "en", "sector", "barrio", "zona"]);
-
-// Palabras geograficas GENERICAS: describen un tipo de accidente o urbanizacion,
-// no identifican una zona concreta. En Medellin hay decenas de "lomas" (Loma del
-// Indio en El Poblado, Loma del Chocho en Envigado, Loma de los Balsos...): un
-// match solo por "loma" es un falso positivo que ubica al cliente en el sitio
-// equivocado. Si el query trae ademas un nombre distintivo, estas no cuentan
-// como coincidencia por si solas.
-const GENERIC_GEO = new Set([
-  "loma", "lomas", "alto", "altos", "bajo", "bajos", "vereda", "parcelacion",
-  "conjunto", "urbanizacion", "unidad", "ciudadela", "cerro", "parque", "via",
-]);
-
-function zonaTokens(zona) {
-  return String(zona)
-    .toLowerCase()
-    .split(/[^a-záéíóúñü]+/i)
-    .filter((w) => w.length >= 3 && !STOPWORDS.has(w));
-}
-
-// Tokens que SI identifican la zona. Si hay alguno distintivo (no generico), el
-// match exige uno de esos; los genericos ("loma") no bastan. Si TODOS son
-// genericos, se usan tal cual como ultimo recurso.
-function distinctiveTokens(tokens) {
-  const distinctive = tokens.filter((t) => !GENERIC_GEO.has(t));
-  return distinctive.length > 0 ? distinctive : tokens;
-}
+// zonaTokens/distinctiveTokens viven en src/lib/zonas.js: son puras y el
+// prefiltro de grupos las necesita SIN arrastrar Supabase (corre dentro del
+// navegador del asesor). Se re-exportan mas abajo porque src/groups/match.js
+// las consume como `properties.zonaTokens(...)`.
+const { zonaTokens, distinctiveTokens } = require("../lib/zonas");
 
 function matchesFilters(p, f) {
   if (f.ref && p.ref.toUpperCase() !== f.ref.toUpperCase()) return false;
