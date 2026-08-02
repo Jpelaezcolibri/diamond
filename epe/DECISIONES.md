@@ -74,8 +74,15 @@ fts-storage.fts-v3-index    7.865
 ```
 
 Con cero conversaciones abiertas hay casi 30.000 mensajes de 342 chats
-guardados localmente, y WhatsApp mantiene además su propio índice de búsqueda
-de texto completo — o sea que los guarda **en claro**.
+guardados localmente. **Eso es lo único que estos números prueban: que los
+registros existen y no dependen de la conversación abierta.**
+
+⚠️ **Pendiente de verificar: si el TEXTO de esos mensajes es legible.** Una
+primera inspección no encontró campo de texto en las muestras, y apareció
+`msgRowOpaqueData`, que sugiere contenido serializado. La existencia del índice
+`fts-v3-index` apunta en la dirección contraria. Hasta resolverlo, D7 vale
+para el *alcance* (todos los chats, sin abrir ninguno) pero **no** para la
+*legibilidad del contenido*.
 
 *Consecuencia:* el host lee todos los grupos de la lista blanca sin abrir
 ninguno. No hay que rotar conversación por conversación, que era la alternativa
