@@ -62,6 +62,51 @@ experiencia. Lo protege [P14](#p14--nunca-romper-la-cadena-de-aprendizaje).
 > experiencia."*
 > — Juan Pelaez, CTO, 2026-08-02
 
+## Los dominios de Radar
+
+`Captura · Procesamiento · Matching · Señales · Digest` — y desde el 2026-08-02:
+
+**Learning Domain.** No es Machine Learning ni IA: es el dominio encargado de
+**preservar la experiencia del producto**. Su Event Store es `signal_events`.
+
+### Dirección de la dependencia — regla permanente
+
+> **Todo lo relacionado con el aprendizaje futuro debe depender del producto; el
+> producto nunca debe depender del aprendizaje.**
+
+```
+Radar → Learning Domain     ✅
+Learning Domain → Radar     ❌
+```
+
+Garantiza que el Learning Engine se pueda **apagar por completo dentro de cinco
+años sin romper el producto**. `signal_events` se comporta desde el primer día
+como si algún día fuera un bounded context independiente — sin cambiar carpetas
+ni arquitectura hoy.
+
+### El modelo real de Radar
+
+No es `Mensajes → IA → Señales`. Es:
+
+```
+Mensajes → Radar → Señales → Acciones → Eventos → Experiencia
+                                             → Conocimiento → Mejores decisiones
+```
+
+El valor deja de estar en detectar una oportunidad y pasa a estar en **entender
+por qué unas terminan en negocio y otras no**.
+
+### Corolario: el grupo es compartido, la interpretación no
+
+```
+Grupo → Interpretación del asesor → Señales
+```
+
+No modelamos el grupo: modelamos **la experiencia individual del asesor frente
+al grupo**. El grupo es una *fuente*; la señal es una *observación*, y las
+observaciones siempre tienen autor. Por eso `advisor_id` pertenece a la señal,
+nunca al grupo.
+
 ## Dirección estratégica sobre el texto original
 
 *Decisión del CTO el 2026-08-02. **Dirección documentada, no implementada.***
@@ -126,6 +171,35 @@ Radar no aprende de clientes; aprende de **oportunidades**.
 oportunidad: `SIN_RESPUESTA · CONVERSACION · VISITA · NEGOCIACION · CIERRE ·
 PERDIDO · DESCARTADO`. Radar debe aprender tanto de los fracasos como de los
 cierres.
+
+### P15 — El aprendizaje se modela como eventos
+
+*Agregado por el CTO el 2026-08-02.*
+
+Todo aquello que describa la evolución de una oportunidad debe representarse
+como una **secuencia de eventos inmutables**.
+
+- Los **estados** representan la fotografía actual.
+- Los **eventos** representan la historia.
+
+**Radar aprende de la historia, nunca de la fotografía.**
+
+Es la diferencia entre *"¿cómo terminó?"* y *"¿cómo llegó hasta ahí?"*. Radar
+necesita responder ambas, y solo la segunda enseña algo.
+
+`signal_events` es el **Event Store del Learning Domain**. No es un log, no es
+auditoría, no es trazabilidad: es el origen del conocimiento futuro.
+
+### P16 — Nunca perder contexto temporal
+
+*Agregado por el CTO el 2026-08-02.*
+
+Una decisión sin contexto temporal pierde gran parte de su valor. Radar no solo
+debe registrar **qué** ocurrió: debe preservar **el orden** en que ocurrió.
+
+El orden de los eventos forma parte del conocimiento. Toda información que
+permita reconstruir la historia completa de una oportunidad tiene prioridad
+sobre cualquier optimización de almacenamiento.
 
 ### P12 — Paralelismo Responsable
 
