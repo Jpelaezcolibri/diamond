@@ -7,6 +7,7 @@ import ErrorBanner from "@/components/error-banner";
 import GruposPanel, { type Grupo } from "@/components/grupos-panel";
 import VincularLinea, { type Sesion, type Asesor } from "@/components/vincular-linea";
 import SenalesGrupos, { type Signal } from "@/components/senales-grupos";
+import ImportarExport from "@/components/importar-export";
 
 export const dynamic = "force-dynamic";
 
@@ -107,14 +108,19 @@ export default async function GruposPage() {
 
   return (
     <div className="mx-auto max-w-5xl p-4 sm:p-6">
-      <h1 className="mb-1 text-2xl font-bold text-slate-900">Grupos de WhatsApp</h1>
+      <h1 className="mb-1 text-2xl font-bold text-slate-900">Radar de grupos</h1>
       <p className="mb-6 text-sm text-slate-500">
-        Sofi escucha los grupos gremiales a través de la línea vinculada de un asesor.{" "}
-        <strong>Nunca escribe en ningún grupo</strong> — sólo detecta. Un grupo nuevo aparece acá
-        apagado y no procesa nada hasta que lo prendas.
+        Un asesor está en 80 grupos con más de mil mensajes al día: nadie los lee, y el pedido
+        bueno se traspapela. Acá se destila eso en lo accionable — quién busca lo que vos tenés,
+        y qué publican los colegas.{" "}
+        <strong>Sofi nunca escribe en ningún grupo</strong> y no se conecta a la línea de nadie.
       </p>
 
       {gruposRes.hasError && <ErrorBanner message={gruposRes.message} />}
+
+      <div className="mb-6">
+        <ImportarExport />
+      </div>
 
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[

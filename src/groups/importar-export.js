@@ -172,7 +172,10 @@ async function importar(org, archivos, { dias = DIAS_DEFAULT, onProgreso = () =>
   const { demandas, ofertas, ruido } = await cruzar(clas.clasificados, { org });
   stats.demandas = demandas.length;
   stats.ofertas = ofertas.length;
-  stats.ruido = ruido;
+  // Solo el CONTEO. `cruzar` devuelve los mensajes de ruido enteros, y estas
+  // stats viajan al CRM: mandar el array meteria el texto crudo de mensajes
+  // privados de terceros en una respuesta HTTP. El ruido muere en memoria.
+  stats.ruido = ruido.length;
   stats.demandasConMatch = demandas.filter((d) => (d.matches || []).length > 0).length;
 
   // ── Persistencia

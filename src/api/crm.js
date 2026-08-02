@@ -169,6 +169,74 @@ router.post("/api/grupos/metricas", (req, res) => {
   res.json({ ok: true, ...require("../groups/buffer").estado() });
 });
 
+// ── Import de exports .txt ──────────────────────────────────────────────
+//
+// La via segura para leer los grupos: el asesor exporta el chat desde su
+// telefono (funcion nativa de WhatsApp) y sube el archivo. Nada se conecta a
+// la linea de nadie, asi que NO va detras de requiereGruposActivos: ese
+// interruptor protege lo que toca WhatsApp por WAHA, y esto no lo toca.
+//
+// Responde 202 con un id y procesa en segundo plano: un export de varios
+// grupos tarda minutos y el navegador cortaria la conexion mucho antes.
+const importJobs = require("../groups/import-jobs");
+
+router.post("/api/grupos/importar-export", upload.array("files", 10), async (req, res) => {
+  const archivos = (req.files || []).map((f) => ({
+    nombre: f.originalname,
+    contenido: f.buffer.toString("utf8"),
+  }));
+  if (archivos.length === 0) {
+    return res.status(400).json({ error: "No llego ningun archivo .txt" });
+  }
+
+  // `dias` vacio o "0" significa "todo el historial": es una eleccion valida
+  // para un grupo nuevo, aunque cara. El tope de mensajes la acota igual.
+  const dias = req.body?.dias === "" || req.body?.dias === undefined
+    ? undefined
+    : Number(req.body.dias) || null;
+
+  try {
+    const org = req.body?.orgId
+      ? { id: req.body.orgId }
+      : await organizations.getDefault();
+    if (!org?.id) return res.status(404).json({ error: "No se pudo resolver la organizacion" });
+
+    const job = importJobs.crear(org.id, { archivos: archivos.length, dias });
+    res.status(202).json({ ok: true, jobId: job.id });
+
+    // Deliberadamente sin await: la respuesta ya salio.
+    const { importar } = require("../groups/importar-export");
+    importar(org, archivos, {
+      ...(dias === undefined ? {} : { dias }),
+      onProgreso: (p) => importJobs.progreso(job.id, p),
+    })
+      .then((stats) => {
+        importJobs.terminar(job.id, stats);
+        console.log(
+          `[radar] Import listo: ${stats.señales} señales nuevas, ${stats.duplicadas} duplicadas, ` +
+          `${stats.ofertasArchivadas} ofertas archivadas, USD ${stats.costoUsd.toFixed(4)}`
+        );
+      })
+      .catch((e) => {
+        importJobs.fallar(job.id, e);
+        console.error("[radar] Import fallido:", e.message);
+      });
+  } catch (e) {
+    if (!res.headersSent) res.status(500).json({ error: e.message });
+  }
+});
+
+router.get("/api/grupos/importar-export/:jobId", async (req, res) => {
+  try {
+    const org = await organizations.getDefault();
+    const estado = importJobs.estado(req.params.jobId, org?.id);
+    if (!estado) return res.status(404).json({ error: "Importacion no encontrada o expirada" });
+    res.json({ ok: true, ...estado });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Marcar una senal como revisada (o descartada, o de vuelta a pendiente).
 //
 // Con volumen alto —el 2026-07-29 entraron ~980 senales en un dia— sin una

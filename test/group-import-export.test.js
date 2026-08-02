@@ -405,3 +405,21 @@ test("un export sin nada inmobiliario no llama a la IA", async (t) => {
   assert.strictEqual(llamadas.length, 0);
   _setClientForTests(null);
 });
+
+test("las stats llevan el CONTEO de ruido, nunca los mensajes", async (t) => {
+  // `cruzar` devuelve los mensajes de ruido enteros y estas stats viajan al
+  // CRM por HTTP: mandar el array metería el texto crudo de mensajes privados
+  // de terceros en la respuesta. El ruido muere en memoria.
+  mockDatos(t);
+  mockClasificador();
+  const contenido = exportCon([
+    `${fecha(1)}, 10:00 a. m. - Andrés: Tengo cliente para apto en Laureles`,
+    `${fecha(1)}, 10:01 a. m. - Marcela: precio de la cuota de administración por favor`,
+  ]);
+
+  const stats = await importar(ORG, [{ nombre: "Chat de WhatsApp con G.txt", contenido }], { dias: 30 });
+
+  assert.strictEqual(typeof stats.ruido, "number");
+  assert.strictEqual(JSON.stringify(stats).includes("administración"), false);
+  _setClientForTests(null);
+});
