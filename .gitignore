@@ -27,3 +27,21 @@ dbg.log
 # EPE: dependencias y bundle generado
 epe/node_modules/
 epe/dist/
+
+# Datos personales de terceros. Mismo motivo que los exports de arriba: son
+# nombres, telefonos y jids de colegas que no consintieron nada. Un commit es
+# permanente; una vez adentro no se saca sin reescribir la historia.
+recuperacion-grupos/
+
+# Cuentas de cobro y soportes con datos fiscales reales. Un repo de codigo no
+# es el lugar de la contabilidad.
+facturacion/
+
+# Assets de campanas (PDFs, imagenes, paginas guardadas). Material de
+# referencia, no codigo — ver CLAUDE.md. Son ~38 MB que la historia de git
+# cargaria para siempre en cada clone.
+CAMPAÑAS/
+DIAMOND/
+
+# Artefactos temporales de trabajo (renders, builds de carrusel, pruebas).
+scratch/
