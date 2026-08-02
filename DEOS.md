@@ -43,6 +43,41 @@ Toda decisión técnica debe protegerlo. Si una solución incrementa el riesgo d
 suspensión, bloqueo o pérdida de confianza del número, se descarta salvo
 aprobación explícita del CTO.
 
+## Los cuatro activos estratégicos
+
+| # | Activo | Qué es |
+|---|---|---|
+| 1 | **El número de WhatsApp del asesor** | Su medio de vida. Ver arriba |
+| 2 | **El pipeline determinista** | Prefiltro, corte, dedup y matching. Código propio, sobrevive a cualquier proveedor de IA |
+| 3 | **El conocimiento estructurado** | La clasificación extraída de cada mensaje, no el mensaje |
+| 4 | **El historial de decisiones** | El registro `Oportunidad → Acción → Resultado`. *Agregado por el CTO el 2026-08-02* |
+
+El activo #4 no son los mensajes, ni los leads, ni las propiedades: es lo que
+permite que Radar pase de herramienta inteligente a producto que acumula
+experiencia. Lo protege [P14](#p14--nunca-romper-la-cadena-de-aprendizaje).
+
+> *"Los modelos pueden olvidarse y volver a entrenarse. Una decisión real tomada
+> por un asesor en el momento exacto en que ocurrió es irrepetible. Por eso,
+> antes de construir inteligencia, debemos asegurarnos de no perder nunca la
+> experiencia."*
+> — Juan Pelaez, CTO, 2026-08-02
+
+## Dirección estratégica sobre el texto original
+
+*Decisión del CTO el 2026-08-02. **Dirección documentada, no implementada.***
+
+El activo estratégico de Radar **no puede depender del texto original**. Debe
+depender del conocimiento extraído:
+
+```
+Texto original → Conocimiento estructurado → Aprendizaje     ✅
+Texto original → Aprendizaje                                 ❌
+```
+
+El segundo modelo convierte el activo más importante del producto en su mayor
+riesgo de privacidad. **Radar debe poder olvidar el texto y conservar el
+conocimiento** — es lo único coherente con P1 y P3.
+
 ---
 
 ## Principios congelados
@@ -60,6 +95,37 @@ aprobación explícita del CTO.
 | P6 | La extensión nunca escribe ni toca el DOM | `prefilter-puro` + `epe-bundle` |
 | P7 | Un solo host, YAGNI estricto | `prefilter-puro`: cadena congelada en 6 archivos |
 | P2, P5, P8–P11 | *pendientes de transcripción* | — |
+
+### P14 — Nunca romper la cadena de aprendizaje
+
+*Agregado por el CTO el 2026-08-02.*
+
+Todo aquello que permita relacionar **una oportunidad detectada con su resultado
+final** constituye un activo estratégico del producto. Esa relación debe
+preservarse **desde el primer día**, incluso si todavía no existe ningún
+componente que la analice.
+
+> **El análisis puede esperar. El dato no.**
+
+La cadena que protege:
+
+```
+Mensaje → Señal → Acción del asesor → Resultado → Aprendizaje
+```
+
+Si cualquiera de esos eslabones desaparece, el AI Native definido en el apéndice
+deja de existir.
+
+**Corolario de dominio:** el cliente de una señal de grupo **no es de Diamond**
+— es del colega. Por eso una oportunidad puede existir sin convertirse jamás en
+un lead del CRM, y **no debe forzarse a que lo sea**: son dos dominios distintos.
+Radar no aprende de clientes; aprende de **oportunidades**.
+
+**Corolario de implementación:** el resultado de una oportunidad se piensa como
+**evento**, no como estado. Los estados representan el recorrido natural de una
+oportunidad: `SIN_RESPUESTA · CONVERSACION · VISITA · NEGOCIACION · CIERRE ·
+PERDIDO · DESCARTADO`. Radar debe aprender tanto de los fracasos como de los
+cierres.
 
 ### P12 — Paralelismo Responsable
 
