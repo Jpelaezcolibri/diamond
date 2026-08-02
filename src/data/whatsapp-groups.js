@@ -11,20 +11,25 @@
 // linea de la asesora pareada. Con ella se fueron las sesiones y la lista
 // blanca, que existian para decidir que chats se escuchaban. Hoy no se escucha
 // nada: los mensajes los trae una persona, a mano.
+//
+// Por eso este modulo quedo en tres funciones. `listGroups` y `setModo` se
+// eliminaron el 2026-08-02: no tenian un solo llamador desde que se retiro
+// WAHA, y sostenian ese modelo de lista blanca que ya no existe. El CRM lee
+// los grupos directo de Supabase.
 
 const supabase = require("./supabase");
 const memory = require("./memory");
 const { plano } = require("../groups/texto");
 
-const MODOS = ["ignorar", "sombra", "sugerir"];
 // ── Grupos ───────────────────────────────────────────────────────────────
 
-// Registra un grupo recien visto. SIEMPRE nace en modo 'ignorar': un grupo
-// nuevo —o uno al que el asesor entre manana— no puede filtrarse al sistema
-// por olvido. Solo existe lo que Juan prendio a mano.
+// Registra un grupo recien visto, o devuelve el que ya estaba. Idempotente por
+// (org_id, jid).
 //
-// Si ya existe, NO toca su modo: descubrirlo de nuevo no puede reactivar un
-// grupo que alguien apago.
+// La columna `modo` sigue existiendo en la tabla y todo grupo nace en
+// 'ignorar', pero ya no significa nada: decidia que chats escuchaba la sesion
+// en vivo, y esa sesion no existe. Se deja el default para no tocar el
+// constraint de la base.
 async function registrarGrupo(orgId, { jid, nombre = null }) {
   if (!supabase) {
     const existente = memory.whatsappGroups.find((g) => g.org_id === orgId && g.jid === jid);
@@ -56,42 +61,6 @@ async function registrarGrupo(orgId, { jid, nombre = null }) {
   return data;
 }
 
-async function listGroups(orgId) {
-  if (!supabase) {
-    return memory.whatsappGroups
-      .filter((g) => g.org_id === orgId)
-      .sort((a, b) => String(a.nombre || "").localeCompare(String(b.nombre || "")));
-  }
-  const { data, error } = await supabase.from("whatsapp_groups").select("*").eq("org_id", orgId).order("nombre");
-  if (error) throw error;
-  return data;
-}
-
-// Prender un grupo fija su escucha_desde en ESE momento. Prender hoy un grupo
-// no puede arrastrar lo que se hablo ahi la semana pasada: apagarlo y volverlo
-// a prender vuelve a correr el corte hacia adelante, nunca hacia atras.
-async function setModo(orgId, groupId, modo) {
-  if (!MODOS.includes(modo)) throw new Error(`Modo invalido: ${modo}`);
-  const ahoraIso = new Date().toISOString();
-  const patch = { modo, updated_at: ahoraIso };
-  if (modo !== "ignorar") patch.escucha_desde = ahoraIso;
-
-  if (!supabase) {
-    const g = memory.whatsappGroups.find((x) => x.id === groupId && x.org_id === orgId);
-    if (!g) throw new Error("Grupo no encontrado");
-    return Object.assign(g, patch);
-  }
-  const { data, error } = await supabase
-    .from("whatsapp_groups")
-    .update(patch)
-    .eq("org_id", orgId)
-    .eq("id", groupId)
-    .select()
-    .single();
-  if (error) throw error;
-  return data;
-}
-
 // ── Grupos virtuales ─────────────────────────────────────────────────────
 //
 // Un mensaje que llega por export o por reenvio no tiene jid: nadie vinculo
@@ -117,7 +86,6 @@ async function asegurarGrupoVirtual(orgId, { prefijo, nombre }) {
   return registrarGrupo(orgId, { jid: jidVirtual(prefijo, nombre), nombre });
 }
 
-module.exports = {
-  registrarGrupo, listGroups, setModo,
-  asegurarGrupoVirtual, jidVirtual, slug, MODOS,
-};
+// `registrarGrupo` no se exporta: su unico llamador es `asegurarGrupoVirtual`,
+// aca al lado. Exportarlo seria API publica sin consumidor.
+module.exports = { asegurarGrupoVirtual, jidVirtual, slug };
