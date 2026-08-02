@@ -1,6 +1,7 @@
 const supabase = require("./supabase");
 const memory = require("./memory");
 const { zonaTokens, distinctiveTokens } = require("./properties");
+const { plano } = require("../groups/texto");
 
 const ESTADOS_ACTIVOS = ["pendiente", "confirmada"];
 
@@ -115,13 +116,30 @@ async function create(orgId, fields) {
   return data;
 }
 
+// Identidad del colega que publico la propiedad.
+//
+// En la captura en vivo siempre habia telefono: lo aportaba el remitente de
+// WhatsApp. Un export `.txt` NO lo trae — solo el nombre con el que el asesor
+// tiene agendado al colega. Sin este fallback, todas las propiedades de un
+// export quedan con telefono null, `mismaPropiedadDeGrupo` las ve iguales por
+// ese campo, y dos colegas distintos con un apartamento parecido en la misma
+// zona colisionan en una sola fila.
+//
+// El nombre es una clave mas debil que el telefono (dos "Andrés" en grupos
+// distintos son la misma clave), pero se combina con tipo+zona+precio, y el
+// costo de un falso positivo aca es refrescar una fecha, no perder un dato.
+function claveColega(p) {
+  const tel = String(p.contacto_telefono || "").trim();
+  return tel ? `tel:${tel}` : `nom:${plano(p.contacto_nombre)}`;
+}
+
 // Se resuelve leyendo y decidiendo, no con upsert: el indice unico de las de
 // grupo va sobre expresiones (coalesce), y PostgREST no acepta eso como
 // onConflict. El indice queda igual, como red de seguridad.
 function mismaPropiedadDeGrupo(a, row) {
   const n = (v) => String(v || "").trim().toLowerCase();
   return a.origen === "grupo"
-    && n(a.contacto_telefono) === n(row.contacto_telefono)
+    && claveColega(a) === claveColega(row)
     && n(a.tipo) === n(row.tipo)
     && n(a.zona) === n(row.zona)
     && n(a.precio) === n(row.precio);
@@ -146,9 +164,17 @@ async function upsertDeGrupo(orgId, row) {
     return creada;
   }
 
-  const { data: candidatas } = await supabase
-    .from("ally_properties").select("*").eq("org_id", orgId).eq("origen", "grupo")
-    .eq("contacto_telefono", row.contacto_telefono || "");
+  // El filtro de candidatas va por telefono SOLO si lo hay. Con un export no
+  // hay telefono, y `.eq("contacto_telefono", "")` no matchea NULL en Postgres:
+  // la consulta volvia vacia siempre y cada re-importacion duplicaba la fila.
+  // Sin telefono se acota por nombre del colega y se decide en memoria con
+  // `mismaPropiedadDeGrupo`, que es quien manda.
+  let q = supabase
+    .from("ally_properties").select("*").eq("org_id", orgId).eq("origen", "grupo");
+  q = row.contacto_telefono
+    ? q.eq("contacto_telefono", row.contacto_telefono)
+    : q.is("contacto_telefono", null).ilike("contacto_nombre", row.contacto_nombre || "");
+  const { data: candidatas } = await q;
   const existente = (candidatas || []).find((a) => mismaPropiedadDeGrupo(a, row));
 
   if (existente) {
@@ -270,4 +296,4 @@ async function registerAlert(orgId, allyPropertyId, leadId) {
   return true;
 }
 
-module.exports = { create, search, findById, list, update, matchesFilters, registerAlert, vigente, mismaPropiedadDeGrupo, DIAS_VIGENCIA_GRUPO };
+module.exports = { create, search, findById, list, update, matchesFilters, registerAlert, vigente, mismaPropiedadDeGrupo, claveColega, DIAS_VIGENCIA_GRUPO };

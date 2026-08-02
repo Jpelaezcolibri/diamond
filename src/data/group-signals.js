@@ -8,6 +8,20 @@ const supabase = require("./supabase");
 const memory = require("./memory");
 
 const CLASES = ["demanda", "oferta"];
+const ORIGENES = ["vivo", "export", "reenvio"];
+
+// Columnas de la migracion 2026-08-01_radar_grupos.sql. Si no corrio todavia,
+// el insert las rechaza y se reintenta sin ellas: una senal guardada sin
+// `origen` vale mucho mas que una senal perdida. Se avisa una sola vez para
+// no llenar los logs.
+const COLUMNAS_NUEVAS = ["origen", "fecha_mensaje"];
+let faltanColumnas = false;
+
+// PGRST204: PostgREST no encuentra la columna en su cache de esquema.
+// 42703: Postgres dice que la columna no existe.
+function esColumnaFaltante(error) {
+  return error?.code === "PGRST204" || error?.code === "42703";
+}
 
 // Alta con deduplicacion. El mismo mensaje visto por dos asesores del mismo
 // grupo trae el mismo wa_message_id: sin esto se paga la IA dos veces y —en
@@ -16,6 +30,8 @@ const CLASES = ["demanda", "oferta"];
 // Devuelve {signal, duplicado}.
 async function create(orgId, fields) {
   if (!CLASES.includes(fields.clase)) throw new Error(`Clase invalida: ${fields.clase}`);
+  const origen = fields.origen || "vivo";
+  if (!ORIGENES.includes(origen)) throw new Error(`Origen invalido: ${origen}`);
 
   const row = {
     org_id: orgId,
@@ -36,6 +52,12 @@ async function create(orgId, fields) {
     texto_original: fields.texto_original || null,
     matches: fields.matches || [],
     estado: "nuevo",
+    origen,
+    // La fecha REAL del mensaje en el grupo. En un export los mensajes son de
+    // hace dias o semanas y created_at diria "hoy" para todos: sin esto no se
+    // puede distinguir una demanda de ayer de una de hace un mes, y una
+    // demanda vieja no vale — el colega ya consiguio lo que buscaba.
+    fecha_mensaje: fields.fecha_mensaje || null,
   };
 
   if (!supabase) {
@@ -48,14 +70,36 @@ async function create(orgId, fields) {
     return { signal: creada, duplicado: false };
   }
 
-  const { data, error } = await supabase.from("group_signals").insert(row).select().single();
-  if (error) {
-    // 23505 = violacion de indice unico: es el dedup haciendo su trabajo, no
-    // un fallo. Cualquier otro error si se propaga.
-    if (error.code === "23505") return { signal: null, duplicado: true };
-    throw error;
+  return insertar(row);
+}
+
+async function insertar(row) {
+  // Si ya sabemos que la migracion no corrio, ni lo intentamos con las
+  // columnas nuevas.
+  const fila = faltanColumnas ? sinColumnasNuevas(row) : row;
+
+  const { data, error } = await supabase.from("group_signals").insert(fila).select().single();
+  if (!error) return { signal: data, duplicado: false };
+
+  // 23505 = violacion de indice unico: es el dedup haciendo su trabajo, no
+  // un fallo. Cualquier otro error si se propaga.
+  if (error.code === "23505") return { signal: null, duplicado: true };
+
+  if (esColumnaFaltante(error) && !faltanColumnas) {
+    faltanColumnas = true;
+    console.warn(
+      "[grupos] Falta correr db/migrations/2026-08-01_radar_grupos.sql — " +
+      "las señales se guardan sin origen ni fecha_mensaje hasta entonces."
+    );
+    return insertar(row);
   }
-  return { signal: data, duplicado: false };
+  throw error;
+}
+
+function sinColumnasNuevas(row) {
+  const copia = { ...row };
+  for (const c of COLUMNAS_NUEVAS) delete copia[c];
+  return copia;
 }
 
 async function list(orgId, { clase = null, estado = null, limit = 200 } = {}) {
@@ -128,4 +172,9 @@ async function marcarEnviada(orgId, groupId, waMessageId) {
   if (error) console.error("[grupos] No se pudo marcar la señal como enviada:", error.message);
 }
 
-module.exports = { create, list, setEstado, resumen, marcarEnviada, CLASES };
+module.exports = { create, list, setEstado, resumen, marcarEnviada, CLASES, ORIGENES, _resetBlindaje };
+
+// Solo para tests: el flag de "falta la migracion" es de proceso.
+function _resetBlindaje() {
+  faltanColumnas = false;
+}

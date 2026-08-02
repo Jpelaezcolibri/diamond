@@ -9,6 +9,7 @@
 
 const supabase = require("./supabase");
 const memory = require("./memory");
+const { plano } = require("../groups/texto");
 
 const MODOS = ["ignorar", "sombra", "sugerir"];
 const CACHE_MS = 60 * 1000;
@@ -204,6 +205,31 @@ async function importarGrupos(orgId, grupos) {
   return { total: grupos.length, nuevos };
 }
 
+// ── Grupos virtuales ─────────────────────────────────────────────────────
+//
+// Un mensaje que llega por export o por reenvio no tiene jid: nadie vinculo
+// una linea, que es justamente el punto. Pero `group_signals.group_id` es una
+// FK obligatoria — y esta bien que lo sea, porque una senal sin grupo no se
+// puede rastrear hasta su origen.
+//
+// La solucion es un grupo con jid sintetico y prefijo de procedencia. Se ve
+// igual que uno real en el CRM y el asesor sabe de donde salio cada senal.
+// Idempotente: `registrarGrupo` ya resuelve por (org_id, jid).
+
+function slug(texto) {
+  return plano(texto)
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
+    .slice(0, 60) || "sin-nombre";
+}
+
+function jidVirtual(prefijo, nombre) {
+  return `${prefijo}:${slug(nombre)}`;
+}
+
+async function asegurarGrupoVirtual(orgId, { prefijo, nombre }) {
+  return registrarGrupo(orgId, { jid: jidVirtual(prefijo, nombre), nombre });
+}
+
 // ── Lista blanca ─────────────────────────────────────────────────────────
 
 function invalidar(orgId) {
@@ -243,5 +269,6 @@ async function whitelist(orgId) {
 module.exports = {
   upsertSession, listSessions, touchSession, sesionPorNombre,
   registrarGrupo, listGroups, setModo, importarGrupos,
+  asegurarGrupoVirtual, jidVirtual, slug,
   whitelist, invalidar, MODOS,
 };

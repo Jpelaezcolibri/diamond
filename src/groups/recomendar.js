@@ -36,7 +36,12 @@ function precioTexto(n) {
   return n > 0 ? `$${Number(n).toLocaleString("es-CO")}` : null;
 }
 
-async function guardarOferta(org, oferta) {
+// `vistoEn` existe por el import de exports: ahi los mensajes son de hace dias
+// o semanas y sellarlos con `now()` los volveria frescos por otros 7 dias. Una
+// oferta de hace tres semanas recomendada como disponible es exactamente el
+// dano de reputacion que la caducidad existe para evitar. En vivo el mensaje
+// acaba de llegar, asi que `now()` sigue siendo lo correcto por defecto.
+async function guardarOferta(org, oferta, { vistoEn = null } = {}) {
   const m = oferta.mensaje;
   const precio = oferta.precio_max || oferta.precio_min || 0;
 
@@ -55,7 +60,7 @@ async function guardarOferta(org, oferta) {
     origen: "grupo",
     group_id: m.groupId || null,
     puente_advisor_id: m.advisorId || null,
-    visto_en_grupo_at: new Date().toISOString(),
+    visto_en_grupo_at: vistoEn || new Date().toISOString(),
   });
 }
 
