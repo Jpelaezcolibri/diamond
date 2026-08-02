@@ -25,7 +25,15 @@ const { getClient } = require("../lib/anthropic");
 
 const MODELO = process.env.CLAUDE_MODEL_GRUPOS || "claude-haiku-4-5";
 const TAMANO_LOTE = 20;
-const CONCURRENCIA = 4;
+const CONCURRENCIA = Number(process.env.GROUPS_CLASSIFY_CONCURRENCIA || 4);
+
+// Reintentos ante limite de tasa o fallo transitorio del proveedor.
+//
+// Con la escucha en vivo esto no hacia falta: llegaban lotes sueltos cada
+// pocos minutos. Un export de varios grupos manda cientos de lotes de una, y
+// sin backoff el 429 convierte una corrida entera en `lotesFallidos` — que en
+// el reporte se ve igual que "no habia nada", el peor modo de fallo posible.
+const REINTENTOS = [2000, 8000, 30000];
 
 // USD por millon de tokens (Haiku 4.5). Solo se usan para proyectar el costo
 // en el reporte; si se cambia de modelo hay que actualizarlos.
@@ -106,7 +114,35 @@ function formatearLote(lote) {
     .join("\n\n");
 }
 
-async function clasificarLote(lote) {
+// Reintentable = el proveedor esta saturado o se cayo un momento. Un 400 (mal
+// esquema, prompt invalido) NO se reintenta: fallaria las tres veces igual y
+// solo retrasaria la corrida.
+function esReintentable(e) {
+  const status = e?.status ?? e?.statusCode;
+  if (status === 429 || status === 408 || status === 409) return true;
+  if (typeof status === "number" && status >= 500) return true;
+  // Errores de red del SDK: no traen status.
+  return status === undefined && /ECONN|ETIMEDOUT|fetch failed|network|socket/i.test(e?.message || "");
+}
+
+const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function clasificarLote(lote, { reintentos = REINTENTOS, onReintento = () => {} } = {}) {
+  for (let intento = 0; ; intento++) {
+    try {
+      return await pedirLote(lote);
+    } catch (e) {
+      if (intento >= reintentos.length || !esReintentable(e)) throw e;
+      // Jitter: sin el, todos los lotes en vuelo reintentan en el mismo
+      // instante y vuelven a chocar contra el mismo limite.
+      const espera = reintentos[intento] + Math.floor(Math.random() * 1000);
+      onReintento(intento + 1, espera, e);
+      await dormir(espera);
+    }
+  }
+}
+
+async function pedirLote(lote) {
   const res = await getClient().messages.create({
     model: MODELO,
     max_tokens: 4000,
@@ -142,14 +178,21 @@ async function conPool(items, limite, fn) {
 // Un lote que falla NO tumba la corrida: se registra y sus mensajes quedan
 // fuera del analisis. El reporte muestra el conteo para que un fallo masivo
 // no pase por una tasa de ruido alta.
-async function classify(mensajes, { onProgreso = () => {} } = {}) {
+async function classify(mensajes, { onProgreso = () => {}, reintentos = REINTENTOS } = {}) {
   const lotes = armarLotes(mensajes);
   const uso = { input_tokens: 0, output_tokens: 0 };
   let lotesFallidos = 0;
+  let reintentosTotales = 0;
 
   const porLote = await conPool(lotes, CONCURRENCIA, async (lote, i) => {
     try {
-      const { items, usage } = await clasificarLote(lote);
+      const { items, usage } = await clasificarLote(lote, {
+        reintentos,
+        onReintento: (n, espera) => {
+          reintentosTotales++;
+          console.warn(`  ↻ Lote ${i + 1}/${lotes.length}: reintento ${n} en ${espera}ms`);
+        },
+      });
       uso.input_tokens += usage.input_tokens || 0;
       uso.output_tokens += usage.output_tokens || 0;
       onProgreso(i + 1, lotes.length);
@@ -157,6 +200,9 @@ async function classify(mensajes, { onProgreso = () => {} } = {}) {
     } catch (e) {
       lotesFallidos++;
       console.error(`  ⚠ Lote ${i + 1}/${lotes.length} falló: ${e.message}`);
+      // El progreso avanza igual: si no, una corrida con lotes fallidos deja
+      // la barra congelada y parece colgada.
+      onProgreso(i + 1, lotes.length);
       return [];
     }
   });
@@ -172,6 +218,7 @@ async function classify(mensajes, { onProgreso = () => {} } = {}) {
     clasificados,
     uso: { ...uso, costoUsd: costoDe(uso) },
     lotesFallidos,
+    reintentos: reintentosTotales,
     lotes: lotes.length,
   };
 }
@@ -180,4 +227,7 @@ function costoDe({ input_tokens = 0, output_tokens = 0 }) {
   return (input_tokens / 1e6) * USD_POR_MTOK_ENTRADA + (output_tokens / 1e6) * USD_POR_MTOK_SALIDA;
 }
 
-module.exports = { classify, armarLotes, formatearLote, costoDe, MODELO, TAMANO_LOTE };
+module.exports = {
+  classify, armarLotes, formatearLote, costoDe, esReintentable,
+  MODELO, TAMANO_LOTE, CONCURRENCIA, REINTENTOS,
+};

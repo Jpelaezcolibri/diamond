@@ -1,6 +1,6 @@
 const { test } = require("node:test");
 const assert = require("node:assert");
-const { parseExport, rangoDeFechas } = require("../scripts/group-mining/parse-export");
+const { parseExport, rangoDeFechas } = require("../src/groups/parse-export");
 
 // Fixtures inline: nada de I/O de archivos, para que los tests sean
 // determinísticos y no dependan de un export real (que ademas tiene datos de

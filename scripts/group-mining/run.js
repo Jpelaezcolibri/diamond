@@ -11,7 +11,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
-const { parseExport, rangoDeFechas } = require("./parse-export");
+const { parseExport, rangoDeFechas } = require("../../src/groups/parse-export");
 const { prefilter } = require("../../src/groups/prefilter");
 
 // Umbral de la primera compuerta (spec, "Criterio de decision").

@@ -73,7 +73,7 @@ exactamente para lo que existe la Fase 0.
 
 | Archivo | Etapa | Nota |
 |---|---|---|
-| [`parse-export.js`](parse-export.js) | — | Parser del `.txt` (Android + iOS, multilínea, invisibles) |
+| [`parse-export.js`](../../src/groups/parse-export.js) | — | Parser del `.txt` (Android + iOS, multilínea, invisibles). Vive en `src/groups/` porque el import del CRM también lo usa |
 | [`lexico.js`](lexico.js) | 0 | **Lo que más se ajusta.** Términos por familia |
 | [`prefilter.js`](prefilter.js) | 0 | Descarte gratis. Se promueve a `src/` tal cual en Fase 1 |
 | [`classify.js`](classify.js) | 1 | Lotes de 20 con Haiku 4.5. Se promueve a `src/` tal cual en Fase 1 |
