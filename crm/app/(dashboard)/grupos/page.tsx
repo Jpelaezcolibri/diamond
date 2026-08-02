@@ -19,13 +19,33 @@ type Metricas = {
 export default async function GruposPage() {
   const supabase = await createClient();
 
-  // Esconder el link del menú no es control de acceso: acá se ve qué líneas
-  // están vinculadas y el contenido de los grupos gremiales. Mismo guard que
-  // /usuarios.
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user || !isAdmin(user)) redirect("/inbox");
+  if (!user) redirect("/login");
+  const admin = isAdmin(user);
+
+  // Un asesor entra y ve SOLO las señales que él observó — las que salieron de
+  // los exports que él subió. El guard de admin que había acá protegía un
+  // modelo que ya no existe: cuando una sola línea vinculada servía a toda la
+  // organización, abrir esta pantalla era ver los grupos de otra persona. Con
+  // exports, cada uno sube los suyos.
+  //
+  // Los GRUPOS siguen siendo compartidos, porque en la realidad lo son: varias
+  // asesoras están en los mismos grupos gremiales. Lo que tiene dueño es la
+  // observación, no la fuente.
+  const { data: miAdvisor } = await supabase
+    .from("advisors").select("id").eq("auth_user_id", user.id).limit(1).maybeSingle();
+  const miAdvisorId: string | null = miAdvisor?.id ?? null;
+
+  // Un no-admin sin fila de asesor no puede tener señales propias. Se le
+  // muestra el porqué en vez de una pantalla vacía que parece un error.
+  const sinVincular = !admin && !miAdvisorId;
+
+  // El filtro se aplica en TODAS las consultas de señales, no en una sola: si
+  // se olvida en alguna, un asesor ve el pedido de otro.
+  const mias = <T extends { eq: (c: string, v: string) => T }>(q: T): T =>
+    admin || !miAdvisorId ? q : q.eq("advisor_id", miAdvisorId);
 
   // Una sola consulta de señales NO alcanza. Habia un `limit(300)` sobre toda
   // la tabla, ordenado por fecha, y las dos clases se separaban en memoria: el
@@ -43,13 +63,15 @@ export default async function GruposPage() {
     .from("organizations").select("radar_activo").limit(1).maybeSingle();
   const radarActivo = orgRes.data?.radar_activo !== false;
 
-  const conMatchQuery = supabase
-    .from("group_signals")
-    .select("*")
-    .eq("clase", "demanda")
-    .neq("matches", "[]")
-    .order("created_at", { ascending: false })
-    .limit(200);
+  const conMatchQuery = mias(
+    supabase
+      .from("group_signals")
+      .select("*")
+      .eq("clase", "demanda")
+      .neq("matches", "[]")
+      .order("created_at", { ascending: false })
+      .limit(200)
+  );
 
   const [gruposRes, conMatchRes, demandasRes, ofertasRes] = await Promise.all([
     fetchSafe<Grupo>(
@@ -58,13 +80,13 @@ export default async function GruposPage() {
     ),
     fetchSafe<Signal>(conMatchQuery, "grupos:demandas_con_match"),
     fetchSafe<Signal>(
-      supabase.from("group_signals").select("*").eq("clase", "demanda")
-        .order("created_at", { ascending: false }).limit(100),
+      mias(supabase.from("group_signals").select("*").eq("clase", "demanda")
+        .order("created_at", { ascending: false }).limit(100)),
       "grupos:demandas"
     ),
     fetchSafe<Signal>(
-      supabase.from("group_signals").select("*").eq("clase", "oferta")
-        .order("created_at", { ascending: false }).limit(100),
+      mias(supabase.from("group_signals").select("*").eq("clase", "oferta")
+        .order("created_at", { ascending: false }).limit(100)),
       "grupos:ofertas"
     ),
   ]);
@@ -72,8 +94,10 @@ export default async function GruposPage() {
   // Métricas del embudo: viven en memoria del bot, no en la base. Se piden
   // acá para no obligar a abrir una terminal cada vez que se quiere mirar el
   // volumen o el costo. Si el bot no responde, la página igual carga.
-  const metricasRes = await callBot<Metricas>("/api/grupos/metricas", {});
-  const m = metricasRes.ok ? metricasRes.data : null;
+  // Solo admin: son cifras de toda la organización. A un asesor que tiene 12
+  // señales propias, ver "980 pedidos" no le dice nada de su trabajo.
+  const metricasRes = admin ? await callBot<Metricas>("/api/grupos/metricas", {}) : null;
+  const m = metricasRes?.ok ? metricasRes.data : null;
 
   const grupos = gruposRes.data || [];
 
@@ -114,9 +138,17 @@ export default async function GruposPage() {
 
       {gruposRes.hasError && <ErrorBanner message={gruposRes.message} />}
 
-      <RadarToggle activo={radarActivo} />
+      <RadarToggle activo={radarActivo} puedeCambiar={admin} />
 
-      {radarActivo && (
+      {sinVincular && (
+        <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+          Tu usuario todavía no está vinculado a una ficha de asesor, así que no
+          podés subir grupos ni ver señales propias. Pedile a un administrador
+          que te vincule desde <strong>Usuarios</strong>.
+        </div>
+      )}
+
+      {radarActivo && !sinVincular && (
         <div className="mb-6">
           <ImportarExport />
         </div>

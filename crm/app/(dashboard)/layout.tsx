@@ -25,7 +25,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
     { href: "/leads", label: "Leads" },
     { href: "/calendario", label: "Calendario" },
     { href: "/aliados", label: "Red de aliados" },
-    ...(admin ? [{ href: "/grupos", label: "Grupos" }] : []),
+    // Grupos es de todo el equipo: cada asesor sube sus exports y ve sus
+    // propias señales. Era solo de admin cuando una línea vinculada servía a
+    // toda la organización y ver la pantalla era ver los grupos de otro.
+    { href: "/grupos", label: "Grupos" },
     { href: "/marketing", label: "Marketing" },
     ...(admin ? [{ href: "/usuarios", label: "Usuarios" }] : []),
   ];

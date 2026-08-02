@@ -15,7 +15,15 @@ import { useRouter } from "next/navigation";
  * pudiendo gestionar: apagar el motor no puede hacerle perder al asesor una
  * oportunidad que ya venía trabajando.
  */
-export default function RadarToggle({ activo }: { activo: boolean }) {
+export default function RadarToggle({
+  activo,
+  puedeCambiar = true,
+}: {
+  activo: boolean;
+  /** Solo un admin lo prende o apaga: deja sin digest a todo el equipo. Un
+   *  asesor igual ve el estado, porque explica por qué su carga no procesa. */
+  puedeCambiar?: boolean;
+}) {
   const router = useRouter();
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -59,16 +67,18 @@ export default function RadarToggle({ activo }: { activo: boolean }) {
           </p>
         </div>
 
-        <button
-          onClick={alternar}
-          disabled={guardando}
-          aria-pressed={activo}
-          className={`shrink-0 rounded-md px-4 py-2 text-sm font-medium text-white disabled:opacity-50 ${
-            activo ? "bg-slate-700 hover:bg-slate-800" : "bg-emerald-600 hover:bg-emerald-700"
-          }`}
-        >
-          {guardando ? "Guardando…" : activo ? "Apagar" : "Encender"}
-        </button>
+        {puedeCambiar && (
+          <button
+            onClick={alternar}
+            disabled={guardando}
+            aria-pressed={activo}
+            className={`shrink-0 rounded-md px-4 py-2 text-sm font-medium text-white disabled:opacity-50 ${
+              activo ? "bg-slate-700 hover:bg-slate-800" : "bg-emerald-600 hover:bg-emerald-700"
+            }`}
+          >
+            {guardando ? "Guardando…" : activo ? "Apagar" : "Encender"}
+          </button>
+        )}
       </div>
 
       {error && <p className="mt-2 text-xs text-red-700">{error}</p>}
