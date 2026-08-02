@@ -119,28 +119,33 @@ test("el nombre del grupo sale del nombre del archivo que genera WhatsApp", () =
   assert.strictEqual(nombreDeArchivo(""), "Grupo sin nombre");
 });
 
-test("el id del mensaje es determinista: re-subir el mismo export no duplica", () => {
+// Estas tres son `async` desde que el hash pasó a WebCrypto (epe/core/hash.js):
+// `crypto.subtle` es asíncrono, y ese fue el precio de que el núcleo corra
+// igual en Node y en el navegador. El comportamiento no cambió — los vectores
+// fijos de test/epe-hash.test.js prueban que los hashes son los mismos.
+
+test("el id del mensaje es determinista: re-subir el mismo export no duplica", async () => {
   const m = { grupo: "G", fechaIso: "2026-07-30T10:00:00.000Z", autor: "Andrés", texto: "busco apto" };
-  assert.strictEqual(idDeMensaje(m), idDeMensaje({ ...m }));
-  assert.match(idDeMensaje(m), /^export:[a-f0-9]{40}$/);
+  assert.strictEqual(await idDeMensaje(m), await idDeMensaje({ ...m }));
+  assert.match(await idDeMensaje(m), /^export:[a-f0-9]{40}$/);
 });
 
-test("el id cambia si cambia el contenido, el autor o el grupo", () => {
+test("el id cambia si cambia el contenido, el autor o el grupo", async () => {
   const base = { grupo: "G", fechaIso: "2026-07-30T10:00:00.000Z", autor: "Andrés", texto: "busco apto" };
-  const id = idDeMensaje(base);
-  assert.notStrictEqual(id, idDeMensaje({ ...base, texto: "busco casa" }));
-  assert.notStrictEqual(id, idDeMensaje({ ...base, autor: "Marcela" }));
-  assert.notStrictEqual(id, idDeMensaje({ ...base, grupo: "Otro" }));
+  const id = await idDeMensaje(base);
+  assert.notStrictEqual(id, await idDeMensaje({ ...base, texto: "busco casa" }));
+  assert.notStrictEqual(id, await idDeMensaje({ ...base, autor: "Marcela" }));
+  assert.notStrictEqual(id, await idDeMensaje({ ...base, grupo: "Otro" }));
 });
 
-test("la huella ignora el grupo — el mismo aviso difundido en diez grupos se paga una vez", () => {
+test("la huella ignora el grupo — el mismo aviso difundido en diez grupos se paga una vez", async () => {
   const a = { grupo: "Grupo A", autor: "Andrés", texto: "Se vende apto en Laureles" };
   const b = { grupo: "Grupo B", autor: "Andrés", texto: "SE VENDE APTO EN LAURELES" };
-  assert.strictEqual(huella(a), huella(b));
+  assert.strictEqual(await huella(a), await huella(b));
 });
 
-test("deduplicar conserva el primero y cuenta los repetidos", () => {
-  const { unicos, repetidos } = deduplicar([
+test("deduplicar conserva el primero y cuenta los repetidos", async () => {
+  const { unicos, repetidos } = await deduplicar([
     { autor: "A", texto: "hola" },
     { autor: "A", texto: "hola" },
     { autor: "B", texto: "hola" },

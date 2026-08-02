@@ -23,14 +23,14 @@
 //    real durante una semana mas. Es el mismo dano de reputacion que la
 //    caducidad de 7 dias existe para evitar.
 
-const crypto = require("node:crypto");
 
 const { parseExport, rangoDeFechas } = require("./parse-export");
-const { prefilter } = require("./prefilter");
+const epe = require("../../epe/core");
+const { aplicarCorte, deduplicar } = epe;
+const { idDeMensaje, huella } = require("../../epe/core/hash");
 const { classify } = require("./classify");
 const { cruzar } = require("./match");
 const { guardarOferta } = require("./ofertas");
-const { plano } = require("./texto");
 const groupSignals = require("../data/group-signals");
 const whatsappGroups = require("../data/whatsapp-groups");
 
@@ -52,64 +52,6 @@ function nombreDeArchivo(nombre) {
     .replace(/^Chat de WhatsApp con /i, "")
     .replace(/^WhatsApp Chat with /i, "")
     .trim() || "Grupo sin nombre";
-}
-
-// Id estable y determinista del mensaje dentro de un grupo.
-//
-// `group_signals` tiene un indice unico (org_id, group_id, wa_message_id), y
-// un .txt no trae ningun id de WhatsApp. Derivarlo del contenido hace que
-// re-subir el mismo export —o uno mas largo que lo contenga— no duplique ni
-// una fila ni un centavo de IA: el insert choca contra el indice y `create()`
-// lo reporta como duplicado, que es el comportamiento que ya existia.
-function idDeMensaje(m) {
-  const semilla = `${m.grupo}|${m.instanteIso || ""}|${m.autor || ""}|${plano(m.texto)}`;
-  return "export:" + crypto.createHash("sha256").update(semilla).digest("hex").slice(0, 40);
-}
-
-// Huella de CONTENIDO, sin el grupo: los colegas difunden el mismo aviso en
-// diez grupos a la vez. En la captura en vivo esto era un buffer con TTL; en
-// un lote es un Set y sale gratis. De 494 señales medidas en vivo, 312 eran
-// repeticiones — es el mayor ahorro de IA del pipeline despues del prefiltro.
-function huella(m) {
-  return crypto.createHash("sha256")
-    .update(`${plano(m.autor)}|${plano(m.texto)}`)
-    .digest("hex");
-}
-
-function deduplicar(mensajes) {
-  const vistos = new Set();
-  const unicos = [];
-  for (const m of mensajes) {
-    const h = huella(m);
-    if (vistos.has(h)) continue;
-    vistos.add(h);
-    unicos.push(m);
-  }
-  return { unicos, repetidos: mensajes.length - unicos.length };
-}
-
-// `desde` es un ISO explicito; `dias` una ventana relativa. Manda el mas
-// reciente de los dos: si el grupo ya se leyo hasta ayer, no tiene sentido
-// reprocesar la semana aunque el usuario haya elegido "ultimos 7 dias".
-function aplicarCorte(mensajes, dias, desde = null) {
-  const limites = [
-    dias ? new Date(Date.now() - dias * 86400000).toISOString() : null,
-    desde,
-  ].filter(Boolean);
-  if (limites.length === 0) return { dentro: mensajes, fuera: 0 };
-
-  const corte = limites.sort().at(-1);
-  // Un mensaje sin fecha no se puede fechar y por lo tanto no se puede
-  // garantizar que sea reciente: se descarta. Mismo criterio que el corte
-  // temporal del pareo en vivo.
-  //
-  // El limite es EXCLUSIVO (`>`): el mensaje que marca la frontera ya se
-  // proceso en la corrida anterior.
-  // Se compara por el INSTANTE (con hora), no por el dia: si no, todos los
-  // mensajes de una jornada comparten limite y la marca de agua de la mañana
-  // se come lo que llegue al mediodia — justo el caso que esto habilita.
-  const dentro = mensajes.filter((m) => m.instanteIso && m.instanteIso > corte);
-  return { dentro, fuera: mensajes.length - dentro.length };
 }
 
 // archivos: [{ nombre, contenido }]. Devuelve las metricas del embudo.
@@ -176,25 +118,37 @@ async function importar(org, archivos, { dias = DIAS_DEFAULT, incremental = true
   stats.fueraDeCorte = fuera;
   stats.rango = rangoDeFechas(todosLosCrudos);
 
-  if (mensajes.length > MAX_MENSAJES) {
-    const e = new Error(
-      `El export tiene ${mensajes.length.toLocaleString("es-CO")} mensajes dentro del corte de ${dias} días ` +
-      `(el máximo por corrida es ${MAX_MENSAJES.toLocaleString("es-CO")}). Acortá el rango de días o subí menos grupos a la vez.`
-    );
-    e.code = "DEMASIADOS_MENSAJES";
+  // ── Nivel local (EPE): tope, dedup y prefiltro.
+  //
+  // Es exactamente el mismo codigo que corre —o correra— en el navegador del
+  // asesor. No hay dos copias: el bundle de la extension se genera de este
+  // mismo modulo, asi que el servidor y el sensor no pueden divergir.
+  onProgreso({ fase: "filtrando", procesados: 0, total: mensajes.length });
+
+  let local;
+  try {
+    local = await epe.procesar(mensajes, { maxMensajes: MAX_MENSAJES });
+  } catch (e) {
+    if (e.codigo === "DEMASIADOS_MENSAJES") {
+      // Se re-lanza con el texto que espera el CRM: el nucleo no sabe de
+      // "dias" ni de "grupos", que son conceptos de esta pantalla.
+      const err = new Error(
+        `El export tiene ${e.cuantos.toLocaleString("es-CO")} mensajes dentro del corte de ${dias} días ` +
+        `(el máximo por corrida es ${MAX_MENSAJES.toLocaleString("es-CO")}). Acortá el rango de días o subí menos grupos a la vez.`
+      );
+      err.code = "DEMASIADOS_MENSAJES";
+      throw err;
+    }
     throw e;
   }
 
-  // ── Dedup de contenido
-  const dedup = deduplicar(mensajes);
-  mensajes = dedup.unicos;
-  stats.repetidos = dedup.repetidos;
-
-  // ── Prefiltro (gratis: lexico, precio, zona)
-  onProgreso({ fase: "filtrando", procesados: 0, total: mensajes.length });
-  const { pasan, stats: pre } = prefilter(mensajes);
-  stats.prefiltrados = pre.descartados;
+  const pasan = local.aEnviar;
+  stats.repetidos = local.metricas.repetidos;
+  stats.prefiltrados = local.metricas.prefiltrados;
   stats.aClasificar = pasan.length;
+  // La proporcion de lo que NUNCA salio del dispositivo. Es la metrica que
+  // vuelve medible el principio de minimizacion de datos.
+  stats.tasaDescarteLocal = local.metricas.tasaDescarte;
 
   if (pasan.length === 0) return stats;
 
@@ -251,7 +205,11 @@ async function persistirSeñal(org, c) {
   const m = c.mensaje;
   return groupSignals.create(org.id, {
     group_id: m.groupId,
-    wa_message_id: idDeMensaje(m),
+    // `await` obligatorio: idDeMensaje es async desde que el hash pasa por
+    // WebCrypto. Sin el, aca viajaba una Promise como wa_message_id y TODAS las
+    // señales de una corrida colisionaban entre si como duplicadas — sin error,
+    // solo con señales que desaparecian.
+    wa_message_id: await idDeMensaje(m),
     autor_nombre: m.autor || null,
     // Un .txt trae el nombre con el que el asesor tiene agendado al colega,
     // nunca el numero. Se asume y se declara: el contacto se resuelve por
