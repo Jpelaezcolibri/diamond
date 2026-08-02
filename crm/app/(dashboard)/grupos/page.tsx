@@ -5,17 +5,14 @@ import { callBot } from "@/lib/bot";
 import { fetchSafe } from "@/lib/fetch-safe";
 import ErrorBanner from "@/components/error-banner";
 import GruposPanel, { type Grupo } from "@/components/grupos-panel";
-import VincularLinea, { type Sesion, type Asesor } from "@/components/vincular-linea";
 import SenalesGrupos, { type Signal } from "@/components/senales-grupos";
 import ImportarExport from "@/components/importar-export";
 
 export const dynamic = "force-dynamic";
 
 type Metricas = {
-  recibidos: number; prefiltrados: number; clasificados: number; senales: number;
-  duplicados: number; ruido: number; historicos: number; costoUsd: number;
-  lotesFallidos: number; pendientes: number; aliadas: number; alertas: number;
-  repetidos: number; alertasFallidas: number;
+  dias: number; demandas: number; ofertas: number;
+  demandasConMatch: number; demandasPorDia: number; ofertasPorDia: number; tasaMatch: number;
 };
 
 export default async function GruposPage() {
@@ -46,7 +43,7 @@ export default async function GruposPage() {
     .order("created_at", { ascending: false })
     .limit(200);
 
-  const [gruposRes, conMatchRes, demandasRes, ofertasRes, sesionesRes, asesoresRes] = await Promise.all([
+  const [gruposRes, conMatchRes, demandasRes, ofertasRes] = await Promise.all([
     fetchSafe<Grupo>(
       supabase.from("whatsapp_groups").select("*").order("nombre"),
       "grupos:whatsapp_groups"
@@ -61,14 +58,6 @@ export default async function GruposPage() {
       supabase.from("group_signals").select("*").eq("clase", "oferta")
         .order("created_at", { ascending: false }).limit(100),
       "grupos:ofertas"
-    ),
-    fetchSafe<Sesion>(
-      supabase.from("whatsapp_sessions").select("*").order("created_at"),
-      "grupos:whatsapp_sessions"
-    ),
-    fetchSafe<Asesor>(
-      supabase.from("advisors").select("id, name, phone").eq("activo", true).order("name"),
-      "grupos:advisors"
     ),
   ]);
 
@@ -104,7 +93,6 @@ export default async function GruposPage() {
   const conMatch = conMatchLista.length;
   // Lo que falta por mirar. Es el número que importa: los otros sólo crecen.
   const pendientes = conMatchLista.filter((s) => s.estado === "nuevo").length;
-  const escuchando = grupos.filter((g) => g.modo !== "ignorar").length;
 
   return (
     <div className="mx-auto max-w-5xl p-4 sm:p-6">
@@ -124,7 +112,7 @@ export default async function GruposPage() {
 
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
-          { n: escuchando, t: "grupos escuchados", d: `de ${grupos.length} descubiertos` },
+          { n: grupos.length, t: "grupos cargados", d: "de exports y reenvíos" },
           { n: demandas.length, t: "demandas", d: "colegas buscando" },
           { n: pendientes, t: "por revisar", d: `de ${conMatch} con match` },
           { n: ofertas.length, t: "ofertas", d: "propiedades de colegas" },
@@ -140,58 +128,36 @@ export default async function GruposPage() {
       {m && (
         <div className="mb-6 rounded-lg border border-slate-200 bg-white p-4">
           <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-            <h2 className="text-sm font-semibold text-slate-900">El embudo, desde el último reinicio del bot</h2>
-            <span className="text-xs text-slate-400">se reinicia con cada deploy</span>
+            <h2 className="text-sm font-semibold text-slate-900">El radar, últimos {m.dias} días</h2>
+            <span className="text-xs text-slate-400">sale de la base, no se reinicia con los deploys</span>
           </div>
           <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
             {[
-              { n: m.recibidos, t: "mensajes", d: "llegaron de grupos prendidos" },
-              { n: m.prefiltrados, t: "descartados gratis", d: "sin señal inmobiliaria" },
-              { n: m.clasificados, t: "vistos por la IA", d: "los que sobrevivieron" },
-              { n: m.senales, t: "señales", d: "demanda u oferta" },
-              { n: m.historicos, t: "históricos", d: "anteriores al pareo" },
-              { n: m.repetidos, t: "difundidos", d: "el mismo aviso en varios grupos: se procesa una vez" },
-              { n: m.duplicados, t: "duplicados", d: "evitados" },
-              { n: m.pendientes, t: "en cola", d: "esperando lote" },
+              { n: m.demandas, t: "pedidos", d: "colegas buscando algo" },
+              { n: m.demandasConMatch, t: "con match", d: "los únicos accionables" },
+              { n: m.ofertas, t: "propiedades", d: "publicadas por colegas" },
+              { n: m.demandasPorDia.toFixed(1), t: "pedidos/día", d: "caudal del canal" },
+              { n: `${Math.round(m.tasaMatch * 100)}%`, t: "tasa de match", d: "de los pedidos, cuántos podemos responder" },
             ].map((c) => (
               <div key={c.t} title={c.d}>
                 <span className="text-lg font-bold tabular-nums text-slate-900">{c.n}</span>{" "}
                 <span className="text-slate-600">{c.t}</span>
               </div>
             ))}
-            <div title="Medido sobre los tokens reales, no estimado">
-              <span className="text-lg font-bold tabular-nums text-slate-900">
-                US${(m.costoUsd || 0).toFixed(4)}
-              </span>{" "}
-              <span className="text-slate-600">de IA</span>
-            </div>
           </div>
-          {m.alertasFallidas > 0 && (
-            <p className="mt-2 rounded-md bg-red-50 px-3 py-2 text-xs text-red-800">
-              <strong>{m.alertasFallidas} aviso(s) al asesor no salieron.</strong> Suele ser la
-              ventana de 24 h de Meta: si el asesor no le escribió a Sofi en las últimas 24 horas,
-              WhatsApp rechaza el texto libre y exige una plantilla aprobada.
-            </p>
-          )}
-          {m.lotesFallidos > 0 && (
+          {m.demandas > 10 && m.tasaMatch < 0.1 && (
             <p className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
-              {m.lotesFallidos} lote(s) de clasificación fallaron: esos mensajes quedaron sin analizar,
-              así que los números de arriba subestiman lo que hay.
-            </p>
-          )}
-          {m.recibidos > 0 && m.senales === 0 && m.clasificados > 20 && (
-            <p className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
-              Están entrando mensajes pero no se detecta ninguna señal. Puede ser que estos grupos no
-              sean gremiales, o que el léxico necesite ajuste.
+              Se detectan pedidos pero casi ninguno calza con el inventario. O estos grupos piden
+              otra cosa de la que tenemos, o al inventario le faltan zonas cargadas.
             </p>
           )}
         </div>
       )}
 
-      <h2 className="mb-2 text-lg font-semibold text-slate-900">La línea</h2>
-      <VincularLinea sesiones={sesionesRes.data || []} asesores={asesoresRes.data || []} />
-
-      <h2 className="mb-2 mt-8 text-lg font-semibold text-slate-900">Qué escucha Sofi</h2>
+      <h2 className="mb-1 text-lg font-semibold text-slate-900">Grupos cargados</h2>
+      <p className="mb-2 text-sm text-slate-500">
+        Cada archivo que subís aparece acá como un grupo.
+      </p>
       <GruposPanel grupos={grupos} />
 
       <h2 className="mb-1 mt-8 text-lg font-semibold text-slate-900">Pedidos de colegas</h2>

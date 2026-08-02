@@ -19,13 +19,6 @@ app.use(whatsapp);
 // solo expone una ruta que procesa mensajes sin poder confirmar el secret
 // token de forma util (ver channels/telegram.js).
 if (config.telegramToken) app.use(telegram);
-// Escucha de grupos (Fase 1). Solo se monta con secreto configurado y con el
-// interruptor global prendido: un endpoint que recibe mensajes de WhatsApp sin
-// autenticar no debe existir, y GROUPS_ENABLED=false debe dejarlo inerte de
-// verdad, no solo silencioso.
-if (config.groups.webhookSecret && config.groups.enabled) {
-  app.use(require("./channels/whatsapp-group"));
-}
 // assistant antes que crm: el middleware "/api" de crm.js matchea tambien
 // /api/assistant/* y exige Supabase; montar assistant primero deja que su
 // propio guard maneje la ruta sin acoplarse a crm.js.
@@ -97,7 +90,4 @@ app.listen(config.port, () => {
   // Digest diario del radar de grupos: lo que entro por export o por reenvio
   // no le sirve a nadie si hay que abrir el CRM para verlo.
   if (config.supabaseUrl) require("./scheduler/group-digest").start();
-  // Vacia el buffer de grupos aunque no se llegue a un lote completo: sin
-  // esto, un grupo tranquilo dejaria sus mensajes esperando indefinidamente.
-  if (config.groups.webhookSecret && config.groups.enabled) require("./groups/buffer").start();
 });

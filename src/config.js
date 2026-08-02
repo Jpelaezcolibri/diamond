@@ -61,19 +61,15 @@ const config = {
     quietEndHour: parseInt(process.env.FOLLOWUP_QUIET_END || "8", 10), // ...a 8am (hora Colombia)
   },
 
-  // Escucha de los grupos gremiales via WAHA (Fase 1, modo sombra).
-  // Ver docs/grupos-waha.md y src/channels/whatsapp-group.js.
+  // Radar de grupos: lo que se detecta en los grupos gremiales.
   //
-  // Sin GROUPS_WEBHOOK_SECRET el canal NO se monta: un endpoint que recibe
-  // mensajes de WhatsApp sin autenticar es una invitacion abierta.
+  // La captura entra por dos vias que NO tocan el protocolo de WhatsApp y por
+  // lo tanto no son baneables: el export nativo del chat subido al CRM, y el
+  // reenvio de un mensaje a Sofi por la Cloud API oficial. La escucha en vivo
+  // via WAHA se retiro el 2026-07-30, cuando WhatsApp baneo la linea de la
+  // asesora que estaba pareada — sanciona el cliente no oficial, no la
+  // conducta, asi que "solo lectura" no protegia de nada.
   groups: {
-    webhookSecret: process.env.GROUPS_WEBHOOK_SECRET || "",
-    // URL publica del bot: es la que se le da a WAHA para que mande los
-    // webhooks. Sin esto, el pareo crea una sesion que no reporta a nadie.
-    publicUrl: (process.env.BOT_PUBLIC_URL || "").replace(/\/+$/, ""),
-    // Interruptor global: deja el servicio vivo pero inerte, sin tocar la
-    // configuracion de ningun grupo. Es el nivel 2 de reversibilidad.
-    enabled: process.env.GROUPS_ENABLED !== "false",
 
     // Digest diario del radar de grupos.
     //

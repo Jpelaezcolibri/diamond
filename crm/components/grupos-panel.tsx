@@ -1,8 +1,3 @@
-"use client";
-
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
-
 export type Grupo = {
   id: string;
   jid: string;
@@ -12,86 +7,41 @@ export type Grupo = {
   created_at: string;
 };
 
-const MODOS: { valor: Grupo["modo"]; etiqueta: string; ayuda: string }[] = [
-  { valor: "ignorar", etiqueta: "Ignorar", ayuda: "Sofi no lo ve. Es el valor por defecto de todo grupo nuevo." },
-  { valor: "sombra", etiqueta: "Sombra", ayuda: "Sofi detecta y registra, sin avisarle a nadie. Para evaluar si acierta." },
-  { valor: "sugerir", etiqueta: "Sugerir", ayuda: "Sofi avisa al asesor con el borrador listo. (Fase 2 — todavía no envía nada.)" },
-];
+// De dónde salió cada grupo. El prefijo del jid lo dice: los que se crean al
+// subir un export llevan "export:", el buzón de reenvíos lleva "reenvio:", y
+// los que quedaron de la escucha en vivo (retirada tras el baneo del 30-jul)
+// tienen un jid real de WhatsApp.
+function origen(jid: string) {
+  if (jid.startsWith("export:")) return { etiqueta: "export", clase: "bg-sky-50 text-sky-700" };
+  if (jid.startsWith("reenvio:")) return { etiqueta: "reenvío", clase: "bg-violet-50 text-violet-700" };
+  return { etiqueta: "histórico", clase: "bg-slate-100 text-slate-500" };
+}
 
 export default function GruposPanel({ grupos }: { grupos: Grupo[] }) {
-  const router = useRouter();
-  const [pendiente, startTransition] = useTransition();
-  const [cambiando, setCambiando] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  async function cambiarModo(id: string, modo: Grupo["modo"]) {
-    setCambiando(id);
-    setError(null);
-    const res = await fetch("/api/grupos/modo", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, modo }),
-    }).catch(() => null);
-
-    setCambiando(null);
-    if (!res || !res.ok) {
-      const body = res ? await res.json().catch(() => ({})) : {};
-      setError(body.error || "No se pudo cambiar el modo");
-      return;
-    }
-    startTransition(() => router.refresh());
-  }
-
   if (grupos.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">
-        Todavía no se descubrió ningún grupo. Aparecen solos acá en cuanto la línea vinculada
-        reciba un mensaje en alguno — sin procesarlo, sólo registrando que existe.
+        Todavía no cargaste ningún grupo. Subí arriba el <code>.txt</code> que exporta WhatsApp
+        y aparece acá.
       </div>
     );
   }
 
   return (
-    <div className="space-y-3">
-      {error && (
-        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
-      )}
-      {grupos.map((g) => (
-        <div
-          key={g.id}
-          className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between"
-        >
-          <div className="min-w-0">
-            <p className="truncate font-medium text-slate-900">{g.nombre || "Grupo sin nombre"}</p>
-            <p className="truncate font-mono text-xs text-slate-400">{g.jid}</p>
+    <div className="divide-y divide-slate-100 rounded-lg border border-slate-200 bg-white">
+      {grupos.map((g) => {
+        const o = origen(g.jid);
+        return (
+          <div key={g.id} className="flex items-center justify-between gap-3 px-4 py-3">
+            <p className="min-w-0 truncate font-medium text-slate-900">
+              {g.nombre || "Grupo sin nombre"}
+            </p>
+            <span className={`shrink-0 rounded px-2 py-0.5 text-xs font-medium ${o.clase}`}>
+              {o.etiqueta}
+            </span>
           </div>
-          <div className="flex shrink-0 gap-1" role="group" aria-label={`Escucha de ${g.nombre || g.jid}`}>
-            {MODOS.map((m) => {
-              const activo = g.modo === m.valor;
-              return (
-                <button
-                  key={m.valor}
-                  type="button"
-                  title={m.ayuda}
-                  disabled={cambiando === g.id || pendiente}
-                  onClick={() => cambiarModo(g.id, m.valor)}
-                  className={[
-                    "rounded-md px-3 py-1.5 text-sm font-medium transition",
-                    activo
-                      ? m.valor === "ignorar"
-                        ? "bg-slate-200 text-slate-700"
-                        : "bg-emerald-600 text-white"
-                      : "text-slate-500 hover:bg-slate-100",
-                    cambiando === g.id ? "opacity-50" : "",
-                  ].join(" ")}
-                >
-                  {m.etiqueta}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

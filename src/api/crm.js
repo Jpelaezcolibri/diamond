@@ -20,161 +20,33 @@ router.use("/api", (req, res, next) => {
   next();
 });
 
-// ── Grupos de WhatsApp (Fase 1, modo sombra) ────────────────────────────
+// ── Grupos de WhatsApp ──────────────────────────────────────────────────
 //
-// El modo de un grupo es la llave de la privacidad del asesor: define si Sofi
-// lo escucha o no. Por eso pasa por aca, con la service key y autenticado,
-// en vez de que el CRM escriba directo contra Supabase.
-const whatsappGroups = require("../data/whatsapp-groups");
+// Ya NO hay endpoints de vinculacion de lineas: el 2026-07-30 WhatsApp baneo
+// la cuenta de la asesora cuya linea estaba pareada con WAHA. La captura ahora
+// entra por dos vias que no tocan el protocolo de WhatsApp —el export nativo
+// del chat y el reenvio a Sofi por la Cloud API— asi que no hay ninguna linea
+// que parear, y por lo tanto ninguna puerta que dejar cerrada.
 const organizations = require("../data/organizations");
-const waha = require("../lib/waha");
 
-// GROUPS_ENABLED tiene que ser un interruptor de verdad.
-//
-// El 2026-07-30 WhatsApp baneo la cuenta de la asesora cuya linea estaba
-// vinculada. Al desconectar todo se descubrio que apagar GROUPS_ENABLED NO
-// alcanzaba: frenaba el webhook y el buffer, pero estos endpoints seguian
-// respondiendo, asi que un clic en "Vincular linea" desde el CRM podia volver a
-// parear el numero — justo lo que no puede pasar mientras Meta revisa una
-// cuenta suspendida. Un interruptor que deja una puerta abierta no es un
-// interruptor.
-//
-// Esto cubre SOLO lo que toca WhatsApp a traves de WAHA (parear, ver estado,
-// importar grupos). Leer lo ya guardado y marcar una senal como revisada no
-// tocan la linea de nadie y siguen disponibles.
-function requiereGruposActivos(req, res, next) {
-  if (!config.groups.enabled) {
-    return res.status(423).json({
-      error:
-        "La escucha de grupos esta desactivada (GROUPS_ENABLED=false). " +
-        "No se puede vincular ni consultar ninguna linea de WhatsApp.",
-    });
-  }
-  next();
-}
-
-// Vincular la linea: crea la sesion en WAHA y la registra. El corte temporal
-// (escucha_desde) queda fijado en este instante — nada anterior se procesa.
-router.post("/api/grupos/sesion", requiereGruposActivos, async (req, res) => {
-  const { nombre, advisorId } = req.body || {};
-  if (!nombre || !/^[a-z0-9_-]{2,40}$/i.test(nombre)) {
-    return res.status(400).json({ error: "Nombre de sesion invalido (letras, numeros, guiones)" });
-  }
-  if (!config.groups.webhookSecret) {
-    return res.status(400).json({ error: "Falta GROUPS_WEBHOOK_SECRET en el bot" });
-  }
+// Metricas del radar. Antes vivian en memoria del bot y se reiniciaban con
+// cada deploy —"desde el ultimo reinicio" era una ventana inutil para decidir
+// nada—. Ahora salen de la base, asi que sobreviven y se pueden comparar.
+router.post("/api/grupos/metricas", async (req, res) => {
   try {
     const org = await organizations.getDefault();
-    const webhookUrl = `${config.groups.publicUrl}/webhook/grupos`;
-    const remota = await waha.crearSesion(nombre, { webhookUrl, webhookSecret: config.groups.webhookSecret });
-    const local = await whatsappGroups.upsertSession(org.id, { nombre, advisorId: advisorId || null });
-    res.json({ ok: true, sesion: local, waha: { status: remota?.status || null } });
+    const dias = Number(req.body?.dias) || 14;
+    res.json({ ok: true, ...(await require("../data/group-signals").resumen(org.id, { dias })) });
   } catch (e) {
-    res.status(502).json({ error: e.message });
+    res.status(500).json({ error: e.message });
   }
-});
-
-// Estado + QR en una sola llamada: es lo que la pantalla de pareo consulta en
-// bucle, y el QR caduca en segundos — pedirlo aparte duplicaria el polling.
-// Solo se pide el QR si la sesion realmente lo esta esperando.
-router.post("/api/grupos/sesion/estado", requiereGruposActivos, async (req, res) => {
-  const { nombre } = req.body || {};
-  if (!nombre) return res.status(400).json({ error: "Falta el nombre de la sesion" });
-  try {
-    const org = await organizations.getDefault();
-    const [remota, locales] = await Promise.all([
-      waha.estadoSesion(nombre).catch((e) => ({ status: "ERROR", error: e.message })),
-      whatsappGroups.listSessions(org.id),
-    ]);
-    const status = remota?.status || null;
-    const qr = status === "SCAN_QR_CODE" ? await waha.qr(nombre).catch(() => null) : null;
-
-    // Si ya quedo vinculada, se marca activa. El corte temporal NO se toca:
-    // se fijo al crear la sesion y reescribirlo abriria la puerta a
-    // reprocesar historial.
-    if (status === "WORKING") await whatsappGroups.upsertSession(org.id, { nombre, estado: "activa" });
-
-    res.json({
-      ok: true,
-      status,
-      qr,
-      error: remota?.error || null,
-      sesion: locales.find((s) => s.nombre === nombre) || null,
-    });
-  } catch (e) {
-    res.status(502).json({ error: e.message });
-  }
-});
-
-// Volver a parear desde cero: descarta las credenciales guardadas y pide un QR
-// nuevo. Es la salida cuando WhatsApp deja de aceptar el dispositivo vinculado
-// —la sesion queda en FAILED y reiniciarla no sirve, porque reintenta con las
-// mismas credenciales rechazadas.
-//
-// Mueve tambien el corte temporal a este instante: al vincular un dispositivo
-// nuevo WhatsApp le resincroniza historial, y esos mensajes viejos no se
-// procesan.
-router.post("/api/grupos/sesion/revincular", requiereGruposActivos, async (req, res) => {
-  const { nombre } = req.body || {};
-  if (!nombre) return res.status(400).json({ error: "Falta el nombre de la sesion" });
-  try {
-    const org = await organizations.getDefault();
-    const remota = await waha.revincular(nombre);
-    const local = await whatsappGroups.upsertSession(org.id, { nombre, estado: "pendiente", reiniciarCorte: true });
-    console.warn(`[grupos] ${nombre} re-vinculada: credenciales descartadas, corte movido a ${local.escucha_desde}`);
-    res.json({ ok: true, status: remota?.status || null, sesion: local });
-  } catch (e) {
-    res.status(502).json({ error: e.message });
-  }
-});
-
-// Importa de una todos los grupos de la linea, en vez de esperar a que llegue
-// un mensaje en cada uno. Nacen TODOS en 'ignorar': importarlos no es
-// escucharlos.
-router.post("/api/grupos/importar", requiereGruposActivos, async (req, res) => {
-  const { sesion } = req.body || {};
-  if (!sesion) return res.status(400).json({ error: "Falta el nombre de la sesion" });
-  try {
-    const org = await organizations.getDefault();
-    let grupos = await waha.listarGrupos(sesion);
-
-    // Si WAHA no devuelve nada, los grupos que YA conocemos igual necesitan
-    // nombre. Los descubre el webhook con cada mensaje, pero de ahi solo sale
-    // el jid: quedan decenas de "Grupo sin nombre", y sin nombre el asesor no
-    // sabe a que grupo ir a responder. Se les pregunta el nombre de a uno,
-    // que no depende del store vacio del motor.
-    if (grupos.length === 0) {
-      const conocidos = (await whatsappGroups.listGroups(org.id)).filter((g) => !g.nombre);
-      if (conocidos.length > 0) {
-        console.warn(`[grupos] WAHA no listo ningun grupo; resolviendo el nombre de ${conocidos.length} ya conocidos.`);
-        const mapa = await waha.nombresPorJid(sesion, conocidos.map((g) => g.jid));
-        grupos = [...mapa].map(([jid, nombre]) => ({ jid, nombre }));
-        console.log(`[grupos] nombres resueltos: ${grupos.length} de ${conocidos.length}`);
-      }
-    }
-
-    const r = await whatsappGroups.importarGrupos(org.id, grupos);
-    const conNombre = grupos.filter((g) => g.nombre).length;
-    console.log(`[grupos] importados ${r.nuevos} nuevos de ${r.total} (${conNombre} con nombre) en la sesion ${sesion}`);
-    res.json({ ok: true, ...r, conNombre });
-  } catch (e) {
-    res.status(502).json({ error: e.message });
-  }
-});
-
-// Metricas en vivo del embudo. Viven en memoria del bot (no en la base), asi
-// que el CRM tiene que preguntarlas. Se exponen aca —con BOT_API_KEY— para que
-// mirarlas no obligue a abrir una terminal.
-router.post("/api/grupos/metricas", (req, res) => {
-  res.json({ ok: true, ...require("../groups/buffer").estado() });
 });
 
 // ── Import de exports .txt ──────────────────────────────────────────────
 //
 // La via segura para leer los grupos: el asesor exporta el chat desde su
 // telefono (funcion nativa de WhatsApp) y sube el archivo. Nada se conecta a
-// la linea de nadie, asi que NO va detras de requiereGruposActivos: ese
-// interruptor protege lo que toca WhatsApp por WAHA, y esto no lo toca.
+// la linea de nadie.
 //
 // Responde 202 con un id y procesa en segundo plano: un export de varios
 // grupos tarda minutos y el navegador cortaria la conexion mucho antes.
@@ -253,21 +125,6 @@ router.post("/api/grupos/senal/estado", async (req, res) => {
     const senal = await require("../data/group-signals").setEstado(org.id, id, estado);
     if (!senal) return res.status(404).json({ error: "Senal no encontrada" });
     res.json({ ok: true, senal });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-router.post("/api/grupos/:id/modo", async (req, res) => {
-  const { modo } = req.body || {};
-  if (!whatsappGroups.MODOS.includes(modo)) {
-    return res.status(400).json({ error: `Modo invalido. Use: ${whatsappGroups.MODOS.join(", ")}` });
-  }
-  try {
-    const org = await organizations.getDefault();
-    const grupo = await whatsappGroups.setModo(org.id, req.params.id, modo);
-    console.log(`[grupos] ${grupo.nombre || grupo.jid} -> ${modo}`);
-    res.json({ ok: true, grupo });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
