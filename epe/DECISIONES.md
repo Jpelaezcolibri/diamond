@@ -74,15 +74,29 @@ fts-storage.fts-v3-index    7.865
 ```
 
 Con cero conversaciones abiertas hay casi 30.000 mensajes de 342 chats
-guardados localmente. **Eso es lo único que estos números prueban: que los
-registros existen y no dependen de la conversación abierta.**
+guardados localmente. Los registros existen y no dependen de la conversación
+abierta.
 
-⚠️ **Pendiente de verificar: si el TEXTO de esos mensajes es legible.** Una
-primera inspección no encontró campo de texto en las muestras, y apareció
-`msgRowOpaqueData`, que sugiere contenido serializado. La existencia del índice
-`fts-v3-index` apunta en la dirección contraria. Hasta resolverlo, D7 vale
-para el *alcance* (todos los chats, sin abrir ninguno) pero **no** para la
-*legibilidad del contenido*.
+**Pero el contenido está cifrado en reposo, así que este camino NO sirve.** El
+texto no vive en ningún campo del registro (se revisaron los 42-73 campos, sin
+truncar): vive en `msgRowOpaqueData`, que tiene esta forma, idéntica en chats
+individuales y en grupos:
+
+```
+_data:   ArrayBuffer(96-144)   el contenido, cifrado
+iv:      Uint8Array(16)        vector de inicializacion
+_keyId:  number                que llave lo cifro
+_scheme: number                version del esquema
+```
+
+*Conclusión:* la IndexedDB da **alcance** (todos los chats sin abrir ninguno)
+pero no da **contenido**. Sin la llave, esos bytes no valen nada.
+
+**Y la llave no se busca.** Las dos vías para obtenerla rompen principios
+congelados: leer el material criptográfico viola D8, y enganchar el JavaScript
+de WhatsApp para que descifre exige inyectar en el mundo principal, que viola
+P6 y es justo lo que dispara detección. Quedan descartadas por diseño, no por
+dificultad.
 
 *Consecuencia:* el host lee todos los grupos de la lista blanca sin abrir
 ninguno. No hay que rotar conversación por conversación, que era la alternativa
