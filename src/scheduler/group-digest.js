@@ -103,6 +103,10 @@ async function runOnce({ ahora = new Date(), forzar = false } = {}) {
   // listActive y no getDefault: el digest es multi-tenant desde el dia uno.
   for (const org of await organizations.listActive()) {
     if (!forzar && enviadoHoy.get(org.id) === dia) continue;
+    // Interruptor del motor: cada envio es una plantilla de Meta cobrada. Las
+    // señales NO se marcan como enviadas, asi que cuando se vuelva a prender
+    // el digest sale con todo lo que se acumulo.
+    if (org.radar_activo === false) continue;
 
     try {
       const señales = await groupSignals.pendientesDigest(org.id);

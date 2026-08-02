@@ -7,6 +7,7 @@ import ErrorBanner from "@/components/error-banner";
 import GruposPanel, { type Grupo } from "@/components/grupos-panel";
 import SenalesGrupos, { type Signal } from "@/components/senales-grupos";
 import ImportarExport from "@/components/importar-export";
+import RadarToggle from "@/components/radar-toggle";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +36,13 @@ export default async function GruposPage() {
   // Por eso cada cosa trae su propia consulta acotada, y las demandas CON
   // match —las unicas accionables— van aparte para que ningun volumen de
   // ofertas pueda desplazarlas.
+  // Estado del interruptor. Si la migración del toggle todavía no corrió, la
+  // columna no existe y la consulta falla: se asume ENCENDIDO, que es el
+  // comportamiento que la organización tenía antes de que el botón existiera.
+  const orgRes = await supabase
+    .from("organizations").select("radar_activo").limit(1).maybeSingle();
+  const radarActivo = orgRes.data?.radar_activo !== false;
+
   const conMatchQuery = supabase
     .from("group_signals")
     .select("*")
@@ -106,9 +114,13 @@ export default async function GruposPage() {
 
       {gruposRes.hasError && <ErrorBanner message={gruposRes.message} />}
 
-      <div className="mb-6">
-        <ImportarExport />
-      </div>
+      <RadarToggle activo={radarActivo} />
+
+      {radarActivo && (
+        <div className="mb-6">
+          <ImportarExport />
+        </div>
+      )}
 
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[

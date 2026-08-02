@@ -122,6 +122,25 @@ router.get("/api/grupos/importar-export/:jobId", async (req, res) => {
 // Con volumen alto —el 2026-07-29 entraron ~980 senales en un dia— sin una
 // marca de "ya lo mire" el asesor relee los mismos pedidos todos los dias y
 // los nuevos se pierden entre ellos. NO borra nada: solo cambia el estado.
+// Prender o apagar el motor de Radar. Apaga lo que se cobra —clasificar un
+// export y mandar el digest—; nunca esconde lo ya detectado.
+router.post("/api/grupos/radar", async (req, res) => {
+  const { activo } = req.body || {};
+  if (typeof activo !== "boolean") {
+    return res.status(400).json({ error: "Falta 'activo' (true o false)" });
+  }
+  try {
+    const org = req.body?.orgId
+      ? { id: req.body.orgId }
+      : await organizations.getDefault();
+    const actualizada = await organizations.setRadarActivo(org.id, activo);
+    console.log(`[radar] motor ${activo ? "ENCENDIDO" : "APAGADO"} para ${actualizada.name || org.id}`);
+    res.json({ ok: true, radar_activo: actualizada.radar_activo });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 router.post("/api/grupos/senal/estado", async (req, res) => {
   const { id, estado } = req.body || {};
   if (!id) return res.status(400).json({ error: "Falta el id de la senal" });

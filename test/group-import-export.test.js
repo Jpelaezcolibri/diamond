@@ -17,6 +17,7 @@ const groupSignals = require("../src/data/group-signals");
 const whatsappGroups = require("../src/data/whatsapp-groups");
 const allyProperties = require("../src/data/ally-properties");
 const properties = require("../src/data/properties");
+const organizations = require("../src/data/organizations");
 
 const ORG = { id: "org-1", name: "Diamond" };
 
@@ -31,10 +32,14 @@ function fecha(diasAtras) {
 }
 
 // Reemplaza todo lo que toca Supabase y devuelve los almacenes para inspección.
-function mockDatos(t, { propiedades = [] } = {}) {
+function mockDatos(t, { propiedades = [], radarActivo = true } = {}) {
   const señales = [];
   const aliadas = [];
   const grupos = new Map();
+
+  // El interruptor del motor. Sin este mock cada import saldría a consultar la
+  // base real solo para preguntar si Radar está prendido.
+  t.mock.method(organizations, "radarActivo", async () => radarActivo);
 
   t.mock.method(whatsappGroups, "asegurarGrupoVirtual", async (orgId, { prefijo, nombre }) => {
     const jid = `${prefijo}:${whatsappGroups.slug(nombre)}`;

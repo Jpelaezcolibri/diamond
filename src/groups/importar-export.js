@@ -33,6 +33,7 @@ const { cruzar } = require("./match");
 const { guardarOferta } = require("./ofertas");
 const groupSignals = require("../data/group-signals");
 const whatsappGroups = require("../data/whatsapp-groups");
+const organizations = require("../data/organizations");
 
 // Corte temporal por defecto. Un export trae TODO el historial del grupo —
 // pueden ser anios. Nada de eso sirve: una demanda de hace seis meses ya se
@@ -60,6 +61,18 @@ function nombreDeArchivo(nombre) {
 // anterior. Es lo que vuelve viable exportar dos veces al dia: sin esto, cada
 // carga reclasifica —y vuelve a pagar— todo el rango elegido.
 async function importar(org, archivos, { dias = DIAS_DEFAULT, incremental = true, onProgreso = () => {} } = {}) {
+  // El interruptor se consulta ACA y no en el endpoint: clasificar es la parte
+  // cara del embudo, y la garantia tiene que valer venga la llamada de donde
+  // venga —la pantalla, un script, un worker futuro—. Se relee de la base en
+  // vez de confiar en el `org` recibido, que a veces es solo `{ id }`.
+  if (!(await organizations.radarActivo(org.id))) {
+    const err = new Error(
+      "El motor de Radar está apagado. Prendelo en la pantalla de Grupos para volver a procesar."
+    );
+    err.code = "RADAR_APAGADO";
+    throw err;
+  }
+
   const stats = {
     archivos: archivos.length,
     crudos: 0, fueraDeCorte: 0, repetidos: 0,
