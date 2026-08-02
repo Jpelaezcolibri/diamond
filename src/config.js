@@ -88,6 +88,12 @@ const config = {
       templateLang: process.env.WHATSAPP_DIGEST_LANG || "es",
       // CSV de telefonos para probar sin tocar a los asesores reales.
       to: (process.env.GROUPS_DIGEST_TO || "").split(",").map((s) => s.trim()).filter(Boolean),
+      // A que especialidades se les manda. Solo venta: es el unico mercado con
+      // inventario cargado, asi que una demanda de arriendo o de vehiculos no
+      // tiene con que cruzarse y el envio de plantilla se paga igual. Vacio =
+      // todas, para cuando esos mercados existan.
+      especialidades: (process.env.GROUPS_DIGEST_ESPECIALIDADES ?? "venta")
+        .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean),
     },
   },
 };

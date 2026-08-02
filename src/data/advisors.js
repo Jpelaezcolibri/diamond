@@ -50,13 +50,46 @@ async function lastTransferredId(orgId, rotationIds) {
   }
 }
 
-// Todos los asesores que pueden RECIBIR algo, sin importar especialidad.
+// Las PERSONAS que pueden recibir algo. Devuelve personas, no filas — la
+// distincion es el punto de esta funcion.
+//
+// Una misma persona puede tener varias filas en `advisors`, una por
+// especialidad: Danna Ospina existe tres veces (arriendo, vehiculos, venta) y
+// es un modelo legitimo, porque el enrutamiento de leads es por especialidad.
+// Pero quien recibe un mensaje es una persona con un telefono, no un rol. Sin
+// deduplicar, a Danna le llegaban tres digests identicos cada manana — la forma
+// mas rapida de ensenarle a un asesor a ignorar el digest, y ademas se paga
+// cada envio de plantilla.
+//
+// `especialidades` acota a que mercados se le manda. Hoy Diamond solo tiene
+// inventario de venta: mandarle el digest al asesor de arriendo o al de
+// vehiculos cuesta plata y no puede terminar en negocio, porque no hay con que
+// cruzar.
 //
 // Mismo criterio de elegibilidad que la rotacion de transferencias (activo +
-// recibe_transferencias), porque es la misma pregunta de negocio: quien recibe
-// leads es quien puede actuar sobre lo que se detecta en un grupo. Lo usa el
-// digest del radar.
-async function listElegibles(orgId) {
+// recibe_transferencias): es la misma pregunta de negocio.
+function elegiblesEnLista(list, especialidades = []) {
+  const permitidas = especialidades.map((e) => String(e).toLowerCase());
+  const elegibles = (list || []).filter(
+    (a) =>
+      a.activo &&
+      a.recibe_transferencias !== false &&
+      a.phone &&
+      (permitidas.length === 0 || permitidas.includes(String(a.especialidad || "").toLowerCase()))
+  );
+
+  // Una fila por telefono. Gana la que tiene login del CRM —es la identidad
+  // con la que esa persona actua sobre las señales— y si ninguna lo tiene, la
+  // primera por id, para que el resultado no dependa del orden de la consulta.
+  const porTelefono = new Map();
+  for (const a of [...elegibles].sort((x, y) => String(x.id).localeCompare(String(y.id)))) {
+    const previo = porTelefono.get(a.phone);
+    if (!previo || (!previo.auth_user_id && a.auth_user_id)) porTelefono.set(a.phone, a);
+  }
+  return [...porTelefono.values()];
+}
+
+async function listElegibles(orgId, { especialidades = [] } = {}) {
   let list;
   if (!supabase) {
     list = memory.advisors.filter((a) => a.org_id === orgId);
@@ -66,7 +99,7 @@ async function listElegibles(orgId) {
     if (error) throw error;
     list = data || [];
   }
-  return list.filter((a) => a.activo && a.recibe_transferencias !== false && a.phone);
+  return elegiblesEnLista(list, especialidades);
 }
 
 // Busca el asesor de la org que recibe ESTE lead organico: rotacion uno a uno
@@ -192,4 +225,4 @@ async function searchByName(orgId, q) {
   return data || [];
 }
 
-module.exports = { findForTransfer, findByAuthUserId, findById, findByPhone, mismoTelefono, buscarEnLista, searchByName, rotationCandidates, nextInRotation, listElegibles };
+module.exports = { findForTransfer, findByAuthUserId, findById, findByPhone, mismoTelefono, buscarEnLista, searchByName, rotationCandidates, nextInRotation, listElegibles, elegiblesEnLista };

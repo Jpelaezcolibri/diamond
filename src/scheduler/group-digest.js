@@ -83,8 +83,14 @@ function buildDigest(señales, advisor) {
 
 // Los mismos elegibles que reciben transferencias: quien recibe leads es quien
 // puede actuar sobre un match. El admin lo ve todo en el CRM.
+//
+// Acotado a las especialidades con inventario cargado —hoy solo venta— y
+// deduplicado por persona: una asesora con tres especialidades es una asesora,
+// no tres destinatarios.
 async function destinatarios(orgId) {
-  return advisors.listElegibles(orgId);
+  return advisors.listElegibles(orgId, {
+    especialidades: config.groups.digest.especialidades,
+  });
 }
 
 async function runOnce({ ahora = new Date(), forzar = false } = {}) {
