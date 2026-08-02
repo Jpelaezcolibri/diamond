@@ -8,6 +8,11 @@ const { computeScore, isQualified } = require("./qualification");
 const propertyOwnerAlerts = require("../data/property-owner-alerts");
 const { buildClientLink, buildAllyClientMatchAlert, buildAppointmentAlert, buildCaptadorInterestAlert } = require("../notifications/advisor");
 const { LEGAL_TOPICS, LEGAL_DISCLAIMER } = require("./knowledge");
+const crypto = require("node:crypto");
+const groupSignals = require("../data/group-signals");
+const whatsappGroups = require("../data/whatsapp-groups");
+const { cruzar: cruzarGrupos } = require("../groups/match");
+const { plano } = require("../groups/texto");
 
 const TOOL_DEFINITIONS = [
   {
@@ -134,6 +139,28 @@ const TOOL_DEFINITIONS = [
         descripcion: { type: "string", description: "Resto de detalles relevantes del anuncio (area, habitaciones, etc) como texto libre" },
         inmobiliaria_origen: { type: "string", description: "Nombre de la inmobiliaria del aliado, si la menciona" },
         contacto_nombre: { type: "string", description: "Nombre de la persona que comparte la propiedad. OBLIGATORIO: si el mensaje no lo trae y no esta en el historial, NO llames esta herramienta todavia — pregunta primero el nombre del asesor o colega que la ingresa." },
+      },
+      required: ["contacto_nombre"],
+    },
+  },
+  {
+    name: "registrar_demanda_colega",
+    description:
+      "Registra un PEDIDO de un colega de otra inmobiliaria: alguien que BUSCA algo porque tiene un cliente. Es la contraparte de registrar_propiedad_aliado (que es para el colega que OFRECE una propiedad). Usala cuando un asesor de la casa te reenvia un mensaje de un grupo gremial del estilo 'tengo cliente para apto 3 alcobas en Laureles hasta 400 millones' o 'alguien maneja local en Envigado?'. NUNCA la uses para un cliente final que busca para si mismo (ese caso es registrar_dato_lead): esto es un colega buscando para SU cliente, y el negocio se comparte. Extrae los datos del texto reenviado aunque venga en formato libre.",
+    input_schema: {
+      type: "object",
+      properties: {
+        operacion: { type: "string", enum: ["Venta", "Arriendo"], description: "Si el mensaje no lo deja claro, omite el campo" },
+        tipo: { type: "string", description: "Apartamento, Casa, Local, Oficina, Bodega, Lote, Finca…" },
+        zona: { type: "string", description: "Barrio o sector, ej 'Laureles', 'Loma del Esmeraldal'. Si solo nombra el municipio, eso va en ciudad" },
+        ciudad: { type: "string", description: "Municipio, ej 'Medellin', 'Envigado'" },
+        presupuesto_min: { type: "integer", description: "Piso en pesos, sin puntos. 'desde 300 millones' -> 300000000. Omite si no lo dice" },
+        presupuesto_max: { type: "integer", description: "Tope en pesos, sin puntos. 'hasta 400 millones' o '400 palos' -> 400000000. Un precio unico va aca" },
+        habitaciones: { type: "integer", description: "Alcobas pedidas. Omite si no las menciona" },
+        contacto_nombre: { type: "string", description: "Nombre del colega que hace el pedido. OBLIGATORIO: si el mensaje reenviado no lo trae y no esta en el historial, NO llames esta herramienta todavia — pregunta primero de quien es el pedido." },
+        contacto_telefono: { type: "string", description: "Telefono del colega, si el mensaje lo trae" },
+        grupo: { type: "string", description: "Nombre del grupo de donde salio el pedido, si el asesor lo menciona" },
+        detalle: { type: "string", description: "Resto del pedido en pocas palabras (area, banos, garaje, urgencia)" },
       },
       required: ["contacto_nombre"],
     },
@@ -454,7 +481,109 @@ async function executeTool(name, input, ctx) {
     return "Propiedad de aliado registrada para la red. Agradece brevemente a quien la compartio, en 1-2 frases, SIN tratarlo como cliente interesado en comprar: no lo califiques con registrar_dato_lead, no le armes ficha, no lo transfieras a un asesor de ventas.";
   }
 
+  if (name === "registrar_demanda_colega") {
+    return registrarDemandaColega(input, ctx);
+  }
+
   return `Herramienta desconocida: ${name}`;
 }
 
-module.exports = { TOOL_DEFINITIONS, executeTool, maybeCaptadorAlert };
+// El pedido de un colega, reenviado por un asesor a Sofi.
+//
+// Es la contraparte viva de `registrar_propiedad_aliado`. Existe porque el
+// reenvio es la otra via segura para leer los grupos: el asesor ve el pedido
+// bueno entre mil mensajes, se lo manda a Sofi por la Cloud API oficial —
+// funcion nativa de WhatsApp, cero riesgo de baneo— y Sofi hace en dos
+// segundos lo que el no puede hacer a mano: cruzarlo contra todo el
+// inventario y contestarle con las refs que calzan.
+//
+// Antes de esto, un reenvio de demanda no dejaba rastro: Sofi listaba unas
+// propiedades en el chat y la informacion moria ahi. No entraba al CRM, no
+// tenia estado, no se podia repartir entre asesores ni contar en el digest.
+async function registrarDemandaColega(input, ctx) {
+  const contacto = String(input?.contacto_nombre || "").trim();
+  if (!contacto) {
+    return "NO registre el pedido: falta el nombre del colega que lo hace. Preguntale de quien es el pedido y volve a llamar esta herramienta cuando lo tengas.";
+  }
+
+  // Se traduce al shape del clasificador para poder reusar el mismo motor de
+  // cruce que corre sobre los exports: mismas compuertas (zona por token
+  // exacto, precio como banda), mismos puntajes, mismas razones.
+  const clasificado = {
+    clase: "demanda",
+    confianza: 1,
+    operacion: String(input.operacion || "").toLowerCase(),
+    tipo: input.tipo || "",
+    zona: input.zona || "",
+    ciudad: input.ciudad || "",
+    precio_min: input.presupuesto_min || 0,
+    precio_max: input.presupuesto_max || 0,
+    habitaciones: input.habitaciones || 0,
+    contacto: input.contacto_telefono || "",
+    notas: input.detalle || "",
+    mensaje: {
+      autor: contacto,
+      texto: ctx.lastUserMessage || "",
+      // La demanda reenviada es de ahora: el asesor la acaba de ver.
+      fechaIso: new Date().toISOString(),
+    },
+  };
+
+  const { demandas } = await cruzarGrupos([clasificado], { org: ctx.org });
+  const demanda = demandas[0] || { ...clasificado, matches: [] };
+  const matches = demanda.matches || [];
+
+  // Persistir es best-effort: si la tabla o la migracion no estan, el asesor
+  // igual se lleva la respuesta con los matches, que es el valor inmediato.
+  try {
+    const grupo = await whatsappGroups.asegurarGrupoVirtual(ctx.org.id, {
+      prefijo: "reenvio",
+      nombre: input.grupo || "Reenvíos a Sofi",
+    });
+    await groupSignals.create(ctx.org.id, {
+      group_id: grupo.id,
+      // Dos asesores que reenvian el mismo pedido caen en el mismo id y el
+      // indice unico lo deduplica: el segundo no crea una senal nueva.
+      wa_message_id: "reenvio:" + crypto
+        .createHash("sha256")
+        .update(`${plano(contacto)}|${plano(ctx.lastUserMessage || "")}`)
+        .digest("hex").slice(0, 40),
+      autor_nombre: contacto,
+      autor_telefono: input.contacto_telefono || null,
+      clase: "demanda",
+      confianza: 1,
+      operacion: clasificado.operacion || null,
+      tipo: input.tipo || null,
+      zona: input.zona || null,
+      ciudad: input.ciudad || null,
+      precio_min: input.presupuesto_min || null,
+      precio_max: input.presupuesto_max || null,
+      habitaciones: input.habitaciones || null,
+      contacto: input.contacto_telefono || null,
+      texto_original: ctx.lastUserMessage || null,
+      matches,
+      origen: "reenvio",
+      fecha_mensaje: clasificado.mensaje.fechaIso,
+    });
+  } catch (e) {
+    console.warn("[tools] No se pudo persistir la demanda del colega:", e.message);
+  }
+
+  if (matches.length === 0) {
+    const porque = demanda.sinZona
+      ? " El pedido no trae zona ni ciudad, asi que no se pudo cruzar: si el colega la menciona, pasamela y lo vuelvo a mirar."
+      : "";
+    return `Pedido de ${contacto} registrado. NO tenemos nada que calce.${porque} Deciselo asi al asesor, corto y sin adornos.`;
+  }
+
+  const lista = matches
+    .map((m) => {
+      const fuente = m.fuente === "diamond" ? "propia" : `de aliado${m.inmobiliaria ? ` (${m.inmobiliaria})` : ""}`;
+      return `- ${m.ref ? `ref ${m.ref}` : "sin ref"} · ${fuente} · ${m.zona || "sin zona"} · ${m.precio || "sin precio"}${m.habitaciones ? ` · ${m.habitaciones} alcobas` : ""} · calza por: ${m.razones.join(", ")}${m.link ? `\n  ${m.link}` : ""}`;
+    })
+    .join("\n");
+
+  return `Pedido de ${contacto} registrado. Calzan ${matches.length} ${matches.length === 1 ? "propiedad" : "propiedades"}:\n${lista}\n\nPasale la lista al asesor tal cual, con los links. Recordale que el le escribe al colega desde su telefono — vos no escribis en ningun grupo. Si hay propiedad propia, esa va primero: la comision completa vale mas que la compartida.`;
+}
+
+module.exports = { TOOL_DEFINITIONS, executeTool, maybeCaptadorAlert, registrarDemandaColega };
