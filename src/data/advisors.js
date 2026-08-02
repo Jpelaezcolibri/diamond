@@ -50,6 +50,25 @@ async function lastTransferredId(orgId, rotationIds) {
   }
 }
 
+// Todos los asesores que pueden RECIBIR algo, sin importar especialidad.
+//
+// Mismo criterio de elegibilidad que la rotacion de transferencias (activo +
+// recibe_transferencias), porque es la misma pregunta de negocio: quien recibe
+// leads es quien puede actuar sobre lo que se detecta en un grupo. Lo usa el
+// digest del radar.
+async function listElegibles(orgId) {
+  let list;
+  if (!supabase) {
+    list = memory.advisors.filter((a) => a.org_id === orgId);
+  } else {
+    const { data, error } = await supabase
+      .from("advisors").select("*").eq("org_id", orgId).eq("activo", true);
+    if (error) throw error;
+    list = data || [];
+  }
+  return list.filter((a) => a.activo && a.recibe_transferencias !== false && a.phone);
+}
+
 // Busca el asesor de la org que recibe ESTE lead organico: rotacion uno a uno
 // entre los elegibles de la especialidad. Fallbacks: cualquier elegible activo
 // de la org, y si no hay tabla poblada, el asesor por defecto de la
@@ -173,4 +192,4 @@ async function searchByName(orgId, q) {
   return data || [];
 }
 
-module.exports = { findForTransfer, findByAuthUserId, findById, findByPhone, mismoTelefono, buscarEnLista, searchByName, rotationCandidates, nextInRotation };
+module.exports = { findForTransfer, findByAuthUserId, findById, findByPhone, mismoTelefono, buscarEnLista, searchByName, rotationCandidates, nextInRotation, listElegibles };

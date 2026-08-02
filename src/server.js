@@ -94,6 +94,9 @@ app.listen(config.port, () => {
   // no hay citas persistidas que recordar).
   if (config.supabaseUrl) require("./scheduler/reminders").start();
   if (config.supabaseUrl) require("./scheduler/followups").start();
+  // Digest diario del radar de grupos: lo que entro por export o por reenvio
+  // no le sirve a nadie si hay que abrir el CRM para verlo.
+  if (config.supabaseUrl) require("./scheduler/group-digest").start();
   // Vacia el buffer de grupos aunque no se llegue a un lote completo: sin
   // esto, un grupo tranquilo dejaria sus mensajes esperando indefinidamente.
   if (config.groups.webhookSecret && config.groups.enabled) require("./groups/buffer").start();

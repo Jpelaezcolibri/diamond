@@ -165,6 +165,18 @@ const TOOL_DEFINITIONS = [
       required: ["contacto_nombre"],
     },
   },
+  {
+    name: "consultar_radar_grupos",
+    description:
+      "Lista lo detectado en los grupos gremiales: pedidos de colegas que calzan con el inventario y propiedades que los colegas publicaron. Usala cuando un ASESOR de la casa pregunte por el radar, responda al digest diario (ej 'VER', 'mostrame', 'que hay hoy'), o pida ver los pedidos o las propiedades de colegas. NO la uses con un cliente final: esto es informacion interna del equipo.",
+    input_schema: {
+      type: "object",
+      properties: {
+        clase: { type: "string", enum: ["demanda", "oferta"], description: "'demanda' son pedidos de colegas, 'oferta' son propiedades que publicaron. Omite para ver ambas" },
+        dias: { type: "integer", description: "Cuantos dias atras mirar. Por defecto 7" },
+      },
+    },
+  },
 ];
 
 // Si la propiedad de interes tiene captador, arma el aviso inmediato para su
@@ -485,6 +497,10 @@ async function executeTool(name, input, ctx) {
     return registrarDemandaColega(input, ctx);
   }
 
+  if (name === "consultar_radar_grupos") {
+    return consultarRadarGrupos(input, ctx);
+  }
+
   return `Herramienta desconocida: ${name}`;
 }
 
@@ -586,4 +602,65 @@ async function registrarDemandaColega(input, ctx) {
   return `Pedido de ${contacto} registrado. Calzan ${matches.length} ${matches.length === 1 ? "propiedad" : "propiedades"}:\n${lista}\n\nPasale la lista al asesor tal cual, con los links. Recordale que el le escribe al colega desde su telefono — vos no escribis en ningun grupo. Si hay propiedad propia, esa va primero: la comision completa vale mas que la compartida.`;
 }
 
-module.exports = { TOOL_DEFINITIONS, executeTool, maybeCaptadorAlert, registrarDemandaColega };
+// El detalle del radar, bajo demanda.
+//
+// Cierra el circuito del digest: la plantilla de las 7am solo puede llevar un
+// resumen (los parametros de Meta no admiten saltos de linea), asi que el
+// asesor responde y —con la ventana de 24h ya abierta por esa respuesta— aca
+// se le manda todo en texto libre.
+async function consultarRadarGrupos(input, ctx) {
+  const dias = input?.dias > 0 ? input.dias : 7;
+  const desde = new Date(Date.now() - dias * 86400000).toISOString();
+
+  let señales;
+  try {
+    señales = await groupSignals.list(ctx.org.id, { clase: input?.clase || null, limit: 100 });
+  } catch (e) {
+    console.warn("[tools] No se pudo leer el radar de grupos:", e.message);
+    return "No pude consultar el radar en este momento. Decile al asesor que lo mire en el CRM, en la pantalla de Grupos.";
+  }
+
+  // Por fecha del MENSAJE cuando la hay: en un export, created_at es el dia de
+  // la subida y todas las señales parecerian de hoy.
+  const recientes = (señales || []).filter((s) => (s.fecha_mensaje || s.created_at) >= desde);
+  if (recientes.length === 0) {
+    return `No hay nada nuevo en el radar de los ultimos ${dias} dias. Deciselo corto, sin adornos.`;
+  }
+
+  const demandas = recientes.filter((s) => s.clase === "demanda" && (s.matches || []).length > 0);
+  const ofertas = recientes.filter((s) => s.clase === "oferta");
+  const bloques = [];
+
+  if (demandas.length > 0) {
+    bloques.push(
+      `PEDIDOS DE COLEGAS QUE CALZAN (${demandas.length}):\n` +
+      demandas.slice(0, 10).map((s) => {
+        const que = [s.tipo, s.zona].filter(Boolean).join(" en ") || "algo";
+        const tope = s.precio_max ? ` hasta $${Number(s.precio_max).toLocaleString("es-CO")}` : "";
+        const refs = (s.matches || []).slice(0, 3)
+          .map((m) => `${m.ref || "sin ref"}${m.fuente === "aliado" ? " (aliado)" : ""}`)
+          .join(", ");
+        return `- ${s.autor_nombre || "Un colega"} busca ${que}${tope} → tenemos ${refs}`;
+      }).join("\n")
+    );
+  }
+
+  if (ofertas.length > 0) {
+    bloques.push(
+      `PROPIEDADES DE COLEGAS (${ofertas.length}):\n` +
+      ofertas.slice(0, 10).map((s) => {
+        const que = [s.tipo, s.zona].filter(Boolean).join(" en ") || "propiedad";
+        const precio = s.precio_max ? ` $${Number(s.precio_max).toLocaleString("es-CO")}` : "";
+        return `- ${que}${precio} — ${s.autor_nombre || "sin contacto"}`;
+      }).join("\n")
+    );
+  }
+
+  if (bloques.length === 0) {
+    return `Hay ${recientes.length} señales de los ultimos ${dias} dias, pero ningun pedido calza con el inventario. Deciselo asi.`;
+  }
+
+  return `${bloques.join("\n\n")}\n\nPasaselo al asesor en este formato, sin agregar propiedades que no esten en la lista. Recordale que EL le escribe al colega desde su telefono: vos no escribis en ningun grupo. El detalle completo, con el borrador listo para copiar, esta en el CRM → Grupos.`;
+}
+
+module.exports = { TOOL_DEFINITIONS, executeTool, maybeCaptadorAlert, registrarDemandaColega, consultarRadarGrupos };

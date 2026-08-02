@@ -74,6 +74,25 @@ const config = {
     // Interruptor global: deja el servicio vivo pero inerte, sin tocar la
     // configuracion de ningun grupo. Es el nivel 2 de reversibilidad.
     enabled: process.env.GROUPS_ENABLED !== "false",
+
+    // Digest diario del radar de grupos.
+    //
+    // Sale por PLANTILLA porque a las 7am casi nunca hay ventana de 24h
+    // abierta con el asesor, y fuera de esa ventana Meta rechaza el texto
+    // libre. La plantilla lleva el resumen; el detalle completo se pide
+    // respondiendo, que es lo que abre la ventana.
+    //
+    // Requiere la migracion 2026-08-01_radar_grupos (columna
+    // digest_enviado_at); si falta, el worker se auto-desactiva con un warn.
+    digest: {
+      enabled: process.env.GROUPS_DIGEST_ENABLED !== "false",
+      hour: parseInt(process.env.GROUPS_DIGEST_HOUR || "7", 10), // hora Colombia
+      intervalMin: parseInt(process.env.GROUPS_DIGEST_INTERVAL_MIN || "15", 10),
+      templateName: process.env.WHATSAPP_DIGEST_TEMPLATE || "radar_grupos",
+      templateLang: process.env.WHATSAPP_DIGEST_LANG || "es",
+      // CSV de telefonos para probar sin tocar a los asesores reales.
+      to: (process.env.GROUPS_DIGEST_TO || "").split(",").map((s) => s.trim()).filter(Boolean),
+    },
   },
 };
 

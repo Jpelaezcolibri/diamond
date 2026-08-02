@@ -155,6 +155,62 @@ async function resumen(orgId, { dias = 14 } = {}) {
   };
 }
 
+// ── Digest diario ────────────────────────────────────────────────────────
+
+// Lo que todavia no se conto en ningun digest y vale la pena contar.
+//
+// Filtra en la consulta y no en memoria porque esta tabla crece sin techo:
+// el indice parcial `group_signals_digest_pend` existe justo para esto.
+//
+// "Vale la pena contar" = una demanda que calzo con algo, o una oferta (que
+// siempre suma inventario). Una demanda sin match no se cuenta: es la fatiga
+// de alertas, que es el riesgo principal de esta direccion.
+async function pendientesDigest(orgId, { limit = 200 } = {}) {
+  if (!supabase) {
+    return memory.groupSignals
+      .filter((s) => s.org_id === orgId && !s.digest_enviado_at && !s.digest_omitida)
+      .filter((s) => s.clase === "oferta" || (s.matches || []).length > 0)
+      .slice(0, limit);
+  }
+  const { data, error } = await supabase
+    .from("group_signals")
+    .select("*")
+    .eq("org_id", orgId)
+    .is("digest_enviado_at", null)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) {
+    if (esColumnaFaltante(error)) return null; // el worker se auto-desactiva
+    throw error;
+  }
+  return (data || []).filter((s) => s.clase === "oferta" || (s.matches || []).length > 0);
+}
+
+// Se marca ANTES de enviar. Duplicarle el digest a un asesor entrena a
+// ignorarlo; perderlo una vez no.
+async function marcarDigest(orgId, ids) {
+  if (!ids.length) return;
+  const ahora = new Date().toISOString();
+  if (!supabase) {
+    for (const s of memory.groupSignals) if (ids.includes(s.id)) s.digest_enviado_at = ahora;
+    return;
+  }
+  const { error } = await supabase
+    .from("group_signals").update({ digest_enviado_at: ahora }).eq("org_id", orgId).in("id", ids);
+  if (error) throw error;
+}
+
+async function revertirDigest(orgId, ids) {
+  if (!ids.length) return;
+  if (!supabase) {
+    for (const s of memory.groupSignals) if (ids.includes(s.id)) s.digest_enviado_at = null;
+    return;
+  }
+  const { error } = await supabase
+    .from("group_signals").update({ digest_enviado_at: null }).eq("org_id", orgId).in("id", ids);
+  if (error) console.error("[digest] No se pudo revertir el claim:", error.message);
+}
+
 // Deja constancia de que el aviso al asesor SALIO.
 //
 // Sin esto la pregunta "¿le llego la alerta a la asesora?" no tiene respuesta:
@@ -172,7 +228,11 @@ async function marcarEnviada(orgId, groupId, waMessageId) {
   if (error) console.error("[grupos] No se pudo marcar la señal como enviada:", error.message);
 }
 
-module.exports = { create, list, setEstado, resumen, marcarEnviada, CLASES, ORIGENES, _resetBlindaje };
+module.exports = {
+  create, list, setEstado, resumen, marcarEnviada,
+  pendientesDigest, marcarDigest, revertirDigest,
+  CLASES, ORIGENES, _resetBlindaje,
+};
 
 // Solo para tests: el flag de "falta la migracion" es de proceso.
 function _resetBlindaje() {
