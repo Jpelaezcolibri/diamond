@@ -58,6 +58,15 @@ function mockDatos(t, { propiedades = [] } = {}) {
     return creada;
   });
 
+  // La marca de agua del import: se calcula sobre las señales ya guardadas,
+  // igual que la real.
+  t.mock.method(groupSignals, "ultimaFechaImportada", async (orgId, groupId) => {
+    const fechas = señales
+      .filter((s) => s.group_id === groupId && s.fecha_mensaje)
+      .map((s) => s.fecha_mensaje);
+    return fechas.length ? fechas.sort().at(-1) : null;
+  });
+
   // cruzar() consulta el inventario propio y la red de aliados.
   t.mock.method(properties, "search", async () => propiedades);
   t.mock.method(allyProperties, "search", async () => []);
@@ -143,9 +152,9 @@ test("deduplicar conserva el primero y cuenta los repetidos", () => {
 test("el corte temporal descarta lo viejo y lo que no se puede fechar", () => {
   const { dentro, fuera } = aplicarCorte(
     [
-      { fechaIso: new Date().toISOString() },
-      { fechaIso: new Date(Date.now() - 60 * 86400000).toISOString() },
-      { fechaIso: null },
+      { instanteIso: new Date().toISOString() },
+      { instanteIso: new Date(Date.now() - 60 * 86400000).toISOString() },
+      { instanteIso: null },
     ],
     30
   );
@@ -154,7 +163,7 @@ test("el corte temporal descarta lo viejo y lo que no se puede fechar", () => {
 });
 
 test("sin días de corte pasa todo", () => {
-  const { dentro, fuera } = aplicarCorte([{ fechaIso: null }, { fechaIso: "2020-01-01T00:00:00Z" }], null);
+  const { dentro, fuera } = aplicarCorte([{ instanteIso: null }, { instanteIso: "2020-01-01T00:00:00Z" }], null);
   assert.strictEqual(dentro.length, 2);
   assert.strictEqual(fuera, 0);
 });
@@ -245,7 +254,7 @@ test("un .txt no trae teléfono: el contacto se resuelve por nombre", async (t) 
   _setClientForTests(null);
 });
 
-test("re-subir el mismo export no crea señales nuevas: cuenta duplicadas", async (t) => {
+test("re-subir el mismo export no crea señales nuevas ni cuesta IA", async (t) => {
   const { señales } = mockDatos(t);
   mockClasificador();
   const contenido = exportCon([`${fecha(2)}, 10:30 a. m. - Andrés: Tengo cliente para apto en Laureles`]);
@@ -255,7 +264,27 @@ test("re-subir el mismo export no crea señales nuevas: cuenta duplicadas", asyn
   const segunda = await importar(ORG, archivo, { dias: 30 });
 
   assert.strictEqual(primera.señales, 1);
-  assert.strictEqual(primera.duplicadas, 0);
+  // La marca de agua lo corta ANTES de clasificar: ni siquiera llega al dedup
+  // de la base, que era lo que antes lo atajaba —pero recién después de pagar.
+  assert.strictEqual(segunda.aClasificar, 0);
+  assert.strictEqual(segunda.costoUsd, 0);
+  assert.strictEqual(segunda.señales, 0);
+  assert.strictEqual(señales.length, 1);
+  _setClientForTests(null);
+});
+
+test("el dedup de la base sigue atajando lo que la marca de agua no ve", async (t) => {
+  // Con incremental:false no hay marca de agua, así que el mensaje repetido
+  // llega hasta la persistencia. Es la segunda red de seguridad.
+  const { señales } = mockDatos(t);
+  mockClasificador();
+  const contenido = exportCon([`${fecha(2)}, 10:30 a. m. - Andrés: Tengo cliente para apto en Laureles`]);
+  const archivo = [{ nombre: "Chat de WhatsApp con Gremio.txt", contenido }];
+
+  await importar(ORG, archivo, { dias: 30, incremental: false });
+  const segunda = await importar(ORG, archivo, { dias: 30, incremental: false });
+
+  assert.strictEqual(segunda.aClasificar, 1, "sin marca de agua sí se reclasifica");
   assert.strictEqual(segunda.señales, 0);
   assert.strictEqual(segunda.duplicadas, 1);
   assert.strictEqual(señales.length, 1);
@@ -421,5 +450,132 @@ test("las stats llevan el CONTEO de ruido, nunca los mensajes", async (t) => {
 
   assert.strictEqual(typeof stats.ruido, "number");
   assert.strictEqual(JSON.stringify(stats).includes("administración"), false);
+  _setClientForTests(null);
+});
+
+// ══ Import incremental ═══════════════════════════════════════════════════
+//
+// Es lo que vuelve viable exportar dos veces al día. El dedup de señales evita
+// la fila repetida, pero recién DESPUÉS de clasificar: sin marca de agua, cada
+// carga vuelve a pagarle a la IA por todo el rango elegido.
+
+test("el corte respeta la marca de agua además de la ventana de días", () => {
+  const ayer = new Date(Date.now() - 1 * 86400000).toISOString();
+  const hace3 = new Date(Date.now() - 3 * 86400000).toISOString();
+  const hace10 = new Date(Date.now() - 10 * 86400000).toISOString();
+
+  // Ventana de 30 días, pero el grupo ya se leyó hasta hace 3: manda el más
+  // reciente de los dos.
+  const { dentro } = aplicarCorte([{ instanteIso: ayer }, { instanteIso: hace10 }], 30, hace3);
+  assert.strictEqual(dentro.length, 1);
+  assert.strictEqual(dentro[0].instanteIso, ayer);
+});
+
+test("el mensaje que marca la frontera no se reprocesa", () => {
+  const borde = new Date(Date.now() - 86400000).toISOString();
+  const { dentro } = aplicarCorte([{ instanteIso: borde }], null, borde);
+  assert.strictEqual(dentro.length, 0, "el límite es exclusivo: ese mensaje ya se procesó");
+});
+
+test("dentro de un mismo día, la hora decide qué es nuevo", () => {
+  // Sin esto, exportar a las 7am dejaba la marca de agua en el día entero y
+  // la carga del mediodía no veía nada. Es el caso que habilita el flujo.
+  const { parseInstante } = require("../src/groups/parse-export");
+  const manana = parseInstante("1/8/2026", "08:12 a. m.").toISOString();
+  const mediodia = parseInstante("1/8/2026", "12:40 p. m.").toISOString();
+
+  assert.ok(mediodia > manana, "el mediodía tiene que ser posterior a la mañana");
+  const { dentro } = aplicarCorte(
+    [{ instanteIso: manana }, { instanteIso: mediodia }],
+    null,
+    manana
+  );
+  assert.strictEqual(dentro.length, 1);
+  assert.strictEqual(dentro[0].instanteIso, mediodia);
+});
+
+test("la segunda carga del mismo día NO vuelve a pagar la IA", async (t) => {
+  // El caso real: exportar a las 7am y otra vez a la 1pm. El export del
+  // mediodía contiene todo lo de la mañana.
+  const { señales } = mockDatos(t);
+  let llamadasIA = 0;
+  const contarIA = () => { llamadasIA++; };
+
+  const manana = `${fecha(1)}, 08:00 a. m. - Andrés: Tengo cliente para apto en Laureles`;
+  const mediodia = `${fecha(0)}, 12:30 p. m. - Marcela: Tengo cliente para casa en Envigado`;
+  const archivo = (lineas) => [{ nombre: "Chat de WhatsApp con Gremio.txt", contenido: exportCon(lineas) }];
+
+  mockClasificador();
+  const original = require("../src/lib/anthropic").getClient();
+  require("../src/lib/anthropic")._setClientForTests({
+    messages: { create: async (p) => { contarIA(); return original.messages.create(p); } },
+  });
+
+  await importar(ORG, archivo([manana]), { dias: 30 });
+  const trasPrimera = llamadasIA;
+
+  // Segunda carga: el mismo mensaje de la mañana + uno nuevo.
+  const segunda = await importar(ORG, archivo([manana, mediodia]), { dias: 30 });
+
+  assert.strictEqual(segunda.crudos, 2, "el archivo trae los dos mensajes");
+  assert.strictEqual(segunda.fueraDeCorte, 1, "el de la mañana queda fuera por la marca de agua");
+  assert.strictEqual(segunda.aClasificar, 1, "solo se clasifica el nuevo");
+  assert.strictEqual(llamadasIA, trasPrimera + 1, "una sola llamada más, no dos");
+  assert.strictEqual(señales.length, 2);
+  _setClientForTests(null);
+});
+
+test("cada grupo lleva su propia marca de agua", async (t) => {
+  // Uno leído hasta ayer y otro que se sube por primera vez no pueden
+  // compartir corte.
+  mockDatos(t);
+  mockClasificador();
+  const llamadas = [];
+  t.mock.method(groupSignals, "ultimaFechaImportada", async (orgId, groupId) => {
+    llamadas.push(groupId);
+    return groupId === "grp-1" ? new Date(Date.now() - 2 * 86400000).toISOString() : null;
+  });
+
+  const viejo = `${fecha(5)}, 10:00 a. m. - Andrés: Tengo cliente para apto en Laureles`;
+  const stats = await importar(ORG, [
+    { nombre: "Chat de WhatsApp con Ya Leido.txt", contenido: exportCon([viejo]) },
+    { nombre: "Chat de WhatsApp con Nuevo.txt", contenido: exportCon([viejo]) },
+  ], { dias: 30 });
+
+  assert.strictEqual(llamadas.length, 2, "se consulta la marca de cada grupo");
+  // El mensaje es de hace 5 días: fuera para el leído-hasta-hace-2, dentro
+  // para el que nunca se subió.
+  assert.strictEqual(stats.fueraDeCorte, 1);
+  assert.strictEqual(stats.aClasificar, 1);
+  _setClientForTests(null);
+});
+
+test("incremental:false reprocesa todo — para rehacer un grupo a mano", async (t) => {
+  mockDatos(t);
+  mockClasificador();
+  t.mock.method(groupSignals, "ultimaFechaImportada", async () => new Date().toISOString());
+
+  const stats = await importar(
+    ORG,
+    [{ nombre: "Chat de WhatsApp con G.txt", contenido: exportCon([`${fecha(2)}, 10:00 a. m. - Andrés: Tengo cliente para apto en Laureles`]) }],
+    { dias: 30, incremental: false }
+  );
+
+  assert.strictEqual(stats.aClasificar, 1, "sin incremental, la marca de agua se ignora");
+  _setClientForTests(null);
+});
+
+test("si la marca de agua falla se procesa igual, no se pierde la carga", async (t) => {
+  mockDatos(t);
+  mockClasificador();
+  t.mock.method(groupSignals, "ultimaFechaImportada", async () => { throw new Error("sin columna"); });
+
+  const stats = await importar(
+    ORG,
+    [{ nombre: "Chat de WhatsApp con G.txt", contenido: exportCon([`${fecha(1)}, 10:00 a. m. - Andrés: Tengo cliente para apto en Laureles`]) }],
+    { dias: 30 }
+  );
+
+  assert.strictEqual(stats.aClasificar, 1);
   _setClientForTests(null);
 });

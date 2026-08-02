@@ -155,6 +155,41 @@ async function resumen(orgId, { dias = 14 } = {}) {
   };
 }
 
+// Hasta que fecha se leyo este grupo — la marca de agua del import.
+//
+// Sin esto, re-exportar un grupo vuelve a pagarle a la IA por todo el rango:
+// el dedup de señales evita la fila repetida, pero recien DESPUES de
+// clasificar. Con dos cargas diarias y corte de 30 dias serian ~60 veces el
+// costo necesario.
+//
+// Es deliberadamente conservadora: se calcula sobre las señales guardadas, y
+// el ruido no se guarda. Si los ultimos dias fueron puro ruido, la marca queda
+// atras y se reprocesan — barato, y del lado seguro: nunca se salta un mensaje
+// que no se haya visto.
+async function ultimaFechaImportada(orgId, groupId) {
+  if (!supabase) {
+    const fechas = memory.groupSignals
+      .filter((s) => s.org_id === orgId && s.group_id === groupId && s.fecha_mensaje)
+      .map((s) => s.fecha_mensaje);
+    return fechas.length ? fechas.sort().at(-1) : null;
+  }
+  const { data, error } = await supabase
+    .from("group_signals")
+    .select("fecha_mensaje")
+    .eq("org_id", orgId)
+    .eq("group_id", groupId)
+    .not("fecha_mensaje", "is", null)
+    .order("fecha_mensaje", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    // Sin la columna todavia: se comporta como un grupo nuevo.
+    if (esColumnaFaltante(error)) return null;
+    throw error;
+  }
+  return data?.fecha_mensaje || null;
+}
+
 // ── Digest diario ────────────────────────────────────────────────────────
 
 // Lo que todavia no se conto en ningun digest y vale la pena contar.
@@ -229,7 +264,7 @@ async function marcarEnviada(orgId, groupId, waMessageId) {
 }
 
 module.exports = {
-  create, list, setEstado, resumen, marcarEnviada,
+  create, list, setEstado, resumen, marcarEnviada, ultimaFechaImportada,
   pendientesDigest, marcarDigest, revertirDigest,
   CLASES, ORIGENES, _resetBlindaje,
 };

@@ -104,6 +104,38 @@ function parseFecha(fecha) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+// "8:12 a. m." -> {h: 8, min: 12}. Devuelve null si no se puede leer.
+//
+// Hace falta para el import incremental: sin hora, todos los mensajes de un
+// dia comparten instante y la marca de agua se come el resto de la jornada —
+// justo el caso de exportar en la mañana y otra vez al mediodia.
+function parseHora(hora) {
+  const m = /^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(?:([ap])\.?\s*m\.?)?$/i.exec(String(hora || "").trim());
+  if (!m) return null;
+  let h = parseInt(m[1], 10);
+  const min = parseInt(m[2], 10);
+  const seg = m[3] ? parseInt(m[3], 10) : 0;
+  const sufijo = m[4]?.toLowerCase();
+  if (sufijo === "p" && h < 12) h += 12;   // 12 p.m. ya es 12
+  if (sufijo === "a" && h === 12) h = 0;   // 12 a.m. es medianoche
+  if (h > 23 || min > 59) return null;
+  return { h, min, seg };
+}
+
+// Instante del mensaje, en la zona del telefono que exporto.
+//
+// Se guarda como UTC nominal —no se convierte de zona— porque el export no
+// dice en que zona esta el telefono. Para lo unico que se usa es para ordenar
+// y comparar mensajes del MISMO grupo entre si, y para eso alcanza: todos
+// vienen del mismo telefono.
+function parseInstante(fecha, hora) {
+  const dia = parseFecha(fecha);
+  if (!dia) return null;
+  const t = parseHora(hora);
+  if (!t) return dia; // sin hora legible, queda el arranque del dia
+  return new Date(dia.getTime() + (t.h * 3600 + t.min * 60 + t.seg) * 1000);
+}
+
 // texto: contenido crudo del .txt. grupo: etiqueta para poder rastrear de que
 // export salio cada mensaje cuando se procesan varios juntos.
 function parseExport(texto, { grupo = "sin-nombre" } = {}) {
@@ -134,12 +166,16 @@ function parseExport(texto, { grupo = "sin-nombre" } = {}) {
 
     const { fecha, hora, contenido } = cabecera;
     const fechaDate = parseFecha(fecha);
+    const instante = parseInstante(fecha, hora);
     const base = {
       id: `${grupo}#${mensajes.length}`,
       grupo,
       fecha,
       hora,
+      // Solo el dia: es lo que se muestra y con lo que se cuenta el rango.
       fechaIso: fechaDate ? fechaDate.toISOString().slice(0, 10) : null,
+      // Con hora: es la que ordena y la que usa la marca de agua del import.
+      instanteIso: instante ? instante.toISOString() : null,
       esSistema: false,
       esMultimedia: false,
     };
@@ -174,4 +210,4 @@ function rangoDeFechas(mensajes) {
   return { desde, hasta, dias: Math.max(1, Math.round(ms / 86400000) + 1) };
 }
 
-module.exports = { parseExport, rangoDeFechas, esSistema, esMultimedia, normalizar, plano };
+module.exports = { parseExport, rangoDeFechas, esSistema, esMultimedia, normalizar, plano, parseHora, parseInstante };

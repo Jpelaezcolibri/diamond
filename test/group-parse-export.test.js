@@ -99,3 +99,53 @@ test("cada mensaje lleva un id estable para poder rastrearlo en el reporte", () 
   assert.strictEqual(msgs[0].id, "laureles#0");
   assert.strictEqual(new Set(msgs.map((m) => m.id)).size, msgs.length);
 });
+
+// ── Hora e instante ──────────────────────────────────────────────────────
+//
+// El import incremental compara mensajes del mismo día entre sí: sin hora, la
+// marca de agua de la mañana se come lo que llegue al mediodía.
+
+const { parseHora, parseInstante } = require("../src/groups/parse-export");
+
+test("la hora de 12 horas se convierte bien, incluidos los dos bordes", () => {
+  assert.deepStrictEqual(parseHora("8:12 a. m."), { h: 8, min: 12, seg: 0 });
+  assert.deepStrictEqual(parseHora("12:40 p. m."), { h: 12, min: 40, seg: 0 }, "12 p.m. es mediodía, no 24");
+  assert.deepStrictEqual(parseHora("12:05 a. m."), { h: 0, min: 5, seg: 0 }, "12 a.m. es medianoche");
+  assert.deepStrictEqual(parseHora("3:30 p.m."), { h: 15, min: 30, seg: 0 });
+  assert.deepStrictEqual(parseHora("10:32:15 a. m."), { h: 10, min: 32, seg: 15 }, "iOS trae segundos");
+});
+
+test("la hora de 24 horas pasa sin tocarse", () => {
+  assert.deepStrictEqual(parseHora("17:45"), { h: 17, min: 45, seg: 0 });
+  assert.deepStrictEqual(parseHora("00:05"), { h: 0, min: 5, seg: 0 });
+});
+
+test("una hora ilegible no rompe: devuelve null", () => {
+  assert.strictEqual(parseHora("no es una hora"), null);
+  assert.strictEqual(parseHora(""), null);
+  assert.strictEqual(parseHora("25:00"), null);
+});
+
+test("el instante ordena los mensajes de un mismo día", () => {
+  const manana = parseInstante("1/8/2026", "08:12 a. m.");
+  const mediodia = parseInstante("1/8/2026", "12:40 p. m.");
+  const tarde = parseInstante("1/8/2026", "6:05 p. m.");
+  assert.ok(manana < mediodia && mediodia < tarde);
+});
+
+test("sin hora legible el instante cae al arranque del día, no a null", () => {
+  // Perder el mensaje sería peor que ubicarlo al principio del día.
+  const i = parseInstante("1/8/2026", "???");
+  assert.strictEqual(i.toISOString(), "2026-08-01T00:00:00.000Z");
+});
+
+test("cada mensaje parseado lleva su instante con hora", () => {
+  const msgs = parseExport([
+    "1/8/2026, 8:12 a. m. - Andrés: primero",
+    "1/8/2026, 12:40 p. m. - Marcela: segundo",
+  ].join("\n"), { grupo: "G" });
+
+  assert.strictEqual(msgs[0].fechaIso, "2026-08-01", "fechaIso sigue siendo el día");
+  assert.strictEqual(msgs[0].instanteIso, "2026-08-01T08:12:00.000Z");
+  assert.strictEqual(msgs[1].instanteIso, "2026-08-01T12:40:00.000Z");
+});

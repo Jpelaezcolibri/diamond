@@ -26,7 +26,7 @@ type Stats = {
   demandasConMatch: number;
   lotesFallidos: number;
   costoUsd: number;
-  grupos: { nombre: string; mensajes: number }[];
+  grupos: { nombre: string; mensajes: number; nuevos: number; leidoHasta: string | null }[];
 };
 
 type Job = {
@@ -38,7 +38,11 @@ type Job = {
   error: string | null;
 };
 
+// -1 = incremental: cada grupo arranca donde quedó la vez anterior. Es el
+// default porque es lo que vuelve viable exportar dos veces al día — sin esto,
+// cada carga vuelve a pagarle a la IA por todo el rango.
 const RANGOS = [
+  { dias: -1, etiqueta: "Solo lo nuevo" },
   { dias: 7, etiqueta: "Última semana" },
   { dias: 30, etiqueta: "Último mes" },
   { dias: 90, etiqueta: "Últimos 3 meses" },
@@ -59,7 +63,7 @@ export default function ImportarExport() {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [archivos, setArchivos] = useState<File[]>([]);
-  const [dias, setDias] = useState(30);
+  const [dias, setDias] = useState(-1);
   const [job, setJob] = useState<Job | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [subiendo, setSubiendo] = useState(false);
@@ -159,6 +163,13 @@ export default function ImportarExport() {
         </button>
       </div>
 
+      {dias === -1 && (
+        <p className="mt-2 text-xs text-slate-500">
+          Cada grupo arranca donde quedó la última carga. Podés exportar y subir varias veces al
+          día sin pagar dos veces por los mismos mensajes.
+        </p>
+      )}
+
       {dias === 0 && (
         <p className="mt-2 text-xs text-amber-700">
           Todo el historial puede ser caro y casi nunca sirve: una demanda de hace seis meses ya
@@ -220,10 +231,22 @@ function Resumen({ s }: { s: Stats }) {
         </p>
       )}
 
-      {s.grupos?.length > 1 && (
-        <p className="mt-2 text-xs text-slate-500">
-          {s.grupos.map((g) => `${g.nombre} (${g.mensajes})`).join(" · ")}
-        </p>
+      {s.grupos?.length > 0 && (
+        <ul className="mt-3 space-y-1 border-t border-slate-200 pt-3 text-xs text-slate-500">
+          {s.grupos.map((g) => (
+            <li key={g.nombre} className="flex justify-between gap-3">
+              <span className="truncate">{g.nombre}</span>
+              <span className="shrink-0 tabular-nums">
+                {g.nuevos} nuevos de {g.mensajes}
+                {g.leidoHasta && (
+                  <span className="ml-1 text-slate-400">
+                    · ya leído hasta {new Date(g.leidoHasta).toLocaleDateString("es-CO", { day: "numeric", month: "short" })}
+                  </span>
+                )}
+              </span>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );

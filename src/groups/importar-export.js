@@ -62,7 +62,7 @@ function nombreDeArchivo(nombre) {
 // una fila ni un centavo de IA: el insert choca contra el indice y `create()`
 // lo reporta como duplicado, que es el comportamiento que ya existia.
 function idDeMensaje(m) {
-  const semilla = `${m.grupo}|${m.fechaIso || ""}|${m.autor || ""}|${plano(m.texto)}`;
+  const semilla = `${m.grupo}|${m.instanteIso || ""}|${m.autor || ""}|${plano(m.texto)}`;
   return "export:" + crypto.createHash("sha256").update(semilla).digest("hex").slice(0, 40);
 }
 
@@ -88,18 +88,36 @@ function deduplicar(mensajes) {
   return { unicos, repetidos: mensajes.length - unicos.length };
 }
 
-function aplicarCorte(mensajes, dias) {
-  if (!dias) return { dentro: mensajes, fuera: 0 };
-  const desde = new Date(Date.now() - dias * 86400000).toISOString();
+// `desde` es un ISO explicito; `dias` una ventana relativa. Manda el mas
+// reciente de los dos: si el grupo ya se leyo hasta ayer, no tiene sentido
+// reprocesar la semana aunque el usuario haya elegido "ultimos 7 dias".
+function aplicarCorte(mensajes, dias, desde = null) {
+  const limites = [
+    dias ? new Date(Date.now() - dias * 86400000).toISOString() : null,
+    desde,
+  ].filter(Boolean);
+  if (limites.length === 0) return { dentro: mensajes, fuera: 0 };
+
+  const corte = limites.sort().at(-1);
   // Un mensaje sin fecha no se puede fechar y por lo tanto no se puede
   // garantizar que sea reciente: se descarta. Mismo criterio que el corte
   // temporal del pareo en vivo.
-  const dentro = mensajes.filter((m) => m.fechaIso && m.fechaIso >= desde);
+  //
+  // El limite es EXCLUSIVO (`>`): el mensaje que marca la frontera ya se
+  // proceso en la corrida anterior.
+  // Se compara por el INSTANTE (con hora), no por el dia: si no, todos los
+  // mensajes de una jornada comparten limite y la marca de agua de la mañana
+  // se come lo que llegue al mediodia — justo el caso que esto habilita.
+  const dentro = mensajes.filter((m) => m.instanteIso && m.instanteIso > corte);
   return { dentro, fuera: mensajes.length - dentro.length };
 }
 
 // archivos: [{ nombre, contenido }]. Devuelve las metricas del embudo.
-async function importar(org, archivos, { dias = DIAS_DEFAULT, onProgreso = () => {} } = {}) {
+//
+// `incremental` (default) hace que cada grupo arranque donde quedo la vez
+// anterior. Es lo que vuelve viable exportar dos veces al dia: sin esto, cada
+// carga reclasifica —y vuelve a pagar— todo el rango elegido.
+async function importar(org, archivos, { dias = DIAS_DEFAULT, incremental = true, onProgreso = () => {} } = {}) {
   const stats = {
     archivos: archivos.length,
     crudos: 0, fueraDeCorte: 0, repetidos: 0,
@@ -111,10 +129,17 @@ async function importar(org, archivos, { dias = DIAS_DEFAULT, onProgreso = () =>
     grupos: [], rango: null,
   };
 
-  // ── Parseo. Cada archivo es un grupo; el grupo se crea (o se reusa) como
-  // grupo virtual para poder colgarle las señales.
+  // ── Parseo y corte, archivo por archivo.
+  //
+  // El corte se aplica POR GRUPO y no sobre la pila junta, porque la marca de
+  // agua es de cada grupo: uno puede estar leido hasta esta mañana y otro ser
+  // la primera vez que se sube.
   onProgreso({ fase: "leyendo", procesados: 0, total: archivos.length });
   let mensajes = [];
+  let crudos = 0;
+  let fuera = 0;
+  const todosLosCrudos = [];
+
   for (const [i, archivo] of archivos.entries()) {
     const nombreGrupo = archivo.grupo || nombreDeArchivo(archivo.nombre);
     const grupo = await whatsappGroups.asegurarGrupoVirtual(org.id, {
@@ -123,17 +148,33 @@ async function importar(org, archivos, { dias = DIAS_DEFAULT, onProgreso = () =>
     });
     const delArchivo = parseExport(archivo.contenido, { grupo: nombreGrupo });
     for (const m of delArchivo) m.groupId = grupo.id;
-    mensajes.push(...delArchivo);
-    stats.grupos.push({ nombre: nombreGrupo, id: grupo.id, mensajes: delArchivo.length });
+    crudos += delArchivo.length;
+    todosLosCrudos.push(...delArchivo);
+
+    // Hasta donde se leyo este grupo la vez pasada. Sin esto, re-exportar
+    // vuelve a pagarle a la IA por todo el rango: el dedup de señales evita la
+    // fila repetida, pero recien despues de clasificar.
+    const yaLeido = incremental
+      ? await groupSignals.ultimaFechaImportada(org.id, grupo.id).catch(() => null)
+      : null;
+
+    const corte = aplicarCorte(delArchivo, dias, yaLeido);
+    mensajes.push(...corte.dentro);
+    fuera += corte.fuera;
+
+    stats.grupos.push({
+      nombre: nombreGrupo,
+      id: grupo.id,
+      mensajes: delArchivo.length,
+      nuevos: corte.dentro.length,
+      leidoHasta: yaLeido,
+    });
     onProgreso({ fase: "leyendo", procesados: i + 1, total: archivos.length });
   }
-  stats.crudos = mensajes.length;
-  stats.rango = rangoDeFechas(mensajes);
 
-  // ── Corte temporal
-  const corte = aplicarCorte(mensajes, dias);
-  mensajes = corte.dentro;
-  stats.fueraDeCorte = corte.fuera;
+  stats.crudos = crudos;
+  stats.fueraDeCorte = fuera;
+  stats.rango = rangoDeFechas(todosLosCrudos);
 
   if (mensajes.length > MAX_MENSAJES) {
     const e = new Error(
@@ -196,7 +237,7 @@ async function importar(org, archivos, { dias = DIAS_DEFAULT, onProgreso = () =>
   for (const o of ofertas) {
     if (!o.utilizable) continue;
     try {
-      await guardarOferta(org, o, { vistoEn: o.mensaje?.fechaIso || null });
+      await guardarOferta(org, o, { vistoEn: o.mensaje?.instanteIso || null });
       stats.ofertasArchivadas++;
     } catch (e) {
       console.error("[radar] No se pudo archivar una oferta:", e.message);
@@ -230,7 +271,7 @@ async function persistirSeñal(org, c) {
     texto_original: m.texto || null,
     matches: c.matches || [],
     origen: "export",
-    fecha_mensaje: m.fechaIso || null,
+    fecha_mensaje: m.instanteIso || null,
   });
 }
 

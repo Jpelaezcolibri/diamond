@@ -51,6 +51,7 @@ router.post("/api/grupos/metricas", async (req, res) => {
 // Responde 202 con un id y procesa en segundo plano: un export de varios
 // grupos tarda minutos y el navegador cortaria la conexion mucho antes.
 const importJobs = require("../groups/import-jobs");
+const { DIAS_DEFAULT: DIAS_DEFAULT_IMPORT } = require("../groups/importar-export");
 
 router.post("/api/grupos/importar-export", upload.array("files", 10), async (req, res) => {
   const archivos = (req.files || []).map((f) => ({
@@ -61,11 +62,17 @@ router.post("/api/grupos/importar-export", upload.array("files", 10), async (req
     return res.status(400).json({ error: "No llego ningun archivo .txt" });
   }
 
-  // `dias` vacio o "0" significa "todo el historial": es una eleccion valida
-  // para un grupo nuevo, aunque cara. El tope de mensajes la acota igual.
-  const dias = req.body?.dias === "" || req.body?.dias === undefined
-    ? undefined
-    : Number(req.body.dias) || null;
+  // Tres casos:
+  //   -1  → incremental: cada grupo arranca donde quedo la vez anterior. Es el
+  //         default de la pantalla y lo que hace viable subir dos veces al dia.
+  //    0  → todo el historial (caro, valido para un grupo nuevo).
+  //   N   → ventana fija de N dias, ignorando la marca de agua.
+  const crudo = req.body?.dias;
+  const pedido = crudo === "" || crudo === undefined ? -1 : Number(crudo);
+  const incremental = pedido < 0;
+  // Con incremental sigue habiendo un techo: la primera carga de un grupo no
+  // tiene marca de agua y sin tope se traeria el historial entero.
+  const dias = incremental ? DIAS_DEFAULT_IMPORT : (pedido || null);
 
   try {
     const org = req.body?.orgId
@@ -79,7 +86,8 @@ router.post("/api/grupos/importar-export", upload.array("files", 10), async (req
     // Deliberadamente sin await: la respuesta ya salio.
     const { importar } = require("../groups/importar-export");
     importar(org, archivos, {
-      ...(dias === undefined ? {} : { dias }),
+      dias,
+      incremental,
       onProgreso: (p) => importJobs.progreso(job.id, p),
     })
       .then((stats) => {
