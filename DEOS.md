@@ -241,3 +241,151 @@ Digest / Dashboard
         ▼
 Acción del asesor
 ```
+
+---
+
+# Apéndice — Visión AI Native de Radar
+
+*Agregado por el CTO el 2026-08-02.*
+
+> **Este apéndice no cambia nada de lo aprobado.** No cambia la arquitectura, ni
+> los Sprints, ni los principios congelados, ni el roadmap, ni el MVP, ni las
+> prioridades actuales. Define únicamente hacia dónde debe evolucionar Radar en
+> los próximos años.
+
+## La visión
+
+Radar no quiere ser otra herramienta que usa IA. Quiere ser **un sistema que
+acumula experiencia**. Una IA responde preguntas; un sistema con experiencia
+toma mejores decisiones con el paso del tiempo.
+
+El objetivo no es tener el modelo más inteligente. Es tener **el producto que
+más aprende**.
+
+## Definición de AI Native
+
+Radar será AI Native cuando **el conocimiento adquirido durante su operación
+tenga más valor que el software mismo**. Con los años, el activo principal
+dejará de ser el código y pasará a ser la experiencia acumulada.
+
+No buscamos entrenar modelos: buscamos construir memoria. No buscamos
+automatizar decisiones: buscamos comprender cómo deciden los mejores asesores.
+
+## El principio más importante
+
+Todo mensaje, toda señal, toda decisión y todo resultado generan información.
+**Nada de eso debe perderse.** Cada interacción debe convertirse en conocimiento
+para el sistema.
+
+## Automatizar ≠ aprender
+
+Automatizar es hacer una tarea sin intervención humana. Aprender es mejorar la
+siguiente decisión gracias a la experiencia anterior. **Radar debe evolucionar
+hacia el aprendizaje, no solo hacia la automatización.**
+
+## El Learning Engine
+
+Capa conceptual. **No es un Sprint. No es un módulo a construir ahora. No debe
+implementarse durante el MVP.**
+
+```
+Mensajes → Radar → Señales → Acciones del asesor → Resultados
+                                                        │
+                                                        ▼
+                                                 Learning Engine
+                                                        │
+                                                        ▼
+                                                  Conocimiento
+                                                        │
+                                                        ▼
+                                                  Radar mejora
+```
+
+**Responsabilidad:** el Learning Engine nunca toma decisiones, nunca reemplaza
+al asesor y nunca modifica el comportamiento del sistema por sí mismo. Solo
+observa, registra, relaciona y aprende.
+
+## Qué debe aprender Radar
+
+Qué señales terminan en conversaciones · qué conversaciones en visitas · qué
+visitas en cierres · qué clientes convierten mejor · qué colegas generan
+oportunidades reales · qué propiedades generan interés · qué barrios convierten
+· qué horarios rinden · qué argumentos usan los que más venden · qué seguimiento
+aumenta el cierre · qué señales suelen ignorarse · qué decisiones producen malos
+resultados.
+
+**Radar no aprenderá reglas. Aprenderá experiencia.**
+
+### Del asesor
+
+Cada asesor trabaja distinto y Radar no debe volverlos iguales: debe aprender el
+estilo de cada uno. **Cada asesor tendrá un Radar diferente — no porque cambie
+el software, sino porque cambia la experiencia acumulada.**
+
+### Del equipo
+
+Solo conocimiento estadístico anonimizado. **Nunca** conversaciones, teléfonos,
+nombres ni mensajes.
+
+- Permitido: *"las oportunidades con estas características terminan en negocio
+  un 37% más que el promedio."*
+- Prohibido: *"Juan cerró esta venta."*
+
+## Las cinco reglas del aprendizaje
+
+1. **Radar nunca aprende de opiniones, solo de resultados.** La realidad tiene
+   prioridad sobre las hipótesis.
+2. **El asesor siempre tiene la última palabra.** Si Radar recomienda A y el
+   asesor hace B, Radar no corrige: observa y aprende.
+3. **Todo aprendizaje debe ser explicable.** Nunca *"porque el modelo lo
+   decidió"*. Si no puede explicarlo, no debe modificar su comportamiento.
+4. **El conocimiento pertenece al producto, no al modelo.** Los modelos,
+   proveedores y tecnologías cambiarán; la experiencia acumulada permanece.
+5. **No entrenar modelos prematuramente.** Requiere: suficientes asesores
+   activos, suficientes decisiones reales, suficientes resultados medibles,
+   evidencia de patrones repetibles y una métrica concreta a mejorar. Si falta
+   una sola, no entrenar.
+
+## Evolución por etapas
+
+Radar evoluciona solo cuando existe evidencia:
+
+`observa → registra → mide → encuentra patrones → recomienda → personaliza →
+predice → optimiza`
+
+La última etapa cubre **únicamente lo que sea seguro optimizar**. Nunca
+decisiones críticas del negocio.
+
+## Regla de oro del apéndice
+
+Nunca construiremos una funcionalidad porque la IA pueda hacerla. Solo cuando
+aumente la capacidad del asesor de vender más, ahorrar tiempo o decidir mejor.
+**La IA es un medio, nunca el objetivo.**
+
+## La pregunta adicional de cada Sprint
+
+> **¿Lo que estamos construyendo hoy deja a Radar mejor preparado para aprender
+> mañana?**
+
+Si es sí, explicar de qué manera. Si es no, **no forzar una integración con
+IA**. No todo Sprint debe aportar al aprendizaje — pero **ninguno debe
+impedirlo**.
+
+## La prueba de los cinco años
+
+Si mañana desaparecieran todos los proveedores de IA, ¿qué quedaría?
+
+- Respuesta incorrecta: *"nos quedamos sin producto"* → construimos un
+  integrador de modelos, no una empresa.
+- Respuesta correcta: *"perdimos una herramienta, pero conservamos años de
+  experiencia comercial acumulada."*
+
+Cualquier competidor puede comprar acceso a un modelo. **Lo que no puede comprar
+son millones de decisiones reales acumuladas.** Ese conocimiento se protege con
+la misma prioridad que hoy protegemos el número de WhatsApp del asesor.
+
+## Lema del proyecto
+
+> *"No estamos construyendo el mejor software para leer grupos de WhatsApp.
+> Estamos construyendo el primer sistema que aprende, junto con los asesores
+> inmobiliarios, cómo vender mejor cada día."*
