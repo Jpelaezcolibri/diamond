@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Radar — spike de IndexedDB (NO ES EL PRODUCTO)",
+  "version": "0.0.1",
+  "description": "Herramienta de investigacion de un solo uso. Lee la IndexedDB local de WhatsApp Web para responder si se pueden leer grupos sin abrirlos. No captura, no envia, no se publica.",
+  "content_scripts": [
+    {
+      "matches": ["https://web.whatsapp.com/*"],
+      "js": ["spike.js"],
+      "run_at": "document_idle",
+      "world": "ISOLATED"
+    }
+  ]
+}
