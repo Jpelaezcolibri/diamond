@@ -43,6 +43,8 @@ const db = {
   whatsappSessions: [],
   whatsappGroups: [],
   groupSignals: [],
+  // Learning Domain: append-only, nunca se muta ni se borra (P15).
+  signalEvents: [],
   uid,
 };
 
