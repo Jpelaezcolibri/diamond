@@ -50,6 +50,7 @@ router.post("/api/grupos/metricas", async (req, res) => {
 //
 // Responde 202 con un id y procesa en segundo plano: un export de varios
 // grupos tarda minutos y el navegador cortaria la conexion mucho antes.
+const signalEvents = require("../data/signal-events");
 const importJobs = require("../groups/import-jobs");
 const { DIAS_DEFAULT: DIAS_DEFAULT_IMPORT } = require("../groups/importar-export");
 
@@ -126,6 +127,32 @@ router.get("/api/grupos/importar-export/:jobId", async (req, res) => {
 // Con volumen alto —el 2026-07-29 entraron ~980 senales en un dia— sin una
 // marca de "ya lo mire" el asesor relee los mismos pedidos todos los dias y
 // los nuevos se pierden entre ellos. NO borra nada: solo cambia el estado.
+// Registrar en que termino una oportunidad. Es el ultimo eslabon de la cadena
+// de aprendizaje (P14) y el unico que no se puede reconstruir despues: una
+// decision real de un asesor, en el momento en que ocurrio, es irrepetible.
+//
+// Cada llamada AGREGA un evento, nunca corrige el anterior (P15). Si una
+// oportunidad va de CONVERSACION a VISITA a PERDIDO, quedan los tres.
+router.post("/api/grupos/senal/evento", async (req, res) => {
+  const { signalId, tipo, motivo, advisorId } = req.body || {};
+  if (!signalId) return res.status(400).json({ error: "Falta signalId" });
+  if (!signalEvents.TIPOS.includes(tipo)) {
+    return res.status(400).json({ error: `Tipo invalido. Use: ${signalEvents.TIPOS.join(", ")}` });
+  }
+  try {
+    const org = await organizations.getDefault();
+    const evento = await signalEvents.registrar(org.id, {
+      signalId, tipo, motivo: motivo || null, advisorId: advisorId || null,
+    });
+    if (!evento) {
+      return res.status(503).json({ error: "Falta correr db/migrations/2026-08-02_learning_domain.sql" });
+    }
+    res.json({ ok: true, evento });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Prender o apagar el motor de Radar. Apaga lo que se cobra —clasificar un
 // export y mandar el digest—; nunca esconde lo ya detectado.
 router.post("/api/grupos/radar", async (req, res) => {

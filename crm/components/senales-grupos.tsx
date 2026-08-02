@@ -42,6 +42,35 @@ export type Signal = {
   /** De qué grupo salió. Sin esto el asesor copia el borrador y no sabe dónde pegarlo. */
   grupo_nombre?: string | null;
   grupo_jid?: string | null;
+  /** El último evento del recorrido, si ya se registró alguno. El historial
+   *  completo vive en signal_events; acá solo se muestra en qué quedó. */
+  ultimo_evento?: string | null;
+};
+
+/** El recorrido natural de una oportunidad. El orden es el del embudo, no
+ *  alfabético: el asesor marca por dónde va, no elige de una lista. */
+export const RECORRIDO = [
+  { tipo: "CONVERSACION", etiqueta: "Le escribí", ayuda: "Contactaste al colega" },
+  { tipo: "VISITA", etiqueta: "Hubo visita", ayuda: "Su cliente vio la propiedad" },
+  { tipo: "NEGOCIACION", etiqueta: "En negociación", ayuda: "Están hablando de precio" },
+  { tipo: "CIERRE", etiqueta: "Se cerró 🎉", ayuda: "Terminó en negocio" },
+] as const;
+
+/** Los dos finales que no son cierre. Van aparte porque preguntan el motivo:
+ *  un fracaso sin motivo no enseña nada. */
+export const FINALES = [
+  { tipo: "SIN_RESPUESTA", etiqueta: "No contestó" },
+  { tipo: "PERDIDO", etiqueta: "Se perdió" },
+] as const;
+
+const ETIQUETA_EVENTO: Record<string, string> = {
+  CONVERSACION: "Le escribiste",
+  VISITA: "Hubo visita",
+  NEGOCIACION: "En negociación",
+  CIERRE: "Cerrado 🎉",
+  SIN_RESPUESTA: "No contestó",
+  PERDIDO: "Se perdió",
+  DESCARTADO: "Descartada",
 };
 
 /**
@@ -154,6 +183,38 @@ function Ficha({ s, copias, grupos }: { s: Signal; copias: number; grupos: numbe
       setGuardando(false);
     }
   }
+  // En qué terminó esta oportunidad. Es el último eslabón de la cadena de
+  // aprendizaje y el único que no se puede reconstruir después: nadie va a
+  // recordar dentro de seis meses si este pedido llegó a visita.
+  //
+  // Cada registro AGREGA un evento, nunca reemplaza el anterior. Por eso el
+  // estado local guarda solo el último, pero el servidor conserva el recorrido.
+  const [ultimoEvento, setUltimoEvento] = useState<string | null>(s.ultimo_evento ?? null);
+  const [registrando, setRegistrando] = useState(false);
+
+  async function registrarEvento(tipo: string) {
+    // Un final sin motivo enseña la mitad. Se pregunta solo cuando no salió.
+    let motivo: string | null = null;
+    if (tipo === "PERDIDO" || tipo === "SIN_RESPUESTA") {
+      motivo = prompt("¿Por qué no salió? (opcional, pero es lo que más enseña)") || null;
+    }
+    setRegistrando(true);
+    setErrorEstado(null);
+    try {
+      const res = await fetch("/api/grupos/evento", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ signalId: s.id, tipo, motivo }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "No se pudo registrar");
+      setUltimoEvento(tipo);
+    } catch (e) {
+      setErrorEstado(e instanceof Error ? e.message : "No se pudo registrar");
+    } finally {
+      setRegistrando(false);
+    }
+  }
+
   const matches = s.matches || [];
   const tel = telefonoUsable(s.autor_telefono);
 
@@ -423,6 +484,59 @@ function Ficha({ s, copias, grupos }: { s: Signal; copias: number; grupos: numbe
                         </>
                       )}
                     </div>
+                    {/* En qué terminó. Solo tiene sentido en un pedido con
+                        match: es el único sobre el que hay algo que hacer. */}
+                    {s.clase === "demanda" && matches.length > 0 && (
+                      <div className="mt-2 border-t border-slate-200 pt-2">
+                        <p className="mb-1.5 text-[11px] font-medium text-slate-700">
+                          ¿En qué terminó?{" "}
+                          <span className="font-normal text-slate-500">
+                            Marcá por dónde va. Podés marcar varias veces a medida que avanza.
+                          </span>
+                        </p>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {RECORRIDO.map((e) => (
+                            <button
+                              key={e.tipo}
+                              type="button"
+                              title={e.ayuda}
+                              onClick={() => registrarEvento(e.tipo)}
+                              disabled={registrando}
+                              className={`rounded-md border px-2.5 py-1 text-[11px] font-medium disabled:opacity-40 ${
+                                ultimoEvento === e.tipo
+                                  ? "border-emerald-500 bg-emerald-50 text-emerald-800"
+                                  : "border-slate-300 text-slate-600 hover:bg-slate-50"
+                              }`}
+                            >
+                              {e.etiqueta}
+                            </button>
+                          ))}
+                          <span className="mx-1 text-slate-300">|</span>
+                          {FINALES.map((e) => (
+                            <button
+                              key={e.tipo}
+                              type="button"
+                              onClick={() => registrarEvento(e.tipo)}
+                              disabled={registrando}
+                              className={`rounded-md border px-2.5 py-1 text-[11px] font-medium disabled:opacity-40 ${
+                                ultimoEvento === e.tipo
+                                  ? "border-amber-500 bg-amber-50 text-amber-800"
+                                  : "border-slate-300 text-slate-500 hover:bg-slate-50"
+                              }`}
+                            >
+                              {e.etiqueta}
+                            </button>
+                          ))}
+                        </div>
+                        {ultimoEvento && (
+                          <p className="mt-1.5 text-[11px] text-slate-500">
+                            Última marca: <strong>{ETIQUETA_EVENTO[ultimoEvento] ?? ultimoEvento}</strong>.
+                            Queda registrada con su fecha; nada se sobreescribe.
+                          </p>
+                        )}
+                      </div>
+                    )}
+
                     {errorEstado && (
                       <p className="mt-1.5 rounded-md bg-red-50 px-3 py-2 text-[11px] text-red-700">{errorEstado}</p>
                     )}

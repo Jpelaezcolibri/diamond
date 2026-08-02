@@ -106,10 +106,35 @@ export default async function GruposPage() {
   // en la consulta: los grupos ya vienen completos para el panel de abajo, así
   // que cruzarlos en memoria no cuesta un viaje más a la base.
   const nombrePorGrupo = new Map(grupos.map((g) => [g.id, { nombre: g.nombre, jid: g.jid }]));
+
+  // En qué quedó cada oportunidad. El historial completo vive en signal_events
+  // —una fila por paso, en orden— pero la pantalla solo necesita el último para
+  // pintar por dónde va. Se traen todos los eventos de las señales visibles en
+  // una sola consulta, ordenados, y gana el más reciente de cada una.
+  //
+  // Si la migración del Learning Domain no corrió, la consulta falla y todo
+  // sigue funcionando sin la marca: el producto no depende del aprendizaje.
+  const idsVisibles = [
+    ...(conMatchRes.data || []),
+    ...(demandasRes.data || []),
+    ...(ofertasRes.data || []),
+  ].map((s) => s.id);
+
+  const ultimoEvento = new Map<string, string>();
+  if (idsVisibles.length > 0) {
+    const { data: eventos } = await supabase
+      .from("signal_events")
+      .select("signal_id, tipo, created_at")
+      .in("signal_id", idsVisibles)
+      .order("created_at", { ascending: true });
+    for (const e of eventos || []) ultimoEvento.set(e.signal_id as string, e.tipo as string);
+  }
+
   const conGrupo = (s: Signal) => ({
     ...s,
     grupo_nombre: nombrePorGrupo.get(s.group_id)?.nombre ?? null,
     grupo_jid: nombrePorGrupo.get(s.group_id)?.jid ?? null,
+    ultimo_evento: ultimoEvento.get(s.id) ?? null,
   });
 
   // Las que tienen match van primero y sin repetirse, después el resto por
