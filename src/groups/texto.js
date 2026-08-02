@@ -1,3 +1,5 @@
+// Este archivo tambien viaja al navegador (epe/): sin node:*, sin Supabase,
+// sin process.env. Lo custodia test/prefilter-puro.test.js.
 // Utilidades de texto compartidas por el embudo de grupos.
 //
 // Vive aparte para que el prefiltro no tenga que depender del parser de

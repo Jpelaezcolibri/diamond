@@ -1,0 +1,12 @@
+{
+  "name": "epe",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Edge Processing Engine — el nucleo de procesamiento local del Radar de Grupos",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}

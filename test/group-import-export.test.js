@@ -11,7 +11,7 @@ const assert = require("node:assert");
 
 const { _setClientForTests } = require("../src/lib/anthropic");
 const {
-  importar, idDeMensaje, huella, deduplicar, aplicarCorte, nombreDeArchivo, MAX_MENSAJES,
+  importar, idDeMensaje, huella, aplicarCorte, nombreDeArchivo, MAX_MENSAJES,
 } = require("../src/groups/importar-export");
 const groupSignals = require("../src/data/group-signals");
 const whatsappGroups = require("../src/data/whatsapp-groups");
@@ -144,15 +144,6 @@ test("la huella ignora el grupo — el mismo aviso difundido en diez grupos se p
   assert.strictEqual(await huella(a), await huella(b));
 });
 
-test("deduplicar conserva el primero y cuenta los repetidos", async () => {
-  const { unicos, repetidos } = await deduplicar([
-    { autor: "A", texto: "hola" },
-    { autor: "A", texto: "hola" },
-    { autor: "B", texto: "hola" },
-  ]);
-  assert.strictEqual(unicos.length, 2);
-  assert.strictEqual(repetidos, 1);
-});
 
 test("el corte temporal descarta lo viejo y lo que no se puede fechar", () => {
   const { dentro, fuera } = aplicarCorte(

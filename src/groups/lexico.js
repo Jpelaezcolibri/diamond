@@ -1,3 +1,5 @@
+// Este archivo tambien viaja al navegador (epe/): sin node:*, sin Supabase,
+// sin process.env. Lo custodia test/prefilter-puro.test.js.
 // Lexico inmobiliario del prefiltro (Etapa 0).
 //
 // Vive aparte de prefilter.js a proposito: cuando las metricas de la Fase 0 no

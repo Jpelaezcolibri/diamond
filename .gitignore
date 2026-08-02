@@ -23,3 +23,7 @@ dbg.log
 
 # Subagent-driven-development scratch state (progress ledger)
 .superpowers/
+
+# EPE: dependencias y bundle generado
+epe/node_modules/
+epe/dist/

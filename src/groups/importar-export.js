@@ -26,7 +26,7 @@
 
 const { parseExport, rangoDeFechas } = require("./parse-export");
 const epe = require("../../epe/core");
-const { aplicarCorte, deduplicar } = epe;
+const { aplicarCorte } = epe;
 const { idDeMensaje, huella } = require("../../epe/core/hash");
 const { classify } = require("./classify");
 const { cruzar } = require("./match");
@@ -234,6 +234,6 @@ async function persistirSeñal(org, c) {
 }
 
 module.exports = {
-  importar, idDeMensaje, huella, deduplicar, aplicarCorte, nombreDeArchivo,
+  importar, idDeMensaje, huella, aplicarCorte, nombreDeArchivo,
   DIAS_DEFAULT, MAX_MENSAJES,
 };

@@ -1,3 +1,5 @@
+// Este archivo tambien viaja al navegador (epe/): sin node:*, sin Supabase,
+// sin process.env. Lo custodia test/prefilter-puro.test.js.
 // Tokenizacion de zonas — puro, sin dependencias.
 //
 // Vive aparte de src/data/properties.js para que el prefiltro de grupos tenga

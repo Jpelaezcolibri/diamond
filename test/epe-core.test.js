@@ -5,7 +5,7 @@
 
 const { test } = require("node:test");
 const assert = require("node:assert");
-const { procesar, aplicarCorte, deduplicar, MAX_MENSAJES } = require("../epe/core");
+const { procesar, aplicarCorte } = require("../epe/core");
 
 const ahora = () => new Date().toISOString();
 const haceDias = (n) => new Date(Date.now() - n * 86400000).toISOString();
@@ -34,12 +34,12 @@ const ruido = (extra = {}) => ({
 
 // ── El contrato ──────────────────────────────────────────────────────────
 
-test("devuelve aEnviar, descartados y métricas", async () => {
+test("devuelve solo aEnviar y métricas — nada de contenido descartado", async () => {
   const r = await procesar([conSenal(), ruido()]);
 
   assert.strictEqual(r.aEnviar.length, 1);
   assert.strictEqual(r.aEnviar[0].texto, conSenal().texto);
-  assert.strictEqual(r.descartados.length, 1);
+  assert.strictEqual(r.descartados, undefined, "lo descartado no se devuelve: no tiene consumidor y es texto de terceros");
   assert.deepStrictEqual(Object.keys(r.metricas).sort(), [
     "aEnviar", "crudos", "fueraDeCorte", "porMotivo", "prefiltrados", "repetidos", "tasaDescarte",
   ]);
@@ -172,21 +172,4 @@ test("tasaDescarte cuenta TODO lo que no salió, no solo el prefiltro", async ()
   );
   assert.strictEqual(r.metricas.aEnviar, 1);
   assert.strictEqual(r.metricas.tasaDescarte, 0.75);
-});
-
-test("MAX_MENSAJES está expuesto para que el host lo pueda mostrar", () => {
-  assert.strictEqual(typeof MAX_MENSAJES, "number");
-  assert.ok(MAX_MENSAJES > 0);
-});
-
-// ── Las piezas sueltas, por si el host las necesita ──────────────────────
-
-test("aplicarCorte y deduplicar se exportan y son usables por separado", async () => {
-  const { dentro, fuera } = aplicarCorte([conSenal(), conSenal({ instanteIso: haceDias(60) })], 30);
-  assert.strictEqual(dentro.length, 1);
-  assert.strictEqual(fuera, 1);
-
-  const { unicos, repetidos } = await deduplicar([conSenal(), conSenal({ id: "otro" })]);
-  assert.strictEqual(unicos.length, 1);
-  assert.strictEqual(repetidos, 1);
 });

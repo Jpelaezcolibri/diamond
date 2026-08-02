@@ -29,10 +29,13 @@
 const { prefilter } = require("../../src/groups/prefilter");
 const { huella } = require("./hash");
 
-// Tope de mensajes por corrida. Es la unica defensa real contra un costo
-// sorpresa: sin el, un export completo de una linea activa (1.600 mensajes/dia
-// por varios meses) son cientos de miles de mensajes en una sola tarde.
-const MAX_MENSAJES = 20000;
+// Tope por defecto de mensajes por corrida. Es la unica defensa real contra un
+// costo sorpresa: sin el, un export completo de una linea activa (1.600
+// mensajes/dia por varios meses) son cientos de miles en una sola tarde.
+//
+// No se exporta: cada host tiene el suyo (el servidor lo lee de una env var) y
+// dos constantes publicas con el mismo nombre son dos fuentes de verdad.
+const MAX_POR_DEFECTO = 20000;
 
 // `desde` es la marca de agua: hasta donde se leyo este grupo la vez pasada.
 // `dias` es una ventana relativa. Manda el mas reciente de los dos — si el
@@ -81,11 +84,14 @@ async function deduplicar(mensajes) {
 //
 // config: { dias, desde, maxMensajes }
 //
-// Devuelve { aEnviar, descartados, metricas }.
-//   `descartados` sirve para auditar falsos negativos — el fallo mas caro del
-//   sistema, porque es invisible. Quien lo consuma decide si lo mira o lo tira;
-//   el nucleo no lo persiste ni lo manda a ningun lado.
-async function procesar(mensajes, { dias = null, desde = null, maxMensajes = MAX_MENSAJES } = {}) {
+// Devuelve { aEnviar, metricas }.
+//
+// Lo descartado NO se devuelve, a proposito. Auditar falsos negativos —el fallo
+// mas caro del sistema— se hace con `metricas.porMotivo`, que da la misma señal
+// sin arrastrar el texto. Devolver los mensajes enteros creaba un array con
+// contenido de terceros sin ningun consumidor, y por lo tanto solo una
+// oportunidad de que alguien lo loguee o lo mande a algun lado.
+async function procesar(mensajes, { dias = null, desde = null, maxMensajes = MAX_POR_DEFECTO } = {}) {
   const crudos = mensajes.length;
 
   const corte = aplicarCorte(mensajes, dias, desde);
@@ -102,11 +108,10 @@ async function procesar(mensajes, { dias = null, desde = null, maxMensajes = MAX
   }
 
   const dedup = await deduplicar(corte.dentro);
-  const { pasan, descartados, stats } = prefilter(dedup.unicos);
+  const { pasan, stats } = prefilter(dedup.unicos);
 
   return {
     aEnviar: pasan,
-    descartados,
     metricas: {
       crudos,
       fueraDeCorte: corte.fuera,
@@ -122,4 +127,8 @@ async function procesar(mensajes, { dias = null, desde = null, maxMensajes = MAX
   };
 }
 
-module.exports = { procesar, aplicarCorte, deduplicar, MAX_MENSAJES };
+// Solo lo que tiene un consumidor real. `deduplicar` vive adentro de
+// `procesar` y su comportamiento se prueba a traves de el; exportarlo seria
+// API publica que nadie llama. `aplicarCorte` si se usa afuera: el servidor lo
+// aplica por grupo, con la marca de agua de cada uno, antes de juntar el lote.
+module.exports = { procesar, aplicarCorte };
