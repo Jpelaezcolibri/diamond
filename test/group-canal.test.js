@@ -122,6 +122,40 @@ test("la lista blanca falla cerrada y no inventa el permiso", async () => {
   assert.ok(codigo.includes("return new Map()"), "ante un error, mapa vacio: quedamos sordos, no abiertos");
 });
 
+test("apagar el radar cierra TODAS las puertas que tocan WhatsApp", () => {
+  // La leccion del 2026-07-30: GROUPS_ENABLED=false frenaba el webhook pero no
+  // estos endpoints, asi que un clic en "Vincular linea" desde el CRM podia
+  // re-parear el numero mientras Meta revisaba la cuenta suspendida. Un
+  // interruptor que deja una puerta abierta no es un interruptor.
+  const codigo = soloCodigo(leer("src/api/crm.js"));
+  for (const ruta of [
+    '"/api/grupos/sesion"',
+    '"/api/grupos/sesion/estado"',
+    '"/api/grupos/sesion/revincular"',
+    '"/api/grupos/importar"',
+  ]) {
+    const i = codigo.indexOf(ruta);
+    assert.ok(i > 0, `falta la ruta ${ruta}`);
+    const declaracion = codigo.slice(i, i + 120);
+    assert.ok(
+      declaracion.includes("requiereGruposActivos"),
+      `${ruta} tiene que estar detras de requiereGruposActivos: toca la linea de WhatsApp`
+    );
+  }
+});
+
+test("lo que NO toca WhatsApp sigue disponible con el radar apagado", () => {
+  // Leer lo ya guardado y administrar permisos no parea ninguna linea. Meterlos
+  // detras de la guarda dejaria al asesor sin poder apagar un grupo justo
+  // cuando mas lo necesita.
+  const codigo = soloCodigo(leer("src/api/crm.js"));
+  for (const ruta of ['"/api/grupos/listar"', '"/api/grupos/responde"', '"/api/grupos/modo"']) {
+    const i = codigo.indexOf(ruta);
+    assert.ok(i > 0, `falta la ruta ${ruta}`);
+    assert.ok(!codigo.slice(i, i + 120).includes("requiereGruposActivos"), `${ruta} no deberia estar bloqueada`);
+  }
+});
+
 test("el canal solo se monta con las dos variables puestas", () => {
   const codigo = soloCodigo(leer("src/server.js"));
   assert.ok(codigo.includes("config.groups.webhookSecret && config.groups.enabled"));

@@ -86,6 +86,9 @@ const config = {
     // 'sombra' redacta y registra sin publicar; 'auto' publica. Cualquier otro
     // valor apaga la respuesta: un typo no puede encender el envio.
     respuestaModo: process.env.GRUPOS_RESPUESTA_MODO || "sombra",
+    // La URL publica del bot: es la que se le configura a WAHA como destino del
+    // webhook. Sin ella la sesion se parea y no llega un solo mensaje.
+    publicUrl: (process.env.BOT_PUBLIC_URL || "").replace(/\/+$/, ""),
 
     // Digest diario del radar de grupos.
     //
