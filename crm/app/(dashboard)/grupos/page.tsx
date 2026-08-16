@@ -8,6 +8,8 @@ import GruposPanel, { type Grupo } from "@/components/grupos-panel";
 import SenalesGrupos, { type Signal } from "@/components/senales-grupos";
 import ImportarExport from "@/components/importar-export";
 import RadarToggle from "@/components/radar-toggle";
+import VincularLinea, { type Sesion, type Asesor } from "@/components/vincular-linea";
+import GruposPermisos, { type GrupoVivo } from "@/components/grupos-permisos";
 
 export const dynamic = "force-dynamic";
 
@@ -101,6 +103,28 @@ export default async function GruposPage() {
 
   const grupos = gruposRes.data || [];
 
+  // Escucha en vivo — solo admin. Vincular una línea la expone a que WhatsApp la
+  // banee, y habilitar la respuesta hace que el bot publique delante de 80
+  // inmobiliarias competidoras. Ninguna de las dos es tarea diaria de un asesor.
+  //
+  // Si las migraciones de la escucha no corrieron, estas consultas fallan y la
+  // sección simplemente no aparece: el resto de la pantalla sigue funcionando.
+  const [sesionesRes, asesoresRes] = admin
+    ? await Promise.all([
+        fetchSafe<Sesion>(
+          supabase.from("whatsapp_sessions").select("*").order("created_at"),
+          "grupos:whatsapp_sessions"
+        ),
+        fetchSafe<Asesor>(
+          supabase.from("advisors").select("id, name, phone").eq("activo", true).order("name"),
+          "grupos:advisors"
+        ),
+      ])
+    : [null, null];
+
+  const sesiones = sesionesRes?.data || [];
+  const gruposVivos: GrupoVivo[] = grupos.filter((g) => g.jid.endsWith("@g.us"));
+
   // De qué grupo salió cada señal. Sin esto el asesor lee un pedido, copia el
   // borrador… y no sabe a dónde ir a pegarlo. Se resuelve acá y no con un join
   // en la consulta: los grupos ya vienen completos para el panel de abajo, así
@@ -157,13 +181,29 @@ export default async function GruposPage() {
       <p className="mb-6 text-sm text-slate-500">
         Un asesor está en 80 grupos con más de mil mensajes al día: nadie los lee, y el pedido
         bueno se traspapela. Acá se destila eso en lo accionable — quién busca lo que vos tenés,
-        y qué publican los colegas.{" "}
-        <strong>Sofi nunca escribe en ningún grupo</strong> y no se conecta a la línea de nadie.
+        y qué publican los colegas. Los mensajes entran por tres vías: el export del chat, el
+        reenvío a Sofi, y —solo en los grupos que un administrador habilite— la escucha en vivo
+        desde una línea dedicada de la empresa.
       </p>
 
       {gruposRes.hasError && <ErrorBanner message={gruposRes.message} />}
 
       <RadarToggle activo={radarActivo} puedeCambiar={admin} />
+
+      {admin && (
+        <section className="mb-8">
+          <h2 className="mb-1 text-lg font-semibold text-slate-900">Escucha en vivo</h2>
+          <p className="mb-3 text-sm text-slate-500">
+            Una línea dedicada de la empresa se vincula por QR y el radar lee los grupos que se
+            habiliten. En los que además tengan <strong>Responder</strong> prendido, publica una
+            respuesta cuando encuentra propiedades que encajan.
+          </p>
+          <div className="flex flex-col gap-4">
+            <VincularLinea sesiones={sesiones} asesores={asesoresRes?.data || []} />
+            <GruposPermisos grupos={gruposVivos} />
+          </div>
+        </section>
+      )}
 
       {sinVincular && (
         <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">

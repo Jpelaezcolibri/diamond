@@ -3,18 +3,18 @@ export type Grupo = {
   jid: string;
   nombre: string | null;
   modo: "ignorar" | "sombra" | "sugerir";
+  responde: boolean;
   activo: boolean;
   created_at: string;
 };
 
 // De dónde salió cada grupo. El prefijo del jid lo dice: los que se crean al
 // subir un export llevan "export:", el buzón de reenvíos lleva "reenvio:", y
-// los que quedaron de la escucha en vivo (retirada tras el baneo del 30-jul)
-// tienen un jid real de WhatsApp.
+// los que tienen un jid real de WhatsApp vienen de una línea vinculada.
 function origen(jid: string) {
   if (jid.startsWith("export:")) return { etiqueta: "export", clase: "bg-sky-50 text-sky-700" };
   if (jid.startsWith("reenvio:")) return { etiqueta: "reenvío", clase: "bg-violet-50 text-violet-700" };
-  return { etiqueta: "histórico", clase: "bg-slate-100 text-slate-500" };
+  return { etiqueta: "en vivo", clase: "bg-amber-50 text-amber-700" };
 }
 
 export default function GruposPanel({ grupos }: { grupos: Grupo[] }) {
