@@ -1,0 +1,131 @@
+// El canal de escucha en vivo y la frontera del envio.
+//
+// ═══ POR QUE ESTE ARCHIVO EXISTE Y QUE REEMPLAZA ═══
+//
+// Hasta el 2026-07-30 habia TRES tests (group-canal, group-fase2,
+// group-waha-qr) que leian el fuente para probar que el sistema NO podia enviar
+// nada por la linea vinculada. Esa garantia se retiro a proposito el 2026-08-16
+// para que el radar pueda responder dentro del grupo.
+//
+// Retirarla sin poner nada en su lugar seria el error. La garantia nueva es mas
+// debil pero sigue siendo verificable: el envio existe en UNA sola funcion
+// (`waha.enviarTexto`), y ningun otro punto del canal puede publicar. Si alguien
+// agrega un fetch al canal, o un segundo endpoint de envio al cliente de WAHA,
+// esta suite falla.
+//
+// Se verifica sobre el TEXTO del fuente, no sobre los exports: el canal exporta
+// un router de Express, asi que mirar los exports daria un falso negativo el dia
+// que alguien meta un envio dentro de un handler sin exportarlo.
+
+const { test } = require("node:test");
+const assert = require("node:assert");
+const fs = require("node:fs");
+const path = require("node:path");
+
+const RAIZ = path.join(__dirname, "..");
+const leer = (p) => fs.readFileSync(path.join(RAIZ, p), "utf8");
+
+// Quita comentarios de linea y de bloque: los encabezados de estos modulos
+// hablan largo de /api/sendText y de fetch, y no son codigo.
+function soloCodigo(fuente) {
+  return fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+}
+
+test("el canal no tiene ninguna via de salida propia", () => {
+  // Todo lo que publica pasa por waha.enviarTexto. Si aparece un fetch, un
+  // axios o una llamada directa al API de WAHA aca, hay una segunda puerta.
+  const codigo = soloCodigo(leer("src/channels/whatsapp-group.js"));
+  for (const prohibido of ["fetch(", "axios", "http.request", "/api/send", "sendText(", "sendMessage("]) {
+    assert.ok(
+      !codigo.includes(prohibido),
+      `El canal no puede contener "${prohibido}": el envio vive solo en waha.enviarTexto`
+    );
+  }
+});
+
+test("el cliente de WAHA expone exactamente UN endpoint de envio", () => {
+  const codigo = soloCodigo(leer("src/lib/waha.js"));
+  // El unico endpoint de escritura de mensajes permitido.
+  const envios = codigo.match(/\/api\/send\w*/g) || [];
+  assert.deepStrictEqual(
+    [...new Set(envios)],
+    ["/api/sendText"],
+    "Si aparece otro /api/send*, hay una capacidad nueva que nadie decidio agregar"
+  );
+  // Y una sola funcion que lo use.
+  const funciones = codigo.match(/async function (\w+)/g) || [];
+  assert.ok(funciones.includes("async function enviarTexto"));
+  assert.strictEqual(
+    (codigo.match(/"\/api\/sendText"/g) || []).length,
+    1,
+    "El endpoint de envio se menciona una sola vez, dentro de enviarTexto"
+  );
+});
+
+test("enviarTexto se niega a escribir fuera de un grupo", async () => {
+  // Guarda dura: este cliente existe para hablar en grupos gremiales. Un
+  // chatId que no sea de grupo significa que algo aguas arriba se equivoco de
+  // destinatario, y escribirle por error al privado de un colega es peor que
+  // no enviar nada.
+  process.env.WAHA_URL = "http://waha.test";
+  process.env.WAHA_API_KEY = "x";
+  const waha = require("../src/lib/waha");
+
+  const privado = await waha.enviarTexto("sesion", "573001234567@c.us", "hola");
+  assert.strictEqual(privado.ok, false);
+  assert.match(privado.error, /Destino invalido/);
+
+  const vacio = await waha.enviarTexto("sesion", null, "hola");
+  assert.strictEqual(vacio.ok, false);
+});
+
+test("sin configuracion de WAHA no se intenta enviar nada", async () => {
+  const url = process.env.WAHA_URL;
+  delete process.env.WAHA_URL;
+  const waha = require("../src/lib/waha");
+  const r = await waha.enviarTexto("sesion", "123@g.us", "hola");
+  assert.strictEqual(r.ok, false);
+  assert.match(r.error, /WAHA_URL/);
+  if (url) process.env.WAHA_URL = url;
+});
+
+test("el canal descarta lo que no es grupo antes de tocar la base", () => {
+  // INVARIANTE 1. El orden importa: el descarte tiene que estar ANTES de
+  // organizations.getDefault(), o los chats privados de la linea llegarian a
+  // generar consultas y logs.
+  const codigo = soloCodigo(leer("src/channels/whatsapp-group.js"));
+  const guardia = codigo.indexOf("!esGrupo(ev.chatId)");
+  const primeraConsulta = codigo.indexOf("organizations.getDefault()");
+  assert.ok(guardia > 0, "tiene que existir el guard de @g.us");
+  assert.ok(primeraConsulta > guardia, "el descarte va antes de cualquier consulta");
+});
+
+test("el permiso de responder es distinto del de escuchar, y nace apagado", () => {
+  const whatsappGroups = require("../src/data/whatsapp-groups");
+  const codigo = soloCodigo(leer("src/data/whatsapp-groups.js"));
+
+  // Importar una linea trae TODOS sus grupos de golpe (la asesora de julio
+  // tenia 80). Si `responde` naciera en true, un clic pondria al bot a hablar
+  // en ochenta grupos gremiales a la vez.
+  assert.ok(codigo.includes("responde: false"), "un grupo nuevo nace sin permiso de responder");
+  assert.strictEqual(typeof whatsappGroups.setResponde, "function");
+  // Y se cambia por una funcion propia, no como efecto secundario de setModo.
+  const setModo = codigo.slice(codigo.indexOf("async function setModo"), codigo.indexOf("async function setResponde"));
+  assert.ok(!setModo.includes("responde"), "setModo no puede tocar el permiso de publicar");
+});
+
+test("la lista blanca falla cerrada y no inventa el permiso", async () => {
+  // Si la migracion no corrio, la columna `responde` no viene: el grupo queda
+  // sin permiso en vez de heredar un true optimista.
+  const codigo = soloCodigo(leer("src/data/whatsapp-groups.js"));
+  assert.ok(codigo.includes("responde: g.responde === true"));
+  assert.ok(codigo.includes("return new Map()"), "ante un error, mapa vacio: quedamos sordos, no abiertos");
+});
+
+test("el canal solo se monta con las dos variables puestas", () => {
+  const codigo = soloCodigo(leer("src/server.js"));
+  assert.ok(codigo.includes("config.groups.webhookSecret && config.groups.enabled"));
+  // GROUPS_ENABLED tiene que exigir el string exacto: cualquier otra cosa deja
+  // el canal apagado en vez de encenderlo por accidente.
+  assert.ok(soloCodigo(leer("src/config.js")).includes('process.env.GROUPS_ENABLED === "true"'));
+});

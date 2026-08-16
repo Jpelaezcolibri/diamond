@@ -63,13 +63,29 @@ const config = {
 
   // Radar de grupos: lo que se detecta en los grupos gremiales.
   //
-  // La captura entra por dos vias que NO tocan el protocolo de WhatsApp y por
-  // lo tanto no son baneables: el export nativo del chat subido al CRM, y el
-  // reenvio de un mensaje a Sofi por la Cloud API oficial. La escucha en vivo
-  // via WAHA se retiro el 2026-07-30, cuando WhatsApp baneo la linea de la
-  // asesora que estaba pareada — sanciona el cliente no oficial, no la
-  // conducta, asi que "solo lectura" no protegia de nada.
+  // Entra por tres vias. Dos NO tocan el protocolo de WhatsApp y por lo tanto
+  // no son baneables: el export nativo del chat subido al CRM, y el reenvio de
+  // un mensaje a Sofi por la Cloud API oficial.
+  //
+  // La tercera —la escucha en vivo via WAHA— si lo toca, y se reactivo el
+  // 2026-08-16 sobre una LINEA DEDICADA de la empresa. Conviene recordar por
+  // que: el 2026-07-30 WhatsApp baneo la linea de la asesora que estaba
+  // pareada, y ese montaje solo leia. Se sanciona el cliente no oficial, no la
+  // conducta, asi que "solo lectura" nunca fue lo que protegia — lo unico que
+  // protege es que la linea sea sacrificable.
   groups: {
+
+    // Escucha en vivo. Sin `webhookSecret` el canal NO se monta: es el
+    // interruptor de nivel 1, y su ausencia deja el codigo inerte.
+    webhookSecret: process.env.GROUPS_WEBHOOK_SECRET || "",
+    // Interruptor de nivel 2. Apagarlo frena el webhook Y los endpoints que
+    // hablan con WAHA — en julio solo frenaba el primero, y un clic en
+    // "Vincular linea" podia re-parear el numero mientras Meta revisaba la
+    // cuenta suspendida.
+    enabled: process.env.GROUPS_ENABLED === "true",
+    // 'sombra' redacta y registra sin publicar; 'auto' publica. Cualquier otro
+    // valor apaga la respuesta: un typo no puede encender el envio.
+    respuestaModo: process.env.GRUPOS_RESPUESTA_MODO || "sombra",
 
     // Digest diario del radar de grupos.
     //

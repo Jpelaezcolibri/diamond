@@ -19,6 +19,17 @@ app.use(whatsapp);
 // solo expone una ruta que procesa mensajes sin poder confirmar el secret
 // token de forma util (ver channels/telegram.js).
 if (config.telegramToken) app.use(telegram);
+// Escucha en vivo de grupos gremiales. DOS condiciones para montarse, y las dos
+// son interruptores reales: sin el secreto el webhook no podria autenticar a
+// nadie, y sin GROUPS_ENABLED=true el canal queda fuera del proceso — no es un
+// flag que el codigo consulte despues, la ruta no existe.
+//
+// Es deliberadamente mas dificil de encender que de apagar: quitar cualquiera
+// de las dos variables y redesplegar deja el radar sordo y mudo.
+if (config.groups.webhookSecret && config.groups.enabled) {
+  app.use(require("./channels/whatsapp-group"));
+  console.log(`[grupos] Escucha en vivo montada (modo de respuesta: ${config.groups.respuestaModo}).`);
+}
 // assistant antes que crm: el middleware "/api" de crm.js matchea tambien
 // /api/assistant/* y exige Supabase; montar assistant primero deja que su
 // propio guard maneje la ruta sin acoplarse a crm.js.
