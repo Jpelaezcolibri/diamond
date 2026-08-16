@@ -190,6 +190,34 @@ test("un dato que el inventario SÍ tiene y no cumple, descalifica", () => {
   assert.strictEqual(evaluarCandidata(apto({ estrato: 3 }), pide({ estrato: 5 }), "diamond"), null);
 });
 
+test("el área se lee bien en el formato REAL de Wasi, sin unidad separada", () => {
+  // Regresión del 2026-08-16. El parser viejo quitaba "todo lo que no fuera
+  // dígito", así que "92m2" se leía 922: el 2 de la unidad quedaba pegado.
+  // Toda área salía inflada ~10x, la compuerta no rechazaba nunca y encima
+  // regalaba sus 8 puntos. Los fixtures usaban "95 m²" —con superíndice, que no
+  // es dígito— y por eso los tests nunca lo vieron. Se prueba con las dos
+  // escrituras a propósito.
+  assert.strictEqual(evaluarCandidata(apto({ area: "92m2" }), pide({ area_min: 100 }), "diamond"), null);
+  assert.strictEqual(evaluarCandidata(apto({ area: "60m2" }), pide({ area_min: 90 }), "diamond"), null);
+
+  const cumple = evaluarCandidata(apto({ area: "113m2" }), pide({ area_min: 100 }), "diamond");
+  assert.ok(cumple, "113m2 sí cumple un pedido de 100 m²");
+  assert.match(cumple.razones.join(" | "), /113 m²/, "y lo declara con el número real");
+});
+
+test("el precio no se infla con los dígitos que trae el texto al lado", () => {
+  // Mismo bug, otra columna: "$450.000.000 negociable 2024" se leía
+  // 4500000002024. Un precio así pasa cualquier techo por arriba y la
+  // propiedad quedaba descartada en silencio (o peor, se publicaba).
+  const m = evaluarCandidata(
+    apto({ precio: "$450.000.000 negociable 2024" }),
+    pide({ precio_max: 600000000 }),
+    "diamond"
+  );
+  assert.ok(m, "el precio real cabe en el presupuesto");
+  assert.match(m.razones.join(" | "), /\$450M dentro de \$600M/);
+});
+
 test("el que aprovecha el presupuesto puntúa más que el que se queda corto", () => {
   const alto = evaluarCandidata(apto({ precio: "$580.000.000" }), pide(), "diamond");
   const bajo = evaluarCandidata(apto({ precio: "$390.000.000" }), pide(), "diamond");

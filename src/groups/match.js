@@ -86,12 +86,16 @@ function mismaOperacion(propiedad, c) {
 const BANDA_INFERIOR = Number(process.env.GRUPOS_BANDA_PRECIO || 0.6);
 const PUNTAJE_BASE = 55;
 
-function aNumero(v) {
-  const n = parseInt(String(v ?? "").replace(/\D/g, ""), 10);
-  return Number.isFinite(n) && n > 0 ? n : null;
-}
+// El parseo de precio y area vive en src/lib/formato.js. Antes habia aca un
+// `aNumero` que hacia `replace(/\D/g, "")`, y ese "quitar todo lo que no sea
+// digito" tenia un bug que no fallaba ruidosamente: sobre el formato REAL de
+// Wasi ("92m2") pegaba el 2 de la unidad y devolvia 922. Toda area quedaba
+// inflada ~10x, asi que la compuerta de area no rechazaba nunca y ademas
+// regalaba sus 8 puntos. No se veia en los tests porque los fixtures usaban
+// "95 m²" con superindice, que no es un digito.
+const formato = require("../lib/formato");
 
-const millones = (n) => (n >= 1000000 ? `$${Math.round(n / 1000000)}M` : `$${n.toLocaleString("es-CO")}`);
+const millones = (n) => formato.formatearPrecioCorto(n);
 
 // La zona pedida se compara SOLO contra la zona de la propiedad. Mezclar la
 // ciudad convertia "Loma del Chocho" en "todo Envigado": ese cruce cruzado
@@ -149,7 +153,7 @@ function evaluarCandidata(p, c, fuente) {
   let puntaje = PUNTAJE_BASE + ubicacion.puntos;
 
   // ── Precio: banda, no techo ──
-  const precio = aNumero(p.precio);
+  const precio = formato.parsearPrecio(p.precio);
   const techo = c.precio_max > 0 ? c.precio_max : null;
   const piso = c.precio_min > 0 ? c.precio_min : techo ? Math.round(techo * BANDA_INFERIOR) : null;
   if (precio && techo) {
@@ -166,7 +170,7 @@ function evaluarCandidata(p, c, fuente) {
   // no descalifica (es un hueco de nuestro sync, no un defecto del inmueble).
   const exigencias = [
     { pide: c.habitaciones, tiene: p.habitaciones, ok: (t, q) => t >= q && t <= q + 1, texto: (t) => `${t} alcobas`, puntos: 10 },
-    { pide: c.area_min, tiene: aNumero(p.area), ok: (t, q) => t >= q, texto: (t) => `${t} m²`, puntos: 8 },
+    { pide: c.area_min, tiene: formato.parsearArea(p.area), ok: (t, q) => t >= q, texto: (t) => `${t} m²`, puntos: 8 },
     { pide: c.banos, tiene: p.banos, ok: (t, q) => t >= q, texto: (t) => `${t} baños`, puntos: 6 },
     { pide: c.garajes, tiene: p.garaje, ok: (t, q) => t >= q, texto: (t) => `${t} garaje${t > 1 ? "s" : ""}`, puntos: 6 },
     { pide: c.estrato, tiene: p.estrato, ok: (t, q) => t >= q, texto: (t) => `estrato ${t}`, puntos: 5 },
