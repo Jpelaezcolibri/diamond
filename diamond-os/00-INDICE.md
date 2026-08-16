@@ -60,6 +60,11 @@ Reemplazados en la práctica por el Blueprint (diseño) y sus siguientes
 etapas de especificación por dominio. No se reactivan Nivel 1/2 salvo
 necesidad puntual y explícita.
 
+## Investigación de canal — WhatsApp y grupos gremiales (ago-2026)
+
+- [Investigación: matching inmobiliario sobre WhatsApp con mínimo riesgo de bloqueo](investigacion-whatsapp-matching-2026-08.md) — estado: APROBADO COMO EVIDENCIA. Estado oficial de la plataforma a ago-2026 (Cloud API, Groups API, Coexistence, OBA, 15 BSPs, productos "group inbox", librerías no oficiales, Ley 1581), con veredicto: no existe vía oficial a grupos existentes; arquitectura recomendada = la captura segura ya desplegada + automatización oficial máxima. Confirma y precisa D9 del EPE.
+- [Deep dive: Group Gateway → Sofi → Wasi → respuesta](deep-dive-group-gateway-2026-08.md) — estado: APROBADO COMO EVIDENCIA. Continuación quirúrgica de la anterior: veredicto por superficie (READ/RECEIVE/WRITE/REPLY), auditoría de 25+ proveedores con su tecnología real, diseño del Gateway como contrato transporte-agnóstico sobre los módulos existentes, política anti-spam, y las 5 respuestas ejecutivas.
+
 ## Contexto ya construido (no redescubrir)
 
 El repo ya documenta lo existente; los expedientes lo referencian en vez
