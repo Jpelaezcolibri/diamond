@@ -39,3 +39,23 @@ test("distinctiveTokens usa las genericas como ultimo recurso si no hay distinti
 test("sin zona, matchesFilters no filtra por ubicacion", () => {
   assert.strictEqual(matchesFilters(lomaChocho, {}), true);
 });
+
+test("el filtro de precio no se rompe con el texto que trae el label de Wasi", () => {
+  // Regresion del 2026-08-16. `parseInt(replace(/\D/g,""))` sobre
+  // "$450.000.000 negociable 2024" pegaba todos los digitos y devolvia
+  // 4500000002024: la propiedad quedaba fuera de CUALQUIER presupuesto, en
+  // silencio y sin que nada fallara. Mismo bug que se corrigio en
+  // src/groups/match.js; esta era la otra mitad, la que ve el cliente.
+  const sucia = { ...castropol, precio: "$450.000.000 negociable 2024" };
+  assert.strictEqual(matchesFilters(sucia, { precio_max: 600000000 }), true);
+  assert.strictEqual(matchesFilters(sucia, { precio_max: 400000000 }), false);
+
+  const limpia = { ...castropol, precio: "$820.000.000" };
+  assert.strictEqual(matchesFilters(limpia, { precio_max: 900000000 }), true);
+  assert.strictEqual(matchesFilters(limpia, { precio_max: 800000000 }), false);
+
+  // Un precio sin numero util no puede excluir la propiedad: es un hueco del
+  // sync, no un defecto del inmueble. Mismo criterio que match.js.
+  const sinPrecio = { ...castropol, precio: "Precio a convenir" };
+  assert.strictEqual(matchesFilters(sinPrecio, { precio_max: 100000000 }), true);
+});

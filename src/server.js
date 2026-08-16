@@ -101,4 +101,10 @@ app.listen(config.port, () => {
   // Digest diario del radar de grupos: lo que entro por export o por reenvio
   // no le sirve a nadie si hay que abrir el CRM para verlo.
   if (config.supabaseUrl) require("./scheduler/group-digest").start();
+  // Vigila el radar en vivo y el inventario. Los fallos de este ecosistema son
+  // silenciosos: el baneo de julio se descubrio porque Juan abrio una pantalla,
+  // y el sync de Wasi se salteo cinco dias seguidos sin dejar mas rastro que un
+  // hueco en una tabla. Avisa por la linea OFICIAL de Sofi, nunca por la
+  // vinculada — si lo que se cayo es esa linea, avisar por ahi no serviria.
+  if (config.supabaseUrl) require("./scheduler/radar-watchdog").start();
 });

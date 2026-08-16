@@ -2,6 +2,7 @@ const supabase = require("./supabase");
 const memory = require("./memory");
 const config = require("../config");
 const { buildSlug } = require("../lib/slug");
+const formato = require("../lib/formato");
 
 // El "link" que ve el cliente (ficha de Sofi, mensaje al asesor) debe ser
 // SIEMPRE el de la landing propia, nunca el de Wasi/inmo.co (que trae la
@@ -39,7 +40,13 @@ function matchesFilters(p, f) {
   if (f.tipo && !p.tipo.toLowerCase().includes(f.tipo.toLowerCase())) return false;
   if (f.habitaciones_min && p.habitaciones < f.habitaciones_min) return false;
   if (f.precio_max) {
-    const precio = parseInt(String(p.precio).replace(/\D/g, ""), 10);
+    // Antes esto hacia `parseInt(replace(/\D/g, ""))`, que sobre el formato real
+    // de Wasi pegaba todos los digitos del texto: "$450.000.000 negociable 2024"
+    // devolvia 4500000002024 y la propiedad quedaba fuera de cualquier
+    // presupuesto, en silencio. El parser de src/lib/formato.js toma el primer
+    // grupo numerico. Mismo bug que en src/groups/match.js, corregido alli el
+    // 2026-08-16; esta era la otra mitad, la que ve el cliente.
+    const precio = formato.parsearPrecio(p.precio);
     if (precio && precio > f.precio_max) return false;
   }
   return true;

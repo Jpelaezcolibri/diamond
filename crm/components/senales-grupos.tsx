@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { fechaHora } from "@/lib/fecha";
+import { formatearArea, formatearPrecio, pluralAlcobas } from "@/lib/formato";
 
 export type Match = {
   fuente: string; // "diamond" (inventario propio) | "aliado" (red de colegas)
@@ -141,17 +142,28 @@ function borrador(s: Signal, matches: Match[]) {
   if (propios.length === 0) return "";
 
   const quien = s.autor_nombre ? `Hola ${s.autor_nombre.split(" ")[0]}, ` : "Hola, ";
+  // Los valores pasan por el mismo formateo que usa el radar en vivo. Antes se
+  // imprimían crudos —la columna `precio` es TEXT y trae lo que alguien tecleó
+  // en Wasi— así que un "$0" o un typo salían tal cual. Este texto lo copia un
+  // asesor y lo pega en un grupo de 80 competidores: es igual de público que el
+  // automático y merece el mismo cuidado.
   const lineas = propios.map((m) => {
-    const ficha = [m.zona, m.habitaciones ? `${m.habitaciones} alcobas` : null, m.area, m.precio]
+    const ficha = [
+      m.zona,
+      pluralAlcobas(m.habitaciones),
+      formatearArea(m.area),
+      formatearPrecio(m.precio),
+    ]
       .filter(Boolean)
       .join(" · ");
-    return `• ${m.titulo || "Propiedad"}\n  ${ficha}${m.link ? `\n  ${m.link}` : ""}`;
+    const encabezado = [m.ref ? `Ref ${m.ref}` : null, m.titulo || "Propiedad"].filter(Boolean).join(" · ");
+    return `• ${encabezado}\n  ${ficha}${m.link ? `\n  ${m.link}` : ""}`;
   });
 
   return (
     `${quien}vi tu solicitud en el grupo. Tengo esto disponible que te puede servir:\n\n` +
     `${lineas.join("\n\n")}\n\n` +
-    `Comisión compartida 50/50 si te sirve alguna.`
+    `Comisión compartida.`
   );
 }
 

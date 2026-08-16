@@ -120,6 +120,25 @@ contadores del proceso: `recibidos`, `prefiltrados`, `difundidos`, `publicados`,
 Los contadores viven en memoria y se reinician con cada deploy. Lo que sí
 persiste es `group_signals`: ahí está el texto de todo lo que se publicó.
 
+### El watchdog
+
+Revisa cada 30 minutos y avisa por WhatsApp a los números de
+`RADAR_WATCHDOG_TO`. Sin esa variable **no arranca**: un vigilante que no tiene
+a quién llamar no es un vigilante.
+
+Detecta dos cosas: que la sesión vinculada se haya caído (`FAILED`, `STOPPED`,
+`ERROR`) y que el inventario esté viejo. Avisa una sola vez por problema, y
+también cuando se normaliza — si no, quien recibe la alarma nunca sabe que puede
+dejar de preocuparse, y termina ignorándolas.
+
+**No intenta arreglar nada**, y hay un test que lo verifica: no puede llamar a
+`reintentarUnaVez`, `revincular`, `crearSesion` ni `restart`. Detecta y avisa;
+levantar la sesión es decisión de una persona.
+
+Los avisos salen por la **línea oficial de Sofi**, nunca por la vinculada: si lo
+que se cayó es esa línea, avisar por ahí sería pedirle al muerto que avise de su
+muerte.
+
 ## Límites que aplica solo
 
 | Control | Variable | Default |
