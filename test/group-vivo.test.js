@@ -18,6 +18,7 @@ let señalCreada = null;
 let respuestasRecientes = { cantidad: 0, ultimaIso: null };
 let marcadas = [];
 let ofertasGuardadas = [];
+let inventario = { fresco: true, iso: new Date().toISOString(), horas: 1 };
 
 function instalarDobles() {
   require.cache[RUTA("groups/classify.js")] = {
@@ -63,6 +64,9 @@ function instalarDobles() {
   require.cache[RUTA("data/organizations.js")] = {
     exports: { radarEncendido: (org) => org.radar_activo !== false },
   };
+  require.cache[RUTA("data/sync-estado.js")] = {
+    exports: { estadoDelInventario: async () => inventario },
+  };
   delete require.cache[RUTA("groups/vivo.js")];
   return require("../src/groups/vivo");
 }
@@ -102,6 +106,7 @@ beforeEach(() => {
   respuestasRecientes = { cantidad: 0, ultimaIso: null };
   marcadas = [];
   ofertasGuardadas = [];
+  inventario = { fresco: true, iso: new Date().toISOString(), horas: 1 };
   vivo = instalarDobles();
 });
 
@@ -212,6 +217,28 @@ test("si ninguna propiedad pasa la compuerta, se calla y se explica por que", as
   assert.strictEqual(r.resultado, "callado");
   assert.strictEqual(r.motivo, "sin_propiedades_publicables");
   assert.deepStrictEqual(r.descartados.map((d) => d.ref), ["AP004", "9921388"]);
+});
+
+test("con el sync de Wasi detenido no se publica nada", async () => {
+  // Si el sync se paro el martes, no se sabe que se vendio desde entonces, y el
+  // bot seguiria ofreciendo con total seguridad propiedades que ya no estan.
+  // DMAP ya estuvo 16 dias detenido sin que nadie se enterara.
+  inventario = { fresco: false, iso: "2026-08-10T00:00:00Z", horas: 150 };
+  const r = await vivo.procesarMensaje(ORG, mensaje(), {
+    grupo: GRUPO, modo: "auto", ahora: MEDIODIA, enviar: async () => ({ ok: true }),
+  });
+  assert.strictEqual(r.resultado, "callado");
+  assert.strictEqual(r.motivo, "sin_propiedades_publicables");
+  assert.ok(r.descartados.every((d) => d.motivos.includes("sync_viejo")));
+});
+
+test("si no se puede leer el estado del sync, tampoco se publica", async () => {
+  // Falla cerrada: sin poder PROBAR que el inventario esta al dia, se calla.
+  inventario = { fresco: false, iso: null, horas: null };
+  const r = await vivo.procesarMensaje(ORG, mensaje(), {
+    grupo: GRUPO, modo: "auto", ahora: MEDIODIA, enviar: async () => ({ ok: true }),
+  });
+  assert.strictEqual(r.resultado, "callado");
 });
 
 test("si no se puede verificar el limite de frecuencia, no se publica", async () => {

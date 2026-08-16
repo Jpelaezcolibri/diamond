@@ -27,6 +27,7 @@ const politica = require("./politica");
 const redactar = require("./redactar");
 const groupSignals = require("../data/group-signals");
 const organizations = require("../data/organizations");
+const syncEstado = require("../data/sync-estado");
 
 const VENTANA_LIMITE_HORAS = 24;
 
@@ -94,7 +95,15 @@ async function procesarMensaje(org, mensaje, { grupo, modo = "sombra", enviar = 
 
   // 5. Compuerta de calidad del dato, y despues politica de conducta. Son dos
   // preguntas distintas: "¿este dato es publicable?" y "¿corresponde hablar?".
-  const { publicables, descartados } = publicable.filtrar(señal.matches || []);
+  //
+  // La frescura del inventario entra ACA y no en la politica porque no es una
+  // regla de conducta: es una propiedad del dato. Si el sync de Wasi se detuvo,
+  // no se sabe que se vendio desde entonces, y ofrecer en un grupo gremial algo
+  // vendido hace tres dias es el error que no se puede deshacer.
+  const inventario = await syncEstado.estadoDelInventario(org.id, { ahora });
+  const { publicables, descartados } = publicable.filtrar(señal.matches || [], {
+    syncFresco: inventario.fresco,
+  });
 
   const recientes = await groupSignals.respuestasDesde(
     org.id,

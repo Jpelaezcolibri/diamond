@@ -19,6 +19,7 @@ const publicable = require("../src/groups/publicable");
 const redactar = require("../src/groups/redactar");
 const organizations = require("../src/data/organizations");
 const advisors = require("../src/data/advisors");
+const syncEstado = require("../src/data/sync-estado");
 
 function arg(nombre, porDefecto) {
   const i = process.argv.indexOf(`--${nombre}`);
@@ -62,7 +63,14 @@ const clasificado = {
     console.log(`  [${String(m.puntaje).padStart(3)}] ${m.fuente.padEnd(7)} ${String(m.ref).padEnd(10)} ${m.zona} — ${m.precio} — ${m.area}`);
   }
 
-  const { publicables, descartados } = publicable.filtrar(d.matches);
+  const inventario = await syncEstado.estadoDelInventario(org.id);
+  console.log(
+    `\nInventario: ultimo sync ${inventario.iso || "desconocido"}` +
+      (inventario.horas !== null ? ` (hace ${inventario.horas} h)` : "") +
+      ` -> ${inventario.fresco ? "fresco" : "VIEJO, no se publica nada"}`
+  );
+
+  const { publicables, descartados } = publicable.filtrar(d.matches, { syncFresco: inventario.fresco });
   console.log(`\nPasan la compuerta de calidad: ${publicables.length} de ${d.matches.length}`);
   for (const x of descartados) console.log(`  descartada ${x.ref}: ${x.motivos.join(", ")}`);
 
