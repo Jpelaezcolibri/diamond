@@ -33,11 +33,11 @@ function motivoImportarDeshabilitado(nombre: string, status: string | null | und
   }
 }
 
-async function llamar(accion: string, nombre: string, advisorId?: string | null) {
+async function llamar(accion: string, nombre: string, advisorId?: string | null, rol?: string) {
   const res = await fetch("/api/grupos/sesion", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ accion, nombre, advisorId: advisorId || null }),
+    body: JSON.stringify({ accion, nombre, advisorId: advisorId || null, rol: rol || "dedicada" }),
   }).catch(() => null);
   const body = res ? await res.json().catch(() => ({})) : {};
   if (!res || !res.ok) throw new Error(body.error || "El bot no respondió");
@@ -49,6 +49,7 @@ export default function VincularLinea({ sesiones, asesores }: { sesiones: Sesion
   const [, startTransition] = useTransition();
   const [nombre, setNombre] = useState(sesiones[0]?.nombre || "");
   const [advisorId, setAdvisorId] = useState(sesiones[0]?.advisor_id || "");
+  const [rol, setRol] = useState(sesiones[0]?.rol || "dedicada");
   const [estado, setEstado] = useState<Estado | null>(null);
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -58,6 +59,7 @@ export default function VincularLinea({ sesiones, asesores }: { sesiones: Sesion
   function seleccionar(s: Sesion | null) {
     setNombre(s?.nombre || "");
     setAdvisorId(s?.advisor_id || "");
+    setRol(s?.rol || "dedicada");
     setEstado(null);
     setError(null);
     setAviso(null);
@@ -103,13 +105,18 @@ export default function VincularLinea({ sesiones, asesores }: { sesiones: Sesion
   }, [nombre, estado?.status, router]);
 
   async function accion(a: "crear" | "importar" | "reintentar" | "revincular") {
-    if (a === "crear" && !confirm(
-      "Vas a vincular esta línea a un cliente NO OFICIAL de WhatsApp.\n\n" +
-      "Confirmá que es una línea SECUNDARIA de la empresa, que se puede perder:\n" +
-      "· NO la de Sofi (está en Cloud API oficial)\n" +
-      "· NO la de Catherine ni la de ningún asesor con clientes\n\n" +
-      "El 2026-07-30 WhatsApp baneó la línea de una asesora con este mismo montaje.\n\n¿Seguir?"
-    )) return;
+    const aviso =
+      rol === "asesor"
+        ? "Vas a vincular la LÍNEA PERSONAL DE UN ASESOR a un cliente NO OFICIAL de WhatsApp.\n\n" +
+          "Si WhatsApp la banea, esa persona pierde sus conversaciones con clientes y su red de " +
+          "contactos — no la empresa.\n\n" +
+          "Confirmá que quien es dueño de la línea lo sabe y está de acuerdo.\n\n¿Seguir?"
+        : "Vas a vincular esta línea a un cliente NO OFICIAL de WhatsApp.\n\n" +
+          "Confirmá que es una línea SECUNDARIA de la empresa, que se puede perder:\n" +
+          "· NO la de Sofi (está en Cloud API oficial)\n" +
+          "· NO la de ningún asesor con clientes activos\n\n" +
+          "El 2026-07-30 WhatsApp baneó una línea con este mismo montaje.\n\n¿Seguir?";
+    if (a === "crear" && !confirm(aviso)) return;
 
     // Re-vincular borra las credenciales y obliga a escanear otra vez. Es la
     // única acción que le cuesta tiempo a otra persona, así que no puede
@@ -124,7 +131,7 @@ export default function VincularLinea({ sesiones, asesores }: { sesiones: Sesion
     setError(null);
     setAviso(null);
     try {
-      const r = await llamar(a, nombre, advisorId);
+      const r = await llamar(a, nombre, advisorId, rol);
       if (a === "importar") {
         setAviso(`${r.nuevos} grupo(s) nuevo(s) de ${r.total}. Entran todos apagados: prendelos de a uno abajo.`);
       }
@@ -226,6 +233,20 @@ export default function VincularLinea({ sesiones, asesores }: { sesiones: Sesion
             {asesores.map((a) => (
               <option key={a.id} value={a.id}>{a.name}</option>
             ))}
+          </select>
+        </label>
+        {/* De quién es la línea, declarado y guardado. Antes se forzaba a
+            "dedicada", que era cómodo y falso. El registro sirve para saber
+            después qué se conectó; uno que miente no sirve para nada. */}
+        <label className="flex-1">
+          <span className="mb-1 block text-xs font-medium text-slate-600">De quién es la línea</span>
+          <select
+            value={rol}
+            onChange={(e) => setRol(e.target.value)}
+            className="w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm"
+          >
+            <option value="dedicada">Secundaria de la empresa (sacrificable)</option>
+            <option value="asesor">Personal de un asesor</option>
           </select>
         </label>
         <button

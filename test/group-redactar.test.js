@@ -71,10 +71,12 @@ test("sin asesor resuelto el mensaje sale igual, sin link roto", () => {
   assert.ok(texto.includes("Comision compartida."));
 });
 
-test("el mensaje se identifica como Diamond y como automatico", () => {
-  // En un grupo de 80 colegas el disfraz se descubre; declararlo cuesta menos.
+test("el mensaje se firma como Sofi y se declara asistente", () => {
+  // Sofi es la persona de marca que los colegas ya conocen del 1 a 1. Se aclara
+  // "asistente" a proposito: "Sofi" a secas se lee como una persona, y en un
+  // grupo de 80 colegas el disfraz se descubre.
   const texto = redactar.mensajeGrupo({ autor_nombre: "Ana" }, [match()], { asesor: CATHERINE });
-  assert.ok(texto.includes("— Diamond Inmobiliaria (respuesta automatica)"));
+  assert.ok(texto.includes("— Sofi, asistente de Diamond Inmobiliaria"));
 });
 
 test("un nombre de WhatsApp con emojis no produce un saludo absurdo", () => {

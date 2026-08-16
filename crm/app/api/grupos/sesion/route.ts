@@ -36,16 +36,19 @@ export async function POST(request: Request) {
     );
   }
 
-  const { accion, nombre, advisorId } = await request.json().catch(() => ({}));
+  const { accion, nombre, advisorId, rol } = await request.json().catch(() => ({}));
   const ruta = RUTAS[accion as string];
   if (!ruta) return NextResponse.json({ error: "Acción inválida" }, { status: 400 });
   if (!nombre) return NextResponse.json({ error: "Falta el nombre de la sesión" }, { status: 400 });
 
-  // `importar` nombra el parámetro distinto en el bot; el resto usa `nombre`.
+  // El rol viaja tal como lo declaró quien vincula. Antes se forzaba a
+  // "dedicada", que era cómodo y falso: si la línea es la de una persona, la
+  // fila tiene que decirlo. El registro sirve justamente para saber después qué
+  // se conectó, y un registro que miente no sirve para nada.
   const cuerpo =
     accion === "importar"
       ? { sesion: nombre }
-      : { nombre, advisorId: advisorId || null, rol: "dedicada" };
+      : { nombre, advisorId: advisorId || null, rol: rol === "asesor" ? "asesor" : "dedicada" };
 
   const r = await callBot(ruta, cuerpo);
   return r.ok ? NextResponse.json(r.data) : NextResponse.json({ error: r.error }, { status: r.status });

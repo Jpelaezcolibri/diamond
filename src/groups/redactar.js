@@ -94,7 +94,11 @@ function mensajeGrupo(senal, publicables, { asesor = null, maxPropiedades = MAX_
     cierre.push(`Mas informacion con ${quien}: https://wa.me/${String(asesor.phone).replace(/\D/g, "")}`);
   }
   cierre.push("Comision compartida.");
-  cierre.push("— Diamond Inmobiliaria (respuesta automatica)");
+  // Firma como Sofi, que es la persona de marca que los colegas ya conocen del
+  // 1 a 1. Se aclara "asistente" a proposito: "Sofi" a secas se lee como una
+  // persona, y en un grupo de 80 colegas el disfraz se descubre — descubrirlo
+  // cuesta mas que declararlo.
+  cierre.push("— Sofi, asistente de Diamond Inmobiliaria");
 
   return [encabezado, "", bloques.join("\n\n"), "", cierre.join("\n")].join("\n");
 }
