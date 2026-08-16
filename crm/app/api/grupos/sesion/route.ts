@@ -16,6 +16,9 @@ import { callBot } from "@/lib/bot";
 const RUTAS: Record<string, string> = {
   crear: "/api/grupos/sesion",
   estado: "/api/grupos/sesion/estado",
+  // Reintento manual, una sola vez. No hay nada automático detrás: si no la
+  // levanta, hay que mirar por qué en vez de volver a apretar.
+  reintentar: "/api/grupos/sesion/reintentar",
   revincular: "/api/grupos/sesion/revincular",
   importar: "/api/grupos/importar",
 };

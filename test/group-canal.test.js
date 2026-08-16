@@ -89,6 +89,45 @@ test("sin configuracion de WAHA no se intenta enviar nada", async () => {
   if (url) process.env.WAHA_URL = url;
 });
 
+test("una sesion caida NO se levanta sola", () => {
+  // Decision de Juan (2026-08-16). El 2026-07-30 la secuencia fue 503 -> 60
+  // reintentos en 5 min -> sesion trabada -> baneo.
+  //
+  // Importante para no confundirse: el 503 llego PRIMERO, asi que los reintentos
+  // fueron consecuencia y no causa — esto NO es lo que evita un baneo. Lo que
+  // consigue es que una caida sea visible en vez de quedar tapada por un bucle,
+  // y que el sistema no siga golpeando cuando ya le dijeron que no.
+  const waha = soloCodigo(leer("src/lib/waha.js"));
+
+  // El unico /restart permitido es el del reintento manual.
+  const restarts = waha.match(/\/restart/g) || [];
+  assert.strictEqual(restarts.length, 1, "solo puede haber un punto que reinicie, y es el manual");
+  const i = waha.indexOf("/restart");
+  const fn = waha.lastIndexOf("async function", i);
+  assert.ok(
+    waha.slice(fn, i).includes("reintentarUnaVez"),
+    "el unico reinicio tiene que estar dentro de reintentarUnaVez"
+  );
+
+  // Y crearSesion no puede reiniciar por su cuenta: antes lo hacia.
+  const crear = waha.slice(waha.indexOf("async function crearSesion"), waha.indexOf("async function estadoSesion"));
+  assert.ok(!crear.includes("/restart"), "vincular una linea no puede reiniciar una sesion caida");
+
+  // Nada de temporizadores: un reintento programado es un bucle con otro nombre.
+  for (const p of ["setInterval", "setTimeout"]) {
+    assert.ok(!waha.includes(p), `waha.js no puede usar ${p}: seria una reconexion automatica`);
+  }
+});
+
+test("el reintento manual no lo dispara ningun programador", () => {
+  // Existe un solo llamador y es un endpoint HTTP, o sea una persona.
+  const crm = soloCodigo(leer("src/api/crm.js"));
+  assert.ok(crm.includes('"/api/grupos/sesion/reintentar"'));
+  assert.ok(crm.includes("waha.reintentarUnaVez"));
+  const scheduler = soloCodigo(leer("src/scheduler/group-digest.js"));
+  assert.ok(!scheduler.includes("reintentar"), "ningun worker puede reintentar la sesion");
+});
+
 test("el canal descarta lo que no es grupo antes de tocar la base", () => {
   // INVARIANTE 1. El orden importa: el descarte tiene que estar ANTES de
   // organizations.getDefault(), o los chats privados de la linea llegarian a

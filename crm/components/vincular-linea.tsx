@@ -102,7 +102,7 @@ export default function VincularLinea({ sesiones, asesores }: { sesiones: Sesion
     };
   }, [nombre, estado?.status, router]);
 
-  async function accion(a: "crear" | "importar" | "revincular") {
+  async function accion(a: "crear" | "importar" | "reintentar" | "revincular") {
     if (a === "crear" && !confirm(
       "Vas a vincular esta línea a un cliente NO OFICIAL de WhatsApp.\n\n" +
       "Confirmá que es una línea SECUNDARIA de la empresa, que se puede perder:\n" +
@@ -127,6 +127,14 @@ export default function VincularLinea({ sesiones, asesores }: { sesiones: Sesion
       const r = await llamar(a, nombre, advisorId);
       if (a === "importar") {
         setAviso(`${r.nuevos} grupo(s) nuevo(s) de ${r.total}. Entran todos apagados: prendelos de a uno abajo.`);
+      }
+      if (a === "reintentar") {
+        setEstado({ status: r.status || "STARTING", qr: null, error: null });
+        setAviso(
+          r.status === "WORKING"
+            ? "La sesión volvió. No hace falta escanear nada."
+            : `Quedó en ${r.status || "desconocido"}. No se reintenta solo: si sigue caída, revisá los logs de WAHA antes de volver a apretar.`
+        );
       }
       if (a === "revincular") {
         // Sin esto la pantalla sigue mostrando FAILED hasta el siguiente sondeo
@@ -237,15 +245,28 @@ export default function VincularLinea({ sesiones, asesores }: { sesiones: Sesion
         >
           {ocupado === "importar" ? "Importando…" : "Importar grupos"}
         </button>
+        {/* Una sesión caída NO se levanta sola: se reintenta a mano, una vez.
+            Primero el reintento, que conserva las credenciales; el re-pareo con
+            QR es el paso siguiente y solo si el reintento no alcanzó. */}
         {sesion && (estado?.status === "FAILED" || estado?.status === "STOPPED") && (
-          <button
-            type="button"
-            onClick={() => accion("revincular")}
-            disabled={ocupado !== null}
-            className="rounded-md border border-amber-400 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-900 disabled:opacity-40"
-          >
-            {ocupado === "revincular" ? "Descartando…" : "Volver a parear (QR nuevo)"}
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={() => accion("reintentar")}
+              disabled={ocupado !== null}
+              className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 disabled:opacity-40"
+            >
+              {ocupado === "reintentar" ? "Reintentando…" : "Reintentar una vez"}
+            </button>
+            <button
+              type="button"
+              onClick={() => accion("revincular")}
+              disabled={ocupado !== null}
+              className="rounded-md border border-amber-400 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-900 disabled:opacity-40"
+            >
+              {ocupado === "revincular" ? "Descartando…" : "Volver a parear (QR nuevo)"}
+            </button>
+          </>
         )}
       </div>
 
@@ -268,11 +289,12 @@ export default function VincularLinea({ sesiones, asesores }: { sesiones: Sesion
               </p>
             )}
             {estado.error && <p className="mt-1 text-xs text-red-600">{estado.error}</p>}
-            {estado.status === "FAILED" && (
+            {(estado.status === "FAILED" || estado.status === "STOPPED") && (
               <p className="mt-2 rounded-md bg-red-50 px-3 py-2 text-xs text-red-800">
-                <strong>El radar no está escuchando nada.</strong> WhatsApp dejó de aceptar este
-                dispositivo vinculado, así que las credenciales guardadas ya no sirven y reiniciar no
-                arregla nada — hay que volver a escanear.
+                <strong>El radar no está escuchando nada, y no se va a levantar solo.</strong>{" "}
+                Probá <strong>Reintentar una vez</strong>: conserva las credenciales. Si queda
+                igual, no insistas — revisá los logs de WAHA primero. Reintentar en bucle contra un
+                WhatsApp que ya rechazó la conexión es lo que pasó el 30 de julio.
               </p>
             )}
             {vinculada ? (

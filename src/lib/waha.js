@@ -82,27 +82,43 @@ async function crearSesion(nombre, { webhookUrl, webhookSecret }) {
         `Revisala a mano en WAHA: sin el webhook apuntando al bot no va a llegar ningun mensaje.`
       );
     }
-    // Una sesion caida o detenida no se arregla reaplicando config: hay que
-    // reiniciarla. Sin esto, "Vincular linea" no hacia nada util con una
-    // sesion en FAILED y el unico camino visible era volver a molestar al
-    // asesor con el QR — que muchas veces ni siquiera hace falta, porque las
-    // credenciales siguen en el volumen.
-    const estado = await estadoSesion(nombre).catch(() => null);
-    if (estado && ["FAILED", "STOPPED"].includes(estado.status)) {
-      console.warn(`[waha] La sesion ${nombre} esta en ${estado.status}; reiniciando.`);
-      try {
-        await pedir(`/api/sessions/${encodeURIComponent(nombre)}/restart`, { metodo: "POST" });
-        return estadoSesion(nombre);
-      } catch (e3) {
-        console.error(`[waha] No se pudo reiniciar ${nombre}: ${e3.message}`);
-      }
-    }
-    return estado || estadoSesion(nombre);
+    // AQUI HABIA UN REINICIO AUTOMATICO. Se saco el 2026-08-16 por decision de
+    // Juan: una sesion caida NO se levanta sola. Si esta en FAILED o STOPPED se
+    // reporta y se queda ahi hasta que una persona decida reintentar.
+    //
+    // El motivo honesto: el 2026-07-30 la secuencia fue 503 -> 60 reintentos en
+    // 5 min -> sesion trabada -> baneo. El 503 llego PRIMERO, asi que los
+    // reintentos fueron consecuencia y no causa — quitar el reinicio automatico
+    // NO es lo que evita un baneo. Lo que si consigue, y vale igual: que una
+    // caida sea visible en vez de quedar tapada por un bucle, y que el sistema
+    // no siga golpeando a WhatsApp cuando WhatsApp ya dijo que no.
+    //
+    // Ojo con el alcance: esto controla NUESTROS reintentos. El motor que corre
+    // dentro de WAHA tiene su propia reconexion y no se apaga desde aca.
+    return (await estadoSesion(nombre).catch(() => null)) || estadoSesion(nombre);
   }
 }
 
 async function estadoSesion(nombre) {
   return pedir(`/api/sessions/${encodeURIComponent(nombre)}`);
+}
+
+// Reintento MANUAL, una sola vez. No hay bucle, no hay backoff, no hay
+// programador que lo llame: lo dispara una persona desde el CRM y si falla,
+// falla.
+//
+// Conserva las credenciales (a diferencia de `revincular`), asi que no obliga a
+// escanear el QR de nuevo. Es lo primero que se prueba cuando la sesion se cae
+// sola; si despues de esto sigue caida, hay que mirar por que en vez de seguir
+// insistiendo.
+async function reintentarUnaVez(nombre) {
+  const n = encodeURIComponent(nombre);
+  const antes = await estadoSesion(nombre).catch(() => null);
+  console.warn(`[waha] Reintento manual de ${nombre} (estaba en ${antes?.status || "desconocido"}).`);
+  await pedir(`/api/sessions/${n}/restart`, { metodo: "POST" });
+  const despues = await estadoSesion(nombre).catch(() => null);
+  console.warn(`[waha] Tras el reintento, ${nombre} quedo en ${despues?.status || "desconocido"}.`);
+  return despues;
 }
 
 // Descarta las credenciales guardadas y arranca de cero para pedir un QR nuevo.
@@ -326,4 +342,7 @@ async function enviarTexto(sesion, chatId, texto) {
   }
 }
 
-module.exports = { configurado, crearSesion, estadoSesion, revincular, qr, listarGrupos, nombresPorJid, enviarTexto };
+module.exports = {
+  configurado, crearSesion, estadoSesion, reintentarUnaVez, revincular, qr,
+  listarGrupos, nombresPorJid, enviarTexto,
+};

@@ -109,6 +109,23 @@ router.post("/api/grupos/sesion/estado", requiereGruposActivos, async (req, res)
   }
 });
 
+// Reintento manual, una sola vez. Es lo primero que se prueba cuando la sesion
+// se cae: conserva las credenciales, asi que no obliga a escanear el QR.
+//
+// No existe ningun programador que llame a esto. Si el reintento no la levanta,
+// hay que mirar por que — no volver a apretar. El 2026-07-30 el sistema
+// reintento 60 veces en 5 minutos contra un WhatsApp que ya habia dicho que no.
+router.post("/api/grupos/sesion/reintentar", requiereGruposActivos, async (req, res) => {
+  const { nombre } = req.body || {};
+  if (!nombre) return res.status(400).json({ error: "Falta el nombre de la sesion" });
+  try {
+    const estado = await waha.reintentarUnaVez(nombre);
+    res.json({ ok: true, status: estado?.status || null });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
+});
+
 // Volver a parear desde cero: descarta las credenciales guardadas y pide un QR
 // nuevo. Es la salida cuando WhatsApp deja de aceptar el dispositivo — la
 // sesion queda en FAILED y reiniciarla no sirve, porque reintenta con las

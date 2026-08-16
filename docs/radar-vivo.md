@@ -40,6 +40,27 @@ Y dos permisos por grupo, independientes: `modo ≠ 'ignorar'` para escuchar,
 `responde = true` para publicar. **Ambos nacen apagados.** Importar una línea
 trae todos sus grupos de golpe — la asesora de julio tenía 80.
 
+## Si la sesión se cae
+
+**No se levanta sola, a propósito.** No hay reintento automático en nuestro
+código y ningún worker la toca: queda caída hasta que una persona actúe.
+
+1. `Reintentar una vez` en el panel — conserva las credenciales, no pide QR.
+2. Si queda igual, **no insistas**. Mirá los logs de WAHA primero.
+3. `Volver a parear (QR nuevo)` solo si WhatsApp dejó de aceptar el dispositivo
+   (`FAILED` persistente): descarta las credenciales y mueve el corte temporal.
+
+Conviene tener claro el alcance: esto controla **nuestros** reintentos. El motor
+que corre dentro de WAHA tiene su propia reconexión y no se apaga desde el bot;
+si hace falta frenarla del todo, se baja el servicio.
+
+Y el matiz que importa para no protegerse de lo que no era: el 30 de julio la
+secuencia fue `stream:error 503` → 60 reintentos en 5 minutos → sesión trabada →
+baneo. **El 503 llegó primero**, así que los reintentos fueron consecuencia, no
+causa. Quitar el bucle no es lo que evita un baneo — lo que consigue es que una
+caída sea visible en vez de quedar tapada, y no seguir golpeando cuando ya
+dijeron que no.
+
 ## Apagar de emergencia
 
 Bajar el bot **no detiene WAHA**. Se comprobó en julio:
