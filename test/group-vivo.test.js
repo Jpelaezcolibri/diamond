@@ -19,6 +19,7 @@ let respuestasRecientes = { cantidad: 0, ultimaIso: null };
 let marcadas = [];
 let ofertasGuardadas = [];
 let inventario = { fresco: true, iso: new Date().toISOString(), horas: 1 };
+let linksAbren = true;
 
 function instalarDobles() {
   require.cache[RUTA("groups/classify.js")] = {
@@ -67,6 +68,14 @@ function instalarDobles() {
   require.cache[RUTA("data/sync-estado.js")] = {
     exports: { estadoDelInventario: async () => inventario },
   };
+  require.cache[RUTA("groups/verificar-link.js")] = {
+    exports: {
+      verificar: async (ms) => ({
+        verificadas: linksAbren ? ms : [],
+        rotas: linksAbren ? [] : ms.map((m) => ({ ref: m.ref, link: m.link })),
+      }),
+    },
+  };
   delete require.cache[RUTA("groups/vivo.js")];
   return require("../src/groups/vivo");
 }
@@ -107,6 +116,7 @@ beforeEach(() => {
   marcadas = [];
   ofertasGuardadas = [];
   inventario = { fresco: true, iso: new Date().toISOString(), horas: 1 };
+  linksAbren = true;
   vivo = instalarDobles();
 });
 
@@ -217,6 +227,21 @@ test("si ninguna propiedad pasa la compuerta, se calla y se explica por que", as
   assert.strictEqual(r.resultado, "callado");
   assert.strictEqual(r.motivo, "sin_propiedades_publicables");
   assert.deepStrictEqual(r.descartados.map((d) => d.ref), ["AP004", "9921388"]);
+});
+
+test("si el link no abre, esa propiedad no se publica", async () => {
+  // La landing lee de la misma tabla, asi que esto no verifica disponibilidad:
+  // verifica el artefacto que va a recibir el colega. El slug lo construyen dos
+  // implementaciones separadas (src/lib/slug.js y web/lib/slug.ts) y nada mas
+  // comprueba que sigan coincidiendo. Un 404 delante de 80 competidores cuesta
+  // mas que perder el match.
+  linksAbren = false;
+  const r = await vivo.procesarMensaje(ORG, mensaje(), {
+    grupo: GRUPO, modo: "auto", ahora: MEDIODIA, enviar: async () => ({ ok: true }),
+  });
+  assert.strictEqual(r.resultado, "callado");
+  assert.strictEqual(r.motivo, "sin_propiedades_publicables");
+  assert.ok(r.descartados.some((d) => d.motivos.includes("link_no_abre")));
 });
 
 test("con el sync de Wasi detenido no se publica nada", async () => {

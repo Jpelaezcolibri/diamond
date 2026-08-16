@@ -20,6 +20,7 @@ const redactar = require("../src/groups/redactar");
 const organizations = require("../src/data/organizations");
 const advisors = require("../src/data/advisors");
 const syncEstado = require("../src/data/sync-estado");
+const verificarLink = require("../src/groups/verificar-link");
 
 function arg(nombre, porDefecto) {
   const i = process.argv.indexOf(`--${nombre}`);
@@ -70,9 +71,18 @@ const clasificado = {
       ` -> ${inventario.fresco ? "fresco" : "VIEJO, no se publica nada"}`
   );
 
-  const { publicables, descartados } = publicable.filtrar(d.matches, { syncFresco: inventario.fresco });
-  console.log(`\nPasan la compuerta de calidad: ${publicables.length} de ${d.matches.length}`);
+  const { publicables: candidatas, descartados } = publicable.filtrar(d.matches, {
+    syncFresco: inventario.fresco,
+  });
+  console.log(`\nPasan la compuerta de calidad: ${candidatas.length} de ${d.matches.length}`);
   for (const x of descartados) console.log(`  descartada ${x.ref}: ${x.motivos.join(", ")}`);
+
+  // Verificacion real contra la landing: que el link abra.
+  const { verificadas: publicables, rotas } = await verificarLink.verificar(candidatas);
+  if (candidatas.length) {
+    console.log(`\nLinks que abren: ${publicables.length} de ${candidatas.length}`);
+    for (const r of rotas) console.log(`  ROTO ${r.ref}: ${r.link}`);
+  }
 
   let asesor = null;
   try {

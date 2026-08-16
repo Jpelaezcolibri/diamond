@@ -93,6 +93,25 @@ test("el titulo se normaliza: no se grita en el grupo", () => {
   assert.ok(!texto.includes("VENDO DUPLEX"));
 });
 
+test("un titulo generico se completa con la zona", () => {
+  // Caso real: la ref 9921137 tiene como titulo solo "Apartamento". Publicado
+  // en un grupo, "1) Apartamento" no le dice nada a nadie y se lee como un
+  // volcado automatico.
+  const texto = redactar.mensajeGrupo({ autor_nombre: "Ana" }, [
+    match({ titulo: "Apartamento", zona: "Laureles" }),
+  ]);
+  assert.ok(texto.includes("Apartamento en Laureles"));
+
+  assert.strictEqual(redactar.tituloUtil({ titulo: "CASA", zona: "Envigado" }), "Casa en Envigado");
+  // Un titulo que ya dice algo no se toca, aunque empiece con la palabra tipo.
+  assert.strictEqual(
+    redactar.tituloUtil({ titulo: "Apartamento en Venta Envigado - Cerca al Metro", zona: "Envigado" }),
+    "Apartamento en Venta Envigado - Cerca al Metro"
+  );
+  // Sin zona no hay con que completarlo: se deja como esta antes que inventar.
+  assert.strictEqual(redactar.tituloUtil({ titulo: "Apartamento", zona: "" }), "Apartamento");
+});
+
 test("una alcoba se dice en singular", () => {
   const texto = redactar.mensajeGrupo({ autor_nombre: "Ana" }, [match({ habitaciones: 1 })]);
   assert.ok(texto.includes("1 alcoba ·") || texto.includes("· 1 alcoba"));

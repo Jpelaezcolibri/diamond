@@ -23,6 +23,7 @@ const { cruzar } = require("./match");
 const { guardarOferta } = require("./ofertas");
 const { persistirSenal } = require("./persistir");
 const publicable = require("./publicable");
+const verificarLink = require("./verificar-link");
 const politica = require("./politica");
 const redactar = require("./redactar");
 const groupSignals = require("../data/group-signals");
@@ -101,9 +102,18 @@ async function procesarMensaje(org, mensaje, { grupo, modo = "sombra", enviar = 
   // no se sabe que se vendio desde entonces, y ofrecer en un grupo gremial algo
   // vendido hace tres dias es el error que no se puede deshacer.
   const inventario = await syncEstado.estadoDelInventario(org.id, { ahora });
-  const { publicables, descartados } = publicable.filtrar(señal.matches || [], {
+  const { publicables: candidatas, descartados } = publicable.filtrar(señal.matches || [], {
     syncFresco: inventario.fresco,
   });
+
+  // Ultimo control, sobre las tres finalistas: que el link ABRA de verdad. La
+  // landing lee de la misma tabla, asi que esto no dice nada sobre si la
+  // propiedad se vendio —de eso se ocupa la compuerta de frescura— pero si
+  // verifica el artefacto exacto que va a recibir el colega. El slug lo
+  // construyen dos implementaciones separadas y nada mas comprueba que sigan
+  // coincidiendo.
+  const { verificadas: publicables, rotas } = await verificarLink.verificar(candidatas);
+  for (const r of rotas) descartados.push({ ref: r.ref, motivos: ["link_no_abre"] });
 
   const recientes = await groupSignals.respuestasDesde(
     org.id,

@@ -34,9 +34,27 @@ function primerNombre(nombre) {
   return palabra.charAt(0).toLocaleUpperCase("es-CO") + palabra.slice(1).toLocaleLowerCase("es-CO");
 }
 
+// Algunos titulos de Wasi son una sola palabra generica —"Apartamento", "Casa"—
+// porque el asesor no llenó el campo. Publicado en un grupo, "1) Apartamento" no
+// le dice nada a nadie y se lee como un volcado automatico. Cuando pasa, se
+// compone con la zona, que es el dato que el colega esta buscando.
+const TITULOS_GENERICOS = new Set([
+  "apartamento", "casa", "local", "oficina", "lote", "finca", "bodega", "apartaestudio", "consultorio",
+]);
+
+function tituloUtil(match) {
+  const titulo = formato.normalizarTitulo(match.titulo);
+  if (!titulo) return null;
+  const zona = String(match.zona || "").trim();
+  if (zona && TITULOS_GENERICOS.has(titulo.toLocaleLowerCase("es-CO"))) {
+    return `${titulo} en ${zona}`;
+  }
+  return titulo;
+}
+
 // Una propiedad, en cuatro lineas: titulo / ref+operacion+zona / medidas+precio / link.
 function ficha(match, indice) {
-  const titulo = formato.normalizarTitulo(match.titulo);
+  const titulo = tituloUtil(match);
   const operacion = String(match.operacion || "").trim();
   const zona = String(match.zona || "").trim();
 
@@ -81,4 +99,4 @@ function mensajeGrupo(senal, publicables, { asesor = null, maxPropiedades = MAX_
   return [encabezado, "", bloques.join("\n\n"), "", cierre.join("\n")].join("\n");
 }
 
-module.exports = { mensajeGrupo, ficha, primerNombre, MAX_PROPIEDADES };
+module.exports = { mensajeGrupo, ficha, primerNombre, tituloUtil, MAX_PROPIEDADES };
