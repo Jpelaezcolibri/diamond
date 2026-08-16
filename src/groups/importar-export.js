@@ -31,6 +31,7 @@ const { idDeMensaje, huella } = require("../../epe/core/hash");
 const { classify } = require("./classify");
 const { cruzar } = require("./match");
 const { guardarOferta } = require("./ofertas");
+const { persistirSenal } = require("./persistir");
 const groupSignals = require("../data/group-signals");
 const whatsappGroups = require("../data/whatsapp-groups");
 const organizations = require("../data/organizations");
@@ -218,37 +219,13 @@ async function importar(org, archivos, { dias = DIAS_DEFAULT, incremental = true
   return stats;
 }
 
+// El mapeo del insert vive en src/groups/persistir.js, compartido con el modo
+// en vivo. Aca se fija lo propio del export: origen "export" y sin telefono —un
+// .txt trae el nombre con el que el asesor tiene agendado al colega, nunca el
+// numero, y la pantalla del CRM ya sabe no ofrecer un boton de marcar cuando no
+// hay telefono utilizable.
 async function persistirSeñal(org, c, advisorId = null) {
-  const m = c.mensaje;
-  return groupSignals.create(org.id, {
-    group_id: m.groupId,
-    advisor_id: advisorId,
-    // `await` obligatorio: idDeMensaje es async desde que el hash pasa por
-    // WebCrypto. Sin el, aca viajaba una Promise como wa_message_id y TODAS las
-    // señales de una corrida colisionaban entre si como duplicadas — sin error,
-    // solo con señales que desaparecian.
-    wa_message_id: await idDeMensaje(m),
-    autor_nombre: m.autor || null,
-    // Un .txt trae el nombre con el que el asesor tiene agendado al colega,
-    // nunca el numero. Se asume y se declara: el contacto se resuelve por
-    // nombre + grupo, y la pantalla del CRM ya sabe no ofrecer un boton de
-    // marcar cuando no hay telefono utilizable.
-    autor_telefono: null,
-    clase: c.clase,
-    confianza: c.confianza,
-    operacion: c.operacion || null,
-    tipo: c.tipo || null,
-    zona: c.zona || null,
-    ciudad: c.ciudad || null,
-    precio_min: c.precio_min || null,
-    precio_max: c.precio_max || null,
-    habitaciones: c.habitaciones || null,
-    contacto: c.contacto || null,
-    texto_original: m.texto || null,
-    matches: c.matches || [],
-    origen: "export",
-    fecha_mensaje: m.instanteIso || null,
-  });
+  return persistirSenal(org, c, { origen: "export", advisorId, autorTelefono: null });
 }
 
 module.exports = {

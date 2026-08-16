@@ -272,10 +272,72 @@ async function marcarEnviada(orgId, groupId, waMessageId) {
   if (error) console.error("[grupos] No se pudo marcar la señal como enviada:", error.message);
 }
 
+const MODOS_RESPUESTA = ["sombra", "auto", "humano"];
+
+// Deja constancia de una respuesta publicada en el grupo (o redactada en modo
+// sombra). Guarda el TEXTO completo a proposito: si manana un colega reclama
+// "ustedes publicaron un precio que no era", la unica respuesta honesta es
+// mostrar el mensaje tal como salio. Reconstruirlo desde los matches no sirve
+// porque el inventario ya habra cambiado.
+//
+// Devuelve true si quedo registrado. Un false NO es cosmetico: significa que el
+// sistema publico algo que no puede probar, y quien llame decide que hacer.
+async function marcarRespondida(orgId, signalId, { texto, wamid = null, modo = "auto" } = {}) {
+  if (!MODOS_RESPUESTA.includes(modo)) throw new Error(`Modo de respuesta invalido: ${modo}`);
+  if (!supabase) return true;
+  const { error } = await supabase
+    .from("group_signals")
+    .update({
+      respondida_at: new Date().toISOString(),
+      respuesta_texto: texto || null,
+      respuesta_wamid: wamid,
+      respuesta_modo: modo,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("org_id", orgId)
+    .eq("id", signalId);
+  if (error) {
+    console.error("[grupos] No se pudo registrar la respuesta publicada:", error.message);
+    return false;
+  }
+  return true;
+}
+
+// Las respuestas que el bot publico en ESTE grupo desde `desdeIso`. Alimenta a
+// la vez el limite diario y el cooldown, en una sola consulta: las dos preguntas
+// se hacen siempre juntas, antes de cada publicacion.
+//
+// Devuelve { cantidad, ultimaIso } o null —no un cero— cuando no se puede saber
+// (falta la migracion, o la base fallo). La diferencia importa: la politica
+// trata el null como "no verificable" y NO responde. Es la direccion segura:
+// ante la duda, callar. Un cero optimista habilitaria a publicar sin limite
+// justo en el momento en que el sistema esta a ciegas.
+async function respuestasDesde(orgId, groupId, desdeIso) {
+  if (!supabase) return { cantidad: 0, ultimaIso: null };
+  const { data, error } = await supabase
+    .from("group_signals")
+    .select("respondida_at")
+    .eq("org_id", orgId)
+    .eq("group_id", groupId)
+    .eq("respuesta_modo", "auto")
+    .gte("respondida_at", desdeIso)
+    .order("respondida_at", { ascending: false });
+  if (error) {
+    if (esColumnaFaltante(error)) {
+      console.error("[grupos] Falta la migracion 2026-08-16_radar_vivo.sql: no se puede verificar el limite de frecuencia.");
+    } else {
+      console.error("[grupos] No se pudo leer las respuestas recientes:", error.message);
+    }
+    return null;
+  }
+  return { cantidad: data.length, ultimaIso: data.length ? data[0].respondida_at : null };
+}
+
 module.exports = {
   create, list, setEstado, resumen, marcarEnviada, ultimaFechaImportada,
   pendientesDigest, marcarDigest, revertirDigest,
-  CLASES, ORIGENES, _resetBlindaje,
+  marcarRespondida, respuestasDesde,
+  CLASES, ORIGENES, MODOS_RESPUESTA, _resetBlindaje,
 };
 
 // Solo para tests: el flag de "falta la migracion" es de proceso.
