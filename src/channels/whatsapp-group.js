@@ -53,6 +53,18 @@ const router = express.Router();
 // falla cerrada, un typo no puede encender el envio por accidente.
 const MODO = () => process.env.GRUPOS_RESPUESTA_MODO || "sombra";
 
+// Espaciado entre dos publicaciones seguidas en el MISMO grupo.
+//
+// No es un tope y no descarta nada: si entran veinte pedidos con match, se
+// responden los veinte. Lo unico que evita es dispararlos en el mismo segundo,
+// que es el patron que peor se lee —tanto para un humano del grupo como para
+// los sistemas de WhatsApp— y el que menos aporta.
+//
+// Se aplica DESPUES de publicar y dentro de la cola por grupo, asi que el
+// siguiente mensaje espera su turno en vez de perderse. Poner 0 lo desactiva.
+const ESPACIADO_MS = Number(process.env.GRUPOS_RESPUESTA_ESPACIADO_SEG || 20) * 1000;
+const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
+
 // Contadores en memoria para el detector de humo. No guardan texto.
 const metricas = {
   recibidos: 0, prefiltrados: 0, historicos: 0, difundidos: 0,
@@ -211,6 +223,11 @@ async function procesar(org, ev, grupo, sesion) {
   else if (r.resultado === "sombra") contar("sombra");
   else if (r.resultado === "error_envio") contar("errores");
   else if (r.resultado === "callado") contar("callados");
+
+  // Solo despues de haber publicado de verdad. Como esto corre dentro de la cola
+  // del grupo, el pedido que venga atras espera y se responde igual: se demora,
+  // no se pierde.
+  if (r.resultado === "publicado" && ESPACIADO_MS > 0) await dormir(ESPACIADO_MS);
   return r;
 }
 

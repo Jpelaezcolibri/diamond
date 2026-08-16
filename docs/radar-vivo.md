@@ -105,10 +105,24 @@ persiste es `group_signals`: ahí está el texto de todo lo que se publicó.
 |---|---|---|
 | Puntaje mínimo para publicar | `GRUPOS_RESPUESTA_UMBRAL` | 70 |
 | Confianza mínima del clasificador | `GRUPOS_RESPUESTA_CONFIANZA` | 0.85 |
-| Respuestas por grupo y día | `GRUPOS_RESPUESTA_MAX_DIA` | 3 |
-| Minutos entre respuestas | `GRUPOS_RESPUESTA_COOLDOWN_MIN` | 20 |
+| Tope diario por grupo | `GRUPOS_RESPUESTA_MAX_DIA` | **0 = sin límite** |
+| Segundos entre publicaciones | `GRUPOS_RESPUESTA_ESPACIADO_SEG` | 20 |
 | Horario (Colombia) | `GRUPOS_RESPUESTA_HORA_DESDE/HASTA` | 8–19 |
+| Máximo de horas sin sync | `GRUPOS_SYNC_MAX_HORAS` | 30 |
 | Refs bloqueadas | `GRUPOS_REFS_BLOQUEADAS` | `9921388` |
+
+**Sobre el volumen.** No hay tope diario por decisión de producto: si entran mil
+pedidos y para los mil hay algo que ofrecer, se responden los mil. Un tope
+descarta pedidos buenos sin mejorar la calidad de lo que se publica — de la
+calidad se ocupa la compuerta, no un contador.
+
+El **"máximo 3"** son las propiedades que van *dentro* de una respuesta, no la
+cantidad de respuestas. Y el espaciado **no descarta nada**: el pedido que venga
+atrás espera su turno en la cola del grupo y se responde igual; lo único que
+evita es disparar dos envíos en el mismo segundo.
+
+Si el gremio reacciona mal al volumen, se pone un número en
+`GRUPOS_RESPUESTA_MAX_DIA` y queda acotado sin tocar código.
 
 Sobre el umbral: la escala de `match.js` va **de 55 a 100**, no de 0 a 100 — un
 match necesita pasar operación, tipo, token exacto de zona y banda de precio

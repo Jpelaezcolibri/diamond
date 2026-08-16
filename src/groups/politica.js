@@ -23,12 +23,18 @@ const LIMITES_DEFAULT = {
   // pedido se entendio a medias, y un match sobre un pedido mal entendido es
   // peor que no responder.
   confianzaMinima: Number(process.env.GRUPOS_RESPUESTA_CONFIANZA || 0.85),
-  // Cuantas veces puede hablar el bot en UN grupo por dia. Tres es suficiente
-  // para ser util y poco para ser molesto.
-  maxPorGrupoDia: Number(process.env.GRUPOS_RESPUESTA_MAX_DIA || 3),
-  // Minimo entre dos respuestas en el mismo grupo: evita la rafaga cuando entran
-  // varios pedidos juntos, que es lo que se lee como bot descontrolado.
-  cooldownMinutos: Number(process.env.GRUPOS_RESPUESTA_COOLDOWN_MIN || 20),
+  // Tope diario de respuestas por grupo. CERO = SIN LIMITE, y ese es el default
+  // por decision de producto (Juan, 2026-08-16): si entran mil solicitudes y
+  // para las mil tenemos algo que ofrecer, se responden las mil. Un tope que
+  // descarta pedidos buenos deja plata sobre la mesa sin mejorar la calidad de
+  // lo que se publica — de la calidad ya se ocupa src/groups/publicable.js.
+  //
+  // Queda configurable, no borrado: si el gremio reacciona mal al volumen, se
+  // pone un numero aca y se apaga sin tocar codigo.
+  //
+  // El "maximo 3" del producto es OTRA cosa: son las propiedades que van DENTRO
+  // de una respuesta (redactar.js), no la cantidad de respuestas.
+  maxPorGrupoDia: Number(process.env.GRUPOS_RESPUESTA_MAX_DIA || 0),
   // Horario comercial de Colombia. Un bot contestando a las 3 de la manana no
   // ayuda a nadie y llama la atencion de la peor manera.
   horaDesde: Number(process.env.GRUPOS_RESPUESTA_HORA_DESDE || 8),
@@ -54,13 +60,6 @@ function dentroDeHorario(fecha, limites = LIMITES_DEFAULT) {
   return hora >= limites.horaDesde && hora < limites.horaHasta;
 }
 
-function minutosDesde(iso, ahora) {
-  if (!iso) return Infinity;
-  const t = new Date(iso).getTime();
-  if (!Number.isFinite(t)) return Infinity;
-  return (ahora.getTime() - t) / 60000;
-}
-
 /**
  * Decide si se publica una respuesta.
  *
@@ -68,8 +67,8 @@ function minutosDesde(iso, ahora) {
  * @param publicables        matches que YA pasaron src/groups/publicable.js
  * @param grupo              { responde } — permiso explicito de ese grupo
  * @param modo               'sombra' | 'auto' (cualquier otra cosa apaga)
- * @param respuestasRecientes cuantas veces se hablo hoy en el grupo; null = no se pudo saber
- * @param ultimaRespuestaIso  cuando fue la ultima, para el cooldown
+ * @param respuestasRecientes cuantas veces se hablo hoy en el grupo; null = no se pudo saber.
+ *                           Solo importa si hay un tope diario configurado.
  * @param ahora              inyectable para poder probar horarios
  *
  * Devuelve { publicar, motivo, traza } — `traza` lista lo que se verifico, en
@@ -81,7 +80,6 @@ function decidir({
   grupo = {},
   modo = "sombra",
   respuestasRecientes = null,
-  ultimaRespuestaIso = null,
   ahora = new Date(),
   limites = LIMITES_DEFAULT,
 } = {}) {
@@ -112,15 +110,17 @@ function decidir({
   if (!dentroDeHorario(ahora, limites)) return no("fuera_de_horario");
   traza.push(`hora:${horaEnBogota(ahora)}`);
 
-  // null significa "no se pudo contar" (falta la migracion o fallo la base). No
-  // es lo mismo que cero: sin poder verificar el limite, no se publica.
-  if (respuestasRecientes === null || respuestasRecientes === undefined) return no("limite_no_verificable");
-  if (respuestasRecientes >= limites.maxPorGrupoDia) return no("limite_alcanzado");
-  traza.push(`respuestas_hoy:${respuestasRecientes}/${limites.maxPorGrupoDia}`);
-
-  const desdeUltima = minutosDesde(ultimaRespuestaIso, ahora);
-  if (desdeUltima < limites.cooldownMinutos) return no("en_cooldown");
-  traza.push("cooldown:ok");
+  // El tope diario solo se evalua si hay uno configurado. Con el default (0,
+  // sin limite) ni siquiera se exige poder contar: no habria nada que verificar.
+  if (limites.maxPorGrupoDia > 0) {
+    // null significa "no se pudo contar" (falta la migracion o fallo la base).
+    // No es lo mismo que cero: si HAY un tope y no se puede verificar, se calla.
+    if (respuestasRecientes === null || respuestasRecientes === undefined) return no("limite_no_verificable");
+    if (respuestasRecientes >= limites.maxPorGrupoDia) return no("limite_alcanzado");
+    traza.push(`respuestas_hoy:${respuestasRecientes}/${limites.maxPorGrupoDia}`);
+  } else {
+    traza.push("sin_tope_diario");
+  }
 
   // Va al final a proposito: es la comprobacion mas cara de producir (exige
   // haber clasificado y cruzado), y ademas es la unica que no depende del

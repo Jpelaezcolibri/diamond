@@ -266,12 +266,27 @@ test("si no se puede leer el estado del sync, tampoco se publica", async () => {
   assert.strictEqual(r.resultado, "callado");
 });
 
-test("si no se puede verificar el limite de frecuencia, no se publica", async () => {
-  respuestasRecientes = null; // falta la migracion, o fallo la base
+test("sin tope diario, un fallo al contar no silencia al radar", async () => {
+  // Antes se callaba si el conteo fallaba. Sin tope configurado no hay nada que
+  // verificar, y un hipo de la base no puede dejar sin responder un pedido que
+  // si tiene match.
+  respuestasRecientes = null;
+  const enviados = [];
   const r = await vivo.procesarMensaje(ORG, mensaje(), {
-    grupo: GRUPO, modo: "auto", ahora: MEDIODIA, enviar: async () => ({ ok: true }),
+    grupo: GRUPO, modo: "auto", ahora: MEDIODIA,
+    enviar: async (t) => { enviados.push(t); return { ok: true, wamid: "w" }; },
   });
-  assert.strictEqual(r.motivo, "limite_no_verificable");
+  assert.strictEqual(r.resultado, "publicado");
+  assert.strictEqual(enviados.length, 1);
+});
+
+test("se responden todos los pedidos del dia, no los primeros tres", async () => {
+  // El "maximo 3" es de PROPIEDADES dentro de una respuesta, no de respuestas.
+  respuestasRecientes = { cantidad: 250, ultimaIso: new Date(MEDIODIA.getTime() - 60000).toISOString() };
+  const r = await vivo.procesarMensaje(ORG, mensaje(), {
+    grupo: GRUPO, modo: "auto", ahora: MEDIODIA, enviar: async () => ({ ok: true, wamid: "w" }),
+  });
+  assert.strictEqual(r.resultado, "publicado");
 });
 
 test("sin transporte inyectado no se inventa una via de salida", async () => {

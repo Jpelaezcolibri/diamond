@@ -127,7 +127,6 @@ async function procesarMensaje(org, mensaje, { grupo, modo = "sombra", enviar = 
     grupo,
     modo,
     respuestasRecientes: recientes ? recientes.cantidad : null,
-    ultimaRespuestaIso: recientes ? recientes.ultimaIso : null,
     ahora,
   });
 

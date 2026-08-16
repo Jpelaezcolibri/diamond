@@ -57,7 +57,7 @@ test("el modo sombra corre exactamente las mismas comprobaciones", () => {
   const d = politica.decidir(escenario({ modo: "sombra" }));
   assert.strictEqual(d.publicar, true);
   assert.strictEqual(motivo({ modo: "sombra", grupo: { responde: false } }), "grupo_no_habilitado");
-  assert.strictEqual(motivo({ modo: "sombra", respuestasRecientes: 3 }), "limite_alcanzado");
+  assert.strictEqual(motivo({ modo: "sombra", senal: { clase: "demanda", confianza: 0.4 } }), "confianza_baja");
 });
 
 test("solo se responden demandas, nunca ofertas ajenas", () => {
@@ -95,26 +95,31 @@ test("la hora se calcula en Bogota, no en UTC", () => {
   assert.strictEqual(politica.horaEnBogota(new Date("2026-08-18T02:00:00Z")), 21);
 });
 
-test("si no se puede contar cuantas veces hablamos hoy, se calla", () => {
-  // null NO es cero. Cuando falta la migracion o falla la base, el sistema esta
-  // a ciegas: publicar sin poder verificar el limite es exactamente el momento
-  // en que se dispara la rafaga.
-  assert.strictEqual(motivo({ respuestasRecientes: null }), "limite_no_verificable");
-  assert.strictEqual(motivo({ respuestasRecientes: undefined }), "limite_no_verificable");
+
+test("por defecto NO hay tope diario: si hay mil pedidos con match, se responden mil", () => {
+  // Decision de producto (Juan, 2026-08-16). Un tope descarta pedidos buenos sin
+  // mejorar la calidad de lo que se publica — de eso ya se ocupa publicable.js.
+  assert.strictEqual(politica.LIMITES_DEFAULT.maxPorGrupoDia, 0);
+  assert.strictEqual(politica.decidir(escenario({ respuestasRecientes: 0 })).publicar, true);
+  assert.strictEqual(politica.decidir(escenario({ respuestasRecientes: 47 })).publicar, true);
+  assert.strictEqual(politica.decidir(escenario({ respuestasRecientes: 999 })).publicar, true);
 });
 
-test("el limite por grupo y por dia se respeta", () => {
-  assert.strictEqual(politica.decidir(escenario({ respuestasRecientes: 2 })).publicar, true);
-  assert.strictEqual(motivo({ respuestasRecientes: 3 }), "limite_alcanzado");
-  assert.strictEqual(motivo({ respuestasRecientes: 99 }), "limite_alcanzado");
+test("sin tope diario, no se exige poder contar las respuestas del dia", () => {
+  // Antes se callaba si el conteo fallaba. Sin tope no hay nada que verificar,
+  // así que un problema de la base no puede silenciar al radar por su cuenta.
+  const d = politica.decidir(escenario({ respuestasRecientes: null }));
+  assert.strictEqual(d.publicar, true);
+  assert.ok(d.traza.includes("sin_tope_diario"));
 });
 
-test("el cooldown evita la rafaga cuando entran varios pedidos juntos", () => {
-  const haceCinco = new Date(MEDIODIA.getTime() - 5 * 60000).toISOString();
-  assert.strictEqual(motivo({ ultimaRespuestaIso: haceCinco }), "en_cooldown");
-
-  const haceTreinta = new Date(MEDIODIA.getTime() - 30 * 60000).toISOString();
-  assert.strictEqual(politica.decidir(escenario({ ultimaRespuestaIso: haceTreinta })).publicar, true);
+test("si se configura un tope, se respeta y exige poder verificarlo", () => {
+  // La capacidad queda por si el gremio reacciona mal al volumen: se pone un
+  // numero en GRUPOS_RESPUESTA_MAX_DIA y se apaga sin tocar codigo.
+  const conTope = { ...politica.LIMITES_DEFAULT, maxPorGrupoDia: 3 };
+  assert.strictEqual(politica.decidir(escenario({ respuestasRecientes: 2, limites: conTope })).publicar, true);
+  assert.strictEqual(motivo({ respuestasRecientes: 3, limites: conTope }), "limite_alcanzado");
+  assert.strictEqual(motivo({ respuestasRecientes: null, limites: conTope }), "limite_no_verificable");
 });
 
 test("sin propiedades que pasen la compuerta, no hay nada que decir", () => {
