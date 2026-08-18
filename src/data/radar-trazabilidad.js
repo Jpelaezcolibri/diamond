@@ -19,6 +19,7 @@
 // pertenecen — mismo criterio que ya usa la pantalla de grupos.
 
 const supabase = require("./supabase");
+const contacto = require("../lib/contacto");
 
 const MAX_FILAS = 40;
 
@@ -124,8 +125,14 @@ async function trazabilidad(scope, { dias = 7, soloConAviso = false, limite = 20
       cuando: s.fecha_mensaje || s.created_at,
       grupo: grupos.get(s.group_id) || "(grupo desconocido)",
       colega: s.autor_nombre || "(sin nombre)",
-      // En vivo llega el telefono; si vino como @lid no es marcable y se dice.
-      contactable: Boolean(s.autor_telefono && String(s.autor_telefono).length <= 13),
+      // En vivo llega el telefono; si vino como @lid no es marcable, y
+      // contacto_wa sale null — nunca un link roto. Juan lo pidio explicito
+      // (2026-08-18): el mensaje que Sofi le arma a la asesora tiene que
+      // llevar el grupo, el nombre del colega Y el link para escribirle, y
+      // sin este campo Sofi no tenia de donde sacar el numero — solo sabia
+      // si "era contactable", nunca el dato en si.
+      contactable: contacto.esMarcable(s.autor_telefono),
+      contacto_wa: contacto.linkWhatsapp(s.autor_telefono),
       pidio: (s.texto_original || "").replace(/\s+/g, " ").slice(0, 220),
       motor: {
         candidatas: matches.length,

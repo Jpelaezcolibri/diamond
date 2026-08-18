@@ -16,6 +16,7 @@
 
 const formato = require("../lib/formato");
 const { normalizarTitulo } = require("../lib/formato");
+const { linkWhatsapp } = require("../lib/contacto");
 
 // Una propiedad, corta: la asesora ya conoce el inventario, no necesita la
 // ficha entera. Necesita reconocerla y tener el link a mano.
@@ -56,17 +57,17 @@ function construir(senal, veredicto, matches) {
 
   const quien = senal.autor_nombre || "un colega";
   // En vivo el remitente SI trae telefono (a diferencia del export, donde solo
-  // llega el nombre). Es la diferencia entre poder llamarlo o no.
-  const contacto = senal.autor_telefono
-    ? `https://wa.me/${String(senal.autor_telefono).replace(/\D/g, "")}`
-    : "sin teléfono — respondele en el grupo";
+  // llega el nombre) — pero puede venir como @lid (identificador interno de
+  // WhatsApp, no marcable): linkWhatsapp() lo filtra en vez de armar un link
+  // que no sirve para nada.
+  const contactoTexto = linkWhatsapp(senal.autor_telefono) || "sin teléfono — respondele en el grupo";
 
   return [
     `🎯 Oportunidad en un grupo`,
     ``,
     `Grupo: ${senal.grupo_nombre || "sin nombre"}`,
     `Colega: ${quien}`,
-    `Contacto: ${contacto}`,
+    `Contacto: ${contactoTexto}`,
     ``,
     `Pidió:`,
     `"${(senal.texto_original || "").trim()}"`,

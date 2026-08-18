@@ -234,6 +234,19 @@ test("el aviso sale por la Cloud API oficial, no por la linea vinculada", async 
   assert.strictEqual(enviadosPorSofi[0].to, "573028536489");
 });
 
+test("el link al colega solo se arma si el numero es marcable (@lid queda descartado)", async () => {
+  // Bug real 2026-08-18: antes se armaba el link con CUALQUIER telefono, sin
+  // filtrar los @lid (14-15 digitos) — el asesor lo tocaba y no llevaba a
+  // ningun lado.
+  await vivo.procesarMensaje(
+    ORG,
+    { ...mensaje(), autorTelefono: "141746805670125" },
+    { grupo: GRUPO, modo: "asistido", asesor: CATHERINE }
+  );
+  assert.match(enviadosPorSofi[0].texto, /sin teléfono — respondele en el grupo/);
+  assert.doesNotMatch(enviadosPorSofi[0].texto, /wa\.me\/141746805670125/);
+});
+
 test("se guarda el destinatario REAL del aviso, no quien observo el grupo", async () => {
   // Bug real 2026-08-18: sin esto, trazabilidad_radar no puede decir a quien
   // se le mando cada aviso, y Sofi termino inventando un nombre al preguntarle.
