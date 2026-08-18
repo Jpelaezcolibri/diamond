@@ -152,6 +152,26 @@ test("envio exitoso: manda el texto exacto al telefono del asesor", async (t) =>
   assert.match(out, /Listo/);
 });
 
+test("mensaje con un link inventado: se bloquea ANTES de buscar al asesor o de mandar nada", async (t) => {
+  // Caso real 2026-08-18: Sofi redacto "https://wa.me/message/YOUR_CONTACT_LINK"
+  // en vez de decir que no tenia el telefono. No puede depender solo del
+  // prompt — esto es la compuerta de codigo.
+  let seBuscoAsesor = false;
+  t.mock.method(advisors, "searchByName", async () => { seBuscoAsesor = true; return []; });
+  let seEnvio = false;
+  t.mock.method(mensajeAsesor, "enviarYRegistrar", async () => { seEnvio = true; return { ok: true }; });
+
+  const out = await executeCommandTool(
+    "enviar_whatsapp_equipo",
+    { asesor: "Catherine", mensaje: "Contacto: Liliana Giraldo\nhttps://wa.me/message/YOUR_CONTACT_LINK" },
+    { scope: adminScope(), session: null }
+  );
+
+  assert.strictEqual(seBuscoAsesor, false, "ni siquiera debe llegar a buscar al asesor");
+  assert.strictEqual(seEnvio, false);
+  assert.match(out, /No mande nada/);
+});
+
 test("ventana de 24h cerrada: dice que no se pudo, no finge que salio", async (t) => {
   t.mock.method(advisors, "searchByName", async () => [{ name: "Catherine Uribe", phone: "573028536489" }]);
   t.mock.method(organizations, "findById", async (orgId) => ({ id: orgId, name: "Diamond" }));

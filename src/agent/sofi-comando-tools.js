@@ -11,6 +11,7 @@ const groupSignals = require("../data/group-signals");
 const signalEvents = require("../data/signal-events");
 const organizations = require("../data/organizations");
 const mensajeAsesor = require("../lib/mensaje-asesor");
+const validarMensaje = require("../lib/validar-mensaje");
 
 const COMMAND_TOOL_DEFINITIONS = [
   {
@@ -642,6 +643,15 @@ async function enviarWhatsappEquipo(input, ctx) {
   const nombre = String(input?.asesor || "").trim();
   const texto = String(input?.mensaje || "").trim();
   if (!nombre || !texto) return "Me falta el nombre del asesor o el mensaje a enviar.";
+
+  // Ultima compuerta antes de mandar nada: no depende de que el prompt se
+  // acuerde de la regla en cada turno. Caso real 2026-08-18: Sofi le mando a
+  // Catherine "https://wa.me/message/YOUR_CONTACT_LINK" — un placeholder
+  // inventado — en vez de decir que no tenia el telefono.
+  const motivoBloqueo = validarMensaje.motivoDeBloqueo(texto);
+  if (motivoBloqueo) {
+    return `No mande nada: ${motivoBloqueo}. Volve a redactarlo — si no tenes el dato real (ej. el telefono del colega), decilo en el texto en vez de inventar un link o dejar un espacio a medio llenar.`;
+  }
 
   let candidatos;
   try {
