@@ -345,29 +345,33 @@ async function findByWamid(orgId, wamid) {
   return data;
 }
 
-// Avisos que le mandamos a ESTE asesor y que todavia no tienen un resultado
-// registrado (signal_events) — lo que Sofi necesita cuando la asesora
-// responde SIN citar el mensaje ("ya llamé al de Sabaneta, no servía") y hay
-// que adivinar a cual de sus pedidos pendientes se refiere.
+// Avisos que todavia no tienen un resultado registrado (signal_events) — lo
+// que Sofi necesita cuando alguien responde SIN citar el mensaje ("ya llamé
+// al de Sabaneta, no servía") y hay que adivinar a cual pedido se refiere.
+//
+// advisorId acota a los avisos de ESE asesor (Sofi-Cliente, cuando le
+// responde a ella misma). Sin advisorId (null) trae los de TODA la org — lo
+// que usa Sofi-Comando, porque el admin puede cerrar el ciclo de un pedido
+// aunque no sea el destinatario (ver el comentario de advisorId en
+// src/data/signal-events.js#registrar).
 //
 // No hace el join contra signal_events aca: esa tabla es del Learning Domain
 // (ver src/data/signal-events.js) y la regla de dependencia es Radar ->
 // Learning Domain, nunca al reves. El cruce lo hace quien llama.
-async function pendientesDeAviso(orgId, advisorId, { limite = 20 } = {}) {
-  if (!advisorId) return [];
+async function pendientesDeAviso(orgId, advisorId = null, { limite = 20 } = {}) {
   if (!supabase) {
     return (memory.groupSignals || [])
-      .filter((s) => s.org_id === orgId && s.aviso_advisor_id === advisorId && s.enviado_at)
+      .filter((s) => s.org_id === orgId && s.enviado_at && (!advisorId || s.aviso_advisor_id === advisorId))
       .slice(-limite);
   }
-  const { data, error } = await supabase
+  let q = supabase
     .from("group_signals")
-    .select("id, texto_original, zona, tipo, operacion, enviado_at, matches")
+    .select("id, texto_original, zona, tipo, operacion, enviado_at, matches, aviso_advisor_id")
     .eq("org_id", orgId)
-    .eq("aviso_advisor_id", advisorId)
-    .not("enviado_at", "is", null)
-    .order("enviado_at", { ascending: false })
-    .limit(limite);
+    .not("enviado_at", "is", null);
+  if (advisorId) q = q.eq("aviso_advisor_id", advisorId);
+  q = q.order("enviado_at", { ascending: false }).limit(limite);
+  const { data, error } = await q;
   if (error) {
     if (esColumnaFaltante(error)) return [];
     console.error("[grupos] No se pudieron leer los avisos pendientes:", error.message);

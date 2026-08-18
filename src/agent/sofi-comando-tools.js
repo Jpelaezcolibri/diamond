@@ -7,6 +7,12 @@ const properties = require("../data/properties");
 const allyProperties = require("../data/ally-properties");
 const advisors = require("../data/advisors");
 const radarTrazabilidad = require("../data/radar-trazabilidad");
+const groupSignals = require("../data/group-signals");
+const signalEvents = require("../data/signal-events");
+const organizations = require("../data/organizations");
+// Modulo y no funcion suelta: destructurar congela la referencia y deja los
+// tests sin forma de mockear el envio (mismo criterio que src/groups/vivo.js).
+const canalWhatsapp = require("../channels/whatsapp");
 
 const COMMAND_TOOL_DEFINITIONS = [
   {
@@ -215,6 +221,37 @@ const COMMAND_TOOL_DEFINITIONS = [
         referencia: { type: "string", description: "Como describe el asesor el recordatorio — una frase o parte de la descripcion original" },
       },
       required: ["referencia"],
+    },
+  },
+  {
+    name: "registrar_resultado_radar",
+    description:
+      "Registra en que quedo un pedido del radar (ej 'el de Sabaneta no sirvio', 'hubo visita', 'se cerro', 'no contesto'). Usala cuando el admin te cuente el resultado de un pedido — sea porque la asesora se lo conto a el, o porque el mismo lo sabe. Si hay varios pedidos sin resultado, te los va a listar con quien los recibio para que preguntes cual.",
+    input_schema: {
+      type: "object",
+      properties: {
+        tipo: {
+          type: "string",
+          enum: ["CONVERSACION", "VISITA", "NEGOCIACION", "CIERRE", "PERDIDO", "SIN_RESPUESTA"],
+          description: "CONVERSACION=le escribieron al colega, VISITA=hubo visita, NEGOCIACION=estan hablando de precio, CIERRE=se cerro el negocio, PERDIDO=se cayo, SIN_RESPUESTA=el colega no contesto.",
+        },
+        motivo: { type: "string", description: "Por que se perdio o cualquier detalle adicional. Opcional." },
+        cual: { type: "string", description: "Si hay varios pedidos pendientes, zona/colega/parte del texto o nombre del asesor para desambiguar." },
+      },
+      required: ["tipo"],
+    },
+  },
+  {
+    name: "enviar_whatsapp_equipo",
+    description:
+      "Manda un mensaje de WhatsApp a un miembro del equipo (asesor). SOLO funciona si ese asesor te escribio en las ultimas 24 horas — es una regla de WhatsApp, no de Sofi. Si la ventana esta cerrada te va a decir que no se pudo enviar; en ese caso decile al admin que lo avise por otro medio, nunca digas que salio si no salio. NO es para clientes finales — solo para gente del equipo.",
+    input_schema: {
+      type: "object",
+      properties: {
+        asesor: { type: "string", description: "Nombre del asesor a quien escribirle" },
+        mensaje: { type: "string", description: "El texto exacto a enviar" },
+      },
+      required: ["asesor", "mensaje"],
     },
   },
 ];
@@ -480,9 +517,120 @@ async function executeCommandTool(name, input, ctx) {
       if (!actualizado) return `No encontre ningun recordatorio pendiente que coincida con "${input?.referencia}".`;
       return `Listo, marque como resuelto: "${actualizado.descripcion}".`;
     }
+    case "registrar_resultado_radar":
+      return registrarResultadoRadarComando(input, ctx);
+    case "enviar_whatsapp_equipo":
+      return enviarWhatsappEquipo(input, ctx);
     default:
       return `Herramienta desconocida: ${name}`;
   }
+}
+
+// Version ADMIN de registrar_resultado_radar (src/agent/tools.js): aca no hay
+// un asesor escribiendole a Sofi desde su propio telefono, es el admin
+// contando el resultado desde el Centro de Comando. Por eso pendientesDeAviso
+// se consulta SIN advisorId (org entera, no lo del admin) y el evento se
+// registra con advisorId=null: quien REGISTRA no es quien recibio el aviso,
+// y eso es exactamente lo que signal_events.registrar espera para este caso
+// (ver el comentario ahi — "un admin puede cerrar el ciclo de una oportunidad ajena").
+async function registrarResultadoRadarComando(input, ctx) {
+  const { scope } = ctx;
+
+  let pendientes;
+  try {
+    pendientes = await groupSignals.pendientesDeAviso(scope.orgId, null);
+  } catch (e) {
+    console.warn("[comando] No se pudieron leer los avisos pendientes del radar:", e.message);
+    return "No pude consultar los pedidos pendientes en este momento.";
+  }
+
+  if (pendientes.length > 0) {
+    const ids = pendientes.map((s) => s.id);
+    const ultimos = await signalEvents.ultimoPorSenal(scope.orgId, ids).catch(() => new Map());
+    pendientes = pendientes.filter((s) => !ultimos.has(s.id));
+  }
+
+  if (pendientes.length === 0) {
+    return "No encuentro ningun pedido del radar pendiente de resultado en toda la organizacion.";
+  }
+
+  // Con varios pendientes, el nombre del destinatario tambien sirve para
+  // desambiguar ("el que le mandaron a Catherine") — a diferencia de la
+  // version de Sofi-Cliente, aca puede haber pedidos de VARIOS asesores. Solo
+  // vale la pena resolverlo si hace falta desambiguar: con un solo pendiente
+  // se registra directo, sin gastar una consulta que nadie va a leer.
+  const nombres = new Map();
+  if (pendientes.length > 1) {
+    const idsDestinatario = [...new Set(pendientes.map((s) => s.aviso_advisor_id).filter(Boolean))];
+    const filas = await Promise.all(idsDestinatario.map((id) => advisors.findById(scope.orgId, id).catch(() => null)));
+    idsDestinatario.forEach((id, i) => { if (filas[i]) nombres.set(id, filas[i].name); });
+  }
+
+  if (input?.cual && pendientes.length > 1) {
+    const q = String(input.cual).toLowerCase();
+    const filtrados = pendientes.filter((s) =>
+      `${s.texto_original || ""} ${s.zona || ""} ${s.tipo || ""} ${nombres.get(s.aviso_advisor_id) || ""}`.toLowerCase().includes(q)
+    );
+    if (filtrados.length >= 1) pendientes = filtrados;
+  }
+
+  if (pendientes.length > 1) {
+    const lista = pendientes.slice(0, 5)
+      .map((s) => `- ${(s.texto_original || "").replace(/\s+/g, " ").slice(0, 80)} (avisado a ${nombres.get(s.aviso_advisor_id) || "sin destinatario registrado"})`)
+      .join("\n");
+    return `Hay ${pendientes.length} pedidos del radar sin resultado todavia:\n${lista}\n\nPreguntale al admin cual antes de registrar nada.`;
+  }
+
+  try {
+    await signalEvents.registrar(scope.orgId, {
+      signalId: pendientes[0].id,
+      advisorId: null,
+      tipo: input.tipo,
+      motivo: input.motivo || null,
+    });
+  } catch (e) {
+    console.warn("[comando] No se pudo registrar el resultado del radar:", e.message);
+    return "No pude guardar el resultado. Intenta de nuevo en un rato.";
+  }
+
+  return "Listo, quedo registrado.";
+}
+
+// Le da a Sofi-Comando la capacidad que le faltaba (Juan, 2026-08-18): mandar
+// un WhatsApp real a alguien del equipo, no solo sugerir que se mande. La
+// unica compuerta es la que ya impone WhatsApp — ventana de 24h abierta desde
+// el ultimo mensaje ENTRANTE de esa persona — y se reporta honesto si fallo,
+// nunca se finge un envio que no salio.
+async function enviarWhatsappEquipo(input, ctx) {
+  const { scope } = ctx;
+  const nombre = String(input?.asesor || "").trim();
+  const texto = String(input?.mensaje || "").trim();
+  if (!nombre || !texto) return "Me falta el nombre del asesor o el mensaje a enviar.";
+
+  let candidatos;
+  try {
+    candidatos = await advisors.searchByName(scope.orgId, nombre);
+  } catch (e) {
+    return "No pude buscar al asesor en este momento.";
+  }
+  if (candidatos.length === 0) return `No encuentro ningun asesor activo llamado "${nombre}".`;
+  if (candidatos.length > 1) {
+    return `Hay ${candidatos.length} asesores que coinciden con "${nombre}": ${candidatos.map((a) => a.name).join(", ")}. Pregunta cual antes de mandar nada.`;
+  }
+  const asesor = candidatos[0];
+  if (!asesor.phone) return `${asesor.name} no tiene telefono cargado — no se puede mandar nada.`;
+
+  const org = await organizations.findById(scope.orgId).catch(() => null);
+  if (!org) return "No pude resolver la organizacion para enviar el mensaje.";
+
+  const r = await canalWhatsapp.sendWhatsApp(org, asesor.phone, texto).catch((e) => ({ ok: false, error: e.message }));
+  if (!r || !r.ok) {
+    const motivo = r && r.error === "sin_credenciales"
+      ? "faltan las credenciales de WhatsApp"
+      : `lo mas probable es que ${asesor.name} no te haya escrito en las ultimas 24 horas — WhatsApp no deja mandar texto libre fuera de esa ventana`;
+    return `No se pudo enviar: ${motivo}. Si es urgente, avisale al admin que lo haga por otro medio.`;
+  }
+  return `Listo, le mande el mensaje a ${asesor.name} (+${asesor.phone}).`;
 }
 
 module.exports = { COMMAND_TOOL_DEFINITIONS, executeCommandTool };
