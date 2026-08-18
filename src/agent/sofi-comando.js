@@ -39,6 +39,20 @@ function horaBogota(iso) {
   }
 }
 
+// Compara el DIA calendario (Bogota) de un ISO contra el de ahora mismo.
+//
+// `command_sessions` no se cierra sola: "Cerrar el dia" es un boton manual, y
+// sin ese clic la sesion sigue "abierta" indefinidamente (verificado en
+// produccion 2026-08-18: tres sesiones open desde julio, con el ultimo
+// mensaje de hace dias o semanas). openSession() la necesita para saber si el
+// ultimo mensaje de la sesion YA es el briefing de hoy, no solo si la sesion
+// tiene algun mensaje en su historia.
+function esDeHoyBogota(iso) {
+  if (!iso) return false;
+  const dia = (d) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Bogota" }).format(d);
+  return dia(new Date(iso)) === dia(new Date());
+}
+
 function nombreDe(item) {
   return item.nombre || (item.phone ? `+${item.phone}` : "un cliente");
 }
@@ -168,8 +182,9 @@ function renderClose({ userName, metrics, follow, tomorrowQueue }) {
 async function openSession(scope, { userName } = {}) {
   const session = await command.ensureSession(scope);
   const sessionMessages = await command.getRecentCommandMessages(session.id, 1);
+  const ultimoEsDeHoy = sessionMessages[0] && esDeHoyBogota(sessionMessages[0].created_at);
 
-  if (!sessionMessages.length) {
+  if (!ultimoEsDeHoy) {
     let briefing;
     try {
       const [metrics, follow, seed, recordatorios] = await Promise.all([
@@ -292,4 +307,5 @@ module.exports = {
   renderClose,
   buildTomorrowQueue,
   toApiMessages,
+  esDeHoyBogota,
 };
