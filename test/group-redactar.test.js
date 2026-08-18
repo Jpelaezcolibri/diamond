@@ -1,11 +1,14 @@
 // El mensaje que se publica en el grupo gremial. Lo leen 80 competidores y no
 // se puede editar despues de enviado, asi que se prueba el texto exacto.
+//
+// "Blanqueado" desde el 2026-08-18 (Juan, con el riesgo explicito sobre la
+// mesa): el colega reenvia esto tal cual a su propio cliente, asi que no
+// puede llevar nada que identifique a Diamond — ver la nota de diseño en
+// src/groups/redactar.js.
 
 const { test } = require("node:test");
 const assert = require("node:assert");
 const redactar = require("../src/groups/redactar");
-
-const CATHERINE = { name: "katherine Uribe", phone: "573001112233" };
 
 function match(extra = {}) {
   return {
@@ -16,6 +19,7 @@ function match(extra = {}) {
     precio: "$395.000.000",
     operacion: "Venta",
     link: "https://diamondinmobiliaria.com/propiedades/apartamento-envigado-ap004",
+    linkWasi: "https://info.wasi.co/apartamento-venta-envigado-centro/9744456",
     habitaciones: 2,
     area: "62m2",
     puntaje: 88,
@@ -30,13 +34,18 @@ test("sin propiedades publicables no se redacta nada", () => {
   assert.strictEqual(redactar.mensajeGrupo({ autor_nombre: "Patricia" }, null), null);
 });
 
-test("el mensaje trae ref, operacion, zona, medidas, precio y link", () => {
-  const texto = redactar.mensajeGrupo({ autor_nombre: "Patricia Gomez" }, [match()], { asesor: CATHERINE });
+test("el mensaje trae ref, operacion, zona, medidas y precio", () => {
+  const texto = redactar.mensajeGrupo({ autor_nombre: "Patricia Gomez" }, [match()]);
 
   assert.match(texto, /^Hola Patricia, vi tu solicitud\./);
   assert.ok(texto.includes("Ref AP004 · Venta · Centro, Envigado"));
   assert.ok(texto.includes("62 m² · 2 alcobas · $395.000.000"));
-  assert.ok(texto.includes("https://diamondinmobiliaria.com/propiedades/apartamento-envigado-ap004"));
+});
+
+test("el link es el de Wasi, NUNCA el propio — es lo opuesto de la regla en todos los demas mensajes", () => {
+  const texto = redactar.mensajeGrupo({ autor_nombre: "Ana" }, [match()]);
+  assert.ok(texto.includes("https://info.wasi.co/apartamento-venta-envigado-centro/9744456"));
+  assert.ok(!texto.includes("diamondinmobiliaria.com"));
 });
 
 test("una sola opcion no se anuncia en plural", () => {
@@ -47,7 +56,7 @@ test("una sola opcion no se anuncia en plural", () => {
 
 test("se publican maximo 3 propiedades aunque lleguen mas", () => {
   const cinco = ["A", "B", "C", "D", "E"].map((ref) => match({ ref }));
-  const texto = redactar.mensajeGrupo({ autor_nombre: "Ana" }, cinco, { asesor: CATHERINE });
+  const texto = redactar.mensajeGrupo({ autor_nombre: "Ana" }, cinco);
 
   assert.ok(texto.includes("Tengo 3 opciones"));
   assert.ok(texto.includes("Ref A"));
@@ -56,27 +65,18 @@ test("se publican maximo 3 propiedades aunque lleguen mas", () => {
   assert.deepStrictEqual(texto.match(/^\d\) /gm).length, 3);
 });
 
-test("el cierre deriva a la asesora por wa.me con el telefono limpio", () => {
-  const texto = redactar.mensajeGrupo({ autor_nombre: "Ana" }, [match()], {
-    asesor: { name: "katherine Uribe", phone: "+57 300 111 2233" },
-  });
-  assert.ok(texto.includes("Mas informacion con Katherine: https://wa.me/573001112233"));
-});
-
-test("sin asesor resuelto el mensaje sale igual, sin link roto", () => {
-  // Si la rotacion de venta quedara vacia, es preferible publicar sin derivacion
-  // que publicar "https://wa.me/undefined".
-  const texto = redactar.mensajeGrupo({ autor_nombre: "Ana" }, [match()], { asesor: null });
+test("no deriva a ninguna asesora — el mensaje no lleva nombre ni contacto de nadie de Diamond", () => {
+  const texto = redactar.mensajeGrupo({ autor_nombre: "Ana" }, [match()]);
   assert.ok(!texto.includes("wa.me"));
+  assert.ok(!texto.includes("Catherine"));
+  assert.ok(!texto.includes("Mas informacion con"));
   assert.ok(texto.includes("Comision compartida."));
 });
 
-test("el mensaje se firma como Sofi y se declara asistente", () => {
-  // Sofi es la persona de marca que los colegas ya conocen del 1 a 1. Se aclara
-  // "asistente" a proposito: "Sofi" a secas se lee como una persona, y en un
-  // grupo de 80 colegas el disfraz se descubre.
-  const texto = redactar.mensajeGrupo({ autor_nombre: "Ana" }, [match()], { asesor: CATHERINE });
-  assert.ok(texto.includes("— Sofi, asistente de Diamond Inmobiliaria"));
+test("el mensaje se firma como Sofi, asistente virtual — sin mencionar a Diamond", () => {
+  const texto = redactar.mensajeGrupo({ autor_nombre: "Ana" }, [match()]);
+  assert.ok(texto.includes("— Sofi, asistente virtual"));
+  assert.ok(!texto.toLowerCase().includes("diamond"));
 });
 
 test("un nombre de WhatsApp con emojis no produce un saludo absurdo", () => {

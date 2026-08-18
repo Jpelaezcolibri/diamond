@@ -37,3 +37,20 @@ test("withLandingLink: no muta el objeto original ni pierde el resto de campos",
 test("withLandingLink: null pasa directo (propiedad no encontrada)", () => {
   assert.strictEqual(withLandingLink(null), null);
 });
+
+test("withLandingLink: conserva el link original de Wasi en linkWasi", () => {
+  // Nadie lo consumia hasta el 2026-08-18 — el mensaje "blanqueado" del modo
+  // auto lo necesita (ver src/groups/redactar.js). `link` sigue siendo,
+  // como siempre, el de la landing propia para todo lo demas.
+  const raw = { ref: "AP001", titulo: "Casa X", link: "https://info.wasi.co/apartamento-venta-x/9755676" };
+  const result = withLandingLink(raw);
+  assert.strictEqual(result.linkWasi, "https://info.wasi.co/apartamento-venta-x/9755676");
+  assert.ok(result.link.includes(config.landingBaseUrl));
+});
+
+test("withLandingLink: sin link original (Wasi vacio), linkWasi es null y no truena", () => {
+  const raw = { ref: "AP001", titulo: "Casa X", link: null };
+  const result = withLandingLink(raw);
+  assert.strictEqual(result.linkWasi, null);
+  assert.ok(result.link.includes(config.landingBaseUrl));
+});

@@ -13,10 +13,28 @@
 //   · Operacion explicita. Hoy el inventario es 100% venta, pero el dia que
 //     entre arriendo un "$2.200.000" sin la palabra arriendo se lee como una
 //     venta absurda.
-//   · Link a la landing propia, nunca a Wasi: mandar al colega a Wasi es
-//     regalarle la marca. La compuerta lo verifica ademas.
-//   · Se firma como Diamond y se avisa que es automatico. En un grupo de 80
-//     colegas el disfraz se descubre, y descubrirlo cuesta mas que declararlo.
+//
+// CAMBIO DELIBERADO (Juan, 2026-08-18) — "MENSAJE BLANQUEADO":
+//
+// Hasta esta fecha el mensaje llevaba el link a la landing propia y cerraba
+// derivando a la asesora ("Mas informacion con Catherine: wa.me/...") firmado
+// como "Sofi, asistente de Diamond Inmobiliaria". Juan pidio explicitamente
+// lo contrario: el colega reenvia este mensaje TAL CUAL a su propio cliente
+// final, asi que no puede llevar nada que identifique a Diamond — ni el link
+// propio, ni el contacto de la asesora, ni "Diamond" en la firma.
+//
+//   · Link: linkWasi (el original de Wasi, ver withLandingLink en
+//     src/data/properties.js), NO `link` (la landing propia). Es lo opuesto
+//     de la regla de siempre para cualquier OTRO mensaje del sistema — sigue
+//     valiendo en todos lados menos aca.
+//   · Sin derivar a la asesora: el colega identifica con quien hablar por el
+//     numero de WhatsApp que publico el mensaje en el grupo, no por un link
+//     en el texto.
+//   · Firma "Sofi, asistente virtual" — sin "de Diamond Inmobiliaria".
+//
+// Juan lo pidio con el riesgo explicito sobre la mesa: sin mencion a Diamond
+// en el mensaje, no queda gancho de comision compartida si el colega cierra
+// el negocio por su cuenta. Decision de negocio, no un descuido.
 
 const formato = require("../lib/formato");
 
@@ -53,6 +71,10 @@ function tituloUtil(match) {
 }
 
 // Una propiedad, en cuatro lineas: titulo / ref+operacion+zona / medidas+precio / link.
+//
+// El link es linkWasi (no `link`) — ver la nota de "MENSAJE BLANQUEADO" arriba.
+// publicable.js ya garantizo que existe (motivo sin_link_wasi) antes de que
+// una propiedad llegue hasta aca.
 function ficha(match, indice) {
   const titulo = tituloUtil(match);
   const operacion = String(match.operacion || "").trim();
@@ -68,14 +90,15 @@ function ficha(match, indice) {
     .filter(Boolean)
     .join(" · ");
 
-  return [`${indice}) ${titulo}`, `   ${identidad}`, `   ${medidas}`, `   ${match.link}`].join("\n");
+  return [`${indice}) ${titulo}`, `   ${identidad}`, `   ${medidas}`, `   ${match.linkWasi}`].join("\n");
 }
 
 // Devuelve el texto listo para publicar, o null si no hay nada que decir.
-// `asesor` es la persona a la que se deriva (hoy Catherine, unica en rotacion de
-// venta): se resuelve afuera con src/data/advisors.js y se pasa entero para que
-// este modulo siga siendo puro y testeable.
-function mensajeGrupo(senal, publicables, { asesor = null, maxPropiedades = MAX_PROPIEDADES } = {}) {
+//
+// No recibe (ni deriva a) ningun asesor a proposito: es el mensaje
+// "blanqueado" que el colega reenvia tal cual a su cliente, y no puede
+// llevar nada que identifique a Diamond — ver la nota arriba.
+function mensajeGrupo(senal, publicables, { maxPropiedades = MAX_PROPIEDADES } = {}) {
   const props = (publicables || []).slice(0, maxPropiedades);
   if (props.length === 0) return null;
 
@@ -88,17 +111,13 @@ function mensajeGrupo(senal, publicables, { asesor = null, maxPropiedades = MAX_
 
   const bloques = props.map((m, i) => ficha(m, i + 1));
 
-  const cierre = [];
-  if (asesor && asesor.phone) {
-    const quien = primerNombre(asesor.name) || "nuestra asesora";
-    cierre.push(`Mas informacion con ${quien}: https://wa.me/${String(asesor.phone).replace(/\D/g, "")}`);
-  }
-  cierre.push("Comision compartida.");
-  // Firma como Sofi, que es la persona de marca que los colegas ya conocen del
-  // 1 a 1. Se aclara "asistente" a proposito: "Sofi" a secas se lee como una
-  // persona, y en un grupo de 80 colegas el disfraz se descubre — descubrirlo
-  // cuesta mas que declararlo.
-  cierre.push("— Sofi, asistente de Diamond Inmobiliaria");
+  const cierre = [
+    "Comision compartida.",
+    // "Sofi, asistente virtual" y nada mas: sin "de Diamond Inmobiliaria". El
+    // colega identifica a quien responder por el numero de WhatsApp que
+    // publico esto en el grupo, no por un nombre o link en el texto.
+    "— Sofi, asistente virtual",
+  ];
 
   return [encabezado, "", bloques.join("\n\n"), "", cierre.join("\n")].join("\n");
 }

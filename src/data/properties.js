@@ -12,9 +12,22 @@ const formato = require("../lib/formato");
 // se pasa (o la org no lo tiene configurado) cae al env global — asi una org
 // nueva sin ese campo aun sigue funcionando, solo con el dominio de Diamond
 // por defecto en vez de fallar.
+//
+// `linkWasi` conserva el link original ANTES de sobreescribirlo — se lee de
+// `p.link` primero, asi que no lo pisa la reescritura de abajo (misma
+// propiedad, dos claves distintas del objeto que se arma). Nadie lo consumia
+// hasta el 2026-08-18 (Juan pidio, con los ojos abiertos sobre el riesgo, que
+// el mensaje "blanqueado" del modo auto use el link de Wasi en vez del propio
+// — ver src/groups/redactar.js). Para todo lo demas —chat de cliente, aviso a
+// la asesora, cualquier otro consumidor de `properties.search`— `link` sigue
+// siendo, como siempre, el de la landing propia.
 function withLandingLink(p, landingBaseUrl = config.landingBaseUrl) {
   if (!p) return p;
-  return { ...p, link: `${landingBaseUrl || config.landingBaseUrl}/propiedades/${buildSlug(p.titulo, p.ref)}` };
+  return {
+    ...p,
+    linkWasi: p.link || null,
+    link: `${landingBaseUrl || config.landingBaseUrl}/propiedades/${buildSlug(p.titulo, p.ref)}`,
+  };
 }
 
 // search/findByRef aceptan el org completo (para resolver landing_base_url

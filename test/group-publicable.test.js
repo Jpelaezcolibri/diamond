@@ -19,6 +19,7 @@ function matchBueno(extra = {}) {
     precio: "$395.000.000",
     operacion: "Venta",
     link: "https://diamondinmobiliaria.com/propiedades/apartamento-en-venta-envigado-ap004",
+    linkWasi: "https://info.wasi.co/apartamento-venta-envigado-centro/9744456",
     habitaciones: 2,
     area: "62m2",
     puntaje: 88,
@@ -88,6 +89,15 @@ test("el link tiene que ser el de la landing propia", () => {
   assert.ok(motivos(matchBueno({ link: "https://info.wasi.co/apartamento-venta/9744456" })).includes("link_ajeno"));
   assert.ok(motivos(matchBueno({ link: "https://paraisoinmobiliario.inmo.co/x" })).includes("link_ajeno"));
   assert.ok(motivos(matchBueno({ link: null })).includes("sin_link"));
+});
+
+test("sin linkWasi tampoco se publica — es lo que de verdad usa el mensaje 'blanqueado'", () => {
+  // withLandingLink SIEMPRE arma un `link` propio (aunque Wasi no haya
+  // traido ninguno), asi que validar solo `link` no alcanza: el mensaje real
+  // (redactar.js) usa linkWasi, y sin esta compuerta saldria con un renglon
+  // vacio en vez de callarse.
+  assert.ok(motivos(matchBueno({ linkWasi: null })).includes("sin_link_wasi"));
+  assert.ok(motivos(matchBueno({ linkWasi: "" })).includes("sin_link_wasi"));
 });
 
 test("un puntaje por debajo del umbral no se publica", () => {

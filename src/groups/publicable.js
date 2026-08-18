@@ -113,6 +113,13 @@ function esPublicable(match, { umbral = UMBRAL_DEFAULT, syncFresco = true, refsB
   if (!link) motivos.push("sin_link");
   else if (DOMINIO_AJENO.test(link)) motivos.push("link_ajeno");
 
+  // El mensaje que de verdad se publica usa linkWasi, no `link` (Juan,
+  // 2026-08-18 — ver la nota de diseño en redactar.js). `withLandingLink`
+  // siempre arma un `link` propio aunque Wasi no haya traido ninguno, asi
+  // que validar solo `link` no alcanza: sin esto, una propiedad sin link de
+  // Wasi pasaria la compuerta y saldria al grupo con un renglon vacio.
+  if (!String(match.linkWasi || "").trim()) motivos.push("sin_link_wasi");
+
   // Si el sync de Wasi esta detenido, todo el inventario es sospechoso: no se
   // sabe que se vendio desde entonces. DMAP ya se detuvo 16 dias sin que nadie
   // se enterara (auditoria del 2026-08-01).

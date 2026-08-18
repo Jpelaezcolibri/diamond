@@ -157,7 +157,9 @@ async function procesarMensaje(org, mensaje, { grupo, modo = "sombra", enviar = 
     return { resultado: "callado", motivo: decision.motivo, traza: decision.traza, descartados, signalId: signal && signal.id };
   }
 
-  const texto = redactar.mensajeGrupo({ autor_nombre: mensaje.autor }, publicables, { asesor });
+  // Mensaje "blanqueado" (Juan, 2026-08-18): sin asesor, a proposito — ver
+  // la nota de diseño en redactar.js.
+  const texto = redactar.mensajeGrupo({ autor_nombre: mensaje.autor }, publicables);
   if (!texto) return { resultado: "callado", motivo: "sin_texto", traza: decision.traza, signalId: signal && signal.id };
 
   // En sombra se redacta y se registra, pero NO se publica. Es la prueba de humo

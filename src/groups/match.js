@@ -257,6 +257,9 @@ function evaluarCandidata(p, c, fuente) {
     // withLandingLink en src/data/properties.js). Los aliados no son nuestros
     // y no tienen ficha en la landing.
     link: fuente === "diamond" ? p.link || null : null,
+    // linkWasi viaja aparte, solo para el mensaje "blanqueado" del modo auto
+    // (redactar.js) — nada mas lo lee. `link` de arriba no cambia para nadie.
+    linkWasi: fuente === "diamond" ? p.linkWasi || null : null,
     habitaciones: p.habitaciones ?? null,
     area: p.area || null,
     puntaje: Math.min(100, puntaje),

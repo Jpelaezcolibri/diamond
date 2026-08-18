@@ -117,6 +117,7 @@ function matchBueno(extra = {}) {
     fuente: "diamond", ref: "AP004", titulo: "Apartamento en Venta Envigado",
     zona: "Centro, Envigado", precio: "$395.000.000", operacion: "Venta",
     link: "https://diamondinmobiliaria.com/propiedades/ap004",
+    linkWasi: "https://info.wasi.co/apartamento-venta-envigado-ap004/9744456",
     habitaciones: 2, area: "62m2", puntaje: 88, razones: [], ...extra,
   };
 }
@@ -146,7 +147,10 @@ test("una demanda con match publicable se publica y queda registrada", async () 
   assert.strictEqual(r.resultado, "publicado");
   assert.strictEqual(enviados.length, 1);
   assert.match(enviados[0], /Ref AP004/);
-  assert.match(enviados[0], /wa\.me\/573028536489/);
+  // Mensaje "blanqueado" (Juan, 2026-08-18): sin derivar a la asesora, con
+  // el link de Wasi — ver la nota de diseño en src/groups/redactar.js.
+  assert.doesNotMatch(enviados[0], /wa\.me/);
+  assert.match(enviados[0], /info\.wasi\.co/);
   // El texto exacto queda guardado: es la unica prueba honesta de que se dijo.
   assert.deepStrictEqual(marcadas, [{ id: "sig-1", texto: enviados[0], wamid: "wamid.OUT", modo: "auto" }]);
 });
