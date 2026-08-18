@@ -190,8 +190,19 @@ function mismoTelefono(a, b) {
 
 // Incluye a los INACTIVOS a proposito: un asesor dado de baja tampoco es un
 // cliente, y responderle con el discurso de ventas seria igual de raro.
+//
+// Si el mismo telefono matchea VARIAS filas, gana la ACTIVA. Bug real
+// 2026-08-18: Catherine Uribe tenia dos filas con el mismo numero (una vieja
+// sin recibe_transferencias, una nueva con login de CRM que es la que de
+// verdad recibe los avisos del radar) y esto devolvia la primera que
+// encontrara la consulta —sin ningun criterio—, asi que cuando ELLA le
+// escribia a Sofi, ctx.advisor.id nunca coincidia con el id que quedaba
+// guardado en los avisos: registrar_resultado_radar siempre decia que no
+// tenia nada pendiente, aunque si tuviera.
 function buscarEnLista(lista, phone) {
-  return (lista || []).find((a) => mismoTelefono(a.phone, phone)) || null;
+  const candidatos = (lista || []).filter((a) => mismoTelefono(a.phone, phone));
+  if (candidatos.length === 0) return null;
+  return candidatos.find((a) => a.activo !== false) || candidatos[0];
 }
 
 async function findByPhone(orgId, phone) {

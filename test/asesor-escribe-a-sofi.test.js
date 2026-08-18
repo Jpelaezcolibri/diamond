@@ -72,6 +72,26 @@ test("un asesor inactivo tampoco es un cliente", () => {
   assert.strictEqual(buscarEnLista(equipo, "573001112233").name, "Ex asesor");
 });
 
+test("BUG real 2026-08-18: dos filas con el mismo telefono (una activa, una no) — gana la activa, no la que aparezca primero", () => {
+  // Catherine Uribe tenia dos filas con +573028536489: una vieja (creada en
+  // julio, sin recibe_transferencias) y una nueva con login de CRM que es la
+  // que de verdad recibe los avisos del radar. La consulta a Supabase
+  // devolvia la vieja primero, sin ningun criterio de por medio — asi que
+  // cuando ELLA le escribia a Sofi, ctx.advisor.id nunca coincidia con el id
+  // guardado en sus avisos y registrar_resultado_radar siempre decia "no
+  // tengo nada pendiente". Remediado con datos (se desactivo la fila vieja)
+  // + este fix de codigo, para que la ambiguedad no dependa solo del dato.
+  const conDuplicado = [
+    { id: "vieja", name: "Catherine Uribe", phone: "573028536489", activo: false },
+    { id: "nueva", name: "Catherine Uribe", phone: "573028536489", activo: true },
+  ];
+  assert.strictEqual(buscarEnLista(conDuplicado, "573028536489").id, "nueva");
+
+  // Aunque la vieja quedara primera en la lista (orden de la consulta, no
+  // garantizado), sigue ganando la activa.
+  assert.strictEqual(buscarEnLista([...conDuplicado].reverse(), "573028536489").id, "nueva");
+});
+
 test("un número corto, vacío o nulo no matchea nada", () => {
   for (const v of ["", null, undefined, "123", "8024"]) {
     assert.strictEqual(buscarEnLista(equipo, v), null, `matcheó con ${JSON.stringify(v)}`);
