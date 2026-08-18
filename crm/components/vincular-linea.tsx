@@ -37,7 +37,7 @@ async function llamar(accion: string, nombre: string, advisorId?: string | null,
   const res = await fetch("/api/grupos/sesion", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ accion, nombre, advisorId: advisorId || null, rol: rol || "dedicada" }),
+    body: JSON.stringify({ accion, nombre, advisorId: advisorId || null, rol }),
   }).catch(() => null);
   const body = res ? await res.json().catch(() => ({})) : {};
   if (!res || !res.ok) throw new Error(body.error || "El bot no respondió");
@@ -49,7 +49,11 @@ export default function VincularLinea({ sesiones, asesores }: { sesiones: Sesion
   const [, startTransition] = useTransition();
   const [nombre, setNombre] = useState(sesiones[0]?.nombre || "");
   const [advisorId, setAdvisorId] = useState(sesiones[0]?.advisor_id || "");
-  const [rol, setRol] = useState(sesiones[0]?.rol || "dedicada");
+  // Sin valor por defecto a proposito. Antes arrancaba en "dedicada" y, si
+  // alguien vinculaba sin tocar el selector, la fila quedaba diciendo que la
+  // linea era de la empresa cuando era la personal de un asesor. El registro
+  // existe para saber despues que se conecto: uno que miente no sirve de nada.
+  const [rol, setRol] = useState(sesiones[0]?.rol || "");
   const [estado, setEstado] = useState<Estado | null>(null);
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -59,7 +63,7 @@ export default function VincularLinea({ sesiones, asesores }: { sesiones: Sesion
   function seleccionar(s: Sesion | null) {
     setNombre(s?.nombre || "");
     setAdvisorId(s?.advisor_id || "");
-    setRol(s?.rol || "dedicada");
+    setRol(s?.rol || "");
     setEstado(null);
     setError(null);
     setAviso(null);
@@ -245,6 +249,7 @@ export default function VincularLinea({ sesiones, asesores }: { sesiones: Sesion
             onChange={(e) => setRol(e.target.value)}
             className="w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm"
           >
+            <option value="">Elegí de quién es…</option>
             <option value="dedicada">Secundaria de la empresa (sacrificable)</option>
             <option value="asesor">Personal de un asesor</option>
           </select>
@@ -252,7 +257,8 @@ export default function VincularLinea({ sesiones, asesores }: { sesiones: Sesion
         <button
           type="button"
           onClick={() => accion("crear")}
-          disabled={!nombre || ocupado !== null}
+          disabled={!nombre || !rol || ocupado !== null}
+          title={rol ? "" : "Elegí de quién es la línea"}
           className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
         >
           {ocupado === "crear" ? "Creando…" : "Vincular línea"}

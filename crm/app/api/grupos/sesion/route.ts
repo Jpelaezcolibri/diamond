@@ -41,14 +41,17 @@ export async function POST(request: Request) {
   if (!ruta) return NextResponse.json({ error: "Acción inválida" }, { status: 400 });
   if (!nombre) return NextResponse.json({ error: "Falta el nombre de la sesión" }, { status: 400 });
 
-  // El rol viaja tal como lo declaró quien vincula. Antes se forzaba a
-  // "dedicada", que era cómodo y falso: si la línea es la de una persona, la
-  // fila tiene que decirlo. El registro sirve justamente para saber después qué
-  // se conectó, y un registro que miente no sirve para nada.
+  // El rol viaja tal como lo declaró quien vincula, y se EXIGE al crear. Antes
+  // se forzaba a "dedicada", que era cómodo y falso: si la línea es la de una
+  // persona, la fila tiene que decirlo. El registro sirve para saber después qué
+  // se conectó, y uno que miente no sirve para nada. Sin default acá tampoco:
+  // un cuerpo sin rol es un error del cliente, no algo que se completa solo.
+  if (accion === "crear" && rol !== "asesor" && rol !== "dedicada") {
+    return NextResponse.json({ error: "Falta declarar de quién es la línea" }, { status: 400 });
+  }
+
   const cuerpo =
-    accion === "importar"
-      ? { sesion: nombre }
-      : { nombre, advisorId: advisorId || null, rol: rol === "asesor" ? "asesor" : "dedicada" };
+    accion === "importar" ? { sesion: nombre } : { nombre, advisorId: advisorId || null, rol };
 
   const r = await callBot(ruta, cuerpo);
   return r.ok ? NextResponse.json(r.data) : NextResponse.json({ error: r.error }, { status: r.status });
