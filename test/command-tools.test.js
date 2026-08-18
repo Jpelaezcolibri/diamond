@@ -153,3 +153,18 @@ test("las tools nuevas estan definidas para el modelo y el prompt las explica", 
   assert.match(stable, /GEOGRAFIA DE MEDELLIN/);
   assert.match(stable, /Envigado NO es El Poblado/);
 });
+
+test("toda tool registrada aparece nombrada en el prompt — si no, Sofi no sabe que existe", () => {
+  // Bug real 2026-08-18: trazabilidad_radar se registro en
+  // COMMAND_TOOL_DEFINITIONS pero nunca se agrego al bloque HERRAMIENTAS del
+  // prompt. La tool "existia" (el modelo la podia ver en el parametro tools),
+  // pero sin ninguna instruccion de cuando usarla, Juan le preguntaba por el
+  // radar y Sofi nunca la llamaba. Este test evita que se repita con la
+  // proxima tool que alguien agregue.
+  const scope = asesorScope();
+  const system = buildCommandSystemPrompt({ scope, userName: "KT", now: { legible: "viernes" } });
+  const stable = system[0].text;
+  for (const t of COMMAND_TOOL_DEFINITIONS) {
+    assert.ok(stable.includes(t.name), `${t.name} esta registrada pero el prompt no la menciona`);
+  }
+});
