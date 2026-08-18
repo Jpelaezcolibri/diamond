@@ -79,6 +79,19 @@ function instalar() {
       },
     },
   };
+  // El envio al asesor PRINCIPAL pasa por mensajeAsesor.enviarYRegistrar, no
+  // por canalWhatsapp directo (deja el mensaje guardado como conversacion
+  // real — ver src/lib/mensaje-asesor.js). Mismo comportamiento simulado que
+  // el mock de arriba, para no duplicar aserciones: al test no le importa por
+  // cual de los dos caminos salio, solo que salio.
+  require.cache[RUTA("lib/mensaje-asesor.js")] = {
+    exports: {
+      enviarYRegistrar: async (org, to, texto) => {
+        enviadosPorSofi.push({ to, texto });
+        return envioFalla ? { ok: false, error: "fuera de la ventana de 24h" } : { ok: true, wamid: "w" };
+      },
+    },
+  };
   delete require.cache[RUTA("groups/vivo.js")];
   return require("../src/groups/vivo");
 }
@@ -227,6 +240,12 @@ test("el wamid guardado es del envio al asesor PRINCIPAL, no de un extra de cali
   process.env.RADAR_ALERTA_TO = "573016981200";
   vivo = instalar();
   let n = 0;
+  // El principal sale por mensajeAsesor.enviarYRegistrar; el extra de
+  // RADAR_ALERTA_TO sigue saliendo por canalWhatsapp.sendWhatsApp directo.
+  require.cache[RUTA("lib/mensaje-asesor.js")].exports.enviarYRegistrar = async (org, to) => {
+    n++;
+    return { ok: true, wamid: `w-${to}` };
+  };
   require.cache[RUTA("channels/whatsapp.js")].exports.sendWhatsApp = async (org, to) => {
     n++;
     return { ok: true, wamid: `w-${to}` };

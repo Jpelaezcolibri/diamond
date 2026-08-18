@@ -30,7 +30,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     // toda la organización y ver la pantalla era ver los grupos de otro.
     { href: "/grupos", label: "Grupos" },
     { href: "/marketing", label: "Marketing" },
-    ...(admin ? [{ href: "/usuarios", label: "Usuarios" }] : []),
+    ...(admin ? [{ href: "/equipo", label: "Equipo" }, { href: "/usuarios", label: "Usuarios" }] : []),
   ];
 
   return (

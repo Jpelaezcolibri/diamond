@@ -17,7 +17,7 @@ const groupSignals = require("../src/data/group-signals");
 const signalEvents = require("../src/data/signal-events");
 const advisors = require("../src/data/advisors");
 const organizations = require("../src/data/organizations");
-const canalWhatsapp = require("../src/channels/whatsapp");
+const mensajeAsesor = require("../src/lib/mensaje-asesor");
 
 function adminScope() {
   return Object.freeze({ orgId: "org-1", viewerUid: "admin-1", role: "admin", isAdmin: true });
@@ -107,7 +107,7 @@ test("con 'cual' se puede desambiguar por el nombre del destinatario", async (t)
 
 test("sin nombre o sin mensaje, no intenta mandar nada", async (t) => {
   let intentos = 0;
-  t.mock.method(canalWhatsapp, "sendWhatsApp", async () => { intentos++; return { ok: true }; });
+  t.mock.method(mensajeAsesor, "enviarYRegistrar", async () => { intentos++; return { ok: true }; });
 
   await executeCommandTool("enviar_whatsapp_equipo", { asesor: "", mensaje: "hola" }, { scope: adminScope(), session: null });
   await executeCommandTool("enviar_whatsapp_equipo", { asesor: "Catherine", mensaje: "" }, { scope: adminScope(), session: null });
@@ -124,7 +124,7 @@ test("asesor inexistente, lo dice sin inventar", async (t) => {
 test("nombre ambiguo (varios matches), pregunta cual sin mandar nada", async (t) => {
   t.mock.method(advisors, "searchByName", async () => [{ name: "Danna Ospina" }, { name: "Danna Ospina" }]);
   let enviado = false;
-  t.mock.method(canalWhatsapp, "sendWhatsApp", async () => { enviado = true; return { ok: true }; });
+  t.mock.method(mensajeAsesor, "enviarYRegistrar", async () => { enviado = true; return { ok: true }; });
 
   const out = await executeCommandTool("enviar_whatsapp_equipo", { asesor: "Danna", mensaje: "hola" }, { scope: adminScope(), session: null });
 
@@ -136,7 +136,7 @@ test("envio exitoso: manda el texto exacto al telefono del asesor", async (t) =>
   t.mock.method(advisors, "searchByName", async () => [{ name: "Catherine Uribe", phone: "573028536489" }]);
   t.mock.method(organizations, "findById", async (orgId) => ({ id: orgId, name: "Diamond" }));
   let enviado = null;
-  t.mock.method(canalWhatsapp, "sendWhatsApp", async (org, to, texto) => {
+  t.mock.method(mensajeAsesor, "enviarYRegistrar", async (org, to, texto) => {
     enviado = { org, to, texto };
     return { ok: true, wamid: "w1" };
   });
@@ -155,7 +155,7 @@ test("envio exitoso: manda el texto exacto al telefono del asesor", async (t) =>
 test("ventana de 24h cerrada: dice que no se pudo, no finge que salio", async (t) => {
   t.mock.method(advisors, "searchByName", async () => [{ name: "Catherine Uribe", phone: "573028536489" }]);
   t.mock.method(organizations, "findById", async (orgId) => ({ id: orgId, name: "Diamond" }));
-  t.mock.method(canalWhatsapp, "sendWhatsApp", async () => ({ ok: false, error: "ventana cerrada" }));
+  t.mock.method(mensajeAsesor, "enviarYRegistrar", async () => ({ ok: false, error: "ventana cerrada" }));
 
   const out = await executeCommandTool(
     "enviar_whatsapp_equipo",

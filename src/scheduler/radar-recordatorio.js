@@ -22,10 +22,10 @@ const organizations = require("../data/organizations");
 const advisors = require("../data/advisors");
 const groupSignals = require("../data/group-signals");
 const signalEvents = require("../data/signal-events");
-// Se importa el MODULO y no la funcion suelta: destructurar congela la
-// referencia y deja los tests sin forma de mockear el envio (mismo criterio
-// que src/groups/vivo.js).
-const canalWhatsapp = require("../channels/whatsapp");
+// Pasa por mensajeAsesor y no por canalWhatsapp directo: el recordatorio
+// tambien queda guardado como mensaje real en la conversacion con el asesor
+// (ver src/lib/mensaje-asesor.js), visible en el panel "Equipo" del CRM.
+const mensajeAsesor = require("../lib/mensaje-asesor");
 
 function textoRecordatorio(señal) {
   const pedido = (señal.texto_original || "").replace(/\s+/g, " ").trim().slice(0, 100);
@@ -74,7 +74,7 @@ async function runOnce() {
         const advisor = await advisors.findById(org.id, señal.aviso_advisor_id);
         if (!advisor || !advisor.phone) continue;
 
-        const { ok, error } = await canalWhatsapp.sendWhatsApp(org, advisor.phone, textoRecordatorio(señal));
+        const { ok, error } = await mensajeAsesor.enviarYRegistrar(org, advisor.phone, textoRecordatorio(señal));
         if (ok) {
           sent++;
         } else {

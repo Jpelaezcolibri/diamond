@@ -10,9 +10,7 @@ const radarTrazabilidad = require("../data/radar-trazabilidad");
 const groupSignals = require("../data/group-signals");
 const signalEvents = require("../data/signal-events");
 const organizations = require("../data/organizations");
-// Modulo y no funcion suelta: destructurar congela la referencia y deja los
-// tests sin forma de mockear el envio (mismo criterio que src/groups/vivo.js).
-const canalWhatsapp = require("../channels/whatsapp");
+const mensajeAsesor = require("../lib/mensaje-asesor");
 
 const COMMAND_TOOL_DEFINITIONS = [
   {
@@ -623,7 +621,7 @@ async function enviarWhatsappEquipo(input, ctx) {
   const org = await organizations.findById(scope.orgId).catch(() => null);
   if (!org) return "No pude resolver la organizacion para enviar el mensaje.";
 
-  const r = await canalWhatsapp.sendWhatsApp(org, asesor.phone, texto).catch((e) => ({ ok: false, error: e.message }));
+  const r = await mensajeAsesor.enviarYRegistrar(org, asesor.phone, texto).catch((e) => ({ ok: false, error: e.message }));
   if (!r || !r.ok) {
     const motivo = r && r.error === "sin_credenciales"
       ? "faltan las credenciales de WhatsApp"

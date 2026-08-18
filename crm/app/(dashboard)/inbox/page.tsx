@@ -17,10 +17,15 @@ export default async function InboxPage() {
 
   const [{ data: conversations, hasError, message }, roster] = await Promise.all([
     fetchSafe<Conversation>(
+      // !inner + neq("leads.source", "asesor"): las conversaciones entre Sofi
+      // y el equipo (avisos del radar, reenvíos, recordatorios) viven en
+      // /equipo desde el 2026-08-18 — sin este filtro se mezclaban acá con
+      // los clientes reales, sin ninguna forma de distinguirlas.
       supabase
         .from("conversations")
-        .select("*, leads(*)")
+        .select("*, leads!inner(*)")
         .eq("estado", "activa")
+        .neq("leads.source", "asesor")
         .order("last_activity_at", { ascending: false })
         .limit(100),
       "inbox:conversations"

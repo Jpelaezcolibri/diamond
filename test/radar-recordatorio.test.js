@@ -10,7 +10,7 @@ const groupSignals = require("../src/data/group-signals");
 const signalEvents = require("../src/data/signal-events");
 const organizations = require("../src/data/organizations");
 const advisors = require("../src/data/advisors");
-const whatsapp = require("../src/channels/whatsapp");
+const mensajeAsesor = require("../src/lib/mensaje-asesor");
 
 test("textoRecordatorio incluye el pedido y pide un resultado corto", () => {
   const t = recordatorio.textoRecordatorio({ texto_original: "busco apto en Sabaneta 3 alcobas" });
@@ -55,7 +55,7 @@ test("runOnce: reclama, resuelve el asesor y manda el recordatorio", async (t) =
   t.mock.method(groupSignals, "claimRecordatorio", async (orgId, signalId) => { reclamado = signalId; return true; });
   t.mock.method(advisors, "findById", async (orgId, id) => ({ id, name: "katherine Uribe", phone: "573028536489" }));
   const enviados = [];
-  t.mock.method(whatsapp, "sendWhatsApp", async (org, to, texto) => { enviados.push({ to, texto }); return { ok: true, wamid: "w1" }; });
+  t.mock.method(mensajeAsesor, "enviarYRegistrar", async (org, to, texto) => { enviados.push({ to, texto }); return { ok: true, wamid: "w1" }; });
 
   const r = await recordatorio.runOnce();
 
@@ -73,7 +73,7 @@ test("si el claim no lo gana (otro tick ya lo tomo), no manda nada", async (t) =
   t.mock.method(signalEvents, "ultimoPorSenal", async () => new Map());
   t.mock.method(groupSignals, "claimRecordatorio", async () => false);
   let enviado = false;
-  t.mock.method(whatsapp, "sendWhatsApp", async () => { enviado = true; return { ok: true }; });
+  t.mock.method(mensajeAsesor, "enviarYRegistrar", async () => { enviado = true; return { ok: true }; });
 
   const r = await recordatorio.runOnce();
 
@@ -90,7 +90,7 @@ test("sin telefono del asesor, no truena y no cuenta como enviado", async (t) =>
   t.mock.method(groupSignals, "claimRecordatorio", async () => true);
   t.mock.method(advisors, "findById", async () => ({ id: "adv-sin-telefono", name: "Sin Telefono", phone: null }));
   let enviado = false;
-  t.mock.method(whatsapp, "sendWhatsApp", async () => { enviado = true; return { ok: true }; });
+  t.mock.method(mensajeAsesor, "enviarYRegistrar", async () => { enviado = true; return { ok: true }; });
 
   const r = await recordatorio.runOnce();
 

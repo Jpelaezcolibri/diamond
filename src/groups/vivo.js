@@ -35,6 +35,7 @@ const syncEstado = require("../data/sync-estado");
 // Se importa el MODULO y no la funcion suelta: destructurar congela la
 // referencia y deja los tests sin forma de mockear el envio.
 const canalWhatsapp = require("../channels/whatsapp");
+const mensajeAsesor = require("../lib/mensaje-asesor");
 
 const VENTANA_LIMITE_HORAS = 24;
 
@@ -224,15 +225,19 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora }
 
   // Sale por la Cloud API OFICIAL de Sofi, no por la linea vinculada.
   //
-  // El telefono PRINCIPAL (asesor.phone) es el unico del que se guarda el
-  // wamid: RADAR_ALERTA_TO es para monitoreo (Juan, calibracion), no gente de
-  // quien se espera un resultado. Sin esta distincion, guardar cualquier wamid
-  // dejaria a Sofi matcheando la respuesta citada de un asesor equivocado.
+  // El telefono PRINCIPAL (asesor.phone) es el UNICO que pasa por
+  // mensajeAsesor.enviarYRegistrar: queda guardado como mensaje real (visible
+  // en el panel "Equipo" del CRM) y es de quien se guarda el wamid, para
+  // matchear una respuesta citada con esta señal exacta. RADAR_ALERTA_TO es
+  // para monitoreo (Juan, calibracion) — gente de quien no se espera un
+  // resultado — y sigue siendo un envio directo, sin crearle una conversacion.
   const telefonoPrincipal = asesor && asesor.phone ? String(asesor.phone).replace(/\D/g, "") : null;
   let alguno = false;
   let wamidPrincipal = null;
   for (const to of destinos) {
-    const r = await canalWhatsapp.sendWhatsApp(org, to, texto).catch((e) => ({ ok: false, error: e.message }));
+    const r = to === telefonoPrincipal
+      ? await mensajeAsesor.enviarYRegistrar(org, to, texto).catch((e) => ({ ok: false, error: e.message }))
+      : await canalWhatsapp.sendWhatsApp(org, to, texto).catch((e) => ({ ok: false, error: e.message }));
     if (r && r.ok) {
       alguno = true;
       if (to === telefonoPrincipal) wamidPrincipal = r.wamid || null;
