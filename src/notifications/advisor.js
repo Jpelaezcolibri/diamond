@@ -151,6 +151,35 @@ function buildAllyClientMatchAlert(allyProperty, lead) {
   ].join("\n");
 }
 
+// Aviso INMEDIATO al asesor cuando el radar detecta que un COLEGA acaba de
+// ofrecer una propiedad que le puede servir a un lead PROPIO ya activo —
+// direccion inversa de buildAllyClientMatchAlert: alla el cliente pregunta
+// primero y se busca en la red de aliados; aca la oferta entra primero
+// (src/groups/cruce-leads.js) y el aviso sale antes de que nadie pregunte.
+function buildAllyOfferMatchAlert(allyProperty, lead) {
+  const tipo = allyProperty.tipo || "propiedad";
+  const zona = allyProperty.zona ? ` en ${allyProperty.zona}` : "";
+  const precio = allyProperty.precio ? `, ${allyProperty.precio}` : "";
+  const contacto = allyProperty.contacto_nombre || "Un colega";
+  const inmobiliaria = allyProperty.inmobiliaria_origen ? ` de ${allyProperty.inmobiliaria_origen}` : "";
+  const clienteNombre = lead.nombre || "un cliente tuyo";
+  const clienteTelefono = lead.phone ? ` (+${lead.phone})` : "";
+  const razones = (lead.coincide_en || []).join(", ") || "lo que busca";
+  const contactoColega = allyProperty.contacto_telefono
+    ? `Contacto del colega: +${allyProperty.contacto_telefono}.`
+    : "El colega no dejo telefono marcable — respondele en el grupo.";
+  return [
+    "Oferta nueva que le puede servir a tu cliente!",
+    `${contacto}${inmobiliaria} acaba de publicar en un grupo una ${tipo}${zona}${precio}.`,
+    `Coincide con ${clienteNombre}${clienteTelefono} — en ${razones}.`,
+    contactoColega,
+    "Confirma disponibilidad antes de ofrecersela al cliente.",
+    // Misma regla de Juan que en buildAllyClientMatchAlert: si uno pone el
+    // cliente y otro la propiedad, la comision se comparte.
+    "La comision se comparte: quien tiene el cliente y quien tiene la propiedad se ponen de acuerdo.",
+  ].join("\n");
+}
+
 // Aviso al asesor cuando un COLEGA pide algo en un grupo gremial y Diamond lo
 // tiene. El asesor lee esto, decide, y publica EL desde su telefono: Sofi no
 // escribe en ningun grupo.
@@ -274,4 +303,4 @@ function buildAdvisorAlert(org, lead, motivo, propertyInteres, especialidad, cit
   return lines.join("\n");
 }
 
-module.exports = { buildClientLink, buildAdvisorAlert, buildAllyClientMatchAlert, buildGroupDemandAlert, buildAppointmentAlert, buildCaptadorInterestAlert, formatCitaFechaHora };
+module.exports = { buildClientLink, buildAdvisorAlert, buildAllyClientMatchAlert, buildAllyOfferMatchAlert, buildGroupDemandAlert, buildAppointmentAlert, buildCaptadorInterestAlert, formatCitaFechaHora };

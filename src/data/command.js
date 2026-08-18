@@ -94,6 +94,10 @@ function matchLeadsConPropiedad(leadsList, propiedad, limit = 10) {
 
     candidatos.push({
       lead_id: l.id,
+      // owner_id viaja aunque hoy solo lo consuma el cruce proactivo del radar
+      // (src/groups/cruce-leads.js): es quien tiene que recibir el aviso, y
+      // sin el habria que volver a consultar el lead para saberlo.
+      owner_id: l.owner_id || null,
       nombre: l.nombre || null,
       phone: l.phone || null,
       estado: l.estado,

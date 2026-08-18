@@ -21,6 +21,7 @@ const epe = require("../../epe/core");
 const { classify } = require("./classify");
 const { cruzar } = require("./match");
 const { guardarOferta } = require("./ofertas");
+const { cruzarOfertaConLeads } = require("./cruce-leads");
 const { persistirSenal } = require("./persistir");
 const publicable = require("./publicable");
 const revalidar = require("./revalidar");
@@ -93,9 +94,17 @@ async function procesarMensaje(org, mensaje, { grupo, modo = "sombra", enviar = 
   if (duplicado) return { resultado: "duplicado" };
 
   // Las ofertas alimentan la red de aliados y no se responden nunca: contestarle
-  // a un colega que publica su propiedad no tiene sentido comercial.
+  // a un colega que publica su propiedad no tiene sentido comercial. Lo que SI
+  // puede pasar es que un lead propio la este esperando — ese cruce es puro
+  // (base de datos, cero tokens) y no puede tumbar el resultado "oferta" si
+  // falla, por eso va atajado aparte.
   if (c.clase === "oferta") {
-    if (señal.utilizable) await guardarOferta(org, señal, { vistoEn: mensaje.instanteIso });
+    if (señal.utilizable) {
+      const allyProperty = await guardarOferta(org, señal, { vistoEn: mensaje.instanteIso });
+      await cruzarOfertaConLeads(org, allyProperty).catch((e) =>
+        console.warn("[radar] No se pudo cruzar la oferta contra leads propios:", e.message)
+      );
+    }
     return { resultado: "oferta", signalId: signal && signal.id };
   }
 

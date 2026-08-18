@@ -18,6 +18,7 @@ let señalCreada = null;
 let respuestasRecientes = { cantidad: 0, ultimaIso: null };
 let marcadas = [];
 let ofertasGuardadas = [];
+let crucesLeads = [];
 let inventario = { fresco: true, iso: new Date().toISOString(), horas: 1 };
 let linksAbren = true;
 
@@ -54,7 +55,20 @@ function instalarDobles() {
     },
   };
   require.cache[RUTA("groups/ofertas.js")] = {
-    exports: { guardarOferta: async (org, o) => { ofertasGuardadas.push(o); } },
+    exports: {
+      guardarOferta: async (org, o) => {
+        ofertasGuardadas.push(o);
+        return { id: "ally-1", tipo: o.tipo, zona: o.zona };
+      },
+    },
+  };
+  require.cache[RUTA("groups/cruce-leads.js")] = {
+    exports: {
+      cruzarOfertaConLeads: async (org, allyProperty) => {
+        crucesLeads.push({ org, allyProperty });
+        return { resultado: "sin_leads_esperando", avisados: [] };
+      },
+    },
   };
   require.cache[RUTA("data/group-signals.js")] = {
     exports: {
@@ -115,6 +129,7 @@ beforeEach(() => {
   respuestasRecientes = { cantidad: 0, ultimaIso: null };
   marcadas = [];
   ofertasGuardadas = [];
+  crucesLeads = [];
   inventario = { fresco: true, iso: new Date().toISOString(), horas: 1 };
   linksAbren = true;
   vivo = instalarDobles();
@@ -196,6 +211,10 @@ test("una oferta alimenta la red de aliados y nunca se responde", async () => {
   assert.strictEqual(r.resultado, "oferta");
   assert.strictEqual(envios, 0);
   assert.strictEqual(ofertasGuardadas.length, 1);
+  // La oferta guardada se cruza contra los leads propios que la esperan —
+  // aprobado por Juan 2026-08-18: "armalo".
+  assert.strictEqual(crucesLeads.length, 1);
+  assert.strictEqual(crucesLeads[0].allyProperty.id, "ally-1");
 });
 
 test("con el radar apagado no se gasta un token ni se escribe una fila", async () => {
