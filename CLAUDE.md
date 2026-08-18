@@ -49,12 +49,14 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
 - **Migraciones pendientes de correr en Supabase:**
   `db/migrations/2026-07-09_dmap_default_designer.sql` (default del motor de
   creativos → designer para orgs nuevas) y
-  `db/migrations/2026-07-25_advisor_rotacion.sql` (rotación de transferencias:
-  columna `recibe_transferencias` + exclusión de Claudia/Catherine — SIN ella
-  la rotación de venta incluye a los 4 asesores activos). Ya corridas:
-  `2026-07-24_advisor_reminders_calendario_equipo.sql`,
-  `2026-07-24_property_captador.sql` y `2026-07-24_lead_idioma.sql`
-  (verificadas 2026-07-24/25).
+  `db/migrations/2026-08-18_radar_aviso_destinatario.sql` (guarda A QUIEN se
+  le manda cada aviso del radar + su wamid, para que trazabilidad_radar no
+  tenga que adivinar y para que una respuesta citada — swipe-to-reply — se
+  pueda enlazar con el pedido exacto). El código ya degrada limpio sin ella
+  (verificado en producción 2026-08-18), pero sin correrla `aviso.para` sale
+  siempre `null` y `registrar_resultado_radar` no puede resolver por cita.
+  Ya corrida y verificada 2026-08-18: `2026-07-25_advisor_rotacion.sql`
+  (Catherine Uribe es la única con `recibe_transferencias=true` en venta).
 - **Pendientes de negocio:** teléfonos reales de asesores de arriendo/
   vehículos en `advisors` · corregir precio de la ref `9921388` en Wasi ·
   verificación de empresa en Meta · confirmar las 3 propiedades exclusivas
