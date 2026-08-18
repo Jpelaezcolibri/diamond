@@ -6,6 +6,7 @@ const command = require("../data/command");
 const properties = require("../data/properties");
 const allyProperties = require("../data/ally-properties");
 const advisors = require("../data/advisors");
+const radarTrazabilidad = require("../data/radar-trazabilidad");
 
 const COMMAND_TOOL_DEFINITIONS = [
   {
@@ -181,6 +182,21 @@ const COMMAND_TOOL_DEFINITIONS = [
         cliente: { type: "string", description: "Nombre o telefono del cliente relacionado, si aplica" },
       },
       required: ["descripcion"],
+    },
+  },
+  {
+    name: "trazabilidad_radar",
+    description:
+      "Muestra el recorrido completo de los pedidos que el radar detecto en los grupos gremiales: que entro, que encontro el motor con su puntaje y si la zona era exacta o vecina, que decidio Sofi y por que, si el aviso llego a la asesora, y en que termino. Usala cuando pregunten como va el radar, si esta sirviendo, que paso con los pedidos de los grupos, por que no llego un aviso, o para calibrar el motor. El admin ve toda la organizacion; un asesor solo lo suyo.",
+    input_schema: {
+      type: "object",
+      properties: {
+        dias: { type: "number", description: "Ventana hacia atras en dias (default 7)." },
+        solo_con_aviso: {
+          type: "boolean",
+          description: "true para ver unicamente las que llegaron a la asesora.",
+        },
+      },
     },
   },
   {
@@ -442,6 +458,13 @@ async function executeCommandTool(name, input, ctx) {
         ? "Va a aparecer en el Calendario del equipo, visible para todos."
         : "Solo tu lo vas a ver.";
       return `Recordatorio guardado${leadId ? " y vinculado al cliente" : ""}: "${creado.descripcion}". ${visibilidad}`;
+    }
+    case "trazabilidad_radar": {
+      const data = await radarTrazabilidad.trazabilidad(scope, {
+        dias: input?.dias || 7,
+        soloConAviso: Boolean(input?.solo_con_aviso),
+      });
+      return JSON.stringify(data);
     }
     case "consultar_recordatorios": {
       const pendientes = await command.recordatoriosPendientes(scope);
