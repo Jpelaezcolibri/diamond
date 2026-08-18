@@ -327,14 +327,23 @@ async function embudo(scope, { desde = null, hasta = null } = {}) {
 }
 
 // ── Recordatorios personales del asesor ────────────────────────────────────
-// Siempre por user_id, incluso si scope.isAdmin: son notas propias, no datos
-// del negocio (a diferencia de leads/metricas, que el admin ve completos).
-async function crearRecordatorio(scope, { descripcion, fechaHoraIso = null, leadId = null }) {
+// Por default, siempre por user_id del que esta chateando, incluso si
+// scope.isAdmin: son notas propias, no datos del negocio (a diferencia de
+// leads/metricas, que el admin ve completos).
+//
+// targetUserId es la unica forma de romper esa regla, y a proposito solo la
+// usa crear_recordatorio_equipo (Sofi-Comando, admin-only, ver
+// sofi-comando-tools.js): el admin dejandole un recordatorio a OTRO asesor.
+// La tool que llega hasta aca decide si eso esta permitido; esta funcion no
+// vuelve a preguntar isAdmin porque no sabe distinguir "el admin escribe su
+// propia nota" de "el admin le deja una nota a alguien mas" sin ese parametro.
+async function crearRecordatorio(scope, { descripcion, fechaHoraIso = null, leadId = null, targetUserId = null }) {
+  const userId = targetUserId || scope.viewerUid;
   if (!supabase) {
     const row = {
       id: demoId(),
       org_id: scope.orgId,
-      user_id: scope.viewerUid,
+      user_id: userId,
       lead_id: leadId,
       descripcion,
       fecha_hora: fechaHoraIso,
@@ -346,7 +355,7 @@ async function crearRecordatorio(scope, { descripcion, fechaHoraIso = null, lead
   }
   const { data, error } = await supabase
     .from("advisor_reminders")
-    .insert({ org_id: scope.orgId, user_id: scope.viewerUid, lead_id: leadId, descripcion, fecha_hora: fechaHoraIso })
+    .insert({ org_id: scope.orgId, user_id: userId, lead_id: leadId, descripcion, fecha_hora: fechaHoraIso })
     .select()
     .single();
   if (error) throw error;

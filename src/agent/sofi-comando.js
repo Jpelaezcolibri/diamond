@@ -10,7 +10,7 @@
 const config = require("../config");
 const command = require("../data/command");
 const { buildCommandSystemPrompt } = require("./sofi-comando-prompts");
-const { COMMAND_TOOL_DEFINITIONS, executeCommandTool } = require("./sofi-comando-tools");
+const { executeCommandTool, toolsForScope } = require("./sofi-comando-tools");
 const { getClient } = require("../lib/anthropic");
 
 // 8, no 5: encontrado en produccion 2026-08-18 — Juan le pidio a Sofi mandarle
@@ -239,7 +239,7 @@ async function processMessage(scope, sessionId, text, { userName } = {}) {
     max_tokens: 1024,
     system,
     messages,
-    tools: COMMAND_TOOL_DEFINITIONS,
+    tools: toolsForScope(scope),
   });
 
   const textParts = [];
@@ -270,7 +270,7 @@ async function processMessage(scope, sessionId, text, { userName } = {}) {
       max_tokens: 1024,
       system,
       messages,
-      tools: COMMAND_TOOL_DEFINITIONS,
+      tools: toolsForScope(scope),
     });
   }
 

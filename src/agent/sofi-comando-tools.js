@@ -252,7 +252,37 @@ const COMMAND_TOOL_DEFINITIONS = [
       required: ["asesor", "mensaje"],
     },
   },
+  {
+    name: "crear_recordatorio_equipo",
+    description:
+      "Crea un recordatorio para OTRO asesor del equipo — no para vos. Usala cuando el admin diga 'recordale a Fulano que...', 'que Sofi le avise a Fulano de...'. Si tiene fecha/hora queda en el Calendario del equipo (lo ve todo el mundo); sin fecha/hora es una nota personal que solo esa persona ve.",
+    input_schema: {
+      type: "object",
+      properties: {
+        asesor: { type: "string", description: "Nombre del asesor a quien va dirigido el recordatorio" },
+        descripcion: { type: "string", description: "El recordatorio tal como lo pidio el admin" },
+        fecha_hora_iso: { type: "string", description: "Fecha/hora ISO si dio dia/hora. Omitir si no dio fecha." },
+      },
+      required: ["asesor", "descripcion"],
+    },
+  },
 ];
+
+// Tools que solo el admin puede usar — actuan sobre OTRA persona del equipo
+// (le mandan un WhatsApp, le dejan un recordatorio, o ven pendientes de toda
+// la org) en vez de sobre quien esta chateando. Un asesor comun no deberia
+// poder pedirle a Sofi que le escriba o le deje notas a un companero.
+//
+// Se filtran en DOS lugares (defensa en profundidad, no redundancia inutil):
+// aca, para que el modelo ni siquiera vea la tool si no es admin (toolsForScope,
+// usado por sofi-comando.js); y de nuevo dentro de cada handler, por si algun
+// dia alguien llama executeCommandTool sin pasar por ese filtro.
+const ADMIN_ONLY_TOOLS = new Set(["registrar_resultado_radar", "enviar_whatsapp_equipo", "crear_recordatorio_equipo"]);
+
+function toolsForScope(scope) {
+  if (scope && scope.isAdmin) return COMMAND_TOOL_DEFINITIONS;
+  return COMMAND_TOOL_DEFINITIONS.filter((t) => !ADMIN_ONLY_TOOLS.has(t.name));
+}
 
 // Techo de resultados por consulta: suficiente para un analisis, sin inundar
 // el contexto del modelo con fichas completas.
@@ -268,6 +298,12 @@ function capLimit(limite, fallback = 5) {
 // no del modelo.
 async function executeCommandTool(name, input, ctx) {
   const { scope, session } = ctx;
+  // Segunda barrera (la primera es toolsForScope, que ni le muestra la tool
+  // al modelo si no es admin). Esta cubre al que llame executeCommandTool
+  // directo, sin pasar por ese filtro.
+  if (ADMIN_ONLY_TOOLS.has(name) && !(scope && scope.isAdmin)) {
+    return "Esto solo lo puede usar un admin.";
+  }
   switch (name) {
     case "consultar_seguimientos": {
       const data = await command.seguimientos(scope, { dias: input?.dias || 3 });
@@ -519,6 +555,8 @@ async function executeCommandTool(name, input, ctx) {
       return registrarResultadoRadarComando(input, ctx);
     case "enviar_whatsapp_equipo":
       return enviarWhatsappEquipo(input, ctx);
+    case "crear_recordatorio_equipo":
+      return crearRecordatorioEquipo(input, ctx);
     default:
       return `Herramienta desconocida: ${name}`;
   }
@@ -631,4 +669,42 @@ async function enviarWhatsappEquipo(input, ctx) {
   return `Listo, le mande el mensaje a ${asesor.name} (+${asesor.phone}).`;
 }
 
-module.exports = { COMMAND_TOOL_DEFINITIONS, executeCommandTool };
+// Recordatorio para OTRO asesor — la unica diferencia con crear_recordatorio
+// (que siempre es para quien esta chateando) es a quien queda asignado. La
+// dejamos en advisor_reminders.user_id = auth_user_id del asesor, que es lo
+// que command.recordatoriosPendientes filtra: sin auth_user_id, la nota
+// quedaria guardada pero esa persona nunca la veria en su Sofi.
+async function crearRecordatorioEquipo(input, ctx) {
+  const { scope } = ctx;
+  const nombre = String(input?.asesor || "").trim();
+  const descripcion = String(input?.descripcion || "").trim();
+  if (!nombre || !descripcion) return "Me falta el nombre del asesor o el recordatorio.";
+
+  let candidatos;
+  try {
+    candidatos = await advisors.searchByName(scope.orgId, nombre);
+  } catch (e) {
+    return "No pude buscar al asesor en este momento.";
+  }
+  if (candidatos.length === 0) return `No encuentro ningun asesor activo llamado "${nombre}".`;
+  if (candidatos.length > 1) {
+    return `Hay ${candidatos.length} asesores que coinciden con "${nombre}": ${candidatos.map((a) => a.name).join(", ")}. Pregunta cual antes de crear nada.`;
+  }
+  const asesor = candidatos[0];
+  if (!asesor.auth_user_id) {
+    return `${asesor.name} todavia no tiene acceso al CRM, asi que no le puedo dejar una nota que vea en su Sofi — avisale por otro medio (ej. enviar_whatsapp_equipo, si te escribio en las ultimas 24h).`;
+  }
+
+  const creado = await command.crearRecordatorio(scope, {
+    descripcion,
+    fechaHoraIso: input?.fecha_hora_iso || null,
+    leadId: null,
+    targetUserId: asesor.auth_user_id,
+  });
+  const visibilidad = creado.fecha_hora
+    ? "Va a aparecer en el Calendario del equipo, visible para todos."
+    : `Solo ${asesor.name} lo va a ver, en su Sofi.`;
+  return `Listo, le deje a ${asesor.name} el recordatorio: "${creado.descripcion}". ${visibilidad}`;
+}
+
+module.exports = { COMMAND_TOOL_DEFINITIONS, executeCommandTool, toolsForScope };
