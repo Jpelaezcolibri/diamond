@@ -272,6 +272,51 @@ async function marcarEnviada(orgId, groupId, waMessageId) {
   if (error) console.error("[grupos] No se pudo marcar la señal como enviada:", error.message);
 }
 
+// Guarda el veredicto de Sofi sobre las candidatas de una senal (modo asistido).
+//
+// Se guarda ENTERO y aunque haya dicho que no sirve: el "no" tambien ensena. Es
+// una de las tres piezas con las que se calibra el motor, junto al puntaje y a
+// lo que la asesora termino haciendo (signal_events).
+//
+// Best-effort: si falta la migracion 2026-08-18, se avisa una vez y el flujo
+// sigue. Perder el dato de calibracion no puede costar la oportunidad.
+async function guardarRevalidacion(orgId, signalId, veredicto) {
+  if (!supabase) return true;
+  const { error } = await supabase
+    .from("group_signals")
+    .update({ revalidacion: veredicto, updated_at: new Date().toISOString() })
+    .eq("org_id", orgId)
+    .eq("id", signalId);
+  if (error) {
+    if (esColumnaFaltante(error)) {
+      console.error("[grupos] Falta la migracion 2026-08-18_radar_asistido.sql: el veredicto de Sofi no se guarda.");
+    } else {
+      console.error("[grupos] No se pudo guardar la revalidacion:", error.message);
+    }
+    return false;
+  }
+  return true;
+}
+
+// Deja constancia de que el aviso a la asesora SALIO.
+//
+// Si esto no se llama, la senal queda con `enviado_at` en null y sigue en la
+// cola. Eso es deliberado: fuera de la ventana de 24 h Meta rechaza el texto
+// libre, y una senal pendiente se puede reintentar cuando la asesora escriba.
+async function marcarAvisoEnviado(orgId, signalId) {
+  if (!supabase) return true;
+  const { error } = await supabase
+    .from("group_signals")
+    .update({ enviado_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq("org_id", orgId)
+    .eq("id", signalId);
+  if (error) {
+    console.error("[grupos] No se pudo marcar el aviso como enviado:", error.message);
+    return false;
+  }
+  return true;
+}
+
 const MODOS_RESPUESTA = ["sombra", "auto", "humano"];
 
 // Deja constancia de una respuesta publicada en el grupo (o redactada en modo
@@ -336,7 +381,7 @@ async function respuestasDesde(orgId, groupId, desdeIso) {
 module.exports = {
   create, list, setEstado, resumen, marcarEnviada, ultimaFechaImportada,
   pendientesDigest, marcarDigest, revertirDigest,
-  marcarRespondida, respuestasDesde,
+  marcarRespondida, respuestasDesde, guardarRevalidacion, marcarAvisoEnviado,
   CLASES, ORIGENES, MODOS_RESPUESTA, _resetBlindaje,
 };
 

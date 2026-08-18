@@ -23,12 +23,17 @@ const { cruzar } = require("./match");
 const { guardarOferta } = require("./ofertas");
 const { persistirSenal } = require("./persistir");
 const publicable = require("./publicable");
+const revalidar = require("./revalidar");
+const alertaAsesor = require("./alerta-asesor");
 const verificarLink = require("./verificar-link");
 const politica = require("./politica");
 const redactar = require("./redactar");
 const groupSignals = require("../data/group-signals");
 const organizations = require("../data/organizations");
 const syncEstado = require("../data/sync-estado");
+// Se importa el MODULO y no la funcion suelta: destructurar congela la
+// referencia y deja los tests sin forma de mockear el envio.
+const canalWhatsapp = require("../channels/whatsapp");
 
 const VENTANA_LIMITE_HORAS = 24;
 
@@ -92,6 +97,13 @@ async function procesarMensaje(org, mensaje, { grupo, modo = "sombra", enviar = 
   if (c.clase === "oferta") {
     if (señal.utilizable) await guardarOferta(org, señal, { vistoEn: mensaje.instanteIso });
     return { resultado: "oferta", signalId: signal && signal.id };
+  }
+
+  // MODO ASISTIDO: no se publica NADA en el grupo. Sofi revalida las candidatas
+  // y, si aprueba, le escribe a la asesora. Es el paso previo a encender las
+  // respuestas: sirve para calibrar el motor sin exponer la marca.
+  if (modo === "asistido") {
+    return asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora });
   }
 
   // 5. Compuerta de calidad del dato, y despues politica de conducta. Son dos
@@ -160,4 +172,78 @@ async function procesarMensaje(org, mensaje, { grupo, modo = "sombra", enviar = 
   return { resultado: "publicado", texto, wamid: envio.wamid, publicables, traza: decision.traza, signalId: signal.id };
 }
 
-module.exports = { procesarMensaje, idEnVivo, VENTANA_LIMITE_HORAS };
+// Sofi da su veredicto y, si aprueba, le avisa a la asesora.
+//
+// Sofi ve TODAS las candidatas, tambien las de puntaje bajo: es la unica forma
+// de descubrir que el umbral esta dejando pasar oportunidades buenas. Los falsos
+// negativos son invisibles por definicion y son los caros.
+//
+// Quien decide si se avisa es Sofi, no el puntaje. El veredicto se guarda
+// SIEMPRE —aunque diga que no sirve— porque el "no" tambien ensena.
+async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora }) {
+  const matches = señal.matches || [];
+  if (matches.length === 0) return { resultado: "sin_candidatas", signalId: signal && signal.id };
+
+  const { veredicto } = await revalidar.revalidar(c, matches);
+  if (!veredicto) {
+    // Falla cerrada: sin veredicto no se le escribe a nadie.
+    return { resultado: "sin_veredicto", signalId: signal && signal.id };
+  }
+  await groupSignals.guardarRevalidacion(org.id, signal.id, veredicto);
+
+  if (!revalidar.apruebaAviso(veredicto)) {
+    return { resultado: "descartada_por_sofi", veredicto, signalId: signal.id };
+  }
+
+  const texto = alertaAsesor.construir(
+    {
+      grupo_nombre: grupo.nombre || grupo.jid,
+      autor_nombre: mensaje.autor,
+      autor_telefono: mensaje.autorTelefono,
+      texto_original: mensaje.texto,
+    },
+    veredicto,
+    matches
+  );
+  if (!texto) return { resultado: "descartada_por_sofi", veredicto, signalId: signal.id };
+
+  const destinos = destinatarios(asesor);
+  if (destinos.length === 0) {
+    console.warn("[radar] Sofi aprobo una oportunidad pero no hay a quien avisarle.");
+    return { resultado: "sin_destinatario", veredicto, texto, signalId: signal.id };
+  }
+
+  // Sale por la Cloud API OFICIAL de Sofi, no por la linea vinculada.
+  let alguno = false;
+  for (const to of destinos) {
+    const r = await canalWhatsapp.sendWhatsApp(org, to, texto).catch((e) => ({ ok: false, error: e.message }));
+    if (r && r.ok) alguno = true;
+    else console.warn(`[radar] No se pudo avisar a ${to}: ${r && r.error}`);
+  }
+
+  // Solo se marca enviado si SALIO. Si no, queda pendiente: fuera de la ventana
+  // de 24 h Meta rechaza el texto libre, y esa senal se puede reintentar cuando
+  // la asesora escriba y la ventana se reabra.
+  if (alguno) await groupSignals.marcarAvisoEnviado(org.id, signal.id);
+
+  return {
+    resultado: alguno ? "avisada" : "aviso_pendiente",
+    veredicto,
+    texto,
+    destinos,
+    signalId: signal.id,
+  };
+}
+
+// A quien se le avisa. Por defecto la asesora de la rotacion de venta; la
+// variable permite sumar a alguien mas durante la calibracion sin tocar codigo.
+function destinatarios(asesor) {
+  const extra = (process.env.RADAR_ALERTA_TO || "")
+    .split(",")
+    .map((t) => t.trim().replace(/\D/g, ""))
+    .filter(Boolean);
+  const base = asesor && asesor.phone ? [String(asesor.phone).replace(/\D/g, "")] : [];
+  return [...new Set([...base, ...extra])];
+}
+
+module.exports = { procesarMensaje, idEnVivo, asistir, destinatarios, VENTANA_LIMITE_HORAS };

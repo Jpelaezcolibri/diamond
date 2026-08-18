@@ -33,12 +33,51 @@ la función no se construye.
    hablan con WAHA responden `423`. *Este es el que faltaba en julio:* frenaba
    el webhook pero dejaba abierto "Vincular línea", así que un clic podía
    re-parear el número mientras Meta revisaba la cuenta suspendida.
-3. **`GRUPOS_RESPUESTA_MODO`** → `sombra` redacta y registra sin publicar;
-   `auto` publica; cualquier otro valor apaga la respuesta. Sigue escuchando.
+3. **`GRUPOS_RESPUESTA_MODO`** → tres modos, de menos a más expuesto:
+   `sombra` redacta y registra sin publicar; **`asistido`** no publica nada pero
+   Sofi revalida y le avisa a la asesora; `auto` publica en el grupo. Cualquier
+   otro valor apaga la respuesta. En los tres se sigue escuchando.
 
 Y dos permisos por grupo, independientes: `modo ≠ 'ignorar'` para escuchar,
 `responde = true` para publicar. **Ambos nacen apagados.** Importar una línea
 trae todos sus grupos de golpe — la asesora de julio tenía 80.
+
+## El modo asistido (calibración)
+
+Es el modo con el que se arranca. **No se publica nada en ningún grupo** — de
+hecho ni siquiera hace falta habilitar *Responder*, basta con *Escuchar*.
+
+El flujo: llega un pedido → el motor cruza contra el inventario → **Sofi revalida
+todas las candidatas** (también las de puntaje bajo) → si aprueba, le escribe a
+la asesora con el grupo, el colega y su teléfono, lo que pidió textual, qué
+propiedad le sirve y por qué.
+
+Sofi ve las de puntaje bajo a propósito: es la única forma de descubrir que el
+umbral está dejando pasar oportunidades buenas. Los falsos negativos son
+invisibles por definición y son los caros. Cuando Sofi no coincide con el
+puntaje se le pide que lo diga, y eso queda en `revalidacion.desacuerdo_con_puntaje`.
+
+**Qué mirar para calibrar**, pasadas unas semanas:
+
+```sql
+select
+  (m->>'ref') as ref,
+  (m->>'puntaje')::int as puntaje,
+  revalidacion->>'sirve_alguna' as sofi_aprueba,
+  revalidacion->>'desacuerdo_con_puntaje' as desacuerdo
+from group_signals, jsonb_array_elements(matches) m
+where revalidacion is not null
+order by created_at desc;
+```
+
+Si Sofi aprueba consistentemente cosas por debajo de 70, el umbral está alto. Si
+rechaza cosas por encima de 80, está bajo o los pesos están mal repartidos.
+
+**La ventana de 24 h.** Meta solo entrega texto libre a quien escribió en las
+últimas 24 horas, y **los mensajes de Sofi no renuevan ese plazo — solo los de
+ella**. Por eso el aviso termina pidiendo una respuesta corta: registra qué pasó
+con la oportunidad y de paso mantiene el canal abierto. Si aun así la ventana
+está cerrada, el aviso **no se marca enviado** y queda pendiente.
 
 ## Si la sesión se cae
 
@@ -84,13 +123,17 @@ y redesplegar. Para apagar un grupo puntual, `POST /api/grupos/responde` con
    Verificación: `select count(*) from whatsapp_groups where responde;` → `0`.
 2. Levantar el servicio WAHA (motor `NOWEB`; `WEBJS` levanta Chromium y no cabe
    en el presupuesto). Sin dominio público, red privada de Railway.
-3. Poner `GROUPS_WEBHOOK_SECRET`, `WAHA_URL`, `WAHA_API_KEY`, `BOT_PUBLIC_URL`
-   y `GROUPS_ENABLED=true`. Dejar `GRUPOS_RESPUESTA_MODO=sombra`.
-4. Vincular la línea dedicada por QR e importar sus grupos.
-5. Habilitar **un** grupo de prueba propio: primero `modo`, después `responde`.
-6. Dejarlo en sombra 24–48 h y revisar en `group_signals` lo que *habría*
-   publicado (`respuesta_texto`, `respuesta_modo = 'sombra'`).
-7. Solo entonces `GRUPOS_RESPUESTA_MODO=auto`, y solo en ese grupo.
+3. Correr también `db/migrations/2026-08-18_radar_asistido.sql` (columna
+   `revalidacion`, donde queda el veredicto de Sofi).
+4. Poner `GROUPS_WEBHOOK_SECRET`, `WAHA_URL`, `WAHA_API_KEY`, `BOT_PUBLIC_URL`,
+   `RADAR_WATCHDOG_TO` y `GROUPS_ENABLED=true`. Modo: `asistido`.
+5. Vincular la línea por QR e importar sus grupos.
+6. Habilitar **Escuchar** en uno solo. **No hace falta `responde`**: en asistido
+   no se publica nada.
+7. Dejarlo corriendo y revisar los avisos que le llegan a la asesora, más la
+   consulta de calibración de arriba.
+8. Cuando el criterio esté afinado: `sombra` para ver el mensaje que saldría al
+   grupo, y solo entonces `auto` con `responde` en un grupo.
 
 ## Qué revisar en la sombra
 

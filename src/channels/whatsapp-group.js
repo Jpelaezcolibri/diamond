@@ -68,7 +68,10 @@ const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
 // Contadores en memoria para el detector de humo. No guardan texto.
 const metricas = {
   recibidos: 0, prefiltrados: 0, historicos: 0, difundidos: 0,
-  publicados: 0, sombra: 0, callados: 0, errores: 0, desde: new Date().toISOString(),
+  publicados: 0, sombra: 0, callados: 0, errores: 0,
+  // Modo asistido: Sofi revalida y le avisa a la asesora, sin publicar nada.
+  avisadas: 0, descartadas_por_sofi: 0, avisos_pendientes: 0,
+  desde: new Date().toISOString(),
 };
 function contar(k) {
   if (k in metricas) metricas[k] += 1;
@@ -223,6 +226,9 @@ async function procesar(org, ev, grupo, sesion) {
   else if (r.resultado === "sombra") contar("sombra");
   else if (r.resultado === "error_envio") contar("errores");
   else if (r.resultado === "callado") contar("callados");
+  else if (r.resultado === "avisada") contar("avisadas");
+  else if (r.resultado === "descartada_por_sofi") contar("descartadas_por_sofi");
+  else if (r.resultado === "aviso_pendiente") contar("avisos_pendientes");
 
   // Solo despues de haber publicado de verdad. Como esto corre dentro de la cola
   // del grupo, el pedido que venga atras espera y se responde igual: se demora,
