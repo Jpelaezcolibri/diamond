@@ -13,7 +13,14 @@ const { buildCommandSystemPrompt } = require("./sofi-comando-prompts");
 const { COMMAND_TOOL_DEFINITIONS, executeCommandTool } = require("./sofi-comando-tools");
 const { getClient } = require("../lib/anthropic");
 
-const MAX_TOOL_ITERATIONS = 5;
+// 8, no 5: encontrado en produccion 2026-08-18 — Juan le pidio a Sofi mandarle
+// un WhatsApp a Catherine por cada uno de 6 pedidos pendientes (una tool por
+// mensaje) y se quedo sin iteraciones a mitad de camino. Con el limite viejo,
+// el ultimo turno del loop terminaba en un tool_use sin texto -> reply vacio
+// -> caia en el fallback generico "No pude procesar eso", sin decir que
+// habia mandado 5 de 6 ni que quedaba uno. Ver el fallback mas abajo para la
+// otra mitad del arreglo: aunque el limite se suba, sigue siendo finito.
+const MAX_TOOL_ITERATIONS = 8;
 const HISTORY_LIMIT = 12;
 
 // TODO(reuse): nowInBogota vive tambien en src/agent/engine.js; no se exporta
@@ -267,9 +274,23 @@ async function processMessage(scope, sessionId, text, { userName } = {}) {
     });
   }
 
+  // El loop se corto por el tope de iteraciones mientras el modelo TODAVIA
+  // queria seguir usando herramientas (no porque termino de responder). Ese
+  // ultimo turno no trae texto —fue puro tool_use— asi que sin esto caia en
+  // el fallback generico, que no dice ni que ya hizo varias acciones ni que
+  // queda trabajo pendiente. Bug real 2026-08-18: Juan pidio mandar un
+  // WhatsApp por cada uno de 6 pedidos y el turno murio en silencio a mitad
+  // de camino.
+  const agotoIteraciones = response.stop_reason === "tool_use" && iterations >= MAX_TOOL_ITERATIONS;
+
   const finalText = extractText(response);
   if (finalText) textParts.push(finalText);
-  const reply = textParts.join("\n").trim() || "No pude procesar eso. ¿Lo intentamos de otra forma?";
+  let reply = textParts.join("\n").trim();
+  if (!reply) {
+    reply = agotoIteraciones
+      ? 'Ya hice varias de las acciones que me pediste, pero llegue al limite de pasos para un solo mensaje. Decime "segui" y continuo con el resto.'
+      : "No pude procesar eso. ¿Lo intentamos de otra forma?";
+  }
 
   await command.appendCommandMessage(sessionId, "assistant", reply);
   return { reply };
