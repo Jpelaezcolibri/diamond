@@ -48,9 +48,9 @@ const waha = require("../lib/waha");
 
 const router = express.Router();
 
-// Modo del radar en vivo. 'sombra' redacta y registra sin publicar; 'auto'
-// publica. Cualquier otro valor (o la variable sin definir) apaga la respuesta:
-// falla cerrada, un typo no puede encender el envio por accidente.
+// Modo del radar en vivo: 'sombra' | 'asistido' | 'auto'. Toggle en base
+// (organizations.grupos_respuesta_modo, 2026-08-18) — MODO() sigue de
+// respaldo para cuando no hay una org resuelta (ej. el endpoint de salud).
 const MODO = () => process.env.GRUPOS_RESPUESTA_MODO || "sombra";
 
 // Espaciado entre dos publicaciones seguidas en el MISMO grupo.
@@ -214,7 +214,7 @@ async function procesar(org, ev, grupo, sesion) {
 
   const r = await vivo.procesarMensaje(org, mensaje, {
     grupo,
-    modo: MODO(),
+    modo: organizations.modoDeRespuesta(org),
     asesor,
     advisorId: sesion?.advisor_id || null,
     // La UNICA via de salida. Se ata aca, al grupo del que vino el mensaje: el
@@ -295,9 +295,10 @@ router.post("/webhook/grupos", async (req, res) => {
 });
 
 // Salud del canal, para el detector de humo.
-router.get("/webhook/grupos/estado", (req, res) => {
+router.get("/webhook/grupos/estado", async (req, res) => {
   if (!autorizado(req)) return res.status(401).json({ ok: false });
-  res.json({ ok: true, modo: MODO(), metricas });
+  const org = await organizations.getDefault().catch(() => null);
+  res.json({ ok: true, modo: organizations.modoDeRespuesta(org), metricas });
 });
 
 module.exports = router;

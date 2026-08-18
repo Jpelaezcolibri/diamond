@@ -8,6 +8,7 @@ import GruposPanel, { type Grupo } from "@/components/grupos-panel";
 import SenalesGrupos, { type Signal } from "@/components/senales-grupos";
 import ImportarExport from "@/components/importar-export";
 import RadarToggle from "@/components/radar-toggle";
+import ModoRespuestaToggle from "@/components/modo-respuesta-toggle";
 import VincularLinea, { type Sesion, type Asesor } from "@/components/vincular-linea";
 import GruposPermisos, { type GrupoVivo } from "@/components/grupos-permisos";
 
@@ -62,8 +63,12 @@ export default async function GruposPage() {
   // columna no existe y la consulta falla: se asume ENCENDIDO, que es el
   // comportamiento que la organización tenía antes de que el botón existiera.
   const orgRes = await supabase
-    .from("organizations").select("radar_activo").limit(1).maybeSingle();
+    .from("organizations").select("radar_activo, grupos_respuesta_modo").limit(1).maybeSingle();
   const radarActivo = orgRes.data?.radar_activo !== false;
+  // Mismo criterio que src/data/organizations.js#modoDeRespuesta: sin
+  // columna (migración sin correr) o valor vacío, "asistido" es el
+  // comportamiento actual en producción — nunca se asume "auto" por defecto.
+  const modoRespuesta = orgRes.data?.grupos_respuesta_modo || "asistido";
 
   const conMatchQuery = mias(
     supabase
@@ -189,6 +194,7 @@ export default async function GruposPage() {
       {gruposRes.hasError && <ErrorBanner message={gruposRes.message} />}
 
       <RadarToggle activo={radarActivo} puedeCambiar={admin} />
+      {radarActivo && <ModoRespuestaToggle modo={modoRespuesta} puedeCambiar={admin} />}
 
       {admin && (
         <section className="mb-8">

@@ -81,7 +81,46 @@ async function setRadarActivo(orgId, activo) {
   return data;
 }
 
+// ── Modo de respuesta del radar en los grupos ────────────────────────────
+//
+// sombra   redacta y registra, no publica nada
+// asistido Sofi revalida y avisa por privado a la asesora, no publica nada
+// auto     publica en el grupo (compuertas deterministicas, sin juicio de un
+//          modelo — ver publicable.js: "aca no hay nadie revisando")
+//
+// Toggle en base (2026-08-18) en vez de variable de entorno de Railway:
+// cambiar una env var implica editar el servicio y esperar el redeploy.
+const MODOS_RESPUESTA = ["sombra", "asistido", "auto"];
+
+// Sin columna (migracion sin correr) o valor invalido, cae a la variable de
+// entorno — el comportamiento de siempre — y no a un default fijo: no hay
+// forma segura de adivinar que modo asumia production antes de esta migracion.
+function modoDeRespuesta(org) {
+  const valor = org && org.grupos_respuesta_modo;
+  if (MODOS_RESPUESTA.includes(valor)) return valor;
+  return process.env.GRUPOS_RESPUESTA_MODO || "sombra";
+}
+
+async function setModoDeRespuesta(orgId, modo) {
+  if (!MODOS_RESPUESTA.includes(modo)) throw new Error(`Modo de respuesta invalido: ${modo}`);
+  if (!supabase) {
+    const o = memory.organizations.find((x) => x.id === orgId);
+    if (!o) throw new Error("Organizacion no encontrada");
+    o.grupos_respuesta_modo = modo;
+    return o;
+  }
+  const { data, error } = await supabase
+    .from("organizations")
+    .update({ grupos_respuesta_modo: modo })
+    .eq("id", orgId)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
 module.exports = {
   findByWhatsappPhoneId, getDefault, listActive,
   findById, radarActivo, setRadarActivo, radarEncendido,
+  modoDeRespuesta, setModoDeRespuesta, MODOS_RESPUESTA,
 };

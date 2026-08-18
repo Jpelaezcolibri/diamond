@@ -352,6 +352,30 @@ router.post("/api/grupos/radar", async (req, res) => {
   }
 });
 
+// Cambia el modo de respuesta del radar en los grupos (sombra | asistido |
+// auto) — org entera, no un grupo puntual. Nombre distinto de
+// /api/grupos/modo a proposito: esa ruta ya existe y es el modo de una
+// LINEA vinculada (whatsappGroups.setModo), un concepto totalmente
+// distinto. El guard de admin vive en el CRM
+// (crm/app/api/grupos/respuesta-modo/route.ts) — esta ruta interna confia
+// en que ya se verifico ahi, igual que el resto de /api/grupos/*.
+router.post("/api/grupos/respuesta-modo", async (req, res) => {
+  const { modo } = req.body || {};
+  if (!organizations.MODOS_RESPUESTA.includes(modo)) {
+    return res.status(400).json({ error: `Modo invalido. Debe ser: ${organizations.MODOS_RESPUESTA.join(", ")}` });
+  }
+  try {
+    const org = req.body?.orgId
+      ? { id: req.body.orgId }
+      : await organizations.getDefault();
+    const actualizada = await organizations.setModoDeRespuesta(org.id, modo);
+    console.log(`[radar] modo de respuesta -> ${modo} para ${actualizada.name || org.id}`);
+    res.json({ ok: true, grupos_respuesta_modo: actualizada.grupos_respuesta_modo });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 router.post("/api/grupos/senal/estado", async (req, res) => {
   const { id, estado } = req.body || {};
   if (!id) return res.status(400).json({ error: "Falta el id de la senal" });
