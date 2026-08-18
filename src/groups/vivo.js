@@ -26,6 +26,7 @@ const { persistirSenal } = require("./persistir");
 const publicable = require("./publicable");
 const revalidar = require("./revalidar");
 const alertaAsesor = require("./alerta-asesor");
+const feedComando = require("./feed-comando");
 const verificarLink = require("./verificar-link");
 const politica = require("./politica");
 const redactar = require("./redactar");
@@ -201,7 +202,14 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora }
   }
   await groupSignals.guardarRevalidacion(org.id, signal.id, veredicto);
 
+  const señalParaFeed = { grupo_nombre: grupo.nombre || grupo.jid, autor_nombre: mensaje.autor, texto_original: mensaje.texto };
+
   if (!revalidar.apruebaAviso(veredicto)) {
+    // Feed del admin: tambien los rechazados. Best-effort — un problema
+    // escribiendo el feed no puede tumbar el pipeline del radar.
+    await feedComando.registrar(org, señalParaFeed, veredicto, matches).catch((e) =>
+      console.warn("[radar] No se pudo escribir en el feed del admin:", e.message)
+    );
     return { resultado: "descartada_por_sofi", veredicto, signalId: signal.id };
   }
 
@@ -215,7 +223,12 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora }
     veredicto,
     matches
   );
-  if (!texto) return { resultado: "descartada_por_sofi", veredicto, signalId: signal.id };
+  if (!texto) {
+    await feedComando.registrar(org, señalParaFeed, veredicto, matches).catch((e) =>
+      console.warn("[radar] No se pudo escribir en el feed del admin:", e.message)
+    );
+    return { resultado: "descartada_por_sofi", veredicto, signalId: signal.id };
+  }
 
   const destinos = destinatarios(asesor);
   if (destinos.length === 0) {
@@ -260,6 +273,10 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora }
       advisorId: asesor && asesor.id ? asesor.id : null,
     });
   }
+
+  await feedComando
+    .registrar(org, señalParaFeed, veredicto, matches, { avisada: alguno, destinatarioNombre: asesor && asesor.name })
+    .catch((e) => console.warn("[radar] No se pudo escribir en el feed del admin:", e.message));
 
   return {
     resultado: alguno ? "avisada" : "aviso_pendiente",

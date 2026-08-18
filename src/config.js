@@ -127,6 +127,15 @@ const config = {
       silenceMin: parseInt(process.env.RADAR_RECORDATORIO_SILENCE_MIN || "120", 10),
       intervalMin: parseInt(process.env.RADAR_RECORDATORIO_INTERVAL_MIN || "20", 10),
     },
+
+    // Feed en vivo para el admin (Juan, 2026-08-18): cada pedido que Sofi
+    // revisa —lo apruebe o lo rechace— le queda en su propia sesion de
+    // Sofi-Comando. adminUserId es el auth user id (no el email) del admin
+    // que lo recibe; sin configurar, el feed no escribe en ningun lado —
+    // ver src/groups/feed-comando.js.
+    feedComando: {
+      adminUserId: process.env.RADAR_FEED_COMANDO_ADMIN_ID || "",
+    },
   },
 };
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 import { absoluteDateTime, dayLabel } from "@/lib/types";
 import { hora } from "@/lib/fecha";
 
@@ -23,8 +24,11 @@ function DaySeparator({ label }: { label: string }) {
 }
 
 // Chat del Centro de Comando (SOFI). Espeja el patron de chat-view.tsx pero sin
-// toggle bot/humano, sin media y sin Realtime: la respuesta llega sincrona en el
-// POST. El asesor (user) va a la derecha; SOFI (assistant) a la izquierda.
+// toggle bot/humano ni media. SI tiene Realtime (agregado 2026-08-18): el feed
+// del radar (src/groups/feed-comando.js) le escribe mensajes al admin desde un
+// proceso de fondo — sin esto, esos mensajes solo aparecerian recargando la
+// pagina, y el feed dejaria de sentirse "en vivo". El asesor (user) va a la
+// derecha; SOFI (assistant) a la izquierda.
 export default function SofiCommandChat({
   sessionId,
   initialMessages,
@@ -56,6 +60,43 @@ export default function SofiCommandChat({
     }
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Escucha mensajes nuevos de la sesion ABIERTA (la que ensureSession
+  // retoma tanto para esta pestaña como para el feed del radar de fondo).
+  //
+  // handleSend ya agrega su propio turno de forma optimista (id "local-...",
+  // ver append() mas abajo) para que la respuesta de Sofi se sienta
+  // instantanea — no espera a Realtime. Sin el chequeo de abajo, ESE mismo
+  // mensaje volveria a aparecer duplicado cuando el INSERT real le llegue por
+  // este canal unos milisegundos despues. Si encuentra el placeholder local
+  // que originó ese mensaje (mismo rol + contenido), lo reemplaza por la fila
+  // real en vez de agregarlo de nuevo; si no hay placeholder — el caso del
+  // feed del radar, que nadie tecleo en esta pestaña — lo agrega como nuevo.
+  useEffect(() => {
+    if (!sessionId) return;
+    const supabase = createClient();
+    const channel = supabase
+      .channel(`command-messages-${sessionId}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "command_messages", filter: `session_id=eq.${sessionId}` },
+        (payload) => {
+          const msg = payload.new as CommandMessage;
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === msg.id)) return prev;
+            const idx = prev.findIndex((m) => m.id.startsWith("local-") && m.role === msg.role && m.content === msg.content);
+            if (idx === -1) return [...prev, msg];
+            const copia = [...prev];
+            copia[idx] = msg;
+            return copia;
+          });
+        }
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [sessionId]);
 
   // Scroll-up al tope: trae la pagina anterior del historial (tipo WhatsApp).
   async function loadOlder() {

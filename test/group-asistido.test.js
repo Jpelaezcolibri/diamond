@@ -19,6 +19,7 @@ let revalidacionesGuardadas = [];
 let avisosMarcados = [];
 let enviadosPorSofi = [];
 let envioFalla = false;
+let feedRegistrado = [];
 
 function instalar() {
   require.cache[RUTA("groups/classify.js")] = {
@@ -67,6 +68,13 @@ function instalar() {
   };
   require.cache[RUTA("data/organizations.js")] = {
     exports: { radarEncendido: () => true },
+  };
+  require.cache[RUTA("groups/feed-comando.js")] = {
+    exports: {
+      registrar: async (org, señal, veredicto, matches, resultado) => {
+        feedRegistrado.push({ señal, veredicto, matches, resultado });
+      },
+    },
   };
   require.cache[RUTA("data/sync-estado.js")] = {
     exports: { estadoDelInventario: async () => ({ fresco: true, iso: "x", horas: 1 }) },
@@ -134,6 +142,7 @@ beforeEach(() => {
   avisosMarcados = [];
   enviadosPorSofi = [];
   envioFalla = false;
+  feedRegistrado = [];
   delete process.env.RADAR_ALERTA_TO;
   vivo = instalar();
 });
@@ -282,4 +291,33 @@ test("sin candidatas no se molesta a Sofi", async () => {
   const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE });
   assert.strictEqual(r.resultado, "sin_candidatas");
   assert.strictEqual(loQueVioSofi, null);
+});
+
+test("Sofi aprueba: el feed del admin se entera, con quien se avisó", async () => {
+  await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: { ...CATHERINE, id: "adv-catherine" } });
+
+  assert.strictEqual(feedRegistrado.length, 1);
+  assert.strictEqual(feedRegistrado[0].veredicto.sirve_alguna, true);
+  assert.strictEqual(feedRegistrado[0].resultado.avisada, true);
+  assert.strictEqual(feedRegistrado[0].resultado.destinatarioNombre, CATHERINE.name);
+});
+
+test("Sofi rechaza: el feed del admin TAMBIEN se entera — es lo que Juan pidio explicitamente", async () => {
+  veredictoDeSofi = {
+    es_pedido_real: true, sirve_alguna: false, refs_utiles: [],
+    por_que: "Pide finca en Llano Grande; lo que tenemos son apartamentos urbanos.",
+    confianza: 0.95, desacuerdo_con_puntaje: "",
+  };
+  await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE });
+
+  assert.strictEqual(feedRegistrado.length, 1);
+  assert.strictEqual(feedRegistrado[0].veredicto.sirve_alguna, false);
+});
+
+test("si el aviso aprobado no logra salir, el feed lo refleja (avisada:false)", async () => {
+  envioFalla = true;
+  await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE });
+
+  assert.strictEqual(feedRegistrado.length, 1);
+  assert.strictEqual(feedRegistrado[0].resultado.avisada, false);
 });
