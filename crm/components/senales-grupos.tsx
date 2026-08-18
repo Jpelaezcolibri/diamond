@@ -46,6 +46,12 @@ export type Signal = {
   /** El último evento del recorrido, si ya se registró alguno. El historial
    *  completo vive en signal_events; acá solo se muestra en qué quedó. */
   ultimo_evento?: string | null;
+  /** Si el radar en vivo ya redactó/publicó una respuesta para este pedido.
+   *  "auto" = el bot la publicó en el grupo; "sombra" = la redactó pero no
+   *  la publicó (prueba de humo). Ver src/groups/vivo.js#marcarRespondida. */
+  respondida_at?: string | null;
+  respuesta_texto?: string | null;
+  respuesta_modo?: "auto" | "sombra" | null;
 };
 
 /** El recorrido natural de una oportunidad. El orden es el del embudo, no
@@ -299,6 +305,25 @@ function Ficha({ s, copias, grupos }: { s: Signal; copias: number; grupos: numbe
         {s.enviado_at && (
           <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700" title={`Aviso enviado al asesor el ${fechaHora(s.enviado_at)}`}>
             avisado
+          </span>
+        )}
+        {/* Distingue lo que decidió el bot solo (auto) de lo que solo se
+            redactó para revisar (sombra) — sin esto, ambos se ven igual que
+            un pedido nunca procesado. */}
+        {s.respondida_at && s.respuesta_modo === "auto" && (
+          <span
+            className="rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-800"
+            title={`Publicado automáticamente por el bot el ${fechaHora(s.respondida_at)}${s.respuesta_texto ? `:\n\n${s.respuesta_texto}` : ""}`}
+          >
+            🤖 respondido en automático
+          </span>
+        )}
+        {s.respondida_at && s.respuesta_modo === "sombra" && (
+          <span
+            className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500"
+            title={`Redactado en modo sombra (no se publicó) el ${fechaHora(s.respondida_at)}${s.respuesta_texto ? `:\n\n${s.respuesta_texto}` : ""}`}
+          >
+            redactado (sombra)
           </span>
         )}
       </div>
