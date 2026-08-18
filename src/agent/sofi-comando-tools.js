@@ -12,6 +12,7 @@ const signalEvents = require("../data/signal-events");
 const organizations = require("../data/organizations");
 const mensajeAsesor = require("../lib/mensaje-asesor");
 const validarMensaje = require("../lib/validar-mensaje");
+const resumenEquipo = require("../groups/resumen-equipo");
 
 const COMMAND_TOOL_DEFINITIONS = [
   {
@@ -267,6 +268,18 @@ const COMMAND_TOOL_DEFINITIONS = [
       required: ["asesor", "descripcion"],
     },
   },
+  {
+    name: "enviar_matches_pendientes_equipo",
+    description:
+      "Arma y manda UN mensaje consolidado con los matches del radar que ese asesor tiene pendientes de seguimiento — el pedido citado tal como lo escribio el colega, las refs que le sirven, y el link real de contacto (o 'sin telefono' si no lo hay). El contenido sale del dato validado de trazabilidad_radar, no lo redactas vos, asi que nunca lleva un link inventado. USALA en vez de armar el texto a mano con enviar_whatsapp_equipo cuando lo que hay que mandar son pedidos del radar — es mas confiable.",
+    input_schema: {
+      type: "object",
+      properties: {
+        asesor: { type: "string", description: "Nombre del asesor a quien se le manda el resumen" },
+      },
+      required: ["asesor"],
+    },
+  },
 ];
 
 // Tools que solo el admin puede usar — actuan sobre OTRA persona del equipo
@@ -278,7 +291,9 @@ const COMMAND_TOOL_DEFINITIONS = [
 // aca, para que el modelo ni siquiera vea la tool si no es admin (toolsForScope,
 // usado por sofi-comando.js); y de nuevo dentro de cada handler, por si algun
 // dia alguien llama executeCommandTool sin pasar por ese filtro.
-const ADMIN_ONLY_TOOLS = new Set(["registrar_resultado_radar", "enviar_whatsapp_equipo", "crear_recordatorio_equipo"]);
+const ADMIN_ONLY_TOOLS = new Set([
+  "registrar_resultado_radar", "enviar_whatsapp_equipo", "crear_recordatorio_equipo", "enviar_matches_pendientes_equipo",
+]);
 
 function toolsForScope(scope) {
   if (scope && scope.isAdmin) return COMMAND_TOOL_DEFINITIONS;
@@ -558,6 +573,8 @@ async function executeCommandTool(name, input, ctx) {
       return enviarWhatsappEquipo(input, ctx);
     case "crear_recordatorio_equipo":
       return crearRecordatorioEquipo(input, ctx);
+    case "enviar_matches_pendientes_equipo":
+      return enviarMatchesPendientesEquipo(input, ctx);
     default:
       return `Herramienta desconocida: ${name}`;
   }
@@ -715,6 +732,53 @@ async function crearRecordatorioEquipo(input, ctx) {
     ? "Va a aparecer en el Calendario del equipo, visible para todos."
     : `Solo ${asesor.name} lo va a ver, en su Sofi.`;
   return `Listo, le deje a ${asesor.name} el recordatorio: "${creado.descripcion}". ${visibilidad}`;
+}
+
+// El resumen de matches pendientes, armado del dato real (src/groups/resumen-equipo.js)
+// en vez de redactado por el modelo — ver la nota de diseño ahi. Sofi solo
+// decide A QUIEN se le manda; el contenido no tiene nada que inventar.
+async function enviarMatchesPendientesEquipo(input, ctx) {
+  const { scope } = ctx;
+  const nombre = String(input?.asesor || "").trim();
+  if (!nombre) return "Me falta el nombre del asesor.";
+
+  let candidatos;
+  try {
+    candidatos = await advisors.searchByName(scope.orgId, nombre);
+  } catch (e) {
+    return "No pude buscar al asesor en este momento.";
+  }
+  if (candidatos.length === 0) return `No encuentro ningun asesor activo llamado "${nombre}".`;
+  if (candidatos.length > 1) {
+    return `Hay ${candidatos.length} asesores que coinciden con "${nombre}": ${candidatos.map((a) => a.name).join(", ")}. Pregunta cual.`;
+  }
+  const asesor = candidatos[0];
+
+  const data = await radarTrazabilidad.trazabilidad(scope, { dias: 14, soloConAviso: false, limite: 40 });
+  if (!data.disponible) return "No pude consultar el radar en este momento.";
+
+  // Pendientes de ESTE asesor: Sofi lo aprobo, el aviso salio a nombre suyo,
+  // y todavia no hay resultado registrado (signal_events).
+  const pendientes = data.señales.filter(
+    (s) => s.sofi && s.sofi.aprobo && !s.resultado && s.aviso && s.aviso.para && s.aviso.para.nombre === asesor.name
+  );
+
+  const texto = resumenEquipo.construir(pendientes);
+  if (!texto) return `${asesor.name} no tiene matches pendientes de seguimiento en este momento.`;
+
+  if (!asesor.phone) return `${asesor.name} no tiene telefono cargado — no se puede mandar nada.`;
+  const org = await organizations.findById(scope.orgId).catch(() => null);
+  if (!org) return "No pude resolver la organizacion para enviar el mensaje.";
+
+  const r = await mensajeAsesor.enviarYRegistrar(org, asesor.phone, texto).catch((e) => ({ ok: false, error: e.message }));
+  if (!r || !r.ok) {
+    const motivo = r && r.error === "sin_credenciales"
+      ? "faltan las credenciales de WhatsApp"
+      : `lo mas probable es que ${asesor.name} no te haya escrito en las ultimas 24 horas`;
+    return `No se pudo enviar: ${motivo}.`;
+  }
+  const n = pendientes.length;
+  return `Listo, le mande a ${asesor.name} el resumen de ${n} pedido${n > 1 ? "s" : ""} pendiente${n > 1 ? "s" : ""}.`;
 }
 
 module.exports = { COMMAND_TOOL_DEFINITIONS, executeCommandTool, toolsForScope };

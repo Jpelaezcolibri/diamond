@@ -12,7 +12,7 @@ const { executeCommandTool, toolsForScope, COMMAND_TOOL_DEFINITIONS } = require(
 const command = require("../src/data/command");
 const advisors = require("../src/data/advisors");
 
-const ADMIN_ONLY = ["registrar_resultado_radar", "enviar_whatsapp_equipo", "crear_recordatorio_equipo"];
+const ADMIN_ONLY = ["registrar_resultado_radar", "enviar_whatsapp_equipo", "crear_recordatorio_equipo", "enviar_matches_pendientes_equipo"];
 
 function asesorScope() {
   return Object.freeze({ orgId: "org-1", viewerUid: "asesor-1", role: "asesor_ventas", isAdmin: false });
