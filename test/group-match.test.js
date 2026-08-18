@@ -255,10 +255,56 @@ test("un pedido de municipio SÍ matchea, pero vale menos que uno de barrio", ()
   assert.ok(porBarrio.puntaje > porMunicipio.puntaje, "el barrio exacto tiene que puntuar más");
 });
 
-test("nombrar un barrio y no estar en él no se salva por la ciudad", () => {
-  // Éste es el bug que generó 656 de los ~731 falsos positivos.
+test("nombrar un barrio y estar en otro lejano entra MARCADO y muy castigado", () => {
+  // CAMBIO DELIBERADO DEL 2026-08-18. Antes esto devolvía null: era la
+  // corrección del bug que generó 656 de los ~731 falsos positivos.
+  //
+  // Ahora entra, pero de la única forma que no reintroduce aquel bug: con el
+  // grado explícito `otra_zona`, con -25 de castigo, y —lo que de verdad lo
+  // contiene— SIN permiso para publicarse en un grupo (ver group-publicable).
+  // El aviso a la asesora sí puede llevarlo porque lo revisa Sofi y después una
+  // persona; la publicación pública no tiene a nadie revisando.
   const otroBarrio = apto({ zona: "Robledo", ciudad: "Medellín" });
-  assert.strictEqual(evaluarCandidata(otroBarrio, pide({ zona: "Laureles", ciudad: "Medellín" }), "diamond"), null);
+  const m = evaluarCandidata(otroBarrio, pide({ zona: "Laureles", ciudad: "Medellín" }), "diamond");
+  assert.ok(m, "ya no se descarta de plano: se marca y lo juzga Sofi");
+  assert.strictEqual(m.ubicacion, "otra_zona");
+  assert.match(m.razones[0], /fuera de la zona pedida/);
+
+  // Y sigue puntuando muy por debajo de un barrio exacto.
+  const exacto = evaluarCandidata(apto(), pide(), "diamond");
+  assert.ok(exacto.puntaje - m.puntaje >= 25, "la distancia en puntaje tiene que ser grande");
+});
+
+test("otra CIUDAD sigue siendo compuerta dura", () => {
+  // La vecindad es entre zonas del area metropolitana, no entre ciudades. Un
+  // apartamento en Cartagena no es una alternativa para un pedido de Medellín.
+  const lejos = apto({ zona: "Bocagrande", ciudad: "Cartagena de Indias" });
+  assert.strictEqual(evaluarCandidata(lejos, pide({ zona: "Laureles", ciudad: "Medellín" }), "diamond"), null);
+});
+
+test("una zona VECINA entra como tal: quien pide El Poblado compra en Envigado", () => {
+  const enEnvigado = apto({ zona: "Envigado", ciudad: "Envigado" });
+  const m = evaluarCandidata(enEnvigado, pide({ zona: "El Poblado", ciudad: "Medellín" }), "diamond");
+  assert.ok(m, "son contiguos: descartarlo perdía negocio real");
+  assert.strictEqual(m.ubicacion, "vecina");
+  assert.match(m.razones[0], /vecina de lo pedido/);
+
+  // Vecina puntúa menos que exacta, pero mucho más que una zona cualquiera.
+  // El pedido lleva ciudad a propósito: sin ella no se puede afirmar que dos
+  // barrios estén en la misma, y el grado `otra_zona` no aplica.
+  const exacto = evaluarCandidata(apto(), pide({ ciudad: "Medellín" }), "diamond");
+  const lejano = evaluarCandidata(apto({ zona: "Robledo" }), pide({ ciudad: "Medellín" }), "diamond");
+  assert.ok(exacto.puntaje > m.puntaje && m.puntaje > lejano.puntaje);
+});
+
+test("un pedido con VARIAS zonas las cruza todas", () => {
+  // Caso real del 2026-08-18: "POBLADO/ENVIGADO". El esquema tenía `zona` como
+  // un solo string, Haiku no podía representar las dos y lo dejaba vacío — así
+  // el pedido terminaba cruzando contra toda Medellín.
+  const enEnvigado = apto({ zona: "Envigado", ciudad: "Envigado" });
+  const c = pide({ zona: "El Poblado", zonas: ["El Poblado", "Envigado"], ciudad: "Medellín" });
+  const m = evaluarCandidata(enEnvigado, c, "diamond");
+  assert.strictEqual(m.ubicacion, "exacta", "Envigado estaba pedido explícitamente");
 });
 
 test("BUG REAL: 'Laurel' (unidad de Sabaneta) ya NO matchea 'Laureles' (el barrio)", () => {

@@ -21,9 +21,19 @@ function filtrosInventario(c) {
   const f = {};
   if (c.tipo) f.tipo = c.tipo;
   // El prefiltro de la base busca el termino en zona O ciudad — es permisivo a
-  // proposito. La compuerta estricta (barrio contra barrio) esta en
+  // proposito. La graduacion (exacta / vecina / otra_zona) esta en
   // ubicacionCoincide; aca solo se acota cuantas filas viajan.
-  if (c.zona || c.ciudad) f.zona = c.zona || c.ciudad;
+  //
+  // Se incluyen las zonas pedidas Y SUS VECINAS. Sin esto la graduacion no
+  // sirve de nada: si la consulta solo trae El Poblado, las de Envigado nunca
+  // llegan al motor y no hay nada que evaluar como vecino.
+  const zonas = zonasPedidas(c);
+  if (zonas.length) {
+    const tokens = zonas.flatMap((z) => properties.distinctiveTokens(properties.zonaTokens(z)));
+    f.zona = [...new Set([...tokens, ...properties.vecinosDe(tokens)])].join(" ");
+  } else if (c.ciudad) {
+    f.zona = c.ciudad;
+  }
   if (c.precio_max > 0) f.precio_max = c.precio_max;
   if (c.habitaciones > 0) f.habitaciones_min = c.habitaciones;
   return f;
@@ -39,7 +49,9 @@ function filtrosAliados(c) {
   // un cliente propio, en src/agent/tools.js.
   const f = { origen: "asesor" };
   if (c.tipo) f.tipo = c.tipo;
-  if (c.zona || c.ciudad) f.zona = c.zona || c.ciudad;
+  const zonasAliado = zonasPedidas(c);
+  if (zonasAliado.length) f.zona = zonasAliado.join(" ");
+  else if (c.ciudad) f.zona = c.ciudad;
   if (c.precio_max > 0) f.precioMax = c.precio_max;
   // operacion NO se pasa a proposito: ally-properties.matchesFilters la compara
   // con !== estricto, y la tabla guarda lo que extrajo Claude en su momento
@@ -111,11 +123,33 @@ const millones = (n) => formato.formatearPrecioCorto(n);
 // conjunto — "laurel" ya no cae dentro de "laureles" porque son tokens
 // distintos, pero "bernal" sigue matcheando "Loma de los Bernal" porque ahi
 // SI es un token propio.
+// Un pedido puede nombrar VARIAS zonas ("POBLADO/ENVIGADO" es como se pide de
+// verdad). El clasificador devuelve `zonas` como lista; `zona` se conserva por
+// compatibilidad con lo ya guardado y con el export.
+function zonasPedidas(c) {
+  const lista = Array.isArray(c.zonas) && c.zonas.length ? c.zonas : [c.zona];
+  return lista.map((z) => String(z || "").trim()).filter(Boolean);
+}
+
 function zonaCoincide(p, c) {
-  const tokensPedido = properties.distinctiveTokens(properties.zonaTokens(c.zona || ""));
-  if (tokensPedido.length === 0) return false;
   const tokensPropiedad = new Set(properties.zonaTokens(p.zona || ""));
-  return tokensPedido.some((t) => tokensPropiedad.has(t));
+  for (const z of zonasPedidas(c)) {
+    const tokensPedido = properties.distinctiveTokens(properties.zonaTokens(z));
+    if (tokensPedido.length && tokensPedido.some((t) => tokensPropiedad.has(t))) return true;
+  }
+  return false;
+}
+
+// Zona distinta pero contigua: quien pide El Poblado compra en Envigado. Ver
+// VECINDAD en src/lib/zonas.js — es geografia declarada, no laxitud.
+function zonaVecina(p, c) {
+  const tokensPropiedad = properties.zonaTokens(p.zona || "");
+  if (!tokensPropiedad.length) return false;
+  for (const z of zonasPedidas(c)) {
+    const tokensPedido = properties.distinctiveTokens(properties.zonaTokens(z));
+    if (properties.sonVecinas(tokensPedido, tokensPropiedad)) return true;
+  }
+  return false;
 }
 
 // Pero un pedido puede ser legitimamente de municipio ("busco casa en
@@ -131,12 +165,40 @@ function ciudadCoincide(p, c) {
 }
 
 // Devuelve como calza la ubicacion, o null si no calza.
+// LA UBICACION YA NO ES UNA COMPUERTA BINARIA, ES UN GRADO (2026-08-18).
+//
+// Antes: si el pedido nombraba un barrio y la propiedad no estaba ahi, se
+// descartaba. Eso perdia negocio real — quien pide El Poblado compra en
+// Envigado, son contiguos y el mismo cliente se mueve entre los dos.
+//
+// Ahora se devuelve el grado y cada match lo lleva encima, para que Sofi pueda
+// razonar sobre el ("¿le sirve Envigado a este cliente en particular?"). El
+// castigo de puntaje refleja la distancia.
+//
+// LO QUE NO SE TOCA, porque fue lo que causo 656 de 731 falsos positivos: la
+// comparacion por token exacto (nunca substring) y el fallback a la ciudad
+// entera, que sigue siendo el ultimo grado y el mas castigado.
+//
+// Y una separacion que importa: este grado alimenta el AVISO a la asesora, que
+// pasa por el juicio de Sofi y de una persona. Para PUBLICAR en el grupo,
+// src/groups/publicable.js sigue exigiendo zona exacta o vecina — ahi no hay
+// nadie revisando y el error se ve delante de 80 competidores.
 function ubicacionCoincide(p, c) {
-  if (c.zona && zonaCoincide(p, c)) return { razon: `Zona: ${p.zona}`, puntos: 0 };
-  // Si el pedido nombra un barrio y la propiedad no esta ahi, no se salva por
-  // estar en la misma ciudad — eso era exactamente el bug.
-  if (c.zona) return null;
-  if (ciudadCoincide(p, c)) return { razon: `Ciudad: ${p.ciudad} (sin barrio en el pedido)`, puntos: -15 };
+  const pide = zonasPedidas(c).length > 0;
+
+  if (pide && zonaCoincide(p, c)) return { razon: `Zona: ${p.zona}`, puntos: 0, grado: "exacta" };
+  if (pide && zonaVecina(p, c)) {
+    return { razon: `${p.zona} (vecina de lo pedido)`, puntos: -8, grado: "vecina" };
+  }
+  if (pide) {
+    // Zona distinta y no contigua. Entra, pero muy castigada y marcada: solo
+    // llega a la asesora si TODO lo demas calza y Sofi lo aprueba.
+    if (!ciudadCoincide(p, c)) return null;
+    return { razon: `${p.zona || p.ciudad} (fuera de la zona pedida)`, puntos: -25, grado: "otra_zona" };
+  }
+  if (ciudadCoincide(p, c)) {
+    return { razon: `Ciudad: ${p.ciudad} (sin barrio en el pedido)`, puntos: -15, grado: "ciudad" };
+  }
   return null;
 }
 
@@ -198,6 +260,9 @@ function evaluarCandidata(p, c, fuente) {
     habitaciones: p.habitaciones ?? null,
     area: p.area || null,
     puntaje: Math.min(100, puntaje),
+    // Como calzo la ubicacion: exacta | vecina | otra_zona | ciudad. Sofi lo
+    // usa para razonar y publicable.js para decidir si puede salir al grupo.
+    ubicacion: ubicacion.grado,
     razones,
     ...(fuente === "aliado" ? { inmobiliaria: p.inmobiliaria_origen || null } : {}),
   };

@@ -28,7 +28,7 @@ function resolveOrg(orgOrId) {
 // prefiltro de grupos las necesita SIN arrastrar Supabase (corre dentro del
 // navegador del asesor). Se re-exportan mas abajo porque src/groups/match.js
 // las consume como `properties.zonaTokens(...)`.
-const { zonaTokens, distinctiveTokens } = require("../lib/zonas");
+const { zonaTokens, distinctiveTokens, sonVecinas, vecinosDe } = require("../lib/zonas");
 
 function matchesFilters(p, f) {
   if (f.ref && p.ref.toUpperCase() !== f.ref.toUpperCase()) return false;
@@ -134,4 +134,4 @@ async function listByCaptador(orgId, advisorId, limit = 20) {
   return data || [];
 }
 
-module.exports = { search, findByRef, matchesFilters, zonaTokens, distinctiveTokens, withLandingLink, setCaptador, listByCaptador };
+module.exports = { search, findByRef, matchesFilters, zonaTokens, distinctiveTokens, sonVecinas, vecinosDe, withLandingLink, setCaptador, listByCaptador };

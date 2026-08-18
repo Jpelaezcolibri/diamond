@@ -74,6 +74,22 @@ function esPublicable(match, { umbral = UMBRAL_DEFAULT, syncFresco = true, refsB
   // mismo grupo, y Diamond quedaria de intermediaria en un negocio ajeno.
   if (match.fuente !== "diamond") motivos.push("no_es_inventario_propio");
 
+  // AQUI SE CONSERVA LA LECCION DE JULIO. Desde el 2026-08-18 la zona dejo de
+  // ser compuerta en match.js: una propiedad de otro barrio entra marcada como
+  // `otra_zona` para que Sofi pueda razonar si le sirve al cliente.
+  //
+  // Eso vale para el AVISO a la asesora, que pasa por Sofi y por una persona.
+  // Para PUBLICAR en un grupo gremial NO: ahi no hay nadie revisando, y ofrecer
+  // Robledo a quien pidio Laureles delante de 80 competidores es exactamente el
+  // falso positivo que costo 656 de 731 matches en julio.
+  //
+  // Se aceptan `exacta` y `vecina` —contigüidad real, declarada en
+  // src/lib/zonas.js— y nada mas. `ciudad` tampoco: un pedido sin barrio no
+  // habilita a publicar media Medellin.
+  if (match.ubicacion && !["exacta", "vecina"].includes(match.ubicacion)) {
+    motivos.push("zona_no_publicable");
+  }
+
   if (!(Number(match.puntaje) >= umbral)) motivos.push("puntaje_bajo");
 
   const ref = String(match.ref || "").trim();

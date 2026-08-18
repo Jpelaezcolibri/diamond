@@ -56,7 +56,13 @@ const ESQUEMA = {
           confianza: { type: "number", description: "0 a 1" },
           operacion: { type: "string", enum: ["arriendo", "venta", "permuta", ""] },
           tipo: { type: "string", description: "apartamento, casa, local, oficina, bodega, lote, finca… o vacio" },
-          zona: { type: "string", description: "Barrio o sector. Vacio si no se menciona" },
+          zonas: {
+        type: "array",
+        items: { type: "string" },
+        description:
+          "TODAS las zonas o barrios que menciona el pedido. 'POBLADO/ENVIGADO' son DOS: ['El Poblado','Envigado']. Lista vacia si no nombra ninguna. Nunca metas la ciudad aca.",
+      },
+      zona: { type: "string", description: "Barrio o sector. Vacio si no se menciona" },
           ciudad: { type: "string", description: "Vacio si no se menciona" },
           precio_min: { type: "integer", description: "Pesos colombianos. 0 si no se especifica" },
           precio_max: { type: "integer", description: "Pesos colombianos. 0 si no se especifica" },
@@ -71,7 +77,7 @@ const ESQUEMA = {
           notas: { type: "string", description: "Detalle relevante en pocas palabras" },
         },
         required: [
-          "id", "clase", "confianza", "operacion", "tipo", "zona", "ciudad",
+          "id", "clase", "confianza", "operacion", "tipo", "zonas", "zona", "ciudad",
           "precio_min", "precio_max", "habitaciones", "area_min", "banos",
           "garajes", "estrato", "contacto", "notas",
         ],
@@ -96,7 +102,9 @@ Reglas de extracción:
 
 - Los precios van SIEMPRE en pesos colombianos, como entero, sin puntos. Convertí las formas coloquiales: "400 millones" y "400 palos" → 400000000; "1.200.000" → 1200000; "2.3 millones" → 2300000. Si el mensaje da un tope ("hasta 400 millones") es precio_max. Si da un piso ("desde 300") es precio_min. Si da un precio único de venta o arriendo, es precio_max.
 - No inventes datos. Si el mensaje no lo dice, dejá el string vacío o el 0. Esto es especialmente importante en \`zona\`: una demanda sin zona NO se puede cruzar contra el inventario, y es mejor dejarla vacía que poner una zona aproximada — una zona inventada manda al asesor a ofrecer algo del barrio equivocado.
-- \`zona\` es el barrio o sector ("Laureles", "Sabaneta", "Loma de los Bernal"). Si el mensaje sólo nombra el municipio ("Envigado", "Medellín"), eso va en \`ciudad\`, no en \`zona\`.
+- \`zonas\` es la LISTA de barrios o sectores que nombra el pedido. Un colega pide en varias a la vez y hay que capturarlas TODAS: "POBLADO/ENVIGADO" → ["El Poblado","Envigado"]; "Laureles o Estadio" → ["Laureles","Estadio"]; "Sabaneta" → ["Sabaneta"]. Lista vacía si no nombra ninguna.
+- \`zona\` es la primera de esa lista, o vacío. Se conserva por compatibilidad; lo que importa es \`zonas\`.
+- Si el mensaje sólo nombra el municipio ("Medellín"), eso va en \`ciudad\`, no en \`zonas\`. Pero ojo: Envigado, Sabaneta, Itagüí y La Estrella son municipios que en estos grupos se usan como zona — van en \`zonas\`.
 - \`area_min\` en metros cuadrados: "mínimo 85 m2" → 85; "de 100 metros" → 100.
 - \`banos\`, \`garajes\` y \`estrato\`: sólo si el mensaje los pide explícitamente. "2 baños, parqueadero doble" → banos 2, garajes 2. "estrato 5 o 6" → 5 (el mínimo).
 - Un mensaje de una sola propiedad con foto y ficha es oferta aunque no diga "vendo".

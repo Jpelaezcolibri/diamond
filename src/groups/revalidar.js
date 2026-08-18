@@ -76,6 +76,14 @@ Como juzgar:
 - El puntaje que ves va de 55 a 100 y premia cuanto del pedido se pudo
   VERIFICAR, no que tan buena es la propiedad. Un puntaje bajo puede ser una
   gran opcion sobre la que sabemos poco. No lo tomes como verdad.
+- LA ZONA NO ES UN SI O NO, es tu criterio. Quien pide El Poblado muchas veces
+  compra en Envigado: son contiguos y el mismo cliente se mueve entre los dos.
+  Cada candidata te dice como calza su ubicacion. Una "zona VECINA" puede servir
+  perfectamente — decilo en 'por_que' para que la asesora lo sepa de entrada
+  ("queda en Envigado, pegado al Poblado"). Una "FUERA de la zona pedida" casi
+  nunca sirve, pero si todo lo demas calza muy bien y el cliente no fue
+  tajante, evaluala en vez de descartarla de plano.
+- Si el pedido nombra varias zonas, cualquiera de ellas cuenta como pedida.
 - Si el motor se equivoco —aprobo algo que no sirve, o dejo abajo algo que si—
   decilo en 'desacuerdo_con_puntaje'. Eso es lo que nos permite mejorarlo.
 - Ante la duda, decidi que NO sirve. Escribirle a una asesora por algo que no
