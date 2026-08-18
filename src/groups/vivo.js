@@ -223,17 +223,38 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora }
   }
 
   // Sale por la Cloud API OFICIAL de Sofi, no por la linea vinculada.
+  //
+  // El telefono PRINCIPAL (asesor.phone) es el unico del que se guarda el
+  // wamid: RADAR_ALERTA_TO es para monitoreo (Juan, calibracion), no gente de
+  // quien se espera un resultado. Sin esta distincion, guardar cualquier wamid
+  // dejaria a Sofi matcheando la respuesta citada de un asesor equivocado.
+  const telefonoPrincipal = asesor && asesor.phone ? String(asesor.phone).replace(/\D/g, "") : null;
   let alguno = false;
+  let wamidPrincipal = null;
   for (const to of destinos) {
     const r = await canalWhatsapp.sendWhatsApp(org, to, texto).catch((e) => ({ ok: false, error: e.message }));
-    if (r && r.ok) alguno = true;
-    else console.warn(`[radar] No se pudo avisar a ${to}: ${r && r.error}`);
+    if (r && r.ok) {
+      alguno = true;
+      if (to === telefonoPrincipal) wamidPrincipal = r.wamid || null;
+    } else {
+      console.warn(`[radar] No se pudo avisar a ${to}: ${r && r.error}`);
+    }
   }
 
   // Solo se marca enviado si SALIO. Si no, queda pendiente: fuera de la ventana
   // de 24 h Meta rechaza el texto libre, y esa senal se puede reintentar cuando
   // la asesora escriba y la ventana se reabra.
-  if (alguno) await groupSignals.marcarAvisoEnviado(org.id, signal.id);
+  //
+  // Se guarda el destinatario REAL (asesor.id) — nunca "quien observo el
+  // grupo" (advisorId, el dueño de la linea vinculada): son cosas distintas y
+  // confundirlas fue justo el bug que le hizo inventar un nombre a Sofi el
+  // 2026-08-18.
+  if (alguno) {
+    await groupSignals.marcarAvisoEnviado(org.id, signal.id, {
+      wamid: wamidPrincipal,
+      advisorId: asesor && asesor.id ? asesor.id : null,
+    });
+  }
 
   return {
     resultado: alguno ? "avisada" : "aviso_pendiente",

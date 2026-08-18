@@ -114,6 +114,19 @@ const config = {
       especialidades: (process.env.GROUPS_DIGEST_ESPECIALIDADES ?? "venta")
         .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean),
     },
+
+    // Recordatorio si la asesora no responde el aviso de un pedido del radar
+    // (Juan, 2026-08-18): la respuesta sirve para calibrar Y renueva la
+    // ventana de 24h — sin ella, los avisos siguientes se quedan sin poder
+    // salir. Ver src/scheduler/radar-recordatorio.js.
+    recordatorio: {
+      enabled: process.env.RADAR_RECORDATORIO_ENABLED !== "false",
+      // 2h: mismo plazo que el seguimiento al cliente (config.followups) —
+      // suficiente margen para que la asesora atienda sin que el pedido se
+      // enfrie (el colega del grupo puede vender antes a otro que si le escribio).
+      silenceMin: parseInt(process.env.RADAR_RECORDATORIO_SILENCE_MIN || "120", 10),
+      intervalMin: parseInt(process.env.RADAR_RECORDATORIO_INTERVAL_MIN || "20", 10),
+    },
   },
 };
 

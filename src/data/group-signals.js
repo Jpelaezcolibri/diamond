@@ -303,18 +303,118 @@ async function guardarRevalidacion(orgId, signalId, veredicto) {
 // Si esto no se llama, la senal queda con `enviado_at` en null y sigue en la
 // cola. Eso es deliberado: fuera de la ventana de 24 h Meta rechaza el texto
 // libre, y una senal pendiente se puede reintentar cuando la asesora escriba.
-async function marcarAvisoEnviado(orgId, signalId) {
+//
+// wamid y advisorId son best-effort (migracion 2026-08-18_radar_aviso_destinatario):
+// sin ellos el aviso igual queda marcado como enviado, solo que ni Sofi ni
+// trazabilidad_radar van a poder decir A QUIEN se le mando ni matchear una
+// respuesta citada con esta señal.
+async function marcarAvisoEnviado(orgId, signalId, { wamid = null, advisorId = null } = {}) {
   if (!supabase) return true;
-  const { error } = await supabase
-    .from("group_signals")
-    .update({ enviado_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-    .eq("org_id", orgId)
-    .eq("id", signalId);
+  const patch = { enviado_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+  const conDestinatario = { ...patch, aviso_wamid: wamid, aviso_advisor_id: advisorId };
+  let { error } = await supabase.from("group_signals").update(conDestinatario).eq("org_id", orgId).eq("id", signalId);
+  if (error && esColumnaFaltante(error)) {
+    console.error("[grupos] Falta la migracion 2026-08-18_radar_aviso_destinatario.sql: el aviso se marca enviado, pero sin destinatario.");
+    ({ error } = await supabase.from("group_signals").update(patch).eq("org_id", orgId).eq("id", signalId));
+  }
   if (error) {
     console.error("[grupos] No se pudo marcar el aviso como enviado:", error.message);
     return false;
   }
   return true;
+}
+
+// La señal detras de un aviso CITADO (swipe-to-reply): la asesora responde
+// tocando el mensaje original, WhatsApp manda su wamid como `context.id`, y
+// esto lo resuelve directo a la señal sin que Sofi tenga que preguntar a
+// cual pedido se refiere.
+async function findByWamid(orgId, wamid) {
+  if (!wamid) return null;
+  if (!supabase) return memory.groupSignals?.find((s) => s.org_id === orgId && s.aviso_wamid === wamid) || null;
+  const { data, error } = await supabase
+    .from("group_signals")
+    .select("id, matches, texto_original, zona, tipo, operacion")
+    .eq("org_id", orgId)
+    .eq("aviso_wamid", wamid)
+    .maybeSingle();
+  if (error) {
+    if (esColumnaFaltante(error)) return null;
+    console.error("[grupos] No se pudo resolver la señal citada:", error.message);
+    return null;
+  }
+  return data;
+}
+
+// Avisos que le mandamos a ESTE asesor y que todavia no tienen un resultado
+// registrado (signal_events) — lo que Sofi necesita cuando la asesora
+// responde SIN citar el mensaje ("ya llamé al de Sabaneta, no servía") y hay
+// que adivinar a cual de sus pedidos pendientes se refiere.
+//
+// No hace el join contra signal_events aca: esa tabla es del Learning Domain
+// (ver src/data/signal-events.js) y la regla de dependencia es Radar ->
+// Learning Domain, nunca al reves. El cruce lo hace quien llama.
+async function pendientesDeAviso(orgId, advisorId, { limite = 20 } = {}) {
+  if (!advisorId) return [];
+  if (!supabase) {
+    return (memory.groupSignals || [])
+      .filter((s) => s.org_id === orgId && s.aviso_advisor_id === advisorId && s.enviado_at)
+      .slice(-limite);
+  }
+  const { data, error } = await supabase
+    .from("group_signals")
+    .select("id, texto_original, zona, tipo, operacion, enviado_at, matches")
+    .eq("org_id", orgId)
+    .eq("aviso_advisor_id", advisorId)
+    .not("enviado_at", "is", null)
+    .order("enviado_at", { ascending: false })
+    .limit(limite);
+  if (error) {
+    if (esColumnaFaltante(error)) return [];
+    console.error("[grupos] No se pudieron leer los avisos pendientes:", error.message);
+    return [];
+  }
+  return data || [];
+}
+
+// Avisos SALIDOS hace mas de `minutos` a un asesor conocido, sin recordatorio
+// todavia — candidatos para src/scheduler/radar-recordatorio.js. El filtro de
+// "sin resultado ya registrado" lo aplica el scheduler (cruzando contra
+// signal_events), por la misma razon de dependencia que pendientesDeAviso.
+async function candidatosRecordatorio(orgId, { antesDeIso, limite = 100 } = {}) {
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("group_signals")
+    .select("id, aviso_advisor_id, texto_original, enviado_at")
+    .eq("org_id", orgId)
+    .not("aviso_advisor_id", "is", null)
+    .not("enviado_at", "is", null)
+    .is("recordatorio_enviado_at", null)
+    .lte("enviado_at", antesDeIso)
+    .limit(limite);
+  if (error) {
+    if (esColumnaFaltante(error)) return [];
+    console.error("[grupos] No se pudieron leer los candidatos a recordatorio:", error.message);
+    return [];
+  }
+  return data || [];
+}
+
+// Claim atomico ANTES de mandar el recordatorio (mismo patron que
+// leads.claimFollowup): si dos ticks corrieran a la vez, solo uno gana.
+async function claimRecordatorio(orgId, signalId) {
+  if (!supabase) return true;
+  const { data, error } = await supabase
+    .from("group_signals")
+    .update({ recordatorio_enviado_at: new Date().toISOString() })
+    .eq("org_id", orgId)
+    .eq("id", signalId)
+    .is("recordatorio_enviado_at", null)
+    .select("id");
+  if (error) {
+    console.error("[grupos] No se pudo reclamar el recordatorio:", error.message);
+    return false;
+  }
+  return Boolean(data && data.length);
 }
 
 const MODOS_RESPUESTA = ["sombra", "auto", "humano"];
@@ -382,6 +482,7 @@ module.exports = {
   create, list, setEstado, resumen, marcarEnviada, ultimaFechaImportada,
   pendientesDigest, marcarDigest, revertirDigest,
   marcarRespondida, respuestasDesde, guardarRevalidacion, marcarAvisoEnviado,
+  findByWamid, pendientesDeAviso, candidatosRecordatorio, claimRecordatorio,
   CLASES, ORIGENES, MODOS_RESPUESTA, _resetBlindaje,
 };
 

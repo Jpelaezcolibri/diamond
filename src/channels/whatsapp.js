@@ -2,6 +2,7 @@ const express = require("express");
 const config = require("../config");
 const organizations = require("../data/organizations");
 const conversations = require("../data/conversations");
+const groupSignals = require("../data/group-signals");
 const supabase = require("../data/supabase");
 const { procesarMensaje } = require("../agent/engine");
 const { verifyMetaSignature } = require("../lib/signature");
@@ -218,9 +219,17 @@ router.post("/webhook", async (req, res) => {
     await enqueue(`${org.id}:${userPhone}`, async () => {
       // Respuesta citada: Meta manda context.id (wamid del mensaje citado)
       let replyToId = null;
+      // Si la asesora cita (swipe-to-reply) el aviso de un pedido del radar,
+      // esto resuelve DIRECTO a esa señal — Sofi no tiene que preguntar a
+      // cual pedido se refiere ni adivinarlo. Ver registrar_resultado_radar.
+      let radarSignalId = null;
       if (message.context?.id) {
         const ref = await conversations.findByWaMessageId(message.context.id);
         replyToId = ref?.id || null;
+        if (!replyToId) {
+          const señal = await groupSignals.findByWamid(org.id, message.context.id).catch(() => null);
+          radarSignalId = señal?.id || null;
+        }
       }
 
       // Normalizar el contenido segun el tipo
@@ -256,6 +265,7 @@ router.post("/webhook", async (req, res) => {
         messageExtras: extras,
         phoneNumberId,
         adReferral,
+        radarSignalId,
       });
 
       if (reply) {

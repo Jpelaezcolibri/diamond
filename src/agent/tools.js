@@ -10,6 +10,7 @@ const { buildClientLink, buildAllyClientMatchAlert, buildAppointmentAlert, build
 const { LEGAL_TOPICS, LEGAL_DISCLAIMER } = require("./knowledge");
 const crypto = require("node:crypto");
 const groupSignals = require("../data/group-signals");
+const signalEvents = require("../data/signal-events");
 const whatsappGroups = require("../data/whatsapp-groups");
 const { cruzar: cruzarGrupos } = require("../groups/match");
 const { plano } = require("../groups/texto");
@@ -175,6 +176,24 @@ const TOOL_DEFINITIONS = [
         clase: { type: "string", enum: ["demanda", "oferta"], description: "'demanda' son pedidos de colegas, 'oferta' son propiedades que publicaron. Omite para ver ambas" },
         dias: { type: "integer", description: "Cuantos dias atras mirar. Por defecto 7" },
       },
+    },
+  },
+  {
+    name: "registrar_resultado_radar",
+    description:
+      "Registra en que quedo un pedido del radar que le avisaste al asesor (ej 'ya lo llame, no le sirvio', 'hubo visita', 'se cerro el negocio', 'no me contesto'). Usala SOLO cuando el asesor te esta contando el resultado de un aviso de radar que le mandaste, no de una transferencia normal ni de un cliente propio. Si citó (swipe-to-reply) el mensaje del aviso, no hace falta que aclare cual — ya lo sabes. Si NO citó y tiene mas de un pedido pendiente de resultado, la herramienta te los va a listar: pasaselos y preguntale cual, no adivines.",
+    input_schema: {
+      type: "object",
+      properties: {
+        tipo: {
+          type: "string",
+          enum: ["CONVERSACION", "VISITA", "NEGOCIACION", "CIERRE", "PERDIDO", "SIN_RESPUESTA"],
+          description: "CONVERSACION=le escribio al colega, VISITA=hubo visita, NEGOCIACION=estan hablando de precio, CIERRE=se cerro el negocio, PERDIDO=se cayo, SIN_RESPUESTA=el colega no contesto.",
+        },
+        motivo: { type: "string", description: "Por que se perdio o cualquier detalle que de el asesor. Opcional." },
+        cual: { type: "string", description: "Si hay varios pedidos pendientes y el asesor especifico cual (zona, colega, o parte del texto), pasalo para desambiguar." },
+      },
+      required: ["tipo"],
     },
   },
 ];
@@ -501,6 +520,10 @@ async function executeTool(name, input, ctx) {
     return consultarRadarGrupos(input, ctx);
   }
 
+  if (name === "registrar_resultado_radar") {
+    return registrarResultadoRadar(input, ctx);
+  }
+
   return `Herramienta desconocida: ${name}`;
 }
 
@@ -663,4 +686,76 @@ async function consultarRadarGrupos(input, ctx) {
   return `${bloques.join("\n\n")}\n\nPasaselo al asesor en este formato, sin agregar propiedades que no esten en la lista. Recordale que EL le escribe al colega desde su telefono: vos no escribis en ningun grupo. El detalle completo, con el borrador listo para copiar, esta en el CRM → Grupos.`;
 }
 
-module.exports = { TOOL_DEFINITIONS, executeTool, maybeCaptadorAlert, registrarDemandaColega, consultarRadarGrupos };
+// Cierra el circuito que abre alerta-asesor.js ("Contame en que quedo... con
+// eso el radar aprende"): hasta ahora esa respuesta se perdia en la
+// conversacion, sin quedar registrada en ningun lado.
+//
+// A CUAL pedido se refiere, en orden de confianza:
+//   1. ctx.radarSignalId — la asesora cito (swipe-to-reply) el aviso exacto;
+//      viene resuelto desde el webhook (src/channels/whatsapp.js), no hay que
+//      preguntar nada.
+//   2. Un solo pendiente sin resultado — si solo tiene uno, es ese.
+//   3. Varios pendientes — se listan para que Sofi pregunte. Adivinar mal aca
+//      registraria el resultado equivocado sobre el pedido equivocado, que es
+//      peor que no registrar nada.
+async function registrarResultadoRadar(input, ctx) {
+  if (!ctx.advisor) {
+    return "Esta herramienta es para cuando un asesor de la casa cuenta el resultado de un pedido del radar. No aplica con un cliente.";
+  }
+
+  let signalId = ctx.radarSignalId || null;
+
+  if (!signalId) {
+    let pendientes;
+    try {
+      pendientes = await groupSignals.pendientesDeAviso(ctx.org.id, ctx.advisor.id);
+    } catch (e) {
+      console.warn("[tools] No se pudieron leer los avisos pendientes del radar:", e.message);
+      return "No pude consultar los pedidos pendientes en este momento. Decile que lo intente de nuevo en un rato.";
+    }
+
+    // Un resultado ya registrado no cuenta como pendiente. En un solo query
+    // (signalEvents es el Learning Domain — Radar depende de el, nunca al
+    // reves, ver src/data/signal-events.js).
+    if (pendientes.length > 0) {
+      const ids = pendientes.map((s) => s.id);
+      const ultimos = await signalEvents.ultimoPorSenal(ctx.org.id, ids).catch(() => new Map());
+      pendientes = pendientes.filter((s) => !ultimos.has(s.id));
+    }
+
+    if (pendientes.length === 0) {
+      return "No encuentro ningun pedido del radar pendiente de resultado para vos. Si es sobre otra cosa, no uses esta herramienta.";
+    }
+
+    if (input?.cual && pendientes.length > 1) {
+      const q = String(input.cual).toLowerCase();
+      const filtrados = pendientes.filter((s) =>
+        `${s.texto_original || ""} ${s.zona || ""} ${s.tipo || ""}`.toLowerCase().includes(q)
+      );
+      if (filtrados.length >= 1) pendientes = filtrados;
+    }
+
+    if (pendientes.length > 1) {
+      const lista = pendientes.slice(0, 5).map((s) => `- ${(s.texto_original || "").replace(/\s+/g, " ").slice(0, 90)}`).join("\n");
+      return `Tenes ${pendientes.length} pedidos del radar sin resultado todavia:\n${lista}\n\nPreguntale al asesor a cual se refiere (o que cite el mensaje del aviso) antes de registrar nada.`;
+    }
+
+    signalId = pendientes[0].id;
+  }
+
+  try {
+    await signalEvents.registrar(ctx.org.id, {
+      signalId,
+      advisorId: ctx.advisor.id,
+      tipo: input.tipo,
+      motivo: input.motivo || null,
+    });
+  } catch (e) {
+    console.warn("[tools] No se pudo registrar el resultado del radar:", e.message);
+    return "No pude guardar el resultado. Decile al asesor que lo intente de nuevo en un rato, o que lo registre desde el CRM en Grupos.";
+  }
+
+  return "Listo, quedo registrado. Gracias por contarme — eso es justo lo que hace que el radar mejore.";
+}
+
+module.exports = { TOOL_DEFINITIONS, executeTool, maybeCaptadorAlert, registrarDemandaColega, consultarRadarGrupos, registrarResultadoRadar };

@@ -22,6 +22,13 @@ const supabase = require("./supabase");
 
 const MAX_FILAS = 40;
 
+// PGRST204/42703: la columna todavia no existe (falta correr la migracion
+// 2026-08-18_radar_aviso_destinatario.sql). Se degrada en vez de romper: la
+// trazabilidad sigue sirviendo, solo que sin decir quien recibio el aviso.
+function esColumnaFaltante(error) {
+  return error?.code === "PGRST204" || error?.code === "42703";
+}
+
 function resumenMatch(m) {
   return {
     ref: m.ref,
@@ -46,7 +53,7 @@ async function trazabilidad(scope, { dias = 7, soloConAviso = false, limite = 20
 
   let q = supabase
     .from("group_signals")
-    .select("id, created_at, fecha_mensaje, clase, texto_original, autor_nombre, autor_telefono, group_id, advisor_id, matches, revalidacion, enviado_at, estado, origen")
+    .select("id, created_at, fecha_mensaje, clase, texto_original, autor_nombre, autor_telefono, group_id, advisor_id, aviso_advisor_id, matches, revalidacion, enviado_at, estado, origen")
     .eq("org_id", scope.orgId)
     .eq("origen", "vivo")
     .gte("created_at", desde)
@@ -57,7 +64,20 @@ async function trazabilidad(scope, { dias = 7, soloConAviso = false, limite = 20
   if (!scope.isAdmin) q = q.eq("advisor_id", scope.viewerUid);
   if (soloConAviso) q = q.not("enviado_at", "is", null);
 
-  const { data, error } = await q;
+  let { data, error } = await q;
+  if (error && esColumnaFaltante(error)) {
+    let q2 = supabase
+      .from("group_signals")
+      .select("id, created_at, fecha_mensaje, clase, texto_original, autor_nombre, autor_telefono, group_id, advisor_id, matches, revalidacion, enviado_at, estado, origen")
+      .eq("org_id", scope.orgId)
+      .eq("origen", "vivo")
+      .gte("created_at", desde)
+      .order("created_at", { ascending: false })
+      .limit(Math.min(limite, MAX_FILAS));
+    if (!scope.isAdmin) q2 = q2.eq("advisor_id", scope.viewerUid);
+    if (soloConAviso) q2 = q2.not("enviado_at", "is", null);
+    ({ data, error } = await q2);
+  }
   if (error) {
     // Si falta la migracion del modo asistido, se dice en vez de fallar: el
     // resto del Centro de Comando no tiene por que caerse por esto.
@@ -69,13 +89,24 @@ async function trazabilidad(scope, { dias = 7, soloConAviso = false, limite = 20
     return { disponible: true, dias, total: 0, señales: [], resumen: resumenVacio(dias) };
   }
 
-  // Nombres de grupo y el ultimo evento de cada senal, en dos consultas y no en
-  // N: esto se llama desde un chat y la latencia se nota.
+  // Nombres de grupo, y de paso QUIEN recibio cada aviso — en las mismas dos
+  // consultas y no en N: esto se llama desde un chat y la latencia se nota.
+  //
+  // Es la pieza que faltaba el 2026-08-18: sin esto Sofi no tenia forma de
+  // saber a quien se le mando cada aviso, y al preguntarle, inventaba un
+  // nombre. Ahora sale del dato real (aviso_advisor_id), no de una suposicion.
   const grupos = new Map();
   const idsGrupo = [...new Set(señales.map((s) => s.group_id).filter(Boolean))];
   if (idsGrupo.length) {
     const { data: gs } = await supabase.from("whatsapp_groups").select("id, nombre, jid").in("id", idsGrupo);
     for (const g of gs || []) grupos.set(g.id, g.nombre || g.jid);
+  }
+
+  const destinatarios = new Map();
+  const idsDestinatario = [...new Set(señales.map((s) => s.aviso_advisor_id).filter(Boolean))];
+  if (idsDestinatario.length) {
+    const { data: advs } = await supabase.from("advisors").select("id, name, phone").in("id", idsDestinatario);
+    for (const a of advs || []) destinatarios.set(a.id, { nombre: a.name, telefono: a.phone });
   }
 
   const ultimoEvento = new Map();
@@ -112,7 +143,14 @@ async function trazabilidad(scope, { dias = 7, soloConAviso = false, limite = 20
           }
         : { reviso: false },
       aviso: s.enviado_at
-        ? { salio: true, cuando: s.enviado_at }
+        ? {
+            salio: true,
+            cuando: s.enviado_at,
+            // null es HONESTO, no un hueco a rellenar: si la migracion no ha
+            // corrido, o el aviso se mando antes de que existiera esta
+            // columna, de verdad no se sabe quien lo recibio.
+            para: s.aviso_advisor_id ? destinatarios.get(s.aviso_advisor_id) || null : null,
+          }
         : { salio: false, motivo: v && !v.sirve_alguna ? "Sofi decidio que no servia" : "no salio" },
       resultado: ultimoEvento.get(s.id) || null,
     };

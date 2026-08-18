@@ -60,7 +60,7 @@ function instalar() {
   require.cache[RUTA("data/group-signals.js")] = {
     exports: {
       guardarRevalidacion: async (org, id, v) => { revalidacionesGuardadas.push({ id, v }); return true; },
-      marcarAvisoEnviado: async (org, id) => { avisosMarcados.push(id); return true; },
+      marcarAvisoEnviado: async (org, id, opts) => { avisosMarcados.push({ id, ...opts }); return true; },
       respuestasDesde: async () => ({ cantidad: 0, ultimaIso: null }),
       marcarRespondida: async () => true,
     },
@@ -210,6 +210,30 @@ test("si el aviso no sale, queda pendiente y NO se marca enviado", async () => {
 test("el aviso sale por la Cloud API oficial, no por la linea vinculada", async () => {
   await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE });
   assert.strictEqual(enviadosPorSofi[0].to, "573028536489");
+});
+
+test("se guarda el destinatario REAL del aviso, no quien observo el grupo", async () => {
+  // Bug real 2026-08-18: sin esto, trazabilidad_radar no puede decir a quien
+  // se le mando cada aviso, y Sofi termino inventando un nombre al preguntarle.
+  await vivo.procesarMensaje(ORG, mensaje(), {
+    grupo: GRUPO, modo: "asistido", asesor: { ...CATHERINE, id: "adv-catherine" },
+  });
+  assert.strictEqual(avisosMarcados.length, 1);
+  assert.strictEqual(avisosMarcados[0].advisorId, "adv-catherine");
+  assert.strictEqual(avisosMarcados[0].wamid, "w");
+});
+
+test("el wamid guardado es del envio al asesor PRINCIPAL, no de un extra de calibracion", async () => {
+  process.env.RADAR_ALERTA_TO = "573016981200";
+  vivo = instalar();
+  let n = 0;
+  require.cache[RUTA("channels/whatsapp.js")].exports.sendWhatsApp = async (org, to) => {
+    n++;
+    return { ok: true, wamid: `w-${to}` };
+  };
+  await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: { ...CATHERINE, id: "adv-catherine" } });
+  assert.strictEqual(n, 2);
+  assert.strictEqual(avisosMarcados[0].wamid, "w-573028536489");
 });
 
 test("se puede sumar un destinatario extra para la calibracion", async () => {

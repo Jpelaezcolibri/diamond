@@ -51,7 +51,7 @@ const REF_PATTERN = /\b([A-Z]{2}\d{3}|\d{6,8})\b/;
 // (Click-to-WhatsApp Ads) — permite separar en el CRM los leads que llegaron
 // por un anuncio pago de los organicos, sin tocar `source` (canal).
 // Devuelve { reply, lead, transfer } — transfer: { motivo, advisorAlert } si aplico.
-async function procesarMensaje({ org, phone, text, source = "whatsapp", messageExtras = {}, phoneNumberId = null, adReferral = null }) {
+async function procesarMensaje({ org, phone, text, source = "whatsapp", messageExtras = {}, phoneNumberId = null, adReferral = null, radarSignalId = null }) {
   const client = getClient();
 
   // ¿Escribe un asesor de la casa? Se resuelve ANTES de tocar el lead: casi
@@ -149,7 +149,13 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
     }
   }
 
-  const ctx = { org, lead, advisor, propertyInteres: null, transfer: null, cita: null, allyMatch: null, allyAlert: null, appointmentAlert: null, captadorAlert: null, lastUserMessage: text };
+  const ctx = {
+    org, lead, advisor, propertyInteres: null, transfer: null, cita: null, allyMatch: null, allyAlert: null,
+    appointmentAlert: null, captadorAlert: null, lastUserMessage: text,
+    // Solo tiene sentido con un asesor citando el aviso de un pedido del
+    // radar; con un cliente esto siempre viene null y no se usa.
+    radarSignalId,
+  };
   if (!advisor && lead.property_ref_origen) {
     const origen = await properties.findByRef(org, lead.property_ref_origen);
     if (origen?.disponible) {

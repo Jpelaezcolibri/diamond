@@ -107,4 +107,8 @@ app.listen(config.port, () => {
   // hueco en una tabla. Avisa por la linea OFICIAL de Sofi, nunca por la
   // vinculada — si lo que se cayo es esa linea, avisar por ahi no serviria.
   if (config.supabaseUrl) require("./scheduler/radar-watchdog").start();
+  // Empuja a la asesora a responder el aviso de un pedido del radar: sirve
+  // para calibrar (signal_events) y renueva la ventana de 24h de los avisos
+  // siguientes.
+  if (config.supabaseUrl) require("./scheduler/radar-recordatorio").start();
 });
