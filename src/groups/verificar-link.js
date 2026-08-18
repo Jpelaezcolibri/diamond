@@ -1,29 +1,22 @@
 // Confirma que el link que estamos a punto de publicar realmente abre.
 //
-// POR QUE CONTRA LA LANDING Y NO CONTRA WASI
+// QUE LINK, EXACTAMENTE (cambio 2026-08-18, mensaje "blanqueado")
 //
-// La landing lee de la MISMA tabla `properties` que el radar, filtrada por
-// `disponible = true`. Asi que esto NO dice nada nuevo sobre si la propiedad se
-// vendio — para eso esta la compuerta de frescura del sync
-// (src/data/sync-estado.js), que es la que sabe si el inventario esta al dia.
+// Hasta el mensaje "blanqueado" esto verificaba la landing propia
+// (`match.link`), porque ese era el link que se publicaba. Desde que
+// src/groups/redactar.js publica `match.linkWasi` en su lugar (ver la nota de
+// diseno ahi), verificar la landing no comprueba nada sobre el artefacto real
+// que recibe el colega — se puede aprobar un link de Diamond sano mientras el
+// de Wasi que de verdad sale al grupo esta muerto. Por eso esto verifica
+// `linkWasi`, no `link`.
 //
-// Lo que si verifica, y que hoy no verifica nada mas, es que el artefacto
-// exacto que va a recibir el colega funcione:
+// publicable.js ya garantizo (motivo sin_link_wasi) que `linkWasi` viene no
+// vacio en toda propiedad que llega hasta aca.
 //
-//   · El slug lo construyen DOS implementaciones separadas —src/lib/slug.js en
-//     el bot y web/lib/slug.ts en la landing— declaradas como replicas. Hoy
-//     coinciden. El dia que alguien toque una y no la otra, el bot publica
-//     links rotos y ningun test lo nota.
-//   · El dominio puede no estar apuntando (el README decia un host y el codigo
-//     otro).
-//   · El deploy de la landing puede estar caido o a medias.
-//
-// No se consulta Wasi por mensaje a proposito: eso ya lo hace DMAP una vez al
-// dia, y meterlo en la ruta critica sumaria credenciales, limites de tasa y una
-// dependencia mas para poder contestar.
-//
-// Corre solo sobre las <=3 finalistas y solo en los pocos mensajes al dia que
-// llegan hasta la publicacion, asi que su costo es irrelevante.
+// Se consulta Wasi por mensaje a proposito de este cambio: es el unico link
+// que se publica, asi que es el unico que vale la pena comprobar en la ruta
+// critica. Corre solo sobre las <=3 finalistas y solo en los pocos mensajes al
+// dia que llegan hasta la publicacion, asi que su costo es irrelevante.
 
 const TIMEOUT_MS = Number(process.env.GRUPOS_LINK_TIMEOUT_MS || 6000);
 
@@ -69,9 +62,9 @@ async function verificar(publicables) {
   const lista = publicables || [];
   if (lista.length === 0) return { verificadas: [], rotas: [] };
 
-  const resultados = await Promise.all(lista.map((m) => abre(m.link)));
+  const resultados = await Promise.all(lista.map((m) => abre(m.linkWasi)));
   const verificadas = lista.filter((_, i) => resultados[i]);
-  const rotas = lista.filter((_, i) => !resultados[i]).map((m) => ({ ref: m.ref, link: m.link }));
+  const rotas = lista.filter((_, i) => !resultados[i]).map((m) => ({ ref: m.ref, link: m.linkWasi }));
   return { verificadas, rotas };
 }
 

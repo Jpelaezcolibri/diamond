@@ -18,7 +18,6 @@ const { cruzar } = require("../src/groups/match");
 const publicable = require("../src/groups/publicable");
 const redactar = require("../src/groups/redactar");
 const organizations = require("../src/data/organizations");
-const advisors = require("../src/data/advisors");
 const syncEstado = require("../src/data/sync-estado");
 const verificarLink = require("../src/groups/verificar-link");
 
@@ -77,22 +76,17 @@ const clasificado = {
   console.log(`\nPasan la compuerta de calidad: ${candidatas.length} de ${d.matches.length}`);
   for (const x of descartados) console.log(`  descartada ${x.ref}: ${x.motivos.join(", ")}`);
 
-  // Verificacion real contra la landing: que el link abra.
+  // Verificacion real contra Wasi: que el link que se va a publicar abra de
+  // verdad (ver la nota de diseno en src/groups/verificar-link.js).
   const { verificadas: publicables, rotas } = await verificarLink.verificar(candidatas);
   if (candidatas.length) {
-    console.log(`\nLinks que abren: ${publicables.length} de ${candidatas.length}`);
+    console.log(`\nLinks de Wasi que abren: ${publicables.length} de ${candidatas.length}`);
     for (const r of rotas) console.log(`  ROTO ${r.ref}: ${r.link}`);
   }
 
-  let asesor = null;
-  try {
-    asesor = await advisors.findForTransfer(org, "venta");
-  } catch (e) {
-    console.log(`\n(no se pudo resolver el asesor de venta: ${e.message})`);
-  }
-  console.log(`\nDerivacion: ${asesor ? `${asesor.name} — ${asesor.phone}` : "ninguna"}`);
-
-  const texto = redactar.mensajeGrupo({ autor_nombre: clasificado.mensaje.autor }, publicables, { asesor });
+  // Sin asesor: el mensaje es "blanqueado" a proposito, no deriva a nadie de
+  // Diamond — ver la nota de diseno en src/groups/redactar.js.
+  const texto = redactar.mensajeGrupo({ autor_nombre: clasificado.mensaje.autor }, publicables);
   console.log("\n══════════ MENSAJE QUE SE PUBLICARIA ══════════");
   console.log(texto === null ? "(nada: el bot calla)" : texto);
   console.log("═══════════════════════════════════════════════");
