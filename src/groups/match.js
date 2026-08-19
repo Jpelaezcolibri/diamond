@@ -183,18 +183,33 @@ function ciudadCoincide(p, c) {
 // pasa por el juicio de Sofi y de una persona. Para PUBLICAR en el grupo,
 // src/groups/publicable.js sigue exigiendo zona exacta o vecina — ahi no hay
 // nadie revisando y el error se ve delante de 80 competidores.
+// Pesos recalibrados (Juan, 2026-08-19): con datos reales del radar en vivo,
+// una zona EXACTA sin mas dato que el precio quedaba en 65 (55 base + 10 de
+// precio) y una VECINA bien especificada rara vez pasaba de 67 — los dos por
+// debajo del umbral de publicacion (70), asi que un match geograficamente
+// correcto solo pasaba si ademas calzaban dos o tres exigencias incidentales
+// (alcobas, area, banos...) que muchos pedidos ni mencionan. El sintoma en
+// produccion: el radar callaba casi todo, no solo lo que de verdad no servia.
+//
+// La correccion mueve peso HACIA la ubicacion —que es el dato que mas importa
+// para decidir si algo "sirve"— y LEJOS de otra_zona, para que ningun combo de
+// exigencias incidentales pueda compensar estar en el barrio equivocado (el
+// techo teorico de otra_zona con TODO lo demas a favor queda en 65, todavia
+// bajo el umbral). zonaCoincide/zonaVecina — la comparacion por token exacto
+// que evito los 656 falsos positivos de julio — no se toca: esto solo cambia
+// cuanto vale cada grado, no como se calcula.
 function ubicacionCoincide(p, c) {
   const pide = zonasPedidas(c).length > 0;
 
-  if (pide && zonaCoincide(p, c)) return { razon: `Zona: ${p.zona}`, puntos: 0, grado: "exacta" };
+  if (pide && zonaCoincide(p, c)) return { razon: `Zona: ${p.zona}`, puntos: 20, grado: "exacta" };
   if (pide && zonaVecina(p, c)) {
-    return { razon: `${p.zona} (vecina de lo pedido)`, puntos: -8, grado: "vecina" };
+    return { razon: `${p.zona} (vecina de lo pedido)`, puntos: -5, grado: "vecina" };
   }
   if (pide) {
     // Zona distinta y no contigua. Entra, pero muy castigada y marcada: solo
     // llega a la asesora si TODO lo demas calza y Sofi lo aprueba.
     if (!ciudadCoincide(p, c)) return null;
-    return { razon: `${p.zona || p.ciudad} (fuera de la zona pedida)`, puntos: -25, grado: "otra_zona" };
+    return { razon: `${p.zona || p.ciudad} (fuera de la zona pedida)`, puntos: -35, grado: "otra_zona" };
   }
   if (ciudadCoincide(p, c)) {
     return { razon: `Ciudad: ${p.ciudad} (sin barrio en el pedido)`, puntos: -15, grado: "ciudad" };

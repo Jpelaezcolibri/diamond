@@ -27,12 +27,32 @@ const signalEvents = require("../data/signal-events");
 // (ver src/lib/mensaje-asesor.js), visible en el panel "Equipo" del CRM.
 const mensajeAsesor = require("../lib/mensaje-asesor");
 
-function textoRecordatorio(señal) {
-  const pedido = (señal.texto_original || "").replace(/\s+/g, " ").trim().slice(0, 100);
+function resumenPedido(señal) {
+  const texto = (señal.texto_original || "").replace(/\s+/g, " ").trim();
+  if (!texto) return null;
+  return texto.length > 100 ? `${texto.slice(0, 100)}...` : texto;
+}
+
+// UN mensaje por corrida, aunque haya varios pedidos vencidos a la vez
+// (Juan, 2026-08-19): antes se mandaba un WhatsApp por cada senal pendiente
+// —si se acumulaban seis, le llegaban seis mensajes seguidos, que se lee como
+// acoso mas que como un aviso—. Ahora se consolida en uno solo por asesora
+// por corrida. Cada senal individual sigue recordandose UNA sola vez en toda
+// su vida (recordatorio_enviado_at, ver claimRecordatorio abajo); lo que
+// cambia es que varias pendientes juntas llegan en un solo mensaje, no en N.
+function textoRecordatorio(señales) {
+  const lista = señales.map((s) => resumenPedido(s)).filter(Boolean);
+
+  const cuerpo =
+    señales.length === 1
+      ? `¿en que quedo el pedido${lista[0] ? ` de "${lista[0]}"` : ""} que te avise hace un rato?`
+      : `tenes ${señales.length} pedidos del radar sin resultado:\n\n${lista.map((t) => `▸ "${t}"`).join("\n")}\n\n¿en que quedaron?`;
+
   return [
-    `Che, ¿en que quedo el pedido${pedido ? ` de "${pedido}${señal.texto_original && señal.texto_original.length > 100 ? "..." : ""}"` : ""} que te avise hace un rato?`,
-    `Contame asi sea corto (le escribi / no servia / hubo visita / se cerro) — con eso el radar aprende.`,
-  ].join("\n");
+    `Cathe, ${cuerpo}`,
+    `Contame asi sea corto por cada uno (le escribi / no servia / hubo visita / se cerro) — con eso el radar aprende.`,
+    `Es muy importante que respondas para poder seguir contando con el radar.`,
+  ].join("\n\n");
 }
 
 // Candidatos de una org: salieron hace mas de silenceMin y todavia no tienen
@@ -63,18 +83,34 @@ async function runOnce() {
       continue;
     }
 
+    // Claim atomico POR SEÑAL antes de agrupar: si dos ticks corrieran a la
+    // vez, cada senal la reclama solo uno — el otro tick la descarta en vez
+    // de meterla dos veces en dos mensajes distintos.
+    const reclamadas = [];
     for (const señal of candidatos) {
       try {
-        // Claim atomico ANTES de enviar: si dos ticks corrieran a la vez,
-        // solo uno gana — el otro se salta esta señal en vez de mandar dos
-        // recordatorios por el mismo pedido.
-        const claimed = await groupSignals.claimRecordatorio(org.id, señal.id);
-        if (!claimed) continue;
+        if (await groupSignals.claimRecordatorio(org.id, señal.id)) reclamadas.push(señal);
+      } catch (e) {
+        console.error("[radar-recordatorio] error reclamando señal", señal.id, e.message);
+      }
+    }
+    if (reclamadas.length === 0) continue;
 
-        const advisor = await advisors.findById(org.id, señal.aviso_advisor_id);
+    // Un mensaje por asesora, no uno por senal — ver la nota en
+    // textoRecordatorio sobre por que se agrupa.
+    const porAsesora = new Map();
+    for (const señal of reclamadas) {
+      const lista = porAsesora.get(señal.aviso_advisor_id) || [];
+      lista.push(señal);
+      porAsesora.set(señal.aviso_advisor_id, lista);
+    }
+
+    for (const [advisorId, señales] of porAsesora) {
+      try {
+        const advisor = await advisors.findById(org.id, advisorId);
         if (!advisor || !advisor.phone) continue;
 
-        const { ok, error } = await mensajeAsesor.enviarYRegistrar(org, advisor.phone, textoRecordatorio(señal));
+        const { ok, error } = await mensajeAsesor.enviarYRegistrar(org, advisor.phone, textoRecordatorio(señales));
         if (ok) {
           sent++;
         } else {
@@ -84,7 +120,7 @@ async function runOnce() {
           console.warn(`[radar-recordatorio] No se pudo avisar a ${advisor.name}:`, error);
         }
       } catch (e) {
-        console.error("[radar-recordatorio] error con señal", señal.id, e.message);
+        console.error("[radar-recordatorio] error avisando a", advisorId, e.message);
       }
     }
   }

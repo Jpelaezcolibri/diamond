@@ -260,7 +260,8 @@ test("nombrar un barrio y estar en otro lejano entra MARCADO y muy castigado", (
   // corrección del bug que generó 656 de los ~731 falsos positivos.
   //
   // Ahora entra, pero de la única forma que no reintroduce aquel bug: con el
-  // grado explícito `otra_zona`, con -25 de castigo, y —lo que de verdad lo
+  // grado explícito `otra_zona`, con -35 de castigo (recalibrado 2026-08-19,
+  // ver la nota en match.js), y —lo que de verdad lo
   // contiene— SIN permiso para publicarse en un grupo (ver group-publicable).
   // El aviso a la asesora sí puede llevarlo porque lo revisa Sofi y después una
   // persona; la publicación pública no tiene a nadie revisando.
