@@ -13,6 +13,29 @@ const formato = require("../lib/formato");
 // nueva sin ese campo aun sigue funcionando, solo con el dominio de Diamond
 // por defecto en vez de fallar.
 //
+// El link que trae el sync de Wasi apunta al dominio propio de la cuenta
+// (ej. paraisoinmobiliario.inmo.co). Wasi sirve la MISMA propiedad —mismo
+// slug, mismo id— tambien en su dominio generico info.wasi.co (verificado
+// 2026-08-19: la misma ruta responde 200 en los dos). Juan pidio publicar ahi
+// puntualmente porque info.wasi.co, a diferencia del sitio de cuenta, muestra
+// un boton de contacto por WhatsApp con `?shared=whatsapp` en la URL — asi el
+// colega llega a un asesor sin que el mensaje de Sofi tenga que llevar ningun
+// link propio de Diamond.
+function enlazarWasiPublico(link) {
+  if (!link) return link;
+  let url;
+  try {
+    url = new URL(link);
+  } catch {
+    return link;
+  }
+  const esDominioWasi = url.hostname === "info.wasi.co" || url.hostname.endsWith(".inmo.co");
+  if (!esDominioWasi) return link;
+  url.hostname = "info.wasi.co";
+  url.searchParams.set("shared", "whatsapp");
+  return url.toString();
+}
+
 // `linkWasi` conserva el link original ANTES de sobreescribirlo — se lee de
 // `p.link` primero, asi que no lo pisa la reescritura de abajo (misma
 // propiedad, dos claves distintas del objeto que se arma). Nadie lo consumia
@@ -25,7 +48,7 @@ function withLandingLink(p, landingBaseUrl = config.landingBaseUrl) {
   if (!p) return p;
   return {
     ...p,
-    linkWasi: p.link || null,
+    linkWasi: enlazarWasiPublico(p.link),
     link: `${landingBaseUrl || config.landingBaseUrl}/propiedades/${buildSlug(p.titulo, p.ref)}`,
   };
 }
@@ -147,4 +170,4 @@ async function listByCaptador(orgId, advisorId, limit = 20) {
   return data || [];
 }
 
-module.exports = { search, findByRef, matchesFilters, zonaTokens, distinctiveTokens, sonVecinas, vecinosDe, withLandingLink, setCaptador, listByCaptador };
+module.exports = { search, findByRef, matchesFilters, zonaTokens, distinctiveTokens, sonVecinas, vecinosDe, withLandingLink, enlazarWasiPublico, setCaptador, listByCaptador };
