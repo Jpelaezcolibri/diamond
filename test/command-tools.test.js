@@ -5,6 +5,7 @@ const { buildCommandSystemPrompt } = require("../src/agent/sofi-comando-prompts"
 const command = require("../src/data/command");
 const properties = require("../src/data/properties");
 const allyProperties = require("../src/data/ally-properties");
+const radarTrazabilidad = require("../src/data/radar-trazabilidad");
 
 function asesorScope() {
   return Object.freeze({ orgId: "org-1", viewerUid: "asesor-1", role: "asesor_ventas", isAdmin: false });
@@ -167,4 +168,29 @@ test("toda tool registrada aparece nombrada en el prompt — si no, Sofi no sabe
   for (const t of COMMAND_TOOL_DEFINITIONS) {
     assert.ok(stable.includes(t.name), `${t.name} esta registrada pero el prompt no la menciona`);
   }
+});
+
+// Bug real 2026-08-19: el default de "cuantas señales traer" era 20, y no
+// habia forma de pedir mas. Con un grupo activo, una rafaga de pedidos SIN
+// match empujaba fuera de la ventana un pedido puntual mas viejo que si tenia
+// match y respuesta — Sofi decia "no lo encuentro" de un dato que existia,
+// solo estaba mas alla de la fila 20.
+test("trazabilidad_radar: sin limite en el input, no se fuerza ningun tope — usa el default de trazabilidad()", async (t) => {
+  let opts = null;
+  t.mock.method(radarTrazabilidad, "trazabilidad", async (scope, o) => { opts = o; return { disponible: true, señales: [] }; });
+
+  await executeCommandTool("trazabilidad_radar", {}, { scope: asesorScope(), session: null });
+
+  assert.strictEqual(opts.limite, undefined);
+});
+
+test("trazabilidad_radar: un limite explicito se respeta hasta el tope de 40", async (t) => {
+  let opts = null;
+  t.mock.method(radarTrazabilidad, "trazabilidad", async (scope, o) => { opts = o; return { disponible: true, señales: [] }; });
+
+  await executeCommandTool("trazabilidad_radar", { limite: 30 }, { scope: asesorScope(), session: null });
+  assert.strictEqual(opts.limite, 30);
+
+  await executeCommandTool("trazabilidad_radar", { limite: 999 }, { scope: asesorScope(), session: null });
+  assert.strictEqual(opts.limite, 40, "no se puede pedir mas del tope real de la consulta");
 });

@@ -46,15 +46,26 @@ function resumenMatch(m) {
  * @param scope  { orgId, viewerUid, isAdmin } — lo arma el servidor, nunca el modelo
  * @param dias   ventana hacia atras (default 7)
  * @param soloConAviso  true = solo las que llegaron a la asesora
+ * @param limite cuantas señales traer (default MAX_FILAS = 40, mismo tope)
  */
-async function trazabilidad(scope, { dias = 7, soloConAviso = false, limite = 20 } = {}) {
+async function trazabilidad(scope, { dias = 7, soloConAviso = false, limite = MAX_FILAS } = {}) {
   if (!supabase) return { disponible: false, motivo: "sin base de datos" };
 
   const desde = new Date(Date.now() - dias * 86400000).toISOString();
 
+  // respondida_at/respuesta_* son del camino auto/sombra (marcarRespondida en
+  // src/data/group-signals.js) — separado de enviado_at/aviso_advisor_id, que
+  // es el aviso PRIVADO del camino asistido. Hasta el 2026-08-19 esta consulta
+  // no traia ninguno de los cuatro: Sofi podia ver que el motor encontro
+  // candidatas, pero no que el bot YA le habia contestado al colega en el
+  // grupo, ni el texto exacto que publico — cuando el admin pedia "el mensaje
+  // completo", Sofi no tenia de donde sacarlo y terminaba pidiendole que lo
+  // copiara a mano del grupo.
+  const CAMPOS = "id, created_at, fecha_mensaje, clase, texto_original, autor_nombre, autor_telefono, group_id, advisor_id, aviso_advisor_id, matches, revalidacion, enviado_at, respondida_at, respuesta_texto, respuesta_modo, respuesta_refs, estado, origen";
+
   let q = supabase
     .from("group_signals")
-    .select("id, created_at, fecha_mensaje, clase, texto_original, autor_nombre, autor_telefono, group_id, advisor_id, aviso_advisor_id, matches, revalidacion, enviado_at, estado, origen")
+    .select(CAMPOS)
     .eq("org_id", scope.orgId)
     .eq("origen", "vivo")
     .gte("created_at", desde)
@@ -67,9 +78,13 @@ async function trazabilidad(scope, { dias = 7, soloConAviso = false, limite = 20
 
   let { data, error } = await q;
   if (error && esColumnaFaltante(error)) {
+    // Fallback SIN aviso_advisor_id (la migracion de destinatario del aviso
+    // asistido) — respondida_at/respuesta_* son mas viejas y ya deberian
+    // existir siempre, asi que no llevan su propio nivel de fallback.
+    const CAMPOS_SIN_AVISO_ADVISOR = "id, created_at, fecha_mensaje, clase, texto_original, autor_nombre, autor_telefono, group_id, advisor_id, matches, revalidacion, enviado_at, respondida_at, respuesta_texto, respuesta_modo, respuesta_refs, estado, origen";
     let q2 = supabase
       .from("group_signals")
-      .select("id, created_at, fecha_mensaje, clase, texto_original, autor_nombre, autor_telefono, group_id, advisor_id, matches, revalidacion, enviado_at, estado, origen")
+      .select(CAMPOS_SIN_AVISO_ADVISOR)
       .eq("org_id", scope.orgId)
       .eq("origen", "vivo")
       .gte("created_at", desde)
@@ -159,6 +174,21 @@ async function trazabilidad(scope, { dias = 7, soloConAviso = false, limite = 20
             para: s.aviso_advisor_id ? destinatarios.get(s.aviso_advisor_id) || null : null,
           }
         : { salio: false, motivo: v && !v.sirve_alguna ? "Sofi decidio que no servia" : "no salio" },
+      // Modo auto/sombra: el bot le contesto DIRECTO al colega en el grupo (o
+      // lo redacto sin publicar, si sombra). Distinto de `aviso`, que es el
+      // mensaje PRIVADO a la asesora del camino asistido — un pedido puede
+      // tener uno, el otro, los dos o ninguno segun el modo con el que se
+      // proceso. `texto` es el texto EXACTO publicado, no un resumen: es lo
+      // que hay que dar si preguntan "que mensaje mando el bot".
+      respuesta: s.respondida_at
+        ? {
+            salio: true,
+            modo: s.respuesta_modo || null,
+            cuando: s.respondida_at,
+            texto: s.respuesta_texto || null,
+            refs: s.respuesta_refs || [],
+          }
+        : { salio: false },
       resultado: ultimoEvento.get(s.id) || null,
     };
   });
@@ -167,7 +197,7 @@ async function trazabilidad(scope, { dias = 7, soloConAviso = false, limite = 20
 }
 
 function resumenVacio(dias) {
-  return { dias, entraron: 0, conCandidatas: 0, revisadasPorSofi: 0, aprobadas: 0, avisosEnviados: 0, conResultado: 0 };
+  return { dias, entraron: 0, conCandidatas: 0, revisadasPorSofi: 0, aprobadas: 0, avisosEnviados: 0, respondioBot: 0, conResultado: 0 };
 }
 
 // El resumen es lo que responde "¿esta sirviendo esto?" de un vistazo. Cada
@@ -179,6 +209,7 @@ function resumir(filas, dias) {
   const revisadas = filas.filter((f) => f.sofi.reviso);
   const aprobadas = filas.filter((f) => f.sofi.reviso && f.sofi.aprobo);
   const enviados = filas.filter((f) => f.aviso.salio);
+  const respondidas = filas.filter((f) => f.respuesta.salio && f.respuesta.modo === "auto");
   const conResultado = filas.filter((f) => f.resultado);
   return {
     dias,
@@ -187,6 +218,10 @@ function resumir(filas, dias) {
     revisadasPorSofi: revisadas.length,
     aprobadas: aprobadas.length,
     avisosEnviados: enviados.length,
+    // Solo cuenta lo PUBLICADO (modo auto), no lo redactado en sombra: sombra
+    // no lo vio ningun colega, contarlo ahi infla el numero que responde
+    // "¿esta sirviendo el radar?".
+    respondioBot: respondidas.length,
     conResultado: conResultado.length,
     // Los desacuerdos son el material de calibracion: donde Sofi dice que el
     // puntaje se equivoco.

@@ -202,6 +202,10 @@ const COMMAND_TOOL_DEFINITIONS = [
           type: "boolean",
           description: "true para ver unicamente las que llegaron a la asesora.",
         },
+        limite: {
+          type: "integer",
+          description: "Cuantas señales traer, las mas recientes primero (default y maximo 40). En un grupo con mucho trafico las mas nuevas pueden empujar fuera de la ventana un pedido puntual mas viejo — si preguntan por algo especifico y no aparece, subilo al maximo antes de decir que no encontraste el dato.",
+        },
       },
     },
   },
@@ -308,6 +312,16 @@ function capLimit(limite, fallback = 5) {
   const n = parseInt(limite, 10);
   if (!Number.isFinite(n) || n < 1) return fallback;
   return Math.min(n, MAX_RESULTADOS);
+}
+
+// Techo = MAX_FILAS en src/data/radar-trazabilidad.js. Sin valor devuelve
+// undefined a proposito, para que trazabilidad() aplique su propio default
+// (tambien 40) en vez de duplicar el numero en dos archivos.
+function capLimiteTrazabilidad(limite) {
+  if (limite === undefined || limite === null) return undefined;
+  const n = parseInt(limite, 10);
+  if (!Number.isFinite(n) || n < 1) return undefined;
+  return Math.min(n, 40);
 }
 
 // ctx: { scope, session } — el scope y el foco de la sesion vienen del servidor,
@@ -550,6 +564,7 @@ async function executeCommandTool(name, input, ctx) {
       const data = await radarTrazabilidad.trazabilidad(scope, {
         dias: input?.dias || 7,
         soloConAviso: Boolean(input?.solo_con_aviso),
+        limite: capLimiteTrazabilidad(input?.limite),
       });
       return JSON.stringify(data);
     }
