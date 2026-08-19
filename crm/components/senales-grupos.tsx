@@ -52,6 +52,10 @@ export type Signal = {
   respondida_at?: string | null;
   respuesta_texto?: string | null;
   respuesta_modo?: "auto" | "sombra" | null;
+  /** Refs de las propiedades que quedaron DENTRO de respuesta_texto — un
+   *  subconjunto de `matches`: el resto se descartó por la compuerta de
+   *  calidad. Null en señales de antes del 2026-08-19. */
+  respuesta_refs?: string[] | null;
 };
 
 /** El recorrido natural de una oportunidad. El orden es el del embudo, no
@@ -399,6 +403,17 @@ function Ficha({ s, copias, grupos }: { s: Signal; copias: number; grupos: numbe
                           <span className="text-sm font-medium text-slate-900">{m.titulo || "Sin título"}</span>
                         )}
                         {m.ref && <span className="font-mono text-[11px] text-slate-400">ref {m.ref}</span>}
+                        {/* Cuál de estos matches quedó de verdad dentro del mensaje que
+                            se publicó — el resto se vio pero lo descartó la compuerta
+                            de calidad (puntaje, precio, link roto, etc). */}
+                        {m.ref && s.respuesta_refs?.includes(String(m.ref)) && (
+                          <span
+                            className="rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-800"
+                            title="Esta propiedad quedó dentro del mensaje que el bot respondió"
+                          >
+                            📤 enviado
+                          </span>
+                        )}
                         {typeof m.puntaje === "number" && (
                           <span
                             className={[

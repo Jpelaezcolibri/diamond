@@ -21,6 +21,7 @@ let ofertasGuardadas = [];
 let crucesLeads = [];
 let inventario = { fresco: true, iso: new Date().toISOString(), horas: 1 };
 let linksAbren = true;
+let feedRegistrado = [];
 
 function instalarDobles() {
   require.cache[RUTA("groups/classify.js")] = {
@@ -90,6 +91,13 @@ function instalarDobles() {
       }),
     },
   };
+  require.cache[RUTA("groups/feed-comando.js")] = {
+    exports: {
+      registrarAuto: async (org, señal, resultado, detalle) => {
+        feedRegistrado.push({ señal, resultado, detalle });
+      },
+    },
+  };
   delete require.cache[RUTA("groups/vivo.js")];
   return require("../src/groups/vivo");
 }
@@ -133,6 +141,7 @@ beforeEach(() => {
   crucesLeads = [];
   inventario = { fresco: true, iso: new Date().toISOString(), horas: 1 };
   linksAbren = true;
+  feedRegistrado = [];
   vivo = instalarDobles();
 });
 
@@ -152,7 +161,7 @@ test("una demanda con match publicable se publica y queda registrada", async () 
   assert.doesNotMatch(enviados[0], /wa\.me/);
   assert.match(enviados[0], /info\.wasi\.co/);
   // El texto exacto queda guardado: es la unica prueba honesta de que se dijo.
-  assert.deepStrictEqual(marcadas, [{ id: "sig-1", texto: enviados[0], wamid: "wamid.OUT", modo: "auto" }]);
+  assert.deepStrictEqual(marcadas, [{ id: "sig-1", texto: enviados[0], wamid: "wamid.OUT", modo: "auto", refs: ["AP004"] }]);
 });
 
 test("en modo sombra se redacta y se registra, pero NO se envia", async () => {
@@ -335,4 +344,43 @@ test("fuera de horario se guarda la senal pero no se publica", async () => {
   });
   assert.strictEqual(r.motivo, "fuera_de_horario");
   assert.ok(señalCreada);
+});
+
+// Pedido de Juan, 2026-08-19: en el camino determinista (auto/sombra) los
+// CALLADOS tambien tienen que quedar en el feed del admin, no solo los
+// publicados — es lo que permite hacerles seguimiento.
+test("un pedido callado en modo auto queda registrado en el feed del admin", async () => {
+  matchesDevueltos = [matchBueno({ precio: "$0" })];
+  const r = await vivo.procesarMensaje(ORG, mensaje(), {
+    grupo: GRUPO, modo: "auto", ahora: MEDIODIA, enviar: async () => ({ ok: true }),
+  });
+  assert.strictEqual(r.resultado, "callado");
+  assert.strictEqual(feedRegistrado.length, 1);
+  assert.strictEqual(feedRegistrado[0].resultado, "callado");
+  assert.strictEqual(feedRegistrado[0].señal.autor_nombre, "Patricia Gomez");
+  assert.strictEqual(feedRegistrado[0].detalle.descartados.length, 1);
+});
+
+test("un pedido publicado en modo auto tambien queda en el feed del admin", async () => {
+  const r = await vivo.procesarMensaje(ORG, mensaje(), {
+    grupo: GRUPO, modo: "auto", ahora: MEDIODIA, enviar: async () => ({ ok: true, wamid: "w" }),
+  });
+  assert.strictEqual(r.resultado, "publicado");
+  assert.strictEqual(feedRegistrado.length, 1);
+  assert.strictEqual(feedRegistrado[0].resultado, "publicado");
+});
+
+test("en modo sombra el registro en el feed dice 'sombra', no 'publicado'", async () => {
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "sombra", ahora: MEDIODIA });
+  assert.strictEqual(r.resultado, "sombra");
+  assert.strictEqual(feedRegistrado.length, 1);
+  assert.strictEqual(feedRegistrado[0].resultado, "sombra");
+});
+
+test("marcarRespondida guarda los refs que quedaron dentro del mensaje, no todos los matches vistos", async () => {
+  matchesDevueltos = [matchBueno({ ref: "AP004" }), matchBueno({ ref: "AP005", precio: "$0" })];
+  await vivo.procesarMensaje(ORG, mensaje(), {
+    grupo: GRUPO, modo: "auto", ahora: MEDIODIA, enviar: async () => ({ ok: true, wamid: "w" }),
+  });
+  assert.deepStrictEqual(marcadas[0].refs, ["AP004"]);
 });

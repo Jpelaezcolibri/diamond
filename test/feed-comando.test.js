@@ -95,3 +95,76 @@ test("con adminUserId configurado, escribe en LA SESION DE ESE ADMIN, con isAdmi
 
   config.groups.feedComando.adminUserId = original;
 });
+
+// ══ construirAuto (pura) — camino determinista, sin veredicto de un modelo ══
+//
+// Juan, 2026-08-19: en modo auto/sombra no hay Sofi validando, pero los
+// CALLADOS tienen que quedar en el feed igual que los publicados, para poder
+// hacerles seguimiento.
+
+test("callado por compuerta de calidad: encabezado con X y el detalle de que se descarto", () => {
+  const texto = feedComando.construirAuto(MENSAJE, "callado", {
+    publicables: [],
+    descartados: [{ ref: "9944723", motivos: ["puntaje_bajo", "sin_link_wasi"] }],
+    decision: null,
+  });
+  assert.match(texto, /^❌ El radar CALLO/);
+  assert.match(texto, /Ninguna propiedad paso la compuerta de calidad/);
+  assert.match(texto, /Ref 9944723 — puntaje_bajo, sin_link_wasi/);
+});
+
+test("callado por politica (habia candidatas buenas, pero no correspondia hablar)", () => {
+  const texto = feedComando.construirAuto(MENSAJE, "callado", {
+    publicables: [MATCH],
+    descartados: [],
+    decision: { publicar: false, motivo: "fuera_de_horario" },
+  });
+  assert.match(texto, /fuera_de_horario/);
+  assert.match(texto, /Habria podido ofrecer:/);
+  assert.match(texto, /Apartamento en Laureles/);
+});
+
+test("publicado: encabezado con check, lista lo que se ofrecio", () => {
+  const texto = feedComando.construirAuto(MENSAJE, "publicado", { publicables: [MATCH], descartados: [] });
+  assert.match(texto, /^✅ El radar PUBLICO/);
+  assert.match(texto, /Se ofrecio:/);
+  assert.doesNotMatch(texto, /Habria podido/);
+});
+
+test("sombra: se distingue de publicado — no se publico nada", () => {
+  const texto = feedComando.construirAuto(MENSAJE, "sombra", { publicables: [MATCH], descartados: [] });
+  assert.match(texto, /sombra, no se publico/);
+  assert.doesNotMatch(texto, /^✅ El radar PUBLICO/);
+});
+
+// ══ registrarAuto (efecto) ═══════════════════════════════════════════════
+
+test("registrarAuto: sin adminUserId configurado, no toca la base", async (t) => {
+  const original = config.groups.feedComando.adminUserId;
+  config.groups.feedComando.adminUserId = "";
+  let tocoSesion = false;
+  t.mock.method(command, "ensureSession", async () => { tocoSesion = true; return { id: "s1" }; });
+
+  await feedComando.registrarAuto({ id: "org-1" }, MENSAJE, "callado", { publicables: [], descartados: [] });
+
+  assert.strictEqual(tocoSesion, false);
+  config.groups.feedComando.adminUserId = original;
+});
+
+test("registrarAuto: con adminUserId configurado, escribe en su sesion", async (t) => {
+  const original = config.groups.feedComando.adminUserId;
+  config.groups.feedComando.adminUserId = "admin-kt";
+
+  let scopeUsado = null;
+  t.mock.method(command, "ensureSession", async (scope) => { scopeUsado = scope; return { id: "sesion-admin" }; });
+  const guardados = [];
+  t.mock.method(command, "appendCommandMessage", async (sessionId, role, content) => { guardados.push({ sessionId, role, content }); });
+
+  await feedComando.registrarAuto({ id: "org-1" }, MENSAJE, "publicado", { publicables: [MATCH], descartados: [] });
+
+  assert.strictEqual(scopeUsado.viewerUid, "admin-kt");
+  assert.strictEqual(guardados.length, 1);
+  assert.match(guardados[0].content, /PUBLICO/);
+
+  config.groups.feedComando.adminUserId = original;
+});

@@ -70,4 +70,68 @@ async function registrar(org, mensaje, veredicto, matches, resultado = {}) {
   await command.appendCommandMessage(session.id, "assistant", texto);
 }
 
-module.exports = { construir, registrar };
+// Version determinista (modo sombra/auto: sin juicio de un modelo — ver la
+// nota de diseno en src/groups/vivo.js sobre por que ese camino no usa IA).
+// Arma el mismo tipo de mensaje que construir(), pero a partir de lo que ya
+// decidieron publicable.js y politica.js, no de un veredicto de Sofi.
+//
+// Pedido de Juan, 2026-08-19: que los CALLADOS de este camino tambien queden
+// en el feed, con el mismo criterio que ya regia para modo asistido — sin
+// esto, todo lo que el radar calla en auto/sombra desaparece sin dejar rastro
+// para poder hacerles seguimiento.
+//
+// @param mensaje     { grupo_nombre, autor_nombre, texto_original }
+// @param resultado   "publicado" | "sombra" | "callado"
+// @param publicables matches que pasaron la compuerta de calidad (puede ser [])
+// @param descartados [{ref, motivos}] — lo que NO paso, y por que
+// @param decision    lo que devolvio politica.decidir — null si la compuerta
+//                     ya dejo 0 publicables (politica ni se llega a correr)
+function construirAuto(mensaje, resultado, { publicables = [], descartados = [], decision = null } = {}) {
+  const publico = resultado === "publicado" || resultado === "sombra";
+
+  const encabezado = !publico
+    ? "❌ El radar CALLO un pedido"
+    : resultado === "publicado"
+      ? "✅ El radar PUBLICO una respuesta automatica"
+      : "🌥️ El radar redacto una respuesta (modo sombra, no se publico)";
+
+  const motivo = publico
+    ? null
+    : publicables.length === 0
+      ? "Ninguna propiedad paso la compuerta de calidad."
+      : `Habia candidatas validas, pero la politica de conducta dijo no responder: ${decision?.motivo || "motivo desconocido"}.`;
+
+  const lineasPublicables = publicables.length
+    ? `${publico ? "Se ofrecio" : "Habria podido ofrecer"}:\n${publicables.map(linea).join("\n")}`
+    : null;
+
+  const lineasDescartadas = descartados.length
+    ? `Descartadas por la compuerta de calidad:\n${descartados.map((d) => `▸ Ref ${d.ref || "sin ref"} — ${d.motivos.join(", ")}`).join("\n")}`
+    : null;
+
+  return [
+    encabezado,
+    "",
+    `Grupo: ${mensaje.grupo_nombre || "sin nombre"}`,
+    `Colega: ${mensaje.autor_nombre || "un colega"}`,
+    `Pidio: "${(mensaje.texto_original || "").trim()}"`,
+    "",
+    motivo,
+    lineasPublicables,
+    lineasDescartadas,
+  ].filter((l) => l !== null).join("\n");
+}
+
+async function registrarAuto(org, mensaje, resultado, detalle = {}) {
+  const adminUserId = config.groups.feedComando.adminUserId;
+  if (!adminUserId) return;
+
+  const texto = construirAuto(mensaje, resultado, detalle);
+  if (!texto) return;
+
+  const scope = { orgId: org.id, viewerUid: adminUserId, isAdmin: true };
+  const session = await command.ensureSession(scope);
+  await command.appendCommandMessage(session.id, "assistant", texto);
+}
+
+module.exports = { construir, registrar, construirAuto, registrarAuto };

@@ -431,20 +431,27 @@ const MODOS_RESPUESTA = ["sombra", "auto", "humano"];
 //
 // Devuelve true si quedo registrado. Un false NO es cosmetico: significa que el
 // sistema publico algo que no puede probar, y quien llame decide que hacer.
-async function marcarRespondida(orgId, signalId, { texto, wamid = null, modo = "auto" } = {}) {
+// `refs` son los refs de las propiedades que quedaron DENTRO de `texto` (no
+// todo `matches`: eso incluye lo que la compuerta de calidad descarto). Si la
+// migracion de respuesta_refs no corrio todavia, se reintenta sin esa columna
+// en vez de perder el resto del registro (texto/wamid/modo) — mismo criterio
+// que el resto de este archivo (ver esColumnaFaltante).
+async function marcarRespondida(orgId, signalId, { texto, wamid = null, modo = "auto", refs = null } = {}) {
   if (!MODOS_RESPUESTA.includes(modo)) throw new Error(`Modo de respuesta invalido: ${modo}`);
   if (!supabase) return true;
-  const { error } = await supabase
-    .from("group_signals")
-    .update({
-      respondida_at: new Date().toISOString(),
-      respuesta_texto: texto || null,
-      respuesta_wamid: wamid,
-      respuesta_modo: modo,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("org_id", orgId)
-    .eq("id", signalId);
+  const patch = {
+    respondida_at: new Date().toISOString(),
+    respuesta_texto: texto || null,
+    respuesta_wamid: wamid,
+    respuesta_modo: modo,
+    respuesta_refs: refs && refs.length ? refs : null,
+    updated_at: new Date().toISOString(),
+  };
+  let { error } = await supabase.from("group_signals").update(patch).eq("org_id", orgId).eq("id", signalId);
+  if (error && esColumnaFaltante(error)) {
+    delete patch.respuesta_refs;
+    ({ error } = await supabase.from("group_signals").update(patch).eq("org_id", orgId).eq("id", signalId));
+  }
   if (error) {
     console.error("[grupos] No se pudo registrar la respuesta publicada:", error.message);
     return false;

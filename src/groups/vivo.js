@@ -153,7 +153,19 @@ async function procesarMensaje(org, mensaje, { grupo, modo = "sombra", enviar = 
     ahora,
   });
 
+  // Feed del admin, tambien para el camino determinista (auto/sombra): sin
+  // esto, todo lo que la compuerta de calidad o la politica callan desaparece
+  // sin dejar rastro — "callar es gratis" para el grupo, pero no puede serlo
+  // para el seguimiento de Juan/Catherine. Best-effort: un problema
+  // escribiendo el feed no puede tumbar el pipeline del radar.
+  const señalParaFeed = { grupo_nombre: grupo.nombre || grupo.jid, autor_nombre: mensaje.autor, texto_original: mensaje.texto };
+  const avisarFeed = (resultado, extra = {}) =>
+    feedComando
+      .registrarAuto(org, señalParaFeed, resultado, { publicables, descartados, decision, ...extra })
+      .catch((e) => console.warn("[radar] No se pudo escribir en el feed del admin:", e.message));
+
   if (!decision.publicar) {
+    await avisarFeed("callado");
     return { resultado: "callado", motivo: decision.motivo, traza: decision.traza, descartados, signalId: signal && signal.id };
   }
 
@@ -162,10 +174,13 @@ async function procesarMensaje(org, mensaje, { grupo, modo = "sombra", enviar = 
   const texto = redactar.mensajeGrupo({ autor_nombre: mensaje.autor }, publicables);
   if (!texto) return { resultado: "callado", motivo: "sin_texto", traza: decision.traza, signalId: signal && signal.id };
 
+  const refs = publicables.map((m) => m.ref).filter(Boolean);
+
   // En sombra se redacta y se registra, pero NO se publica. Es la prueba de humo
   // que valida la calidad del mensaje sin que nadie en el grupo vea nada.
   if (modo === "sombra") {
-    await groupSignals.marcarRespondida(org.id, signal.id, { texto, wamid: null, modo: "sombra" });
+    await groupSignals.marcarRespondida(org.id, signal.id, { texto, wamid: null, modo: "sombra", refs });
+    await avisarFeed("sombra");
     return { resultado: "sombra", texto, publicables, traza: decision.traza, signalId: signal.id };
   }
 
@@ -181,7 +196,8 @@ async function procesarMensaje(org, mensaje, { grupo, modo = "sombra", enviar = 
   // Se registra DESPUES de que salio, con el id real del mensaje publicado: si
   // manana un colega reclama por lo que se dijo, la unica respuesta honesta es
   // mostrar el texto tal como salio.
-  await groupSignals.marcarRespondida(org.id, signal.id, { texto, wamid: envio.wamid, modo: "auto" });
+  await groupSignals.marcarRespondida(org.id, signal.id, { texto, wamid: envio.wamid, modo: "auto", refs });
+  await avisarFeed("publicado");
   return { resultado: "publicado", texto, wamid: envio.wamid, publicables, traza: decision.traza, signalId: signal.id };
 }
 
