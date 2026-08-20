@@ -275,17 +275,39 @@ router.post("/webhook", async (req, res) => {
           if (wamid) await conversations.setWaMessageId(assistantMessageId, wamid);
         }
       }
+      // BUG real (Juan, 2026-08-20): "necesito confirmar si la transferencia a
+      // Catherine si se hizo por que no veo registro entre Sofi y Catherine".
+      // Los cuatro avisos de abajo tiraban el resultado de sendWhatsApp —
+      // {ok, error}, que graphSendMessage YA calcula (ver el comentario de esa
+      // funcion mas arriba) — y no lo hacian nada con el. Un fallo de Meta (el
+      // caso mas probable: texto libre fuera de la ventana de 24h, que Meta
+      // rechaza) quedaba solo en un console.error de Railway, invisible desde
+      // el CRM: se veia identico a un exito para cualquiera mirando la
+      // conversacion. Ahora un fallo se loguea CON contexto (a quien, que
+      // telefono, que error) y, para transfer -el caso que Juan reporto-,
+      // ademas queda una nota EN LA MISMA conversacion que ya se esta mirando.
       if (transfer) {
-        await sendWhatsApp(org, transfer.advisorPhone, transfer.advisorAlert, { fromPhoneId: phoneNumberId });
+        const r = await sendWhatsApp(org, transfer.advisorPhone, transfer.advisorAlert, { fromPhoneId: phoneNumberId });
+        if (!r.ok) {
+          console.error(`[whatsapp] Aviso de transferencia a ${transfer.advisorName} (${transfer.advisorPhone}) NO se pudo enviar:`, r.error);
+          if (transfer.conversationId) {
+            await conversations
+              .appendMessage(transfer.conversationId, "system", `⚠️ El aviso de transferencia a ${transfer.advisorName} no se pudo enviar (${r.error || "error desconocido"}). Avisale por otra via.`)
+              .catch((e) => console.warn("[whatsapp] No se pudo dejar la nota del fallo:", e.message));
+          }
+        }
       }
       if (allyAlert) {
-        await sendWhatsApp(org, allyAlert.advisorPhone, allyAlert.advisorAlert, { fromPhoneId: phoneNumberId });
+        const r = await sendWhatsApp(org, allyAlert.advisorPhone, allyAlert.advisorAlert, { fromPhoneId: phoneNumberId });
+        if (!r.ok) console.error(`[whatsapp] Aviso de match de aliado a ${allyAlert.advisorPhone} NO se pudo enviar:`, r.error);
       }
       if (appointmentAlert) {
-        await sendWhatsApp(org, appointmentAlert.advisorPhone, appointmentAlert.advisorAlert, { fromPhoneId: phoneNumberId });
+        const r = await sendWhatsApp(org, appointmentAlert.advisorPhone, appointmentAlert.advisorAlert, { fromPhoneId: phoneNumberId });
+        if (!r.ok) console.error(`[whatsapp] Aviso de cita a ${appointmentAlert.advisorPhone} NO se pudo enviar:`, r.error);
       }
       if (captadorAlert) {
-        await sendWhatsApp(org, captadorAlert.advisorPhone, captadorAlert.advisorAlert, { fromPhoneId: phoneNumberId });
+        const r = await sendWhatsApp(org, captadorAlert.advisorPhone, captadorAlert.advisorAlert, { fromPhoneId: phoneNumberId });
+        if (!r.ok) console.error(`[whatsapp] Aviso de captador a ${captadorAlert.advisorPhone} NO se pudo enviar:`, r.error);
       }
     });
   } catch (e) {

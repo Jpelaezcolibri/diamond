@@ -279,6 +279,13 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
       advisorName: advisor.name,
       advisorPhone: advisor.phone,
       advisorAlert: buildAdvisorAlert(org, lead, ctx.transfer.motivo, ctx.propertyInteres, ctx.transfer.especialidad, ctx.cita, ctx.allyMatch),
+      // Para poder dejar constancia EN LA MISMA conversacion si el aviso al
+      // asesor falla (Juan, 2026-08-20 — ver whatsapp.js). Antes el envio se
+      // disparaba y su resultado se descartaba: un fallo (ej. la ventana de
+      // 24h de Meta cerrada, porque este es texto libre, no una plantilla) no
+      // dejaba ningun rastro, ni en el chat ni en ningun lado — se veia
+      // identico a un exito.
+      conversationId: conv.id,
     };
   }
 
