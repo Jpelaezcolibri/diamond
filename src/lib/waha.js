@@ -321,7 +321,15 @@ async function completarNombres(sesion, grupos, concurrencia = 4) {
 // No reintenta a proposito. Un reintento ciego sobre un envio que quiza si
 // salio es la forma mas facil de publicar dos veces lo mismo en un grupo, que
 // es exactamente la conducta que hace que a uno lo saquen.
-async function enviarTexto(sesion, chatId, texto) {
+// replyTo (Juan, 2026-08-20): en un grupo activo el pedido original ya se
+// perdio en el scroll para cuando el bot contesta — el colega no se entera
+// de que le respondieron. La tentacion es escribirle al interno, pero eso es
+// justo el patron que mas reportes de baneo tiene en lineas no oficiales (y
+// el que se llevo la linea de julio). Citar el mensaje (WAHA `reply_to`)
+// resuelve lo mismo sin salir de un grupo donde ya somos miembro: WhatsApp
+// muestra la respuesta enganchada al mensaje original, con notificacion,
+// aunque hayan pasado cien mensajes desde entonces.
+async function enviarTexto(sesion, chatId, texto, { replyTo = null } = {}) {
   if (!configurado()) return { ok: false, error: "Falta WAHA_URL o WAHA_API_KEY" };
   if (!chatId || !String(chatId).endsWith("@g.us")) {
     // Guarda dura: este cliente existe para hablar en grupos. Un chatId que no
@@ -330,10 +338,9 @@ async function enviarTexto(sesion, chatId, texto) {
     return { ok: false, error: `Destino invalido para el radar: ${chatId}` };
   }
   try {
-    const r = await pedir("/api/sendText", {
-      metodo: "POST",
-      body: { session: sesion, chatId, text: texto },
-    });
+    const body = { session: sesion, chatId, text: texto };
+    if (replyTo) body.reply_to = replyTo;
+    const r = await pedir("/api/sendText", { metodo: "POST", body });
     const wamid = r?.id?._serialized || r?.id || r?.key?.id || null;
     return { ok: true, wamid };
   } catch (e) {

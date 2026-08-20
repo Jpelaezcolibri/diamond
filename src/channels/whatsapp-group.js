@@ -218,8 +218,10 @@ async function procesar(org, ev, grupo, sesion) {
     asesor,
     advisorId: sesion?.advisor_id || null,
     // La UNICA via de salida. Se ata aca, al grupo del que vino el mensaje: el
-    // radar no tiene forma de escribirle a otro chat.
-    enviar: (texto) => waha.enviarTexto(ev.sesion, ev.chatId, texto),
+    // radar no tiene forma de escribirle a otro chat. replyTo cita el pedido
+    // original — en un grupo activo ya se perdio en el scroll para cuando
+    // esto sale, y sin la cita el colega no se entera de que le respondieron.
+    enviar: (texto) => waha.enviarTexto(ev.sesion, ev.chatId, texto, { replyTo: ev.waMessageId }),
   });
 
   if (r.resultado === "publicado") contar("publicados");

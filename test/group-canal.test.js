@@ -43,6 +43,14 @@ test("el canal no tiene ninguna via de salida propia", () => {
   }
 });
 
+test("el canal cita el mensaje original al responder (replyTo), no solo lo publica suelto", () => {
+  // Juan, 2026-08-20: en un grupo activo el pedido ya se perdio en el scroll
+  // para cuando el bot contesta. Sin citarlo, el colega no se entera de que
+  // le respondieron a EL especificamente.
+  const codigo = soloCodigo(leer("src/channels/whatsapp-group.js"));
+  assert.match(codigo, /enviarTexto\(ev\.sesion, ev\.chatId, texto, \{ replyTo: ev\.waMessageId \}\)/);
+});
+
 test("el cliente de WAHA expone exactamente UN endpoint de envio", () => {
   const codigo = soloCodigo(leer("src/lib/waha.js"));
   // El unico endpoint de escritura de mensajes permitido.
@@ -77,6 +85,27 @@ test("enviarTexto se niega a escribir fuera de un grupo", async () => {
 
   const vacio = await waha.enviarTexto("sesion", null, "hola");
   assert.strictEqual(vacio.ok, false);
+});
+
+// replyTo (Juan, 2026-08-20): citar el pedido original en vez de escribirle
+// al interno del colega — mismo problema (que se entere que le respondieron
+// en un grupo activo) sin el riesgo de un mensaje 1:1 no solicitado.
+test("enviarTexto manda reply_to cuando se lo pasan, y lo omite cuando no", async (t) => {
+  process.env.WAHA_URL = "http://waha.test";
+  process.env.WAHA_API_KEY = "x";
+  const waha = require("../src/lib/waha");
+
+  let ultimoBody = null;
+  t.mock.method(globalThis, "fetch", async (url, opts) => {
+    ultimoBody = JSON.parse(opts.body);
+    return { ok: true, status: 200, text: async () => JSON.stringify({ id: { _serialized: "wamid-1" } }) };
+  });
+
+  await waha.enviarTexto("sesion", "123@g.us", "hola", { replyTo: "false_123@g.us_ABC" });
+  assert.strictEqual(ultimoBody.reply_to, "false_123@g.us_ABC");
+
+  await waha.enviarTexto("sesion", "123@g.us", "hola");
+  assert.strictEqual("reply_to" in ultimoBody, false, "sin replyTo no se manda el campo, ni siquiera en null");
 });
 
 test("sin configuracion de WAHA no se intenta enviar nada", async () => {

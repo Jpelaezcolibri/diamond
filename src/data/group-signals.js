@@ -474,7 +474,7 @@ async function obtenerPorId(orgId, signalId) {
   if (!supabase) return memory.groupSignals?.find((s) => s.org_id === orgId && s.id === signalId) || null;
   const { data, error } = await supabase
     .from("group_signals")
-    .select("id, group_id, clase, matches, autor_nombre, texto_original, respondida_at")
+    .select("id, group_id, clase, matches, autor_nombre, texto_original, respondida_at, wa_message_id")
     .eq("org_id", orgId)
     .eq("id", signalId)
     .maybeSingle();

@@ -94,8 +94,8 @@ function instalarDobles() {
   };
   require.cache[RUTA("lib/waha.js")] = {
     exports: {
-      enviarTexto: async (sesion, chatId, texto) => {
-        enviadosManual.push({ sesion, chatId, texto });
+      enviarTexto: async (sesion, chatId, texto, opts) => {
+        enviadosManual.push({ sesion, chatId, texto, replyTo: opts && opts.replyTo });
         return envioResultado;
       },
     },
@@ -439,6 +439,7 @@ function señalCallada(extra = {}) {
   return {
     id: "sig-callada", group_id: "grp-1", clase: "demanda",
     autor_nombre: "Camilo", texto_original: "busco apto", respondida_at: null,
+    wa_message_id: "vivo:false_120363@g.us_ABCDEF",
     matches: [matchBueno()], ...extra,
   };
 }
@@ -457,6 +458,9 @@ test("aprobarManual: publica el pedido callado y lo marca respondido", async () 
   assert.strictEqual(enviadosManual.length, 1);
   assert.strictEqual(enviadosManual[0].sesion, "RADA-NATALIA");
   assert.strictEqual(enviadosManual[0].chatId, "vivo:gremial");
+  // Cita el pedido original (Juan, 2026-08-20) — sin el prefijo "vivo:" que es
+  // solo de nuestro almacenamiento, WhatsApp no lo conoce.
+  assert.strictEqual(enviadosManual[0].replyTo, "false_120363@g.us_ABCDEF");
   assert.strictEqual(marcadas.length, 1);
   assert.strictEqual(marcadas[0].modo, "auto");
 });

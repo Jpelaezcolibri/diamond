@@ -362,7 +362,12 @@ async function aprobarManual(org, signalId) {
   const activas = sesiones.filter((s) => s.estado === "activa");
   if (activas.length !== 1) return { resultado: "sesion_ambigua", cantidad: activas.length };
 
-  const envio = await waha.enviarTexto(activas[0].nombre, grupo.jid, texto);
+  // Citar el pedido original (ver la nota en waha.js#enviarTexto): en un
+  // grupo activo ya se perdio en el scroll, y sin la cita el colega no se
+  // entera de que le respondieron — es justo el problema que motivo la
+  // aprobacion manual.
+  const idOriginal = String(signal.wa_message_id || "").replace(/^vivo:/, "") || null;
+  const envio = await waha.enviarTexto(activas[0].nombre, grupo.jid, texto, { replyTo: idOriginal });
   if (!envio || !envio.ok) return { resultado: "error_envio", error: envio && envio.error };
 
   const refs = publicables.map((m) => m.ref).filter(Boolean);
