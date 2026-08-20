@@ -484,6 +484,38 @@ test("aprobarManual: un grupo sin permiso de responder no publica", async () => 
   assert.strictEqual(enviadosManual.length, 0);
 });
 
+// Caso real (Ana Pabon, 2026-08-20): ambos matches propios quedaron en 66
+// (puntaje_bajo, el umbral de publicar solo es 70) y "aprobar_pedido_radar"
+// seguia devolviendo el mismo "no se puede" — la aprobacion humana no
+// aprobaba nada porque seguia exigiendo el mismo umbral del camino 100%
+// automatico.
+test("aprobarManual: un match que SOLO fallo por puntaje bajo SI se publica aprobado a mano", async () => {
+  señalParaAprobar = señalCallada({ matches: [matchBueno({ puntaje: 66 })] });
+  grupoParaAprobar = grupoHabilitado();
+
+  const r = await vivo.aprobarManual({ id: "org-1" }, "sig-callada");
+  assert.strictEqual(r.resultado, "publicado");
+  assert.strictEqual(enviadosManual.length, 1);
+});
+
+test("aprobarManual: la zona equivocada SIGUE sin publicarse aunque se apruebe a mano — es seguridad, no confianza", async () => {
+  señalParaAprobar = señalCallada({ matches: [matchBueno({ puntaje: 66, ubicacion: "otra_zona" })] });
+  grupoParaAprobar = grupoHabilitado();
+
+  const r = await vivo.aprobarManual({ id: "org-1" }, "sig-callada");
+  assert.strictEqual(r.resultado, "sin_propiedades_publicables");
+  assert.strictEqual(enviadosManual.length, 0);
+});
+
+test("aprobarManual: una propiedad de un aliado SIGUE sin publicarse aunque se apruebe a mano", async () => {
+  señalParaAprobar = señalCallada({ matches: [matchBueno({ puntaje: 90, fuente: "aliado", link: null })] });
+  grupoParaAprobar = grupoHabilitado();
+
+  const r = await vivo.aprobarManual({ id: "org-1" }, "sig-callada");
+  assert.strictEqual(r.resultado, "sin_propiedades_publicables");
+  assert.strictEqual(enviadosManual.length, 0);
+});
+
 test("aprobarManual: si el inventario ya no pasa la compuerta, no publica ninguna candidata vieja", async () => {
   // El precio $0 es exactamente el bug que src/groups/publicable.js existe
   // para atajar: si el dato cambio desde que llego el pedido, se revalida.

@@ -288,7 +288,7 @@ const COMMAND_TOOL_DEFINITIONS = [
   {
     name: "aprobar_pedido_radar",
     description:
-      "Aprueba manualmente un pedido del radar que quedo CALLADO (respuesta.salio=false en trazabilidad_radar) y lo publica DIRECTO en el grupo, igual que si hubiera salido en modo automatico. Usala cuando el admin diga 'aprueba ese', 'mandalo igual', 'publica esa propiedad', 'respondele a X' sobre un pedido que el radar no contesto solo. Vuelve a validar la calidad de los datos en el momento (precio, link, sync del inventario) — si algo ya no pasa, te va a decir por que en vez de publicar cualquier cosa. Si hay varios pedidos callados que coinciden con la descripcion, te los va a listar para que preguntes cual.",
+      "Aprueba manualmente un pedido del radar que quedo CALLADO (respuesta.salio=false en trazabilidad_radar) y lo publica DIRECTO en el grupo, igual que si hubiera salido en modo automatico. Usala cuando el admin diga 'aprueba ese', 'mandalo igual', 'publica esa propiedad', 'respondele a X' sobre un pedido que el radar no contesto solo. La aprobacion humana reemplaza el UMBRAL DE PUNTAJE (el motivo mas comun de callado, 'puntaje_bajo') — por eso sirve justo para los casos de zona vecina o puntaje limite que el admin decide que si valen la pena. NO reemplaza la calidad del dato: si es de la red de aliados, si la zona es la equivocada, si el link no abre o el sync esta viejo, te va a decir por que en vez de publicar cualquier cosa. Si hay varios pedidos callados que coinciden con la descripcion, te los va a listar para que preguntes cual.",
     input_schema: {
       type: "object",
       properties: {

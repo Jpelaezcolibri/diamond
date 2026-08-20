@@ -343,9 +343,21 @@ async function aprobarManual(org, signalId) {
   if (!grupo) return { resultado: "grupo_no_encontrado" };
   if (grupo.responde !== true) return { resultado: "grupo_no_habilitado" };
 
+  // BUG real (Juan, 2026-08-20): "aun no puedo enviar mensajes que el bot
+  // callo". La causa: esto seguia exigiendo el mismo umbral de puntaje (70)
+  // que el camino 100% automatico, asi que aprobar un pedido que se callo por
+  // "puntaje_bajo" volvia a chocar con la MISMA razon — la aprobacion humana
+  // no aprobaba nada. Un admin/asesor que ya miro el pedido y decide mandarlo
+  // esta reemplazando esa confianza, no un dato de calidad — por eso el
+  // umbral se apaga aca (umbral: 0) y NADA MAS: zona_no_publicable (nunca
+  // publicar el barrio equivocado), no_es_inventario_propio (nunca la
+  // propiedad de un aliado) y todos los motivos de dato corrupto (sin_ref,
+  // sin_precio, precio_fuera_de_rango, sync_viejo, etc.) siguen exactamente
+  // igual de duros — esos no son de confianza, son de seguridad y de dato.
   const inventario = await syncEstado.estadoDelInventario(org.id, {});
   const { publicables: candidatas, descartados } = publicable.filtrar(signal.matches || [], {
     syncFresco: inventario.fresco,
+    umbral: 0,
   });
   const { verificadas: publicables, rotas } = await verificarLink.verificar(candidatas);
   for (const r of rotas) descartados.push({ ref: r.ref, motivos: ["link_no_abre"] });
