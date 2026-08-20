@@ -347,18 +347,35 @@ function destinatarios(asesor) {
 async function avisarCercano(org, signal, mensaje, grupo, matches, descartados, publicables = []) {
   if (!RADAR_REVISOR_PHONE) return;
 
-  // Dos formas de llegar aca, unidas en una sola lista para Natalia:
+  // Tres formas de llegar aca, unidas en una sola lista para Natalia:
   //   1. publicables: match de calidad COMPLETA que no se publico solo
   //      porque el grupo todavia esta en modo escucha (responde=false) —
   //      nunca porque el puntaje o el dato fueran el problema.
   //   2. "cercanos": fallo SOLO por puntaje_bajo, con todo lo demas limpio.
-  // Si ADEMAS le falta un dato (sin_ref, sin_link_wasi) o es de zona
-  // equivocada o de un aliado, no es un "casi" — es un no real, y avisar
-  // igual solo generaria ruido.
+  //   3. "sin_barrio": fallo SOLO por zona_no_publicable, pero con
+  //      ubicacion:"ciudad" — el cliente no nombro ningun barrio (solo
+  //      "Medellin y area metropolitana"), asi que el motor no pudo graduar
+  //      mejor que "ciudad" ni el mejor match posible. Caso real (Juan,
+  //      2026-08-20 — pedido de Juanita Monsalve, ref 10013440 al 72%): esto
+  //      SE SALTABA los dos caminos justo como el de Regnum Realty que
+  //      motivo la norma de hoy — la diferencia con "otra_zona" es que ahi
+  //      SI sabemos que el barrio pedido no es ese (un no real); aca no hay
+  //      barrio pedido que comparar, es un "no sabemos" que Natalia si puede
+  //      resolver con una llamada.
+  //   Si ADEMAS le falta un dato (sin_ref, sin_link_wasi) o es de zona
+  //   EXPLICITAMENTE equivocada (otra_zona) o de un aliado, no es un "casi"
+  //   — es un no real, y avisar igual solo generaria ruido.
+  const motivoUnico = (d, motivo) => d.motivos.length === 1 && d.motivos[0] === motivo;
+  const matchDe = (d) => (matches || []).find((m) => String(m.ref) === String(d.ref));
   const cercanos = descartados
-    .filter((d) => d.motivos.length === 1 && d.motivos[0] === "puntaje_bajo")
-    .map((d) => (matches || []).find((m) => String(m.ref) === String(d.ref)))
+    .filter((d) => motivoUnico(d, "puntaje_bajo"))
+    .map(matchDe)
     .filter(Boolean);
+  const sinBarrio = descartados
+    .filter((d) => motivoUnico(d, "zona_no_publicable"))
+    .map(matchDe)
+    .filter((m) => m && m.ubicacion === "ciudad");
+  cercanos.push(...sinBarrio);
   const candidatas = [...publicables, ...cercanos];
   if (!candidatas.length) return;
 

@@ -683,6 +683,41 @@ test("avisarCercano: un match de CALIDAD COMPLETA en un grupo que solo escucha S
   assert.match(avisosCercanosEnviados[0].texto, /AP004/);
 });
 
+// Caso real (Juanita Monsalve, 2026-08-20): pedido "Medellín y área
+// metropolitana", sin barrio. El motor no puede graduar mejor que "ciudad"
+// (el grado mas debil, excluido de publicar aunque el puntaje sea alto), y
+// el pedido se saltaba los DOS caminos: no se publicaba solo (correcto, es
+// una zona sin confirmar) NI se avisaba a Natalia (el bug) — justo lo que la
+// norma de hoy vino a evitar. Distinto de "otra_zona" (ahi SI sabemos que el
+// barrio pedido no es ese, un no real): "ciudad" es un "no sabemos", y eso
+// Natalia si lo puede resolver con una llamada.
+test("avisarCercano: un match en 'ciudad' (el cliente no dio barrio) SI avisa al revisor", async () => {
+  process.env.RADAR_REVISOR_PHONE = "573001878024";
+  vivo = instalarDobles();
+  matchesDevueltos = [matchBueno({ puntaje: 72, ubicacion: "ciudad" })];
+
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "auto", ahora: MEDIODIA });
+
+  delete process.env.RADAR_REVISOR_PHONE;
+
+  assert.strictEqual(r.resultado, "callado");
+  assert.strictEqual(avisosCercanosEnviados.length, 1);
+  assert.match(avisosCercanosEnviados[0].texto, /AP004/);
+});
+
+test("avisarCercano: 'otra_zona' (barrio pedido y confirmado distinto) sigue SIN avisar, aunque el puntaje sea alto — es un no real, no un 'no sabemos'", async () => {
+  process.env.RADAR_REVISOR_PHONE = "573001878024";
+  vivo = instalarDobles();
+  // Mismo puntaje que el test de 'ciudad' de arriba, unico motivo distinto:
+  // aca SI sabemos que el barrio pedido no es ese.
+  matchesDevueltos = [matchBueno({ puntaje: 72, ubicacion: "otra_zona" })];
+
+  await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "auto", ahora: MEDIODIA });
+
+  delete process.env.RADAR_REVISOR_PHONE;
+  assert.strictEqual(avisosCercanosEnviados.length, 0);
+});
+
 test("avisarCercano: un grupo apagado sin ningun match limpio no genera ruido", async () => {
   process.env.RADAR_REVISOR_PHONE = "573001878024";
   vivo = instalarDobles();
