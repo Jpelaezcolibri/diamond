@@ -6,6 +6,12 @@ const command = require("../src/data/command");
 const properties = require("../src/data/properties");
 const allyProperties = require("../src/data/ally-properties");
 const radarTrazabilidad = require("../src/data/radar-trazabilidad");
+const groupSignals = require("../src/data/group-signals");
+const vivo = require("../src/groups/vivo");
+
+function adminScope() {
+  return Object.freeze({ orgId: "org-1", viewerUid: "admin-1", role: "admin", isAdmin: true });
+}
 
 function asesorScope() {
   return Object.freeze({ orgId: "org-1", viewerUid: "asesor-1", role: "asesor_ventas", isAdmin: false });
@@ -193,4 +199,62 @@ test("trazabilidad_radar: un limite explicito se respeta hasta el tope de 40", a
 
   await executeCommandTool("trazabilidad_radar", { limite: 999 }, { scope: asesorScope(), session: null });
   assert.strictEqual(opts.limite, 40, "no se puede pedir mas del tope real de la consulta");
+});
+
+// aprobar_pedido_radar (Juan, 2026-08-20): "que yo pueda aprobarlo de manera
+// manual dentro del chat de Sofi y que una vez aprobado se responda de
+// manera automatica".
+test("aprobar_pedido_radar: sin 'cual' pide que se especifique", async () => {
+  const out = await executeCommandTool("aprobar_pedido_radar", {}, { scope: adminScope(), session: null });
+  assert.match(out, /Decime cual/);
+});
+
+test("aprobar_pedido_radar: sin candidatos callados lo dice sin inventar", async (t) => {
+  t.mock.method(groupSignals, "calladosPendientes", async () => []);
+  const out = await executeCommandTool("aprobar_pedido_radar", { cual: "Camilo" }, { scope: adminScope(), session: null });
+  assert.match(out, /No hay ningun pedido callado/);
+});
+
+test("aprobar_pedido_radar: varios candidatos que coinciden piden desambiguar, no aprueban al azar", async (t) => {
+  t.mock.method(groupSignals, "calladosPendientes", async () => [
+    { id: "s1", autor_nombre: "Camilo Loaiza", texto_original: "busco en Envigado" },
+    { id: "s2", autor_nombre: "Camilo Perez", texto_original: "busco en Sabaneta" },
+  ]);
+  let llamado = false;
+  t.mock.method(vivo, "aprobarManual", async () => { llamado = true; return { resultado: "publicado" }; });
+
+  const out = await executeCommandTool("aprobar_pedido_radar", { cual: "Camilo" }, { scope: adminScope(), session: null });
+  assert.match(out, /Hay 2 pedidos callados/);
+  assert.strictEqual(llamado, false, "no puede aprobar ninguno hasta que se desambigue");
+});
+
+test("aprobar_pedido_radar: un solo match aprueba y publica de verdad, no lo simula", async (t) => {
+  t.mock.method(groupSignals, "calladosPendientes", async () => [
+    { id: "sig-99", autor_nombre: "Camilo Loaiza", texto_original: "busco en Envigado" },
+  ]);
+  let recibido = null;
+  t.mock.method(vivo, "aprobarManual", async (org, signalId) => {
+    recibido = { org, signalId };
+    return { resultado: "publicado", texto: "Hola Camilo...", grupo: "Pedidos Poblado/Envigado" };
+  });
+
+  const out = await executeCommandTool("aprobar_pedido_radar", { cual: "camilo loaiza" }, { scope: adminScope(), session: null });
+  assert.strictEqual(recibido.org.id, "org-1");
+  assert.strictEqual(recibido.signalId, "sig-99");
+  assert.match(out, /Pedidos Poblado\/Envigado/);
+  assert.match(out, /Hola Camilo/);
+});
+
+test("aprobar_pedido_radar: si ya no pasa la compuerta de calidad, dice por que en vez de fingir que salio", async (t) => {
+  t.mock.method(groupSignals, "calladosPendientes", async () => [
+    { id: "sig-99", autor_nombre: "Camilo", texto_original: "busco en Envigado" },
+  ]);
+  t.mock.method(vivo, "aprobarManual", async () => ({
+    resultado: "sin_propiedades_publicables",
+    descartados: [{ ref: "AP1", motivos: ["precio_fuera_de_rango"] }],
+  }));
+
+  const out = await executeCommandTool("aprobar_pedido_radar", { cual: "Camilo" }, { scope: adminScope(), session: null });
+  assert.match(out, /Ninguna de las candidatas pasa la compuerta de calidad/);
+  assert.match(out, /precio_fuera_de_rango/);
 });

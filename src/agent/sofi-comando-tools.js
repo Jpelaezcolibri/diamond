@@ -13,6 +13,7 @@ const organizations = require("../data/organizations");
 const mensajeAsesor = require("../lib/mensaje-asesor");
 const validarMensaje = require("../lib/validar-mensaje");
 const resumenEquipo = require("../groups/resumen-equipo");
+const vivo = require("../groups/vivo");
 
 const COMMAND_TOOL_DEFINITIONS = [
   {
@@ -284,6 +285,18 @@ const COMMAND_TOOL_DEFINITIONS = [
       required: ["asesor"],
     },
   },
+  {
+    name: "aprobar_pedido_radar",
+    description:
+      "Aprueba manualmente un pedido del radar que quedo CALLADO (respuesta.salio=false en trazabilidad_radar) y lo publica DIRECTO en el grupo, igual que si hubiera salido en modo automatico. Usala cuando el admin diga 'aprueba ese', 'mandalo igual', 'publica esa propiedad', 'respondele a X' sobre un pedido que el radar no contesto solo. Vuelve a validar la calidad de los datos en el momento (precio, link, sync del inventario) — si algo ya no pasa, te va a decir por que en vez de publicar cualquier cosa. Si hay varios pedidos callados que coinciden con la descripcion, te los va a listar para que preguntes cual.",
+    input_schema: {
+      type: "object",
+      properties: {
+        cual: { type: "string", description: "Colega, zona o parte del texto del pedido que el radar callo, para encontrarlo entre los pendientes de aprobar." },
+      },
+      required: ["cual"],
+    },
+  },
 ];
 
 // Tools que solo el admin puede usar — actuan sobre OTRA persona del equipo
@@ -297,6 +310,7 @@ const COMMAND_TOOL_DEFINITIONS = [
 // dia alguien llama executeCommandTool sin pasar por ese filtro.
 const ADMIN_ONLY_TOOLS = new Set([
   "registrar_resultado_radar", "enviar_whatsapp_equipo", "crear_recordatorio_equipo", "enviar_matches_pendientes_equipo",
+  "aprobar_pedido_radar",
 ]);
 
 function toolsForScope(scope) {
@@ -590,6 +604,8 @@ async function executeCommandTool(name, input, ctx) {
       return crearRecordatorioEquipo(input, ctx);
     case "enviar_matches_pendientes_equipo":
       return enviarMatchesPendientesEquipo(input, ctx);
+    case "aprobar_pedido_radar":
+      return aprobarPedidoRadarComando(input, ctx);
     default:
       return `Herramienta desconocida: ${name}`;
   }
@@ -794,6 +810,65 @@ async function enviarMatchesPendientesEquipo(input, ctx) {
   }
   const n = pendientes.length;
   return `Listo, le mande a ${asesor.name} el resumen de ${n} pedido${n > 1 ? "s" : ""} pendiente${n > 1 ? "s" : ""}.`;
+}
+
+// Aprobacion manual de un pedido que el radar callo (Juan, 2026-08-20): "que
+// yo pueda aprobarlo de manera manual dentro del chat de Sofi y que una vez
+// aprobado se responda de manera automatica". Reusa exactamente el mismo
+// motor de publicacion que el camino auto (src/groups/vivo.js#aprobarManual)
+// — la unica diferencia es que la politica de conducta (horario, confianza)
+// ya no aplica: la decision humana la reemplaza.
+async function aprobarPedidoRadarComando(input, ctx) {
+  const { scope } = ctx;
+  const q = String(input?.cual || "").trim();
+  if (!q) return "Decime cual pedido — colega, zona o parte del texto.";
+
+  let candidatos;
+  try {
+    candidatos = await groupSignals.calladosPendientes(scope.orgId, { dias: 3 });
+  } catch (e) {
+    return "No pude consultar los pedidos callados en este momento.";
+  }
+  if (candidatos.length === 0) return "No hay ningun pedido callado con candidatas en los ultimos 3 dias.";
+
+  const ql = q.toLowerCase();
+  const filtrados = candidatos.filter((s) =>
+    `${s.texto_original || ""} ${s.autor_nombre || ""}`.toLowerCase().includes(ql)
+  );
+  const lista = filtrados.length ? filtrados : candidatos;
+
+  if (lista.length > 1) {
+    const detalle = lista.slice(0, 5)
+      .map((s) => `- ${s.autor_nombre || "sin nombre"}: "${(s.texto_original || "").replace(/\s+/g, " ").slice(0, 80)}"`)
+      .join("\n");
+    return `Hay ${lista.length} pedidos callados que coinciden:\n${detalle}\n\nSe mas especifico (colega o zona) antes de aprobar.`;
+  }
+  if (filtrados.length === 0) {
+    return `No encuentro ningun pedido callado que coincida con "${q}".`;
+  }
+
+  const señal = lista[0];
+  const r = await vivo.aprobarManual({ id: scope.orgId }, señal.id);
+
+  switch (r.resultado) {
+    case "publicado":
+      return `Listo, aprobado y publicado en "${r.grupo}":\n\n${r.texto}`;
+    case "ya_respondida":
+      return "Ese pedido ya tenia una respuesta — no se puede aprobar de nuevo.";
+    case "grupo_no_habilitado":
+    case "grupo_no_encontrado":
+      return "Ese grupo ya no esta habilitado para responder — no se puede publicar ahi.";
+    case "sin_propiedades_publicables": {
+      const motivos = (r.descartados || []).map((d) => `Ref ${d.ref || "sin ref"} — ${d.motivos.join(", ")}`).join("\n");
+      return `Ninguna de las candidatas pasa la compuerta de calidad AHORA mismo (puede que el inventario haya cambiado desde que llego el pedido).${motivos ? `\n${motivos}` : ""}`;
+    }
+    case "sesion_ambigua":
+      return `No hay exactamente una sesion de WhatsApp activa (encontre ${r.cantidad}) — no se puede saber por cual linea publicar.`;
+    case "error_envio":
+      return `El envio fallo: ${r.error || "sin detalle"}.`;
+    default:
+      return `No se pudo aprobar (${r.resultado}).`;
+  }
 }
 
 module.exports = { COMMAND_TOOL_DEFINITIONS, executeCommandTool, toolsForScope };

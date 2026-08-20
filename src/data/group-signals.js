@@ -468,6 +468,76 @@ async function marcarRespondida(orgId, signalId, { texto, wamid = null, modo = "
 // trata el null como "no verificable" y NO responde. Es la direccion segura:
 // ante la duda, callar. Un cero optimista habilitaria a publicar sin limite
 // justo en el momento en que el sistema esta a ciegas.
+// Una señal por su id, con lo necesario para volver a intentar publicarla
+// (aprobacion manual, Juan 2026-08-20 — ver vivo.js#aprobarManual).
+async function obtenerPorId(orgId, signalId) {
+  if (!supabase) return memory.groupSignals?.find((s) => s.org_id === orgId && s.id === signalId) || null;
+  const { data, error } = await supabase
+    .from("group_signals")
+    .select("id, group_id, clase, matches, autor_nombre, texto_original, respondida_at")
+    .eq("org_id", orgId)
+    .eq("id", signalId)
+    .maybeSingle();
+  if (error) {
+    console.error("[grupos] No se pudo leer la señal:", error.message);
+    return null;
+  }
+  return data;
+}
+
+// Pedidos CALLADOS con al menos una candidata (asi Sofi solo los ofrece para
+// aprobar cuando de verdad hay algo que mandar, no cuando el motor no
+// encontro nada). Sirve para que el admin diga "aprueba el de Camilo" sin
+// tener que darle un id — se desambigua por texto, igual que
+// registrar_resultado_radar.
+async function calladosPendientes(orgId, { dias = 3, limite = 20 } = {}) {
+  if (!supabase) return [];
+  const desde = new Date(Date.now() - dias * 86400000).toISOString();
+  const { data, error } = await supabase
+    .from("group_signals")
+    .select("id, group_id, clase, matches, autor_nombre, texto_original, created_at, politica_motivo")
+    .eq("org_id", orgId)
+    .eq("origen", "vivo")
+    .eq("clase", "demanda")
+    .is("respondida_at", null)
+    .gte("created_at", desde)
+    .order("created_at", { ascending: false })
+    .limit(limite);
+  if (error) {
+    if (esColumnaFaltante(error)) return [];
+    console.error("[grupos] No se pudieron leer los callados pendientes:", error.message);
+    return [];
+  }
+  return (data || []).filter((s) => Array.isArray(s.matches) && s.matches.length > 0);
+}
+
+// Deja constancia de POR QUE el radar callo (o publico) en el camino
+// deterministico auto/sombra — lo que devolvio src/groups/politica.js#decidir.
+//
+// Bug real (Juan, 2026-08-20): sin esto, el motivo solo vivia en el feed del
+// admin (una serie de mensajes de chat). trazabilidad_radar no lo tenia, asi
+// que cuando preguntaban "por que no se envio esto", Sofi no podia leer la
+// razon real y terminaba inventando una. Best-effort: si falta la migracion,
+// se avisa una vez y el pipeline sigue — perder este dato de auditoria no
+// puede costar la oportunidad.
+async function guardarPolitica(orgId, signalId, { motivo = null, traza = [] } = {}) {
+  if (!supabase) return true;
+  const { error } = await supabase
+    .from("group_signals")
+    .update({ politica_motivo: motivo, politica_traza: traza, updated_at: new Date().toISOString() })
+    .eq("org_id", orgId)
+    .eq("id", signalId);
+  if (error) {
+    if (esColumnaFaltante(error)) {
+      console.error("[grupos] Falta la migracion 2026-08-20_radar_politica_motivo.sql: el motivo de la politica no se guarda.");
+    } else {
+      console.error("[grupos] No se pudo guardar el motivo de la politica:", error.message);
+    }
+    return false;
+  }
+  return true;
+}
+
 async function respuestasDesde(orgId, groupId, desdeIso) {
   if (!supabase) return { cantidad: 0, ultimaIso: null };
   const { data, error } = await supabase
@@ -493,6 +563,7 @@ module.exports = {
   create, list, setEstado, resumen, marcarEnviada, ultimaFechaImportada,
   pendientesDigest, marcarDigest, revertirDigest,
   marcarRespondida, respuestasDesde, guardarRevalidacion, marcarAvisoEnviado,
+  guardarPolitica, obtenerPorId, calladosPendientes,
   findByWamid, pendientesDeAviso, candidatosRecordatorio, claimRecordatorio,
   CLASES, ORIGENES, MODOS_RESPUESTA, _resetBlindaje,
 };

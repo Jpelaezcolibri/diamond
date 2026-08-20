@@ -44,6 +44,7 @@ const SEÑAL_BASE = {
   group_id: "grp-1", advisor_id: null, aviso_advisor_id: null, matches: [],
   revalidacion: null, enviado_at: null, estado: "nuevo", origen: "vivo",
   respondida_at: null, respuesta_texto: null, respuesta_modo: null, respuesta_refs: null,
+  politica_motivo: null, politica_traza: null,
 };
 
 test("una señal respondida en modo auto trae el texto EXACTO en respuesta.texto, no un resumen", async (t) => {
@@ -77,6 +78,34 @@ test("sin respondida_at, respuesta.salio es false — no se inventa un texto", a
 
   const r = await radarTrazabilidad.trazabilidad(SCOPE_ADMIN);
   assert.strictEqual(r.señales[0].respuesta.salio, false);
+});
+
+// Bug real (Juan, 2026-08-20): Camilo Loaiza tuvo un match del 100% y el
+// radar lo callo por fuera_de_horario (regla que ya no existe, pero
+// confianza_baja/sin_propiedades_publicables/etc. si). Ese motivo SOLO vivia
+// en el feed de chat del admin — Sofi no lo tenia y termino inventando una
+// razon. Este test protege que trazabilidad_radar lo exponga directo.
+test("un pedido callado trae el motivo REAL de la politica, no uno inventado", async (t) => {
+  t.mock.method(supabase, "from", mockPorTabla({
+    group_signals: {
+      data: [{ ...SEÑAL_BASE, politica_motivo: "confianza_baja", politica_traza: ["modo:auto", "grupo:habilitado"] }],
+      error: null,
+    },
+  }));
+
+  const r = await radarTrazabilidad.trazabilidad(SCOPE_ADMIN);
+  const s = r.señales[0];
+  assert.strictEqual(s.respuesta.salio, false);
+  assert.strictEqual(s.respuesta.motivo, "confianza_baja");
+});
+
+test("un pedido callado de ANTES de la migracion trae motivo null, no una razon inventada", async (t) => {
+  t.mock.method(supabase, "from", mockPorTabla({
+    group_signals: { data: [{ ...SEÑAL_BASE }], error: null },
+  }));
+
+  const r = await radarTrazabilidad.trazabilidad(SCOPE_ADMIN);
+  assert.strictEqual(r.señales[0].respuesta.motivo, null);
 });
 
 test("aviso (asistido) y respuesta (auto) son independientes: una señal puede tener uno sin el otro", async (t) => {

@@ -164,6 +164,16 @@ async function registrarGrupo(orgId, { jid, nombre = null }) {
   return data;
 }
 
+// Un grupo por su id — lo que necesita la aprobacion manual (Juan,
+// 2026-08-20) para saber a que jid publicarle sin traer la lista entera.
+async function obtenerGrupo(orgId, groupId) {
+  if (!supabase) return memory.whatsappGroups.find((g) => g.org_id === orgId && g.id === groupId) || null;
+  const { data, error } = await supabase
+    .from("whatsapp_groups").select("id, jid, nombre, responde, modo").eq("org_id", orgId).eq("id", groupId).maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
 async function listGroups(orgId) {
   if (!supabase) {
     return memory.whatsappGroups
@@ -316,7 +326,7 @@ async function whitelist(orgId) {
 
 module.exports = {
   upsertSession, listSessions, touchSession, sesionPorNombre,
-  registrarGrupo, listGroups, setModo, setResponde, importarGrupos,
+  registrarGrupo, listGroups, obtenerGrupo, setModo, setResponde, importarGrupos,
   asegurarGrupoVirtual, jidVirtual, slug,
   whitelist, invalidar,
 };

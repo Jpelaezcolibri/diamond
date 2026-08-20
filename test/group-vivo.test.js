@@ -22,6 +22,13 @@ let crucesLeads = [];
 let inventario = { fresco: true, iso: new Date().toISOString(), horas: 1 };
 let linksAbren = true;
 let feedRegistrado = [];
+let politicasGuardadas = [];
+// Dobles para vivo.aprobarManual (Juan, 2026-08-20).
+let señalParaAprobar = null;
+let grupoParaAprobar = null;
+let sesionesActivas = [{ nombre: "RADA-NATALIA", estado: "activa" }];
+let envioResultado = { ok: true, wamid: "wm-aprobado" };
+let enviadosManual = [];
 
 function instalarDobles() {
   require.cache[RUTA("groups/classify.js")] = {
@@ -75,6 +82,22 @@ function instalarDobles() {
     exports: {
       respuestasDesde: async () => respuestasRecientes,
       marcarRespondida: async (orgId, id, datos) => { marcadas.push({ id, ...datos }); return true; },
+      guardarPolitica: async (orgId, id, datos) => { politicasGuardadas.push({ id, ...datos }); return true; },
+      obtenerPorId: async () => señalParaAprobar,
+    },
+  };
+  require.cache[RUTA("data/whatsapp-groups.js")] = {
+    exports: {
+      obtenerGrupo: async () => grupoParaAprobar,
+      listSessions: async () => sesionesActivas,
+    },
+  };
+  require.cache[RUTA("lib/waha.js")] = {
+    exports: {
+      enviarTexto: async (sesion, chatId, texto) => {
+        enviadosManual.push({ sesion, chatId, texto });
+        return envioResultado;
+      },
     },
   };
   require.cache[RUTA("data/organizations.js")] = {
@@ -137,11 +160,17 @@ beforeEach(() => {
   señalCreada = null;
   respuestasRecientes = { cantidad: 0, ultimaIso: null };
   marcadas = [];
+  politicasGuardadas = [];
   ofertasGuardadas = [];
   crucesLeads = [];
   inventario = { fresco: true, iso: new Date().toISOString(), horas: 1 };
   linksAbren = true;
   feedRegistrado = [];
+  señalParaAprobar = null;
+  grupoParaAprobar = null;
+  sesionesActivas = [{ nombre: "RADA-NATALIA", estado: "activa" }];
+  envioResultado = { ok: true, wamid: "wm-aprobado" };
+  enviadosManual = [];
   vivo = instalarDobles();
 });
 
@@ -337,13 +366,14 @@ test("si el envio falla, no se registra como publicada", async () => {
   assert.deepStrictEqual(marcadas, []);
 });
 
-test("fuera de horario se guarda la senal pero no se publica", async () => {
+test("SIN restriccion de horario (Juan, 2026-08-20): publica igual a las 3am que a mediodia", async () => {
+  const enviados = [];
   const r = await vivo.procesarMensaje(ORG, mensaje(), {
-    grupo: GRUPO, modo: "auto", ahora: new Date("2026-08-17T08:00:00Z"),
-    enviar: async () => ({ ok: true }),
+    grupo: GRUPO, modo: "auto", ahora: new Date("2026-08-17T08:00:00Z"), // 03:00 Colombia
+    enviar: async (t) => { enviados.push(t); return { ok: true, wamid: "w" }; },
   });
-  assert.strictEqual(r.motivo, "fuera_de_horario");
-  assert.ok(señalCreada);
+  assert.strictEqual(r.resultado, "publicado");
+  assert.strictEqual(enviados.length, 1);
 });
 
 // Pedido de Juan, 2026-08-19: en el camino determinista (auto/sombra) los
@@ -359,6 +389,21 @@ test("un pedido callado en modo auto queda registrado en el feed del admin", asy
   assert.strictEqual(feedRegistrado[0].resultado, "callado");
   assert.strictEqual(feedRegistrado[0].señal.autor_nombre, "Patricia Gomez");
   assert.strictEqual(feedRegistrado[0].detalle.descartados.length, 1);
+});
+
+// Bug real (Juan, 2026-08-20): el motivo de un callado solo quedaba en el
+// feed de chat del admin — trazabilidad_radar no lo tenia, y Sofi terminaba
+// inventando una razon cuando le preguntaban "por que no se envio esto".
+test("un pedido callado guarda el motivo REAL en la señal misma, no solo en el feed", async () => {
+  matchesDevueltos = [matchBueno({ precio: "$0" })];
+  const r = await vivo.procesarMensaje(ORG, mensaje(), {
+    grupo: GRUPO, modo: "auto", ahora: MEDIODIA, enviar: async () => ({ ok: true }),
+  });
+  assert.strictEqual(r.resultado, "callado");
+  assert.strictEqual(politicasGuardadas.length, 1);
+  assert.strictEqual(politicasGuardadas[0].id, "sig-1");
+  assert.strictEqual(politicasGuardadas[0].motivo, "sin_propiedades_publicables");
+  assert.ok(Array.isArray(politicasGuardadas[0].traza));
 });
 
 test("un pedido publicado en modo auto tambien queda en el feed del admin", async () => {
@@ -383,4 +428,85 @@ test("marcarRespondida guarda los refs que quedaron dentro del mensaje, no todos
     grupo: GRUPO, modo: "auto", ahora: MEDIODIA, enviar: async () => ({ ok: true, wamid: "w" }),
   });
   assert.deepStrictEqual(marcadas[0].refs, ["AP004"]);
+});
+
+// ── aprobarManual: "que yo pueda aprobarlo de manera manual dentro del chat
+// de Sofi y que una vez aprobado se responda de manera automatica" (Juan,
+// 2026-08-20). Corre la misma compuerta y el mismo envio que el camino auto,
+// pero SIN pasar por politica.decidir — la aprobacion humana la reemplaza.
+
+function señalCallada(extra = {}) {
+  return {
+    id: "sig-callada", group_id: "grp-1", clase: "demanda",
+    autor_nombre: "Camilo", texto_original: "busco apto", respondida_at: null,
+    matches: [matchBueno()], ...extra,
+  };
+}
+
+function grupoHabilitado(extra = {}) {
+  return { id: "grp-1", jid: "vivo:gremial", nombre: "Gremial", responde: true, ...extra };
+}
+
+test("aprobarManual: publica el pedido callado y lo marca respondido", async () => {
+  señalParaAprobar = señalCallada();
+  grupoParaAprobar = grupoHabilitado();
+
+  const r = await vivo.aprobarManual({ id: "org-1" }, "sig-callada");
+
+  assert.strictEqual(r.resultado, "publicado");
+  assert.strictEqual(enviadosManual.length, 1);
+  assert.strictEqual(enviadosManual[0].sesion, "RADA-NATALIA");
+  assert.strictEqual(enviadosManual[0].chatId, "vivo:gremial");
+  assert.strictEqual(marcadas.length, 1);
+  assert.strictEqual(marcadas[0].modo, "auto");
+});
+
+test("aprobarManual: una señal ya respondida no se vuelve a publicar", async () => {
+  señalParaAprobar = señalCallada({ respondida_at: "2026-08-20T12:00:00Z" });
+  grupoParaAprobar = grupoHabilitado();
+
+  const r = await vivo.aprobarManual({ id: "org-1" }, "sig-callada");
+  assert.strictEqual(r.resultado, "ya_respondida");
+  assert.strictEqual(enviadosManual.length, 0);
+});
+
+test("aprobarManual: un grupo sin permiso de responder no publica", async () => {
+  señalParaAprobar = señalCallada();
+  grupoParaAprobar = grupoHabilitado({ responde: false });
+
+  const r = await vivo.aprobarManual({ id: "org-1" }, "sig-callada");
+  assert.strictEqual(r.resultado, "grupo_no_habilitado");
+  assert.strictEqual(enviadosManual.length, 0);
+});
+
+test("aprobarManual: si el inventario ya no pasa la compuerta, no publica ninguna candidata vieja", async () => {
+  // El precio $0 es exactamente el bug que src/groups/publicable.js existe
+  // para atajar: si el dato cambio desde que llego el pedido, se revalida.
+  señalParaAprobar = señalCallada({ matches: [matchBueno({ precio: "$0" })] });
+  grupoParaAprobar = grupoHabilitado();
+
+  const r = await vivo.aprobarManual({ id: "org-1" }, "sig-callada");
+  assert.strictEqual(r.resultado, "sin_propiedades_publicables");
+  assert.strictEqual(enviadosManual.length, 0);
+});
+
+test("aprobarManual: sin exactamente una sesion activa, falla cerrado en vez de adivinar", async () => {
+  señalParaAprobar = señalCallada();
+  grupoParaAprobar = grupoHabilitado();
+  sesionesActivas = [];
+
+  const r = await vivo.aprobarManual({ id: "org-1" }, "sig-callada");
+  assert.strictEqual(r.resultado, "sesion_ambigua");
+  assert.strictEqual(r.cantidad, 0);
+  assert.strictEqual(enviadosManual.length, 0);
+});
+
+test("aprobarManual: si el envio falla, no se marca como respondida", async () => {
+  señalParaAprobar = señalCallada();
+  grupoParaAprobar = grupoHabilitado();
+  envioResultado = { ok: false, error: "sesion caida" };
+
+  const r = await vivo.aprobarManual({ id: "org-1" }, "sig-callada");
+  assert.strictEqual(r.resultado, "error_envio");
+  assert.strictEqual(marcadas.length, 0);
 });

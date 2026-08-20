@@ -33,6 +33,8 @@ const redactar = require("./redactar");
 const groupSignals = require("../data/group-signals");
 const organizations = require("../data/organizations");
 const syncEstado = require("../data/sync-estado");
+const whatsappGroups = require("../data/whatsapp-groups");
+const waha = require("../lib/waha");
 // Se importa el MODULO y no la funcion suelta: destructurar congela la
 // referencia y deja los tests sin forma de mockear el envio.
 const canalWhatsapp = require("../channels/whatsapp");
@@ -166,6 +168,10 @@ async function procesarMensaje(org, mensaje, { grupo, modo = "sombra", enviar = 
 
   if (!decision.publicar) {
     await avisarFeed("callado");
+    // Guardado en la senal misma, no solo en el feed de chat: sin esto, "por
+    // que no se envio X" solo se podia responder buscando a mano entre los
+    // mensajes del feed — y Sofi, sin ese cruce, terminaba inventando un motivo.
+    await groupSignals.guardarPolitica(org.id, signal.id, { motivo: decision.motivo, traza: decision.traza }).catch(() => {});
     return { resultado: "callado", motivo: decision.motivo, traza: decision.traza, descartados, signalId: signal && signal.id };
   }
 
@@ -316,4 +322,53 @@ function destinatarios(asesor) {
   return [...new Set([...base, ...extra])];
 }
 
-module.exports = { procesarMensaje, idEnVivo, asistir, destinatarios, VENTANA_LIMITE_HORAS };
+// Aprobacion manual de un pedido que el radar callo (Juan, 2026-08-20): "que
+// yo pueda aprobarlo de manera manual dentro del chat de Sofi y que una vez
+// aprobado se responda de manera automatica". Corre EXACTAMENTE la misma
+// compuerta de calidad y el mismo envio que el camino auto — la unica
+// diferencia es que la politica de conducta (horario, confianza, etc.) ya no
+// aplica: un admin que dice "mandalo" es una decision humana, no necesita que
+// politica.decidir lo confirme otra vez.
+//
+// Se recalcula publicable.filtrar/verificarLink con el estado ACTUAL del
+// inventario, no con lo que se veia cuando llego el mensaje: si el sync se
+// detuvo o la propiedad se vendio desde entonces, sigue sin publicarse.
+async function aprobarManual(org, signalId) {
+  const signal = await groupSignals.obtenerPorId(org.id, signalId);
+  if (!signal) return { resultado: "no_encontrada" };
+  if (signal.respondida_at) return { resultado: "ya_respondida" };
+  if (signal.clase !== "demanda") return { resultado: "no_es_demanda" };
+
+  const grupo = await whatsappGroups.obtenerGrupo(org.id, signal.group_id);
+  if (!grupo) return { resultado: "grupo_no_encontrado" };
+  if (grupo.responde !== true) return { resultado: "grupo_no_habilitado" };
+
+  const inventario = await syncEstado.estadoDelInventario(org.id, {});
+  const { publicables: candidatas, descartados } = publicable.filtrar(signal.matches || [], {
+    syncFresco: inventario.fresco,
+  });
+  const { verificadas: publicables, rotas } = await verificarLink.verificar(candidatas);
+  for (const r of rotas) descartados.push({ ref: r.ref, motivos: ["link_no_abre"] });
+
+  if (!publicables.length) return { resultado: "sin_propiedades_publicables", descartados };
+
+  const texto = redactar.mensajeGrupo({ autor_nombre: signal.autor_nombre }, publicables);
+  if (!texto) return { resultado: "sin_texto" };
+
+  // Una sola sesion vinculada por org en este piloto (Juan, 2026-08-16): si
+  // manana hay mas de una, esto se vuelve ambiguo a proposito — falla cerrado
+  // en vez de adivinar por cual linea publicar.
+  const sesiones = await whatsappGroups.listSessions(org.id);
+  const activas = sesiones.filter((s) => s.estado === "activa");
+  if (activas.length !== 1) return { resultado: "sesion_ambigua", cantidad: activas.length };
+
+  const envio = await waha.enviarTexto(activas[0].nombre, grupo.jid, texto);
+  if (!envio || !envio.ok) return { resultado: "error_envio", error: envio && envio.error };
+
+  const refs = publicables.map((m) => m.ref).filter(Boolean);
+  await groupSignals.marcarRespondida(org.id, signal.id, { texto, wamid: envio.wamid, modo: "auto", refs });
+
+  return { resultado: "publicado", texto, wamid: envio.wamid, publicables, grupo: grupo.nombre || grupo.jid };
+}
+
+module.exports = { procesarMensaje, idEnVivo, asistir, destinatarios, aprobarManual, VENTANA_LIMITE_HORAS };

@@ -61,38 +61,39 @@ async function trazabilidad(scope, { dias = 7, soloConAviso = false, limite = MA
   // grupo, ni el texto exacto que publico — cuando el admin pedia "el mensaje
   // completo", Sofi no tenia de donde sacarlo y terminaba pidiendole que lo
   // copiara a mano del grupo.
-  const CAMPOS = "id, created_at, fecha_mensaje, clase, texto_original, autor_nombre, autor_telefono, group_id, advisor_id, aviso_advisor_id, matches, revalidacion, enviado_at, respondida_at, respuesta_texto, respuesta_modo, respuesta_refs, estado, origen";
+  // politica_motivo/politica_traza (migracion 2026-08-20): por que el radar
+  // callo en el camino auto/sombra. Antes ese motivo SOLO vivia en el feed de
+  // chat del admin — trazabilidad_radar no lo tenia, y al preguntar "por que
+  // no se envio esto" Sofi no podia leer la razon real y terminaba
+  // inventando una (confundio "auto" con "asistido" y aseguro que el grupo
+  // no tenia la configuracion activa, cuando el modo es de toda la org).
+  const BASE = "id, created_at, fecha_mensaje, clase, texto_original, autor_nombre, autor_telefono, group_id, advisor_id, matches, revalidacion, enviado_at, respondida_at, respuesta_texto, respuesta_modo, respuesta_refs, estado, origen";
+  const CON_AVISO_ADVISOR = `${BASE}, aviso_advisor_id`;
+  const CON_POLITICA = `${BASE}, politica_motivo, politica_traza`;
+  const COMPLETO = `${BASE}, aviso_advisor_id, politica_motivo, politica_traza`;
 
-  let q = supabase
-    .from("group_signals")
-    .select(CAMPOS)
-    .eq("org_id", scope.orgId)
-    .eq("origen", "vivo")
-    .gte("created_at", desde)
-    .order("created_at", { ascending: false })
-    .limit(Math.min(limite, MAX_FILAS));
-
-  // Un asesor solo ve lo suyo. El admin ve todo: es informacion de la operacion.
-  if (!scope.isAdmin) q = q.eq("advisor_id", scope.viewerUid);
-  if (soloConAviso) q = q.not("enviado_at", "is", null);
-
-  let { data, error } = await q;
-  if (error && esColumnaFaltante(error)) {
-    // Fallback SIN aviso_advisor_id (la migracion de destinatario del aviso
-    // asistido) — respondida_at/respuesta_* son mas viejas y ya deberian
-    // existir siempre, asi que no llevan su propio nivel de fallback.
-    const CAMPOS_SIN_AVISO_ADVISOR = "id, created_at, fecha_mensaje, clase, texto_original, autor_nombre, autor_telefono, group_id, advisor_id, matches, revalidacion, enviado_at, respondida_at, respuesta_texto, respuesta_modo, respuesta_refs, estado, origen";
-    let q2 = supabase
+  function armarQuery(campos) {
+    let q = supabase
       .from("group_signals")
-      .select(CAMPOS_SIN_AVISO_ADVISOR)
+      .select(campos)
       .eq("org_id", scope.orgId)
       .eq("origen", "vivo")
       .gte("created_at", desde)
       .order("created_at", { ascending: false })
       .limit(Math.min(limite, MAX_FILAS));
-    if (!scope.isAdmin) q2 = q2.eq("advisor_id", scope.viewerUid);
-    if (soloConAviso) q2 = q2.not("enviado_at", "is", null);
-    ({ data, error } = await q2);
+    if (!scope.isAdmin) q = q.eq("advisor_id", scope.viewerUid);
+    if (soloConAviso) q = q.not("enviado_at", "is", null);
+    return q;
+  }
+
+  // Dos migraciones pueden faltar de forma independiente (2026-08-18 y
+  // 2026-08-20), asi que se prueba de la mas completa a la mas vieja en vez
+  // de un solo fallback — un solo nivel se rompia entero si faltaba
+  // cualquiera de las dos que no fuera exactamente la que ese nivel asumia.
+  let data, error;
+  for (const campos of [COMPLETO, CON_AVISO_ADVISOR, CON_POLITICA, BASE]) {
+    ({ data, error } = await armarQuery(campos));
+    if (!error || !esColumnaFaltante(error)) break;
   }
   if (error) {
     // Si falta la migracion del modo asistido, se dice en vez de fallar: el
@@ -180,6 +181,12 @@ async function trazabilidad(scope, { dias = 7, soloConAviso = false, limite = MA
       // tener uno, el otro, los dos o ninguno segun el modo con el que se
       // proceso. `texto` es el texto EXACTO publicado, no un resumen: es lo
       // que hay que dar si preguntan "que mensaje mando el bot".
+      // `motivo` (solo cuando salio=false) es el veredicto REAL de
+      // politica.decidir — confianza_baja, sin_propiedades_publicables, etc.
+      // Es la razon autoritativa de por que el radar se callo en modo
+      // auto/sombra: no hay que adivinarla ni reconstruirla del feed de chat.
+      // Null significa que la señal es anterior a la migracion 2026-08-20, no
+      // que no se sepa el motivo.
       respuesta: s.respondida_at
         ? {
             salio: true,
@@ -188,7 +195,7 @@ async function trazabilidad(scope, { dias = 7, soloConAviso = false, limite = MA
             texto: s.respuesta_texto || null,
             refs: s.respuesta_refs || [],
           }
-        : { salio: false },
+        : { salio: false, motivo: s.politica_motivo || null },
       resultado: ultimoEvento.get(s.id) || null,
     };
   });
