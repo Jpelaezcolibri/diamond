@@ -49,8 +49,10 @@ const formato = require("../lib/formato");
 // no hay todavia un lugar unico de donde leerlo en el backend, asi que se
 // declara aca con el mismo valor. Configurable para no tener que redesplegar
 // si cambia.
+//
+// Sin ?text= (Juan, 2026-08-20): el mensaje precargado hacia el link larguisimo
+// e ilegible en el chat. Se prefiere el wa.me limpio, sin abrir con un texto.
 const SOFI_WHATSAPP_NUMBER = process.env.SOFI_WHATSAPP_NUMBER || "573044653609";
-const SOFI_WHATSAPP_MENSAJE = "Hola, vi una propiedad en el grupo y quiero mas informacion o propiedades similares";
 
 // SIN TOPE (Juan, 2026-08-20): "que no se restrinja a 3, que se envien los
 // que tengan un scoring alto" — se manda TODO lo que ya paso la compuerta de
@@ -152,7 +154,7 @@ function mensajeGrupo(senal, publicables, { maxPropiedades = MAX_PROPIEDADES } =
     // colega identifica a quien responder por el numero de WhatsApp que
     // publico esto en el grupo, no por un nombre o link en el texto.
     "— Sofi, asistente virtual",
-    `Mas informacion o propiedades similares: https://wa.me/${SOFI_WHATSAPP_NUMBER}?text=${encodeURIComponent(SOFI_WHATSAPP_MENSAJE)}`,
+    `Mas informacion o propiedades similares: https://wa.me/${SOFI_WHATSAPP_NUMBER}`,
   ];
 
   return [encabezado, "", bloques.join("\n\n"), "", cierre.join("\n")].join("\n");
