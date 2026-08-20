@@ -135,7 +135,10 @@ test("los motivos se acumulan — una pasada audita todo el dato", () => {
   assert.ok(v.motivos.includes("no_es_inventario_propio"));
 });
 
-test("filtrar devuelve las 3 mejores y explica cada descarte", () => {
+// SIN TOPE por defecto (Juan, 2026-08-20): "que no se restrinja a 3, que se
+// envien los que tengan un scoring alto" — filtrar() manda TODO lo que pasa
+// la compuerta, ordenado de mejor a peor, y solo la calidad decide cuantas.
+test("filtrar devuelve TODAS las que pasan la compuerta, ordenadas por puntaje, y explica cada descarte", () => {
   const entrada = [
     matchBueno({ ref: "A", puntaje: 82 }),
     matchBueno({ ref: "B", puntaje: 95 }),
@@ -145,8 +148,18 @@ test("filtrar devuelve las 3 mejores y explica cada descarte", () => {
   ];
   const { publicables, descartados } = publicable.filtrar(entrada);
 
-  assert.deepStrictEqual(publicables.map((m) => m.ref), ["B", "D", "C"]);
+  assert.deepStrictEqual(publicables.map((m) => m.ref), ["B", "D", "C", "A"]);
   assert.deepStrictEqual(descartados, [{ ref: "E", motivos: ["sin_precio"] }]);
+});
+
+test("un limite explicito SI se respeta — el default es sin tope, no la unica opcion", () => {
+  const entrada = [
+    matchBueno({ ref: "A", puntaje: 82 }),
+    matchBueno({ ref: "B", puntaje: 95 }),
+    matchBueno({ ref: "C", puntaje: 88 }),
+  ];
+  const { publicables } = publicable.filtrar(entrada, { limite: 2 });
+  assert.deepStrictEqual(publicables.map((m) => m.ref), ["B", "C"]);
 });
 
 test("si nada pasa la compuerta, la lista queda vacia y no se responde", () => {

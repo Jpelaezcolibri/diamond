@@ -159,6 +159,16 @@ test("las razones dicen POR QUE calza: zona, valor y las demás variables", () =
   assert.match(texto, /estrato 5/);
 });
 
+// FICHA COMPLETA (Juan, 2026-08-20): banos/garajes/estrato ahora viajan en el
+// match para que redactar.js los pueda mostrar — antes solo influian el
+// puntaje, no salian en el objeto.
+test("banos, garajes y estrato viajan en el match, no solo en el puntaje", () => {
+  const m = evaluarCandidata(apto(), pide(), "diamond");
+  assert.strictEqual(m.banos, 2);
+  assert.strictEqual(m.garajes, 1);
+  assert.strictEqual(m.estrato, 5);
+});
+
 test("BUG: el precio es una banda, no sólo un techo", () => {
   // A un cliente con $600M no se le ofrece uno de $150M: cabe en el
   // presupuesto y no es lo que busca.

@@ -38,7 +38,13 @@
 
 const formato = require("../lib/formato");
 
-const MAX_PROPIEDADES = 3;
+// SIN TOPE (Juan, 2026-08-20): "que no se restrinja a 3, que se envien los
+// que tengan un scoring alto" — se manda TODO lo que ya paso la compuerta de
+// calidad de src/groups/publicable.js (puntaje >= umbral, zona exacta o
+// vecina, datos limpios). Esa compuerta es la que de verdad decide "esto es
+// bueno", no un limite fijo de cantidad. Se deja el parametro por si algun
+// dia hace falta acotar de nuevo, pero el default ya no trunca.
+const MAX_PROPIEDADES = Infinity;
 
 function primerNombre(nombre) {
   const limpio = String(nombre || "").trim();
@@ -70,7 +76,8 @@ function tituloUtil(match) {
   return titulo;
 }
 
-// Una propiedad, en cuatro lineas: titulo / ref+operacion+zona / medidas+precio / link.
+// Ficha completa (Juan, 2026-08-20): titulo / ref+operacion+zona /
+// medidas+precio / banos+garajes+estrato (si el inventario los tiene) / link.
 //
 // El link es linkWasi (no `link`) — ver la nota de "MENSAJE BLANQUEADO" arriba.
 // publicable.js ya garantizo que existe (motivo sin_link_wasi) antes de que
@@ -90,7 +97,21 @@ function ficha(match, indice) {
     .filter(Boolean)
     .join(" · ");
 
-  return [`${indice}) ${titulo}`, `   ${identidad}`, `   ${medidas}`, `   ${match.linkWasi}`].join("\n");
+  // Solo si el inventario los tiene: un hueco de sync no se disfraza de "0
+  // baños" o "estrato 0", que es peor que no decir nada (ver la misma regla
+  // en las exigencias de match.js).
+  const detalles = [
+    formato.pluralizar(match.banos, "baño", "baños"),
+    formato.pluralizar(match.garajes, "garaje"),
+    match.estrato > 0 ? `estrato ${match.estrato}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  const lineas = [`${indice}) ${titulo}`, `   ${identidad}`, `   ${medidas}`];
+  if (detalles) lineas.push(`   ${detalles}`);
+  lineas.push(`   ${match.linkWasi}`);
+  return lineas.join("\n");
 }
 
 // Devuelve el texto listo para publicar, o null si no hay nada que decir.

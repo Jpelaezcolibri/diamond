@@ -42,6 +42,20 @@ test("el mensaje trae ref, operacion, zona, medidas y precio", () => {
   assert.ok(texto.includes("62 m² · 2 alcobas · $395.000.000"));
 });
 
+// FICHA COMPLETA (Juan, 2026-08-20): banos, garajes y estrato ahora salen en
+// el mensaje cuando el inventario los tiene.
+test("la ficha muestra banos, garajes y estrato cuando el inventario los tiene", () => {
+  const texto = redactar.mensajeGrupo({ autor_nombre: "Ana" }, [match({ banos: 2, garajes: 1, estrato: 5 })]);
+  assert.ok(texto.includes("2 baños · 1 garaje · estrato 5"));
+});
+
+test("sin esos datos en el inventario, la ficha no inventa una linea vacia", () => {
+  const texto = redactar.mensajeGrupo({ autor_nombre: "Ana" }, [match()]);
+  assert.ok(!texto.includes("baño"));
+  assert.ok(!texto.includes("garaje"));
+  assert.ok(!texto.includes("estrato"));
+});
+
 test("el link es el de Wasi, NUNCA el propio — es lo opuesto de la regla en todos los demas mensajes", () => {
   const texto = redactar.mensajeGrupo({ autor_nombre: "Ana" }, [match()]);
   assert.ok(texto.includes("https://info.wasi.co/apartamento-venta-envigado-centro/9744456"));
@@ -54,14 +68,28 @@ test("una sola opcion no se anuncia en plural", () => {
   assert.ok(!texto.includes("opciones"));
 });
 
-test("se publican maximo 3 propiedades aunque lleguen mas", () => {
+// SIN TOPE (Juan, 2026-08-20): "que no se restrinja a 3, que se envien los
+// que tengan un scoring alto" — mensajeGrupo ya no trunca por su cuenta. La
+// cantidad la decide publicable.js (compuerta de calidad), no un numero fijo
+// aca. El parametro maxPropiedades sigue existiendo por si algun dia hace
+// falta acotar de nuevo.
+test("se publican TODAS las propiedades que llegan, sin tope por defecto", () => {
   const cinco = ["A", "B", "C", "D", "E"].map((ref) => match({ ref }));
   const texto = redactar.mensajeGrupo({ autor_nombre: "Ana" }, cinco);
 
-  assert.ok(texto.includes("Tengo 3 opciones"));
+  assert.ok(texto.includes("Tengo 5 opciones"));
   assert.ok(texto.includes("Ref A"));
-  assert.ok(texto.includes("Ref C"));
-  assert.ok(!texto.includes("Ref D"), "la cuarta propiedad no debe aparecer");
+  assert.ok(texto.includes("Ref D"));
+  assert.ok(texto.includes("Ref E"));
+  assert.deepStrictEqual(texto.match(/^\d\) /gm).length, 5);
+});
+
+test("un maxPropiedades explicito SI se respeta — el default es sin tope, no la unica opcion", () => {
+  const cinco = ["A", "B", "C", "D", "E"].map((ref) => match({ ref }));
+  const texto = redactar.mensajeGrupo({ autor_nombre: "Ana" }, cinco, { maxPropiedades: 3 });
+
+  assert.ok(texto.includes("Tengo 3 opciones"));
+  assert.ok(!texto.includes("Ref D"));
   assert.deepStrictEqual(texto.match(/^\d\) /gm).length, 3);
 });
 

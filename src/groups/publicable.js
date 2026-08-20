@@ -131,8 +131,15 @@ function esPublicable(match, { umbral = UMBRAL_DEFAULT, syncFresco = true, refsB
 // Filtra una lista de matches y devuelve los publicables (ya ordenados por
 // puntaje) mas el detalle de los descartes, que sirve para auditar por que un
 // pedido no se respondio.
+//
+// SIN TOPE por defecto (Juan, 2026-08-20): antes se cortaba en 3 aca mismo,
+// antes de que redactar.js pudiera decidir nada. Ahora se manda TODO lo que
+// paso la compuerta de calidad — es ella la que decide "esto es bueno", no
+// un limite fijo de cantidad. `matches` ya viene acotado a 6 candidatas desde
+// match.js#cruzarDemanda, asi que el techo real sigue existiendo, solo que
+// no es un numero arbitrario despues de filtrar por calidad.
 function filtrar(matches, opciones = {}) {
-  const limite = opciones.limite || 3;
+  const limite = opciones.limite || Infinity;
   const publicables = [];
   const descartados = [];
 

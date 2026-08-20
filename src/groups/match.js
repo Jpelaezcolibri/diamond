@@ -328,6 +328,11 @@ function evaluarCandidata(p, c, fuente) {
     linkWasi: fuente === "diamond" ? p.linkWasi || null : null,
     habitaciones: p.habitaciones ?? null,
     area: p.area || null,
+    // Ficha completa (Juan, 2026-08-20): antes no viajaban porque el mensaje
+    // no los mostraba — ahora si, asi que tienen que salir de aca.
+    banos: p.banos ?? null,
+    garajes: p.garaje ?? null,
+    estrato: p.estrato ?? null,
     puntaje: Math.min(100, puntaje),
     // Como calzo la ubicacion: exacta | vecina | otra_zona | ciudad. Sofi lo
     // usa para razonar y publicable.js para decidir si puede salir al grupo.
