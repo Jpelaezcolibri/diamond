@@ -93,12 +93,18 @@ test("un maxPropiedades explicito SI se respeta — el default es sin tope, no l
   assert.deepStrictEqual(texto.match(/^\d\) /gm).length, 3);
 });
 
-test("no deriva a ninguna asesora — el mensaje no lleva nombre ni contacto de nadie de Diamond", () => {
+test("no deriva a ninguna asesora — solo lleva el link de Sofi, no el de una persona", () => {
   const texto = redactar.mensajeGrupo({ autor_nombre: "Ana" }, [match()]);
-  assert.ok(!texto.includes("wa.me"));
   assert.ok(!texto.includes("Catherine"));
   assert.ok(!texto.includes("Mas informacion con"));
   assert.ok(texto.includes("Comision compartida."));
+});
+
+// Firma con link (Juan, 2026-08-20): "marcalo con el link directo de sofi
+// para mayor informacion o propiedades similares".
+test("la firma lleva el link de WhatsApp de Sofi para mas informacion", () => {
+  const texto = redactar.mensajeGrupo({ autor_nombre: "Ana" }, [match()]);
+  assert.match(texto, /— Sofi, asistente virtual\nMas informacion o propiedades similares: https:\/\/wa\.me\/\d+\?text=/);
 });
 
 test("el mensaje se firma como Sofi, asistente virtual — sin mencionar a Diamond", () => {

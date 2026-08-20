@@ -186,8 +186,9 @@ test("una demanda con match publicable se publica y queda registrada", async () 
   assert.strictEqual(enviados.length, 1);
   assert.match(enviados[0], /Ref AP004/);
   // Mensaje "blanqueado" (Juan, 2026-08-18): sin derivar a la asesora, con
-  // el link de Wasi — ver la nota de diseño en src/groups/redactar.js.
-  assert.doesNotMatch(enviados[0], /wa\.me/);
+  // el link de Wasi — ver la nota de diseño en src/groups/redactar.js. Desde
+  // el 2026-08-20 SI lleva el link de Sofi (no el de la asesora) en la firma.
+  assert.doesNotMatch(enviados[0], /573028536489/); // el telefono de la asesora, no
   assert.match(enviados[0], /info\.wasi\.co/);
   // El texto exacto queda guardado: es la unica prueba honesta de que se dijo.
   assert.deepStrictEqual(marcadas, [{ id: "sig-1", texto: enviados[0], wamid: "wamid.OUT", modo: "auto", refs: ["AP004"] }]);

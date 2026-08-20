@@ -35,8 +35,22 @@
 // Juan lo pidio con el riesgo explicito sobre la mesa: sin mencion a Diamond
 // en el mensaje, no queda gancho de comision compartida si el colega cierra
 // el negocio por su cuenta. Decision de negocio, no un descuido.
+//
+// AJUSTE (Juan, 2026-08-20): la firma "Sofi, asistente virtual" ahora lleva
+// el link de WhatsApp de Sofi ("para mayor informacion o propiedades
+// similares") — el mismo numero publico que ya usa la landing
+// (web/config/tenants/diamond.ts). No es un retroceso del blanqueado: el
+// texto sigue sin decir "Diamond" en ningun lado, solo abre un canal directo
+// con el asistente para quien quiera seguir la conversacion.
 
 const formato = require("../lib/formato");
+
+// Mismo numero que web/config/tenants/diamond.ts (contact.whatsapp.number) —
+// no hay todavia un lugar unico de donde leerlo en el backend, asi que se
+// declara aca con el mismo valor. Configurable para no tener que redesplegar
+// si cambia.
+const SOFI_WHATSAPP_NUMBER = process.env.SOFI_WHATSAPP_NUMBER || "573044653609";
+const SOFI_WHATSAPP_MENSAJE = "Hola, vi una propiedad en el grupo y quiero mas informacion o propiedades similares";
 
 // SIN TOPE (Juan, 2026-08-20): "que no se restrinja a 3, que se envien los
 // que tengan un scoring alto" — se manda TODO lo que ya paso la compuerta de
@@ -138,6 +152,7 @@ function mensajeGrupo(senal, publicables, { maxPropiedades = MAX_PROPIEDADES } =
     // colega identifica a quien responder por el numero de WhatsApp que
     // publico esto en el grupo, no por un nombre o link en el texto.
     "— Sofi, asistente virtual",
+    `Mas informacion o propiedades similares: https://wa.me/${SOFI_WHATSAPP_NUMBER}?text=${encodeURIComponent(SOFI_WHATSAPP_MENSAJE)}`,
   ];
 
   return [encabezado, "", bloques.join("\n\n"), "", cierre.join("\n")].join("\n");
