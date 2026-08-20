@@ -26,9 +26,26 @@ test("'castropol' matchea Castropol pero no Loma del Chocho", () => {
   assert.strictEqual(matchesFilters(lomaChocho, { zona: "castropol" }), false);
 });
 
+// BUG real (Juan, 2026-08-20): "Loma de San Julián" (El Poblado) matcheaba
+// exacta contra "San Joaquín, Laureles" y "Tierra Firme San Germán" — sin
+// ninguna relacion, solo por compartir el token "san". Se publico en vivo
+// antes de notarse (pedido de Catalina): 2 de 3 propiedades ofrecidas no
+// tenian nada que ver con lo pedido. Mismo defecto que "loma", con "san".
+test("BUG: 'San Joaquin' NO matchea 'Loma de San Julian' solo por la palabra 'san'", () => {
+  const sanJoaquin = { ref: "10013037", zona: "San Joaquin", ciudad: "Medellin", tipo: "Apartamento", habitaciones: 3, precio: "$480.000.000", disponible: true };
+  assert.strictEqual(matchesFilters(sanJoaquin, { zona: "Loma de San Julián" }), false);
+});
+
+test("BUG: 'Tierra Firme San German' NO matchea 'Loma de San Julian' solo por 'san'", () => {
+  const tierraFirme = { ref: "10234389", zona: "Tierra Firme San German", ciudad: "Medellin", tipo: "Apartamento", habitaciones: 3, precio: "$585.000.000", disponible: true };
+  assert.strictEqual(matchesFilters(tierraFirme, { zona: "Loma de San Julián" }), false);
+});
+
 test("distinctiveTokens descarta genericas si hay una distintiva", () => {
   assert.deepStrictEqual(distinctiveTokens(zonaTokens("loma del indio")), ["indio"]);
   assert.deepStrictEqual(distinctiveTokens(zonaTokens("loma de los balsos")), ["balsos"]);
+  assert.deepStrictEqual(distinctiveTokens(zonaTokens("San Joaquín")), ["joaquín"]);
+  assert.deepStrictEqual(distinctiveTokens(zonaTokens("Loma de San Julián")), ["julián"]);
 });
 
 test("distinctiveTokens usa las genericas como ultimo recurso si no hay distintivas", () => {

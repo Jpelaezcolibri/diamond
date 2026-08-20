@@ -63,6 +63,12 @@ const ESQUEMA = {
           "TODAS las zonas o barrios que menciona el pedido. 'POBLADO/ENVIGADO' son DOS: ['El Poblado','Envigado']. Lista vacia si no nombra ninguna. Nunca metas la ciudad aca.",
       },
       zona: { type: "string", description: "Barrio o sector. Vacio si no se menciona" },
+          zonas_excluidas: {
+        type: "array",
+        items: { type: "string" },
+        description:
+          "Zonas que el pedido EXCLUYE explicitamente ('No Loma del Indio', '❌ Loma del Indio', 'menos Robledo', 'excepto Belén'). Lista vacia si no excluye ninguna. Nunca metas aca una zona que tambien este en `zonas` — son listas opuestas.",
+      },
           ciudad: { type: "string", description: "Vacio si no se menciona" },
           precio_min: { type: "integer", description: "Pesos colombianos. 0 si no se especifica" },
           precio_max: { type: "integer", description: "Pesos colombianos. 0 si no se especifica" },
@@ -77,7 +83,7 @@ const ESQUEMA = {
           notas: { type: "string", description: "Detalle relevante en pocas palabras" },
         },
         required: [
-          "id", "clase", "confianza", "operacion", "tipo", "zonas", "zona", "ciudad",
+          "id", "clase", "confianza", "operacion", "tipo", "zonas", "zona", "zonas_excluidas", "ciudad",
           "precio_min", "precio_max", "habitaciones", "area_min", "banos",
           "garajes", "estrato", "contacto", "notas",
         ],
@@ -104,6 +110,7 @@ Reglas de extracción:
 - No inventes datos. Si el mensaje no lo dice, dejá el string vacío o el 0. Esto es especialmente importante en \`zona\`: una demanda sin zona NO se puede cruzar contra el inventario, y es mejor dejarla vacía que poner una zona aproximada — una zona inventada manda al asesor a ofrecer algo del barrio equivocado.
 - \`zonas\` es la LISTA de barrios o sectores que nombra el pedido. Un colega pide en varias a la vez y hay que capturarlas TODAS: "POBLADO/ENVIGADO" → ["El Poblado","Envigado"]; "Laureles o Estadio" → ["Laureles","Estadio"]; "Sabaneta" → ["Sabaneta"]. Lista vacía si no nombra ninguna.
 - \`zona\` es la primera de esa lista, o vacío. Se conserva por compatibilidad; lo que importa es \`zonas\`.
+- \`zonas_excluidas\`: BUG real (2026-08-20) — un pedido que decía "❌No Loma del Indio" se guardaba sin ese dato, y el motor podía ofrecer justo lo que el cliente rechazó. Capturá TODA zona que el mensaje excluya explícitamente ("No X", "❌ X", "menos X", "excepto X", "X no"). Una zona nunca va en \`zonas\` y en \`zonas_excluidas\` a la vez.
 - Si el mensaje sólo nombra el municipio ("Medellín"), eso va en \`ciudad\`, no en \`zonas\`. Pero ojo: Envigado, Sabaneta, Itagüí y La Estrella son municipios que en estos grupos se usan como zona — van en \`zonas\`.
 - \`area_min\` en metros cuadrados: "mínimo 85 m2" → 85; "de 100 metros" → 100.
 - \`banos\`, \`garajes\` y \`estrato\`: sólo si el mensaje los pide explícitamente. "2 baños, parqueadero doble" → banos 2, garajes 2. "estrato 5 o 6" → 5 (el mínimo).

@@ -23,9 +23,18 @@ const STOPWORDS = new Set(["el", "la", "los", "las", "de", "del", "en", "sector"
 // match solo por "loma" es un falso positivo que ubica al cliente en el sitio
 // equivocado. Si el query trae ademas un nombre distintivo, estas no cuentan
 // como coincidencia por si solas.
+// BUG real (Juan, 2026-08-20): "san"/"santa"/"santo" no estaban en esta lista.
+// "Loma de San Julián" (El Poblado) matcheaba "exacta" contra "San Joaquín,
+// Laureles" y contra "Tierra Firme San Germán" — dos barrios sin ninguna
+// relacion, solo porque los tres comparten el token "san". Se publico en vivo
+// (pedido de Catalina, "PEDIDOS 7:00A.M.8:00P.M.", 2026-08-20) antes de
+// notarse: 2 de las 3 propiedades ofrecidas no tenian nada que ver con lo
+// pedido. Mismo defecto que "loma" en julio, solo que con un prefijo distinto
+// — en Medellin/Antioquia "San/Santa/Santo X" es tan comun como "Loma X".
 const GENERIC_GEO = new Set([
   "loma", "lomas", "alto", "altos", "bajo", "bajos", "vereda", "parcelacion",
   "conjunto", "urbanizacion", "unidad", "ciudadela", "cerro", "parque", "via",
+  "san", "santa", "santo",
 ]);
 
 function zonaTokens(zona) {

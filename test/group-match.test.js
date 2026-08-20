@@ -125,7 +125,7 @@ test("un precio que sólo viene como mínimo también sirve", () => {
 // Robledo a Sabaneta. Un contador de matches que incluye cosas así no informa,
 // desinforma — el asesor deja de mirarlo.
 
-const { evaluarCandidata, zonaCoincide } = require("../src/groups/match");
+const { evaluarCandidata, zonaCoincide, zonaExcluida } = require("../src/groups/match");
 
 const pide = (extra = {}) => ({
   operacion: "venta", tipo: "apartamento", zona: "Laureles",
@@ -366,6 +366,46 @@ test("BUG REAL: 'Laurel' (unidad de Sabaneta) ya NO matchea 'Laureles' (el barri
   const aptoLaureles = { zona: "Laureles", ciudad: "Medellín" };
   assert.strictEqual(zonaCoincide(aptoLaureles, pedidoSabaneta), false);
   assert.strictEqual(evaluarCandidata(aptoLaureles, { ...pide(), ...pedidoSabaneta }, "diamond"), null);
+});
+
+test("BUG REAL: 'San Joaquin' ya NO matchea 'Loma de San Julian' (el barrio de El Poblado)", () => {
+  // Caso Catalina, 2026-08-20: el radar publico 3 propiedades para un pedido
+  // en Cumbres/El Poblado, y 2 no tenian ninguna relacion — matchearon
+  // "exacta" solo porque "San Joaquin" y "Tierra Firme San German" comparten
+  // el token "san" con "Loma de San Julian". Mismo defecto que "Laurel"/
+  // "Laureles" en julio, con el prefijo "san" en vez de "loma".
+  const sanJoaquin = apto({ zona: "San Joaquin", ciudad: "Medellín" });
+  const pedido = { ...pide(), zona: "Loma de San Julián", zonas: ["Loma de San Julián"], ciudad: "Medellín" };
+  assert.strictEqual(zonaCoincide(sanJoaquin, pedido), false);
+  // Misma ciudad, asi que ya no es null: cae a "otra_zona" (muy castigado y
+  // marcado) en vez de "exacta" — publicable.js sigue sin dejarlo publicar,
+  // que es lo que de verdad importa para no repetir el caso Catalina.
+  const m = evaluarCandidata(sanJoaquin, pedido, "diamond");
+  assert.strictEqual(m.ubicacion, "otra_zona");
+});
+
+// ZONAS EXCLUIDAS (Juan, 2026-08-20). Caso real: el pedido de Catalina decia
+// "❌No Loma del Indio", y ese dato no se guardaba en ningun lado — el motor
+// podia ofrecer justo lo que el cliente rechazo. No paso de pura suerte de
+// puntaje (quedo en 78, fuera del top 3), pero era cuestion de tiempo.
+test("EXCLUSION: una zona rechazada explicitamente nunca matchea, ni siquiera como otra_zona", () => {
+  const lomaDelIndio = apto({ zona: "Loma Del Indio", ciudad: "Medellín" });
+  const pedido = {
+    ...pide(), zona: "Loma de San Julián",
+    zonas: ["Loma de San Julián", "El Poblado"], zonas_excluidas: ["Loma del Indio"],
+    ciudad: "Medellín",
+  };
+  assert.strictEqual(zonaExcluida(lomaDelIndio, pedido), true);
+  assert.strictEqual(evaluarCandidata(lomaDelIndio, pedido, "diamond"), null);
+});
+
+test("EXCLUSION: sin zonas_excluidas en el pedido, todo sigue igual que antes", () => {
+  assert.strictEqual(zonaExcluida(apto(), pide()), false);
+});
+
+test("EXCLUSION: una zona que NO esta en la lista de rechazadas no se ve afectada", () => {
+  const pedido = { ...pide(), zonas_excluidas: ["Robledo"] };
+  assert.ok(evaluarCandidata(apto(), pedido, "diamond"), "Laureles no esta excluido, tiene que matchear normal");
 });
 
 test("un token completo SIGUE matcheando aunque sea prefijo de otra palabra", () => {

@@ -156,6 +156,27 @@ function zonaCoincide(p, c) {
 
 // Zona distinta pero contigua: quien pide El Poblado compra en Envigado. Ver
 // VECINDAD en src/lib/zonas.js — es geografia declarada, no laxitud.
+// Zonas que el pedido EXCLUYE explicitamente ("No Loma del Indio").
+function zonasExcluidas(c) {
+  return (Array.isArray(c.zonas_excluidas) ? c.zonas_excluidas : []).map((z) => String(z || "").trim()).filter(Boolean);
+}
+
+// BUG real (Juan, 2026-08-20): "❌No Loma del Indio" en un pedido no se
+// guardaba en ningun lado — el motor podia ofrecer justo lo que el cliente
+// rechazo (no paso esta vez de pura suerte de puntaje, pero era cuestion de
+// tiempo). Mismo criterio de token exacto que zonaCoincide/zonaVecina, y
+// veta ANTES que cualquier otra cosa: una zona excluida no se ofrece ni como
+// "otra_zona" marcada para que alguien la revise.
+function zonaExcluida(p, c) {
+  const excluidas = zonasExcluidas(c);
+  if (!excluidas.length) return false;
+  const tokensPropiedad = new Set(properties.zonaTokens(p.zona || ""));
+  return excluidas.some((z) => {
+    const tokensExcluida = properties.distinctiveTokens(properties.zonaTokens(z));
+    return tokensExcluida.length && tokensExcluida.some((t) => tokensPropiedad.has(t));
+  });
+}
+
 function zonaVecina(p, c) {
   const tokensPropiedad = properties.zonaTokens(p.zona || "");
   if (!tokensPropiedad.length) return false;
@@ -213,6 +234,10 @@ function ciudadCoincide(p, c) {
 // que evito los 656 falsos positivos de julio — no se toca: esto solo cambia
 // cuanto vale cada grado, no como se calcula.
 function ubicacionCoincide(p, c) {
+  // Veto absoluto: una zona que el cliente rechazo explicitamente no se
+  // ofrece bajo ningun grado, ni siquiera "otra_zona" marcada para revisar.
+  if (zonaExcluida(p, c)) return null;
+
   const pide = zonasPedidas(c).length > 0;
 
   if (pide && zonaCoincide(p, c)) return { razon: `Zona: ${p.zona}`, puntos: 20, grado: "exacta" };
@@ -389,6 +414,6 @@ async function cruzar(clasificados, { org = null } = {}) {
 
 module.exports = {
   cruzar, filtrosInventario, filtrosAliados, mismaOperacion, evaluarOferta,
-  evaluarCandidata, zonaCoincide, ciudadCoincide, ubicacionCoincide, BANDA_INFERIOR,
+  evaluarCandidata, zonaCoincide, ciudadCoincide, ubicacionCoincide, zonaExcluida, BANDA_INFERIOR,
   MARGEN_PRECIO, MARGEN_AREA,
 };
