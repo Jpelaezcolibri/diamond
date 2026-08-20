@@ -637,7 +637,14 @@ test("avisarCercano: si TAMBIEN le falta un dato (no solo puntaje), no es un 'ca
   assert.strictEqual(avisosCercanosEnviados.length, 0);
 });
 
-test("avisarCercano: una propiedad de un aliado con puntaje bajo tampoco es un 'casi'", async () => {
+// Antes (primera version de avisarCercano) esto NO avisaba: se curaba por
+// motivo, y "aliado" quedaba afuera aunque la barrera real (nunca publicar
+// solo el inventario de un colega) sigue viva en aprobarManual. Simplificado
+// (Juan, 2026-08-20, segunda vuelta): "lo que no se responda por el bot debe
+// de ir de una al chat de natalia" — sin excepcion por fuente. Ella puede
+// decidir avisarle al cliente de esta opcion por otra via; lo que NO puede
+// pasar es que el bot la publique sola en el grupo, y eso sigue bloqueado.
+test("avisarCercano: una propiedad de un aliado con puntaje bajo SI avisa — la barrera real sigue en la publicacion, no en el aviso", async () => {
   process.env.RADAR_REVISOR_PHONE = "573001878024";
   vivo = instalarDobles();
   matchesDevueltos = [matchBueno({ puntaje: 60, fuente: "aliado", link: null })];
@@ -645,7 +652,7 @@ test("avisarCercano: una propiedad de un aliado con puntaje bajo tampoco es un '
   await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "auto", ahora: MEDIODIA });
 
   delete process.env.RADAR_REVISOR_PHONE;
-  assert.strictEqual(avisosCercanosEnviados.length, 0);
+  assert.strictEqual(avisosCercanosEnviados.length, 1);
 });
 
 test("avisarCercano: un pedido que si se publica (score alto) no molesta al revisor", async () => {
@@ -705,17 +712,18 @@ test("avisarCercano: un match en 'ciudad' (el cliente no dio barrio) SI avisa al
   assert.match(avisosCercanosEnviados[0].texto, /AP004/);
 });
 
-test("avisarCercano: 'otra_zona' (barrio pedido y confirmado distinto) sigue SIN avisar, aunque el puntaje sea alto — es un no real, no un 'no sabemos'", async () => {
+// Igual que el caso de aliado arriba: "otra_zona" ya NO se excluye del
+// aviso — la barrera real (nunca publicar el barrio equivocado) sigue dura
+// en aprobarManual, sea cual sea la respuesta de Natalia.
+test("avisarCercano: 'otra_zona' (barrio pedido y confirmado distinto) TAMBIEN avisa ahora — la barrera real sigue en la publicacion", async () => {
   process.env.RADAR_REVISOR_PHONE = "573001878024";
   vivo = instalarDobles();
-  // Mismo puntaje que el test de 'ciudad' de arriba, unico motivo distinto:
-  // aca SI sabemos que el barrio pedido no es ese.
   matchesDevueltos = [matchBueno({ puntaje: 72, ubicacion: "otra_zona" })];
 
   await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "auto", ahora: MEDIODIA });
 
   delete process.env.RADAR_REVISOR_PHONE;
-  assert.strictEqual(avisosCercanosEnviados.length, 0);
+  assert.strictEqual(avisosCercanosEnviados.length, 1);
 });
 
 test("avisarCercano: un grupo apagado sin ningun match limpio no genera ruido", async () => {

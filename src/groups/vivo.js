@@ -35,6 +35,7 @@ const whatsappGroups = require("../data/whatsapp-groups");
 const advisors = require("../data/advisors");
 const avisoCercano = require("./aviso-cercano");
 const waha = require("../lib/waha");
+const formato = require("../lib/formato");
 // Se importa el MODULO y no la funcion suelta: destructurar congela la
 // referencia y deja los tests sin forma de mockear el envio.
 const canalWhatsapp = require("../channels/whatsapp");
@@ -178,14 +179,21 @@ async function procesarMensaje(org, mensaje, { grupo, modo = "sombra", enviar = 
     // que no se envio X" solo se podia responder buscando a mano entre los
     // mensajes del feed — y Sofi, sin ese cruce, terminaba inventando un motivo.
     await groupSignals.guardarPolitica(org.id, signal.id, { motivo: decision.motivo, traza: decision.traza }).catch(() => {});
-    // "que no se salte ninguno de los dos" (Juan, 2026-08-20): un pedido con
-    // un match real no puede desaparecer en silencio solo porque el grupo
-    // todavia esta en modo escucha (responde=false) — eso paso con el pedido
-    // de Regnum Realty en "SOLO VIVIENDA >$1000 MLLS" y es justo lo que esto
-    // cierra. "confianza_baja", "ya_respondida" y el tope diario NO avisan:
-    // esos son un "no" real, no una oportunidad perdida por configuracion.
-    if (decision.motivo === "sin_propiedades_publicables" || decision.motivo === "grupo_no_habilitado") {
-      await avisarCercano(org, signal, mensaje, grupo, señal.matches || [], descartados, publicables)
+    // "que no se salte ninguno de los dos" (Juan, 2026-08-20), simplificado
+    // en una segunda vuelta el mismo dia: "lo que no se responda por el bot
+    // debe de ir de una al chat de natalia... no podemos dejar pasar ningun
+    // pedido". Antes esto avisaba SOLO para dos motivos puntuales
+    // (sin_propiedades_publicables, grupo_no_habilitado) y cada motivo nuevo
+    // era un hueco nuevo — el pedido de Juanita Monsalve (zona "ciudad", sin
+    // barrio) se salto los dos caminos por un tercer motivo que la lista
+    // todavia no cubria. Ya no se filtra por motivo: cualquier "callado"
+    // avisa, salvo los dos que serian ruido real:
+    //   - ya_respondida: el pedido YA se resolvio (por este mismo camino o
+    //     por auto), avisar de nuevo confundiria a Natalia sobre algo cerrado.
+    //   - modo_apagado: la respuesta del radar esta apagada a proposito para
+    //     toda la org — avisar contradiria esa decision.
+    if (!["ya_respondida", "modo_apagado"].includes(decision.motivo)) {
+      await avisarCercano(org, signal, mensaje, grupo, señal.matches || [])
         .catch((e) => console.warn("[radar] No se pudo avisar el candidato cercano:", e.message));
     }
     return { resultado: "callado", motivo: decision.motivo, traza: decision.traza, descartados, signalId: signal && signal.id };
@@ -338,45 +346,40 @@ function destinatarios(asesor) {
   return [...new Set([...base, ...extra])];
 }
 
-// Aviso a quien revisa los "casi" del radar (Juan, 2026-08-20): "necesito que
-// catherine uribe reciba que se envió y que no y por que no para que ella
-// apruebe desde su celular" — corregido despues a Natalia Velez, la misma
-// linea vinculada, "para no perder la trazabilidad". Si dice que si, se
-// publica por la MISMA via auditada (aprobarManual mas abajo) desde su
-// propio chat con Sofi (src/agent/tools.js#aprobar_pedido_radar).
-async function avisarCercano(org, signal, mensaje, grupo, matches, descartados, publicables = []) {
+// Aviso a quien revisa los pedidos que el bot no respondio solo (Juan,
+// 2026-08-20): "necesito que catherine uribe reciba que se envió y que no y
+// por que no para que ella apruebe desde su celular" — corregido despues a
+// Natalia Velez, la misma linea vinculada, "para no perder la trazabilidad".
+// Si dice que si, se publica por la MISMA via auditada (aprobarManual mas
+// abajo) desde su propio chat con Sofi (src/agent/tools.js#aprobar_pedido_radar).
+//
+// SIMPLIFICADO en una segunda vuelta el mismo dia (Juan): "lo que no se
+// responda por el bot debe de ir de una al chat de natalia... el bot
+// contesta los de puntaje mas alto y el resto que lo revise natalia". Antes
+// esto curaba por MOTIVO (solo puntaje_bajo, despues tambien zona "ciudad")
+// y cada motivo nuevo era un hueco nuevo — el pedido de Juanita Monsalve se
+// salto los dos caminos por un motivo que la curaduria de ese momento
+// todavia no cubria. Ya no se cura por motivo: si el motor encontro AL MENOS
+// UNA candidata con dato usable, se avisa — sea cual sea la razon por la que
+// el bot no respondio solo (puntaje, zona, aliado, config del grupo). El
+// unico filtro que queda es de DATO, no de negocio: un match sin titulo, sin
+// zona o sin precio no le sirve a Natalia en un mensaje de texto, sea cual
+// sea el motivo. La decision de si SIRVE la toma ella, no el motivo.
+//
+// Las barreras de seguridad reales (zona explicitamente equivocada, aliado)
+// no se relajaron: siguen bloqueando la PUBLICACION incluso si Natalia dice
+// que si (ver aprobarManual mas abajo) — lo que cambia aca es solo a quien
+// se le avisa, nunca que se puede publicar sin revisar.
+async function avisarCercano(org, signal, mensaje, grupo, matches) {
   if (!RADAR_REVISOR_PHONE) return;
 
-  // Tres formas de llegar aca, unidas en una sola lista para Natalia:
-  //   1. publicables: match de calidad COMPLETA que no se publico solo
-  //      porque el grupo todavia esta en modo escucha (responde=false) —
-  //      nunca porque el puntaje o el dato fueran el problema.
-  //   2. "cercanos": fallo SOLO por puntaje_bajo, con todo lo demas limpio.
-  //   3. "sin_barrio": fallo SOLO por zona_no_publicable, pero con
-  //      ubicacion:"ciudad" — el cliente no nombro ningun barrio (solo
-  //      "Medellin y area metropolitana"), asi que el motor no pudo graduar
-  //      mejor que "ciudad" ni el mejor match posible. Caso real (Juan,
-  //      2026-08-20 — pedido de Juanita Monsalve, ref 10013440 al 72%): esto
-  //      SE SALTABA los dos caminos justo como el de Regnum Realty que
-  //      motivo la norma de hoy — la diferencia con "otra_zona" es que ahi
-  //      SI sabemos que el barrio pedido no es ese (un no real); aca no hay
-  //      barrio pedido que comparar, es un "no sabemos" que Natalia si puede
-  //      resolver con una llamada.
-  //   Si ADEMAS le falta un dato (sin_ref, sin_link_wasi) o es de zona
-  //   EXPLICITAMENTE equivocada (otra_zona) o de un aliado, no es un "casi"
-  //   — es un no real, y avisar igual solo generaria ruido.
-  const motivoUnico = (d, motivo) => d.motivos.length === 1 && d.motivos[0] === motivo;
-  const matchDe = (d) => (matches || []).find((m) => String(m.ref) === String(d.ref));
-  const cercanos = descartados
-    .filter((d) => motivoUnico(d, "puntaje_bajo"))
-    .map(matchDe)
-    .filter(Boolean);
-  const sinBarrio = descartados
-    .filter((d) => motivoUnico(d, "zona_no_publicable"))
-    .map(matchDe)
-    .filter((m) => m && m.ubicacion === "ciudad");
-  cercanos.push(...sinBarrio);
-  const candidatas = [...publicables, ...cercanos];
+  // `formato.parsearPrecio` y no un truthy check crudo: un precio "$0" (label
+  // vacio en Wasi) es un string no vacio, asi que pasaria el filtro sin esto
+  // — el mismo bug de dato corrupto que publicable.js ya resuelve para la
+  // publicacion, pero esto corre ANTES de esa compuerta.
+  const candidatas = (matches || []).filter(
+    (m) => m && (m.titulo || m.ref) && String(m.zona || "").trim() && formato.parsearPrecio(m.precio) !== null
+  );
   if (!candidatas.length) return;
 
   const revisor = await advisors.findByPhone(org.id, RADAR_REVISOR_PHONE).catch(() => null);

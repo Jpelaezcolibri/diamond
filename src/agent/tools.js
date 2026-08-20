@@ -199,10 +199,22 @@ const TOOL_DEFINITIONS = [
   {
     name: "aprobar_pedido_radar",
     description:
-      "Publica en el grupo gremial un pedido del radar que quedo callado SOLO por puntaje bajo — el aviso que te llego con 'El radar callo un pedido por poco'. Usala cuando el asesor diga 'si', 'mandalo', 'publicalo' respondiendo a ese aviso. Si citó (swipe-to-reply) el aviso exacto, no hace falta que aclare cual. Si dice que NO o que no sirve, no llames esta herramienta — no hay nada que registrar, simplemente no se publica.",
+      "Publica en el grupo gremial un pedido del radar que el bot no respondio solo — el aviso que te llego con 'Tenés un match del radar que no salió solo'. Usala cuando el asesor diga 'si', 'mandalo', 'publicalo' respondiendo a ese aviso. Si citó (swipe-to-reply) el aviso exacto, no hace falta que aclare cual. Si dice que NO o que no sirve, usa rechazar_pedido_radar en vez de esta — el 'no' tambien hay que registrarlo.",
     input_schema: {
       type: "object",
       properties: {
+        cual: { type: "string", description: "Si hay varios avisos pendientes y el asesor especifico cual (zona, colega, o parte del texto), pasalo para desambiguar." },
+      },
+    },
+  },
+  {
+    name: "rechazar_pedido_radar",
+    description:
+      "Registra que un pedido del radar NO sirve — el asesor respondio 'no' a un aviso 'Tenés un match del radar que no salió solo'. Usala SIEMPRE que diga que no o que no sirve, aunque no dé motivo: el aviso pide explicitamente una respuesta, y sin este registro un pedido descartado y uno que nunca se leyo se ven igual. Si citó (swipe-to-reply) el aviso exacto, no hace falta que aclare cual.",
+    input_schema: {
+      type: "object",
+      properties: {
+        motivo: { type: "string", description: "Por que no sirve, si el asesor lo dice. Opcional." },
         cual: { type: "string", description: "Si hay varios avisos pendientes y el asesor especifico cual (zona, colega, o parte del texto), pasalo para desambiguar." },
       },
     },
@@ -539,6 +551,10 @@ async function executeTool(name, input, ctx) {
     return aprobarPedidoRadar(input, ctx);
   }
 
+  if (name === "rechazar_pedido_radar") {
+    return rechazarPedidoRadar(input, ctx);
+  }
+
   return `Herramienta desconocida: ${name}`;
 }
 
@@ -713,6 +729,37 @@ async function consultarRadarGrupos(input, ctx) {
 //   3. Varios pendientes — se listan para que Sofi pregunte. Adivinar mal aca
 //      registraria el resultado equivocado sobre el pedido equivocado, que es
 //      peor que no registrar nada.
+// Pedidos del radar que le avisaron a este asesor y que TODAVIA no tienen
+// ningun resultado registrado — ni "si" (aprobado/publicado, que ya sale del
+// pool porque pendientesDeAviso exige respondida_at null), ni "no"
+// (descartado — signal_events es lo unico que lo sabe, ver
+// rechazarPedidoRadar), ni un resultado de llamada. Compartido por las tres
+// herramientas del radar que le preguntan "¿a cual pedido te referis?": sin
+// esto, un pedido que la asesora YA resolvio (aprobo, rechazo o conto en que
+// quedo) le seguiria apareciendo en la lista para desambiguar la proxima vez.
+async function pendientesSinResultado(ctx) {
+  const pendientes = await groupSignals.pendientesDeAviso(ctx.org.id, ctx.advisor.id);
+  if (pendientes.length === 0) return pendientes;
+  // signalEvents es el Learning Domain — Radar depende de el, nunca al
+  // reves, ver src/data/signal-events.js.
+  const ids = pendientes.map((s) => s.id);
+  const ultimos = await signalEvents.ultimoPorSenal(ctx.org.id, ids).catch(() => new Map());
+  return pendientes.filter((s) => !ultimos.has(s.id));
+}
+
+function desambiguar(pendientes, cual) {
+  if (!cual || pendientes.length <= 1) return pendientes;
+  const q = String(cual).toLowerCase();
+  const filtrados = pendientes.filter((s) =>
+    `${s.texto_original || ""} ${s.zona || ""} ${s.tipo || ""}`.toLowerCase().includes(q)
+  );
+  return filtrados.length >= 1 ? filtrados : pendientes;
+}
+
+function listaPendientes(pendientes) {
+  return pendientes.slice(0, 5).map((s) => `- ${(s.texto_original || "").replace(/\s+/g, " ").slice(0, 90)}`).join("\n");
+}
+
 async function registrarResultadoRadar(input, ctx) {
   if (!ctx.advisor) {
     return "Esta herramienta es para cuando un asesor de la casa cuenta el resultado de un pedido del radar. No aplica con un cliente.";
@@ -723,36 +770,20 @@ async function registrarResultadoRadar(input, ctx) {
   if (!signalId) {
     let pendientes;
     try {
-      pendientes = await groupSignals.pendientesDeAviso(ctx.org.id, ctx.advisor.id);
+      pendientes = await pendientesSinResultado(ctx);
     } catch (e) {
       console.warn("[tools] No se pudieron leer los avisos pendientes del radar:", e.message);
       return "No pude consultar los pedidos pendientes en este momento. Decile que lo intente de nuevo en un rato.";
-    }
-
-    // Un resultado ya registrado no cuenta como pendiente. En un solo query
-    // (signalEvents es el Learning Domain — Radar depende de el, nunca al
-    // reves, ver src/data/signal-events.js).
-    if (pendientes.length > 0) {
-      const ids = pendientes.map((s) => s.id);
-      const ultimos = await signalEvents.ultimoPorSenal(ctx.org.id, ids).catch(() => new Map());
-      pendientes = pendientes.filter((s) => !ultimos.has(s.id));
     }
 
     if (pendientes.length === 0) {
       return "No encuentro ningun pedido del radar pendiente de resultado para vos. Si es sobre otra cosa, no uses esta herramienta.";
     }
 
-    if (input?.cual && pendientes.length > 1) {
-      const q = String(input.cual).toLowerCase();
-      const filtrados = pendientes.filter((s) =>
-        `${s.texto_original || ""} ${s.zona || ""} ${s.tipo || ""}`.toLowerCase().includes(q)
-      );
-      if (filtrados.length >= 1) pendientes = filtrados;
-    }
+    pendientes = desambiguar(pendientes, input?.cual);
 
     if (pendientes.length > 1) {
-      const lista = pendientes.slice(0, 5).map((s) => `- ${(s.texto_original || "").replace(/\s+/g, " ").slice(0, 90)}`).join("\n");
-      return `Tenes ${pendientes.length} pedidos del radar sin resultado todavia:\n${lista}\n\nPreguntale al asesor a cual se refiere (o que cite el mensaje del aviso) antes de registrar nada.`;
+      return `Tenes ${pendientes.length} pedidos del radar sin resultado todavia:\n${listaPendientes(pendientes)}\n\nPreguntale al asesor a cual se refiere (o que cite el mensaje del aviso) antes de registrar nada.`;
     }
 
     signalId = pendientes[0].id;
@@ -789,7 +820,7 @@ async function aprobarPedidoRadar(input, ctx) {
   if (!signalId) {
     let pendientes;
     try {
-      pendientes = await groupSignals.pendientesDeAviso(ctx.org.id, ctx.advisor.id);
+      pendientes = await pendientesSinResultado(ctx);
     } catch (e) {
       console.warn("[tools] No se pudieron leer los avisos pendientes del radar:", e.message);
       return "No pude consultar los pedidos pendientes en este momento.";
@@ -797,16 +828,9 @@ async function aprobarPedidoRadar(input, ctx) {
     if (pendientes.length === 0) {
       return "No encuentro ningun pedido del radar esperando tu aprobacion en este momento.";
     }
-    if (input?.cual && pendientes.length > 1) {
-      const q = String(input.cual).toLowerCase();
-      const filtrados = pendientes.filter((s) =>
-        `${s.texto_original || ""} ${s.zona || ""} ${s.tipo || ""}`.toLowerCase().includes(q)
-      );
-      if (filtrados.length >= 1) pendientes = filtrados;
-    }
+    pendientes = desambiguar(pendientes, input?.cual);
     if (pendientes.length > 1) {
-      const lista = pendientes.slice(0, 5).map((s) => `- ${(s.texto_original || "").replace(/\s+/g, " ").slice(0, 90)}`).join("\n");
-      return `Tenes ${pendientes.length} pedidos esperando aprobacion:\n${lista}\n\nPreguntale a cual se refiere (o que cite el aviso) antes de publicar nada.`;
+      return `Tenes ${pendientes.length} pedidos esperando aprobacion:\n${listaPendientes(pendientes)}\n\nPreguntale a cual se refiere (o que cite el aviso) antes de publicar nada.`;
     }
     signalId = pendientes[0].id;
   }
@@ -836,4 +860,55 @@ async function aprobarPedidoRadar(input, ctx) {
   }
 }
 
-module.exports = { TOOL_DEFINITIONS, executeTool, maybeCaptadorAlert, registrarDemandaColega, consultarRadarGrupos, registrarResultadoRadar, aprobarPedidoRadar };
+// El "no" de un aviso "Tenés un match del radar que no salió solo" (Juan,
+// 2026-08-20): "explica en el mensaje que debe responder si o no para que
+// se reenvie, asi no vamos a tener diferencias". Antes un "no" no llamaba
+// ninguna herramienta — literalmente no quedaba registrado en ningun lado, y
+// un pedido que la asesora descarto se veia identico a uno que nunca leyo.
+// Usa el mismo tipo DESCARTADO del Learning Domain que ya existia para "no
+// haberla tomado nunca" (ver src/data/signal-events.js) — no hace falta un
+// tipo nuevo, esto es exactamente ese caso.
+async function rechazarPedidoRadar(input, ctx) {
+  if (!ctx.advisor) {
+    return "Esta herramienta es para cuando un asesor de la casa descarta un pedido del radar. No aplica con un cliente.";
+  }
+
+  let signalId = ctx.radarSignalId || null;
+
+  if (!signalId) {
+    let pendientes;
+    try {
+      pendientes = await pendientesSinResultado(ctx);
+    } catch (e) {
+      console.warn("[tools] No se pudieron leer los avisos pendientes del radar:", e.message);
+      return "No pude consultar los pedidos pendientes en este momento.";
+    }
+    if (pendientes.length === 0) {
+      return "No encuentro ningun pedido del radar esperando tu respuesta en este momento. Si es sobre otra cosa, no uses esta herramienta.";
+    }
+    pendientes = desambiguar(pendientes, input?.cual);
+    if (pendientes.length > 1) {
+      return `Tenes ${pendientes.length} pedidos esperando tu respuesta:\n${listaPendientes(pendientes)}\n\nPreguntale a cual se refiere (o que cite el aviso) antes de descartar nada.`;
+    }
+    signalId = pendientes[0].id;
+  }
+
+  try {
+    await signalEvents.registrar(ctx.org.id, {
+      signalId,
+      advisorId: ctx.advisor.id,
+      tipo: "DESCARTADO",
+      motivo: input?.motivo || null,
+    });
+  } catch (e) {
+    console.warn("[tools] No se pudo registrar el descarte del radar:", e.message);
+    return "No pude guardar que no sirve. Decile al asesor que lo intente de nuevo en un rato.";
+  }
+
+  return "Listo, quedo registrado que no sirve. Gracias por responder — asi el radar no queda con dudas de que paso con este pedido.";
+}
+
+module.exports = {
+  TOOL_DEFINITIONS, executeTool, maybeCaptadorAlert, registrarDemandaColega, consultarRadarGrupos,
+  registrarResultadoRadar, aprobarPedidoRadar, rechazarPedidoRadar,
+};

@@ -113,3 +113,18 @@ test("si el envio falla, lo dice sin tumbar la conversacion", async (t) => {
   assert.match(out, /El envio fallo/);
   assert.match(out, /sesion caida/);
 });
+
+// Un pedido que Natalia YA rechazo (rechazar_pedido_radar, DESCARTADO) no
+// puede seguir apareciendo como "pendiente de aprobacion" — mismo helper
+// compartido (pendientesSinResultado) que registrar_resultado_radar ya usaba
+// (Juan, 2026-08-20, segunda vuelta del mismo dia).
+test("un pendiente ya rechazado no cuenta como pendiente de aprobacion", async (t) => {
+  const signalEvents = require("../src/data/signal-events");
+  t.mock.method(groupSignals, "pendientesDeAviso", async () => [
+    { id: "sig-ya-no", texto_original: "busco apto en Sabaneta" },
+  ]);
+  t.mock.method(signalEvents, "ultimoPorSenal", async () => new Map([["sig-ya-no", { tipo: "DESCARTADO" }]]));
+
+  const out = await executeTool("aprobar_pedido_radar", {}, ctxAsesor());
+  assert.match(out, /No encuentro ningun pedido/);
+});
