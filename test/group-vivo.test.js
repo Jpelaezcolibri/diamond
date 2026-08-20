@@ -267,20 +267,26 @@ test("lo que la IA declara ruido no toca disco ni se responde", async () => {
   assert.strictEqual(señalCreada, null, "el ruido no se persiste nunca");
 });
 
-test("una oferta alimenta la red de aliados y nunca se responde", async () => {
+// Juan, 2026-08-20: "apaguemos las ofertas no las leamos solo quiero que lea
+// los pedidos, las ofertas nos estan saturando y no son necesarias" — en un
+// grupo activo las ofertas superan por volumen a las demandas (438 señales en
+// 2 dias, 402 ofertas) y eran el grueso de lo que inflaba group_signals.
+// Revoca la regla anterior ("una oferta alimenta la red de aliados"): ese
+// camino sigue vivo solo en la importacion de export .txt
+// (importar-export.js), que es una carga puntual y deliberada, no ruido
+// continuo de la escucha en vivo.
+test("una oferta se ignora por completo en la escucha en vivo: no se guarda ni se cruza contra leads", async () => {
   claseDevuelta = "oferta";
   let envios = 0;
   const r = await vivo.procesarMensaje(ORG, mensaje({ texto: "tengo apartamento en venta" }), {
     grupo: GRUPO, modo: "auto", ahora: MEDIODIA,
     enviar: async () => { envios++; return { ok: true }; },
   });
-  assert.strictEqual(r.resultado, "oferta");
+  assert.strictEqual(r.resultado, "oferta_ignorada");
   assert.strictEqual(envios, 0);
-  assert.strictEqual(ofertasGuardadas.length, 1);
-  // La oferta guardada se cruza contra los leads propios que la esperan —
-  // aprobado por Juan 2026-08-18: "armalo".
-  assert.strictEqual(crucesLeads.length, 1);
-  assert.strictEqual(crucesLeads[0].allyProperty.id, "ally-1");
+  assert.strictEqual(ofertasGuardadas.length, 0);
+  assert.strictEqual(crucesLeads.length, 0);
+  assert.strictEqual(señalCreada, null, "la oferta no se persiste");
 });
 
 test("con el radar apagado no se gasta un token ni se escribe una fila", async () => {

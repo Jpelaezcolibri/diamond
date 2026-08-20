@@ -20,8 +20,6 @@
 const epe = require("../../epe/core");
 const { classify } = require("./classify");
 const { cruzar } = require("./match");
-const { guardarOferta } = require("./ofertas");
-const { cruzarOfertaConLeads } = require("./cruce-leads");
 const { persistirSenal } = require("./persistir");
 const publicable = require("./publicable");
 const revalidar = require("./revalidar");
@@ -90,9 +88,24 @@ async function procesarMensaje(org, mensaje, { grupo, modo = "sombra", enviar = 
   // del Radar. La mayoria de los mensajes de un grupo gremial son ruido.
   if (c.clase === "ruido") return { resultado: "ruido" };
 
+  // Ofertas de colegas: apagadas en la escucha en vivo (Juan, 2026-08-20) —
+  // "apaguemos las ofertas no las leamos solo quiero que lea los pedidos, las
+  // ofertas nos estan saturando y no son necesarias, tenemos muchas
+  // propiedades y muchos pedidos". Ni se cruzan ni se persisten: mueren aca
+  // igual que el ruido. Antes alimentaban ally_properties y se cruzaban
+  // contra leads propios, pero en un grupo activo las ofertas superan por
+  // volumen a las demandas y eran el grueso de lo que saturaba group_signals
+  // (438 señales en 2 dias, 402 ofertas) — inflando cada consulta del radar
+  // sin aportar lo que el negocio necesita hoy. La importacion de export .txt
+  // (importar-export.js) es un camino distinto y no cambia: ahi la captura de
+  // ofertas sigue siendo una decision deliberada de carga puntual, no ruido
+  // continuo de un grupo en vivo.
+  if (c.clase === "oferta") return { resultado: "oferta_ignorada" };
+
   // 3. Cruce contra inventario propio y aliados.
-  const { demandas, ofertas } = await cruzar([c], { org });
-  const señal = demandas[0] || ofertas[0];
+  const { demandas } = await cruzar([c], { org });
+  const señal = demandas[0];
+  if (!señal) return { resultado: "sin_señal" };
   señal.mensaje = { ...mensaje, groupId: grupo.id };
 
   // 4. Persistencia. Va antes de decidir: la senal es valiosa aunque despues se
@@ -104,21 +117,6 @@ async function procesarMensaje(org, mensaje, { grupo, modo = "sombra", enviar = 
     waMessageId: idEnVivo(mensaje.waMessageId || mensaje.id),
   });
   if (duplicado) return { resultado: "duplicado" };
-
-  // Las ofertas alimentan la red de aliados y no se responden nunca: contestarle
-  // a un colega que publica su propiedad no tiene sentido comercial. Lo que SI
-  // puede pasar es que un lead propio la este esperando — ese cruce es puro
-  // (base de datos, cero tokens) y no puede tumbar el resultado "oferta" si
-  // falla, por eso va atajado aparte.
-  if (c.clase === "oferta") {
-    if (señal.utilizable) {
-      const allyProperty = await guardarOferta(org, señal, { vistoEn: mensaje.instanteIso });
-      await cruzarOfertaConLeads(org, allyProperty).catch((e) =>
-        console.warn("[radar] No se pudo cruzar la oferta contra leads propios:", e.message)
-      );
-    }
-    return { resultado: "oferta", signalId: signal && signal.id };
-  }
 
   // MODO ASISTIDO: no se publica NADA en el grupo. Sofi revalida las candidatas
   // y, si aprueba, le escribe a la asesora. Es el paso previo a encender las

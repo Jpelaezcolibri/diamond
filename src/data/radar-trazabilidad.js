@@ -102,8 +102,21 @@ async function trazabilidad(scope, { dias = 7, soloConAviso = false, limite = MA
   }
 
   const señales = data || [];
+
+  // El resumen agregado se calcula SIN el cap de MAX_FILAS, sobre toda la
+  // ventana de `dias` — separado a proposito del detalle de arriba.
+  //
+  // Bug real (Juan, 2026-08-20): con un grupo activo, las ofertas de colegas
+  // (que nunca tienen match — el motor no cruza oferta contra nada) pueden
+  // superar por volumen a las demandas reales. El resumen se calculaba sobre
+  // las mismas 40 filas mas recientes que el detalle, mezclando clase: en una
+  // ventana con 438 señales en 2 dias (402 ofertas, 36 demandas), las 40 filas
+  // mas recientes quedaban dominadas por ofertas y Sofi reportaba "2 con
+  // candidatas" cuando el dato real, sobre toda la ventana, eran mas de 50.
+  const resumen = await calcularResumen(scope, desde, soloConAviso, dias);
+
   if (señales.length === 0) {
-    return { disponible: true, dias, total: 0, señales: [], resumen: resumenVacio(dias) };
+    return { disponible: true, dias, total: 0, señales: [], resumen };
   }
 
   // Nombres de grupo, y de paso QUIEN recibio cada aviso — en las mismas dos
@@ -200,24 +213,56 @@ async function trazabilidad(scope, { dias = 7, soloConAviso = false, limite = MA
     };
   });
 
-  return { disponible: true, dias, total: filas.length, señales: filas, resumen: resumir(filas, dias) };
+  return { disponible: true, dias, total: filas.length, señales: filas, resumen };
 }
 
 function resumenVacio(dias) {
-  return { dias, entraron: 0, conCandidatas: 0, revisadasPorSofi: 0, aprobadas: 0, avisosEnviados: 0, respondioBot: 0, conResultado: 0 };
+  return { dias, entraron: 0, conCandidatas: 0, revisadasPorSofi: 0, aprobadas: 0, avisosEnviados: 0, respondioBot: 0, conResultado: 0, desacuerdos: [] };
 }
+
+const CAMPOS_RESUMEN = "id, matches, revalidacion, enviado_at, respondida_at, respuesta_modo";
 
 // El resumen es lo que responde "¿esta sirviendo esto?" de un vistazo. Cada
 // escalon dice donde se cae el embudo: si entran muchas y Sofi aprueba pocas, el
 // problema es el inventario o el motor; si aprueba y no salen avisos, es la
 // ventana de 24h; si salen y no hay resultado, es adopcion de la asesora.
-function resumir(filas, dias) {
-  const conCandidatas = filas.filter((f) => f.motor.candidatas > 0);
-  const revisadas = filas.filter((f) => f.sofi.reviso);
-  const aprobadas = filas.filter((f) => f.sofi.reviso && f.sofi.aprobo);
-  const enviados = filas.filter((f) => f.aviso.salio);
-  const respondidas = filas.filter((f) => f.respuesta.salio && f.respuesta.modo === "auto");
-  const conResultado = filas.filter((f) => f.resultado);
+//
+// Deliberadamente SIN el .limit(MAX_FILAS) de la consulta de detalle de
+// arriba — ver el comentario en trazabilidad() sobre el bug del 2026-08-20.
+// Se degrada a ceros (no revienta el resto de la vista) si la consulta falla
+// por cualquier motivo, incluida una migracion que no ha corrido.
+async function calcularResumen(scope, desde, soloConAviso, dias) {
+  let q = supabase
+    .from("group_signals")
+    .select(CAMPOS_RESUMEN)
+    .eq("org_id", scope.orgId)
+    .eq("origen", "vivo")
+    .gte("created_at", desde);
+  if (!scope.isAdmin) q = q.eq("advisor_id", scope.viewerUid);
+  if (soloConAviso) q = q.not("enviado_at", "is", null);
+
+  const { data, error } = await q;
+  if (error) return resumenVacio(dias);
+
+  const filas = data || [];
+  const conCandidatas = filas.filter((f) => Array.isArray(f.matches) && f.matches.length > 0);
+  const revisadas = filas.filter((f) => f.revalidacion);
+  const aprobadas = revisadas.filter((f) => f.revalidacion.sirve_alguna);
+  const enviados = filas.filter((f) => f.enviado_at);
+  // Solo cuenta lo PUBLICADO (modo auto), no lo redactado en sombra: sombra
+  // no lo vio ningun colega, contarlo ahi infla el numero que responde
+  // "¿esta sirviendo el radar?".
+  const respondidas = filas.filter((f) => f.respondida_at && f.respuesta_modo === "auto");
+
+  let conResultado = 0;
+  if (filas.length) {
+    const { data: eventos } = await supabase
+      .from("signal_events")
+      .select("signal_id")
+      .in("signal_id", filas.map((f) => f.id));
+    conResultado = new Set((eventos || []).map((e) => e.signal_id)).size;
+  }
+
   return {
     dias,
     entraron: filas.length,
@@ -225,14 +270,11 @@ function resumir(filas, dias) {
     revisadasPorSofi: revisadas.length,
     aprobadas: aprobadas.length,
     avisosEnviados: enviados.length,
-    // Solo cuenta lo PUBLICADO (modo auto), no lo redactado en sombra: sombra
-    // no lo vio ningun colega, contarlo ahi infla el numero que responde
-    // "¿esta sirviendo el radar?".
     respondioBot: respondidas.length,
-    conResultado: conResultado.length,
+    conResultado,
     // Los desacuerdos son el material de calibracion: donde Sofi dice que el
     // puntaje se equivoco.
-    desacuerdos: revisadas.map((f) => f.sofi.desacuerdo).filter(Boolean).slice(0, 5),
+    desacuerdos: revisadas.map((f) => f.revalidacion.desacuerdo_con_puntaje).filter(Boolean).slice(0, 5),
   };
 }
 

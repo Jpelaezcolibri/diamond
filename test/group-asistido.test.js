@@ -291,10 +291,13 @@ test("el mismo numero no recibe el aviso dos veces", async () => {
   assert.strictEqual(enviadosPorSofi.length, 1);
 });
 
-test("una oferta de un colega no dispara aviso", async () => {
+// Juan, 2026-08-20: las ofertas ya no se leen en la escucha en vivo (ver
+// group-vivo.test.js) — se ignoran ANTES del modo asistido, asi que esto
+// aplica igual con modo:"asistido".
+test("una oferta de un colega se ignora, tambien en modo asistido", async () => {
   claseDevuelta = "oferta";
   const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE });
-  assert.strictEqual(r.resultado, "oferta");
+  assert.strictEqual(r.resultado, "oferta_ignorada");
   assert.strictEqual(enviadosPorSofi.length, 0);
 });
 

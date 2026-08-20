@@ -191,6 +191,39 @@ test("un 'limite' explicito mas chico se respeta", async (t) => {
   assert.strictEqual(pedidas, 5);
 });
 
+// Bug real (Juan, 2026-08-20): "esto fue lo que me respondio sofi pero en
+// realidad son muchos mas de 2 los que el bot ha contestado, por que se
+// quedo bugueado en 2??" — el resumen se calculaba sobre las mismas 40 filas
+// capadas del detalle. En un grupo activo las ofertas (que nunca tienen
+// match) superan por volumen a las demandas, asi que las 40 filas mas
+// recientes podian ser casi todas oferta y el resumen reportaba "2 con
+// candidatas" cuando la ventana real tenia muchas mas.
+test("una rafaga de ofertas no tapa el conteo real de demandas del resumen", async (t) => {
+  const detalleCapado = [{ ...SEÑAL_BASE, id: "s-reciente", matches: [{ ref: "AP1", puntaje: 90 }] }];
+  const ventanaCompleta = [
+    ...Array.from({ length: 30 }, (_, i) => ({ id: `oferta-${i}`, matches: [] })),
+    { id: "s-reciente", matches: [{ ref: "AP1", puntaje: 90 }] },
+    ...Array.from({ length: 8 }, (_, i) => ({ id: `demanda-vieja-${i}`, matches: [{ ref: `X${i}`, puntaje: 85 }] })),
+  ];
+
+  t.mock.method(supabase, "from", (tabla) => {
+    if (tabla !== "group_signals") return chain({ data: [], error: null });
+    let limitado = false;
+    const c = {
+      select: () => c, eq: () => c, not: () => c, gte: () => c, order: () => c,
+      limit: () => { limitado = true; return c; },
+      in: () => c,
+      then: (resolve) => resolve({ data: limitado ? detalleCapado : ventanaCompleta, error: null }),
+    };
+    return c;
+  });
+
+  const r = await radarTrazabilidad.trazabilidad(SCOPE_ADMIN);
+  assert.strictEqual(r.señales.length, 1, "el detalle mostrado sigue capado, eso esta bien");
+  assert.strictEqual(r.resumen.conCandidatas, 9, "el resumen cuenta TODA la ventana, no solo el detalle capado");
+  assert.strictEqual(r.resumen.entraron, 39);
+});
+
 test("si falta la migracion de aviso_advisor_id, el fallback SIGUE trayendo respuesta_texto", async (t) => {
   let intento = 0;
   t.mock.method(supabase, "from", (tabla) => {
