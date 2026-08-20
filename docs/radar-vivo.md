@@ -190,9 +190,14 @@ muerte.
 | Confianza mínima del clasificador | `GRUPOS_RESPUESTA_CONFIANZA` | 0.85 |
 | Tope diario por grupo | `GRUPOS_RESPUESTA_MAX_DIA` | **0 = sin límite** |
 | Segundos entre publicaciones | `GRUPOS_RESPUESTA_ESPACIADO_SEG` | 20 |
-| Horario (Colombia) | `GRUPOS_RESPUESTA_HORA_DESDE/HASTA` | 8–19 |
 | Máximo de horas sin sync | `GRUPOS_SYNC_MAX_HORAS` | 30 |
 | Refs bloqueadas | `GRUPOS_REFS_BLOQUEADAS` | `9921388` |
+| Margen de precio sobre el techo pedido | `GRUPOS_MARGEN_PRECIO` | 0.10 (10%) |
+| Margen de área bajo el mínimo pedido | `GRUPOS_MARGEN_AREA` | 0.10 (10%) |
+
+**Sin restricción de horario (Juan, 2026-08-20).** El radar responde 24/7. Antes
+callaba fuera de 8am–7pm Colombia, y un match perfecto llegado a las 7am se
+perdía para siempre sin ningún reintento cuando abría la ventana.
 
 **Sobre el volumen.** No hay tope diario por decisión de producto: si entran mil
 pedidos y para los mil hay algo que ofrecer, se responden los mil. Un tope

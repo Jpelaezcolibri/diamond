@@ -35,30 +35,9 @@ const LIMITES_DEFAULT = {
   // El "maximo 3" del producto es OTRA cosa: son las propiedades que van DENTRO
   // de una respuesta (redactar.js), no la cantidad de respuestas.
   maxPorGrupoDia: Number(process.env.GRUPOS_RESPUESTA_MAX_DIA || 0),
-  // Horario comercial de Colombia. Un bot contestando a las 3 de la manana no
-  // ayuda a nadie y llama la atencion de la peor manera.
-  horaDesde: Number(process.env.GRUPOS_RESPUESTA_HORA_DESDE || 8),
-  horaHasta: Number(process.env.GRUPOS_RESPUESTA_HORA_HASTA || 19),
 };
 
 const MODOS = ["sombra", "auto"];
-
-// Hora local de Colombia. Se usa Intl con America/Bogota igual que el resto del
-// repo (src/agent/engine.js): el servidor corre en UTC y restar cinco a mano se
-// rompe en los bordes del dia.
-function horaEnBogota(fecha) {
-  const partes = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Bogota",
-    hour: "2-digit",
-    hour12: false,
-  }).formatToParts(fecha);
-  return Number(partes.find((p) => p.type === "hour").value);
-}
-
-function dentroDeHorario(fecha, limites = LIMITES_DEFAULT) {
-  const hora = horaEnBogota(fecha);
-  return hora >= limites.horaDesde && hora < limites.horaHasta;
-}
 
 /**
  * Decide si se publica una respuesta.
@@ -69,7 +48,6 @@ function dentroDeHorario(fecha, limites = LIMITES_DEFAULT) {
  * @param modo               'sombra' | 'auto' (cualquier otra cosa apaga)
  * @param respuestasRecientes cuantas veces se hablo hoy en el grupo; null = no se pudo saber.
  *                           Solo importa si hay un tope diario configurado.
- * @param ahora              inyectable para poder probar horarios
  *
  * Devuelve { publicar, motivo, traza } — `traza` lista lo que se verifico, en
  * orden, para poder auditar despues por que el bot hablo o se callo.
@@ -80,7 +58,6 @@ function decidir({
   grupo = {},
   modo = "sombra",
   respuestasRecientes = null,
-  ahora = new Date(),
   limites = LIMITES_DEFAULT,
 } = {}) {
   const traza = [];
@@ -107,9 +84,11 @@ function decidir({
   if (senal.respondida_at) return no("ya_respondida");
   traza.push("sin_respuesta_previa");
 
-  if (!dentroDeHorario(ahora, limites)) return no("fuera_de_horario");
-  traza.push(`hora:${horaEnBogota(ahora)}`);
-
+  // SIN restriccion de horario (Juan, 2026-08-20): el radar responde 24/7. Un
+  // pedido a las 3 a.m. es un cliente real esperando igual que uno a mediodia,
+  // y hasta ahora un match perfecto llegado antes de las 8 a.m. se callaba
+  // para siempre sin ningun reintento cuando abria la ventana.
+  //
   // El tope diario solo se evalua si hay uno configurado. Con el default (0,
   // sin limite) ni siquiera se exige poder contar: no habria nada que verificar.
   if (limites.maxPorGrupoDia > 0) {
@@ -131,4 +110,4 @@ function decidir({
   return { publicar: true, motivo: "ok", traza };
 }
 
-module.exports = { decidir, dentroDeHorario, horaEnBogota, LIMITES_DEFAULT, MODOS };
+module.exports = { decidir, LIMITES_DEFAULT, MODOS };

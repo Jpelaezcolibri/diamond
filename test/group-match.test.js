@@ -197,7 +197,9 @@ test("el área se lee bien en el formato REAL de Wasi, sin unidad separada", () 
   // regalaba sus 8 puntos. Los fixtures usaban "95 m²" —con superíndice, que no
   // es dígito— y por eso los tests nunca lo vieron. Se prueba con las dos
   // escrituras a propósito.
-  assert.strictEqual(evaluarCandidata(apto({ area: "92m2" }), pide({ area_min: 100 }), "diamond"), null);
+  // area_min alto a proposito: 92 (parseado bien, no 922) tiene que rechazarse
+  // incluso con el margen de captura del 10% (GRUPOS_MARGEN_AREA).
+  assert.strictEqual(evaluarCandidata(apto({ area: "92m2" }), pide({ area_min: 200 }), "diamond"), null);
   assert.strictEqual(evaluarCandidata(apto({ area: "60m2" }), pide({ area_min: 90 }), "diamond"), null);
 
   const cumple = evaluarCandidata(apto({ area: "113m2" }), pide({ area_min: 100 }), "diamond");
@@ -222,6 +224,54 @@ test("el que aprovecha el presupuesto puntúa más que el que se queda corto", (
   const alto = evaluarCandidata(apto({ precio: "$580.000.000" }), pide(), "diamond");
   const bajo = evaluarCandidata(apto({ precio: "$390.000.000" }), pide(), "diamond");
   assert.ok(alto.puntaje > bajo.puntaje);
+});
+
+// MARGEN DE CAPTURA (Juan, 2026-08-20). Caso real que motivo el cambio: un
+// cliente busca hasta $700M en Sabaneta y Diamond tiene una de $720M (2.9%
+// arriba) — antes se descartaba de plano. El margen relaja precio y area
+// (variables que casi nunca son criticas para el cliente); alcobas, banos,
+// garajes y estrato siguen exactos.
+test("MARGEN: un precio hasta 10% sobre el techo entra, mas alla se descarta igual que antes", () => {
+  const techo = 700000000;
+  const casiEncima = evaluarCandidata(apto({ precio: "$720.000.000" }), pide({ precio_max: techo }), "diamond");
+  assert.ok(casiEncima, "2.9% sobre el techo tiene que entrar dentro del margen del 10%");
+  assert.match(casiEncima.razones.join(" | "), /\$720M — 3% sobre \$700M, dentro del margen/);
+
+  const enElLimite = evaluarCandidata(apto({ precio: "$770.000.000" }), pide({ precio_max: techo }), "diamond");
+  assert.ok(enElLimite, "exactamente 10% sobre el techo todavia entra");
+
+  const muyArriba = evaluarCandidata(apto({ precio: "$800.000.000" }), pide({ precio_max: techo }), "diamond");
+  assert.strictEqual(muyArriba, null, "mas alla del margen se sigue rechazando");
+});
+
+test("MARGEN: pasarse del presupuesto no puntua como si hubiera cabido", () => {
+  const techo = 700000000;
+  const dentro = evaluarCandidata(apto({ precio: "$680.000.000" }), pide({ precio_max: techo }), "diamond");
+  const conMargen = evaluarCandidata(apto({ precio: "$720.000.000" }), pide({ precio_max: techo }), "diamond");
+  assert.ok(dentro.puntaje > conMargen.puntaje, "el que SI cupo tiene que puntuar mas que el que necesito margen");
+});
+
+test("MARGEN: area hasta 10% por debajo de lo pedido entra, mas abajo se descarta igual que antes", () => {
+  const casiSuficiente = evaluarCandidata(apto({ area: "92m2" }), pide({ area_min: 100 }), "diamond");
+  assert.ok(casiSuficiente, "92 m² para un pedido de 100 m² (8% de menos) entra dentro del margen");
+
+  const enElLimite = evaluarCandidata(apto({ area: "90m2" }), pide({ area_min: 100 }), "diamond");
+  assert.ok(enElLimite, "exactamente 10% de menos todavia entra");
+
+  const muyChico = evaluarCandidata(apto({ area: "80m2" }), pide({ area_min: 100 }), "diamond");
+  assert.strictEqual(muyChico, null, "mas alla del margen se sigue rechazando");
+});
+
+test("MARGEN: alcobas, banos, garajes y estrato NO llevan margen — siguen exactos", () => {
+  // Estas si le cambian lo que puede hacer con la propiedad al cliente: no se
+  // relajan aunque precio y area si lo hagan.
+  assert.strictEqual(evaluarCandidata(apto({ habitaciones: 1 }), pide({ habitaciones: 2 }), "diamond"), null);
+  assert.strictEqual(evaluarCandidata(apto({ banos: 1 }), pide({ banos: 2 }), "diamond"), null);
+  // garaje: 0 no sirve para esta asercion — el codigo lo trata como "sin
+  // dato" (no distingue "confirmado sin garaje" de "no sincronizado"), asi
+  // que no descalifica. Se usa un valor con dato real e insuficiente.
+  assert.strictEqual(evaluarCandidata(apto({ garaje: 1 }), pide({ garajes: 2 }), "diamond"), null);
+  assert.strictEqual(evaluarCandidata(apto({ estrato: 4 }), pide({ estrato: 5 }), "diamond"), null);
 });
 
 test("una demanda de arriendo no matchea una propiedad en venta", () => {

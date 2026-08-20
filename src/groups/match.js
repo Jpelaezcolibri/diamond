@@ -98,6 +98,20 @@ function mismaOperacion(propiedad, c) {
 const BANDA_INFERIOR = Number(process.env.GRUPOS_BANDA_PRECIO || 0.6);
 const PUNTAJE_BASE = 55;
 
+// MARGEN DE CAPTURA (Juan, 2026-08-20): el techo de precio y el piso de area
+// eran compuertas duras — un apartamento de $720M para un presupuesto de
+// $700M (2.9% arriba) se descartaba de plano, aunque para el cliente esos
+// $20M casi seguro sean negociables. El pedido explicito fue "capturar la
+// mayor cantidad de ofertas posible" dandole margen al bot en las variables
+// que NO son criticas para el cliente (precio, metros) sin tocar las que si
+// lo son (alcobas, banos, garajes, estrato: estas siguen exactas).
+//
+// El margen relaja la compuerta, no la borra: mas alla de el, se sigue
+// rechazando igual que antes. Configurable sin redesplegar, mismo patron que
+// BANDA_INFERIOR.
+const MARGEN_PRECIO = Number(process.env.GRUPOS_MARGEN_PRECIO || 0.10);
+const MARGEN_AREA = Number(process.env.GRUPOS_MARGEN_AREA || 0.10);
+
 // El parseo de precio y area vive en src/lib/formato.js. Antes habia aca un
 // `aNumero` que hacia `replace(/\D/g, "")`, y ese "quitar todo lo que no sea
 // digito" tenia un bug que no fallaba ruidosamente: sobre el formato REAL de
@@ -229,15 +243,23 @@ function evaluarCandidata(p, c, fuente) {
   const razones = [ubicacion.razon];
   let puntaje = PUNTAJE_BASE + ubicacion.puntos;
 
-  // ── Precio: banda, no techo ──
+  // ── Precio: banda, no techo — con margen de captura sobre el techo ──
   const precio = formato.parsearPrecio(p.precio);
   const techo = c.precio_max > 0 ? c.precio_max : null;
+  const techoConMargen = techo ? Math.round(techo * (1 + MARGEN_PRECIO)) : null;
   const piso = c.precio_min > 0 ? c.precio_min : techo ? Math.round(techo * BANDA_INFERIOR) : null;
   if (precio && techo) {
-    if (precio > techo) return null;
+    if (precio > techoConMargen) return null;
     if (piso && precio < piso) return null;
-    razones.push(`${millones(precio)} dentro de ${millones(techo)}`);
-    if (precio >= techo * 0.75) puntaje += 10; // aprovecha el presupuesto
+    if (precio > techo) {
+      // Dentro del margen, no del presupuesto: se declara tal cual, sin la
+      // bonificacion de "aprovecha el presupuesto" (esa premia quedarse
+      // adentro, no pasarse) y sin fingir que cupo.
+      razones.push(`${millones(precio)} — ${Math.round((precio / techo - 1) * 100)}% sobre ${millones(techo)}, dentro del margen`);
+    } else {
+      razones.push(`${millones(precio)} dentro de ${millones(techo)}`);
+      if (precio >= techo * 0.75) puntaje += 10; // aprovecha el presupuesto
+    }
   } else if (precio) {
     razones.push(millones(precio));
   }
@@ -247,7 +269,11 @@ function evaluarCandidata(p, c, fuente) {
   // no descalifica (es un hueco de nuestro sync, no un defecto del inmueble).
   const exigencias = [
     { pide: c.habitaciones, tiene: p.habitaciones, ok: (t, q) => t >= q && t <= q + 1, texto: (t) => `${t} alcobas`, puntos: 10 },
-    { pide: c.area_min, tiene: formato.parsearArea(p.area), ok: (t, q) => t >= q, texto: (t) => `${t} m²`, puntos: 8 },
+    // Area SI lleva margen de captura (Juan, 2026-08-20): unos metros menos
+    // de lo pedido casi nunca descarta un negocio real. Alcobas/banos/garajes/
+    // estrato no lo llevan a proposito: son las que si le importan al
+    // cliente y una de menos si cambia lo que puede hacer con la propiedad.
+    { pide: c.area_min, tiene: formato.parsearArea(p.area), ok: (t, q) => t >= q * (1 - MARGEN_AREA), texto: (t) => `${t} m²`, puntos: 8 },
     { pide: c.banos, tiene: p.banos, ok: (t, q) => t >= q, texto: (t) => `${t} baños`, puntos: 6 },
     { pide: c.garajes, tiene: p.garaje, ok: (t, q) => t >= q, texto: (t) => `${t} garaje${t > 1 ? "s" : ""}`, puntos: 6 },
     { pide: c.estrato, tiene: p.estrato, ok: (t, q) => t >= q, texto: (t) => `estrato ${t}`, puntos: 5 },
@@ -364,4 +390,5 @@ async function cruzar(clasificados, { org = null } = {}) {
 module.exports = {
   cruzar, filtrosInventario, filtrosAliados, mismaOperacion, evaluarOferta,
   evaluarCandidata, zonaCoincide, ciudadCoincide, ubicacionCoincide, BANDA_INFERIOR,
+  MARGEN_PRECIO, MARGEN_AREA,
 };

@@ -80,19 +80,12 @@ test("una demanda ya respondida no se responde de nuevo", () => {
   assert.strictEqual(motivo({ senal: { clase: "demanda", confianza: 0.95, respondida_at: "2026-08-17T15:00:00Z" } }), "ya_respondida");
 });
 
-test("fuera del horario comercial colombiano, silencio", () => {
-  // 08:00 UTC son las 03:00 en Colombia.
-  assert.strictEqual(motivo({ ahora: new Date("2026-08-17T08:00:00Z") }), "fuera_de_horario");
-  // 01:00 UTC del dia 18 son las 20:00 del 17 en Colombia: ya cerro.
-  assert.strictEqual(motivo({ ahora: new Date("2026-08-18T01:00:00Z") }), "fuera_de_horario");
-  // 13:00 UTC son las 08:00: abre.
-  assert.strictEqual(politica.decidir(escenario({ ahora: new Date("2026-08-17T13:00:00Z") })).publicar, true);
-});
-
-test("la hora se calcula en Bogota, no en UTC", () => {
-  // El servidor corre en UTC; restar cinco a mano se rompe en el borde del dia.
-  assert.strictEqual(politica.horaEnBogota(new Date("2026-08-17T17:00:00Z")), 12);
-  assert.strictEqual(politica.horaEnBogota(new Date("2026-08-18T02:00:00Z")), 21);
+test("SIN restriccion de horario (Juan, 2026-08-20): el radar publica 24/7", () => {
+  // Antes esto se callaba fuera de las 8am-7pm de Colombia. Un pedido real a
+  // las 3am de un cliente no espera menos que uno a mediodia, y el que
+  // llegaba antes de abrir la ventana se perdia para siempre sin reintento.
+  assert.strictEqual(politica.decidir(escenario({ ahora: new Date("2026-08-17T08:00:00Z") })).publicar, true);
+  assert.strictEqual(politica.decidir(escenario({ ahora: new Date("2026-08-18T01:00:00Z") })).publicar, true);
 });
 
 
