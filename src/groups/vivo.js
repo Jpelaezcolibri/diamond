@@ -180,10 +180,14 @@ async function procesarMensaje(org, mensaje, { grupo, modo = "sombra", enviar = 
     // que no se envio X" solo se podia responder buscando a mano entre los
     // mensajes del feed — y Sofi, sin ese cruce, terminaba inventando un motivo.
     await groupSignals.guardarPolitica(org.id, signal.id, { motivo: decision.motivo, traza: decision.traza }).catch(() => {});
-    // Solo cuando lo UNICO que falto fue puntaje (nunca zona equivocada ni
-    // propiedad de un aliado — esos no se avisan, aprobados o no).
-    if (decision.motivo === "sin_propiedades_publicables") {
-      await avisarCercano(org, signal, mensaje, grupo, señal.matches || [], descartados)
+    // "que no se salte ninguno de los dos" (Juan, 2026-08-20): un pedido con
+    // un match real no puede desaparecer en silencio solo porque el grupo
+    // todavia esta en modo escucha (responde=false) — eso paso con el pedido
+    // de Regnum Realty en "SOLO VIVIENDA >$1000 MLLS" y es justo lo que esto
+    // cierra. "confianza_baja", "ya_respondida" y el tope diario NO avisan:
+    // esos son un "no" real, no una oportunidad perdida por configuracion.
+    if (decision.motivo === "sin_propiedades_publicables" || decision.motivo === "grupo_no_habilitado") {
+      await avisarCercano(org, signal, mensaje, grupo, señal.matches || [], descartados, publicables)
         .catch((e) => console.warn("[radar] No se pudo avisar el candidato cercano:", e.message));
     }
     return { resultado: "callado", motivo: decision.motivo, traza: decision.traza, descartados, signalId: signal && signal.id };
@@ -342,23 +346,29 @@ function destinatarios(asesor) {
 // linea vinculada, "para no perder la trazabilidad". Si dice que si, se
 // publica por la MISMA via auditada (aprobarManual mas abajo) desde su
 // propio chat con Sofi (src/agent/tools.js#aprobar_pedido_radar).
-async function avisarCercano(org, signal, mensaje, grupo, matches, descartados) {
+async function avisarCercano(org, signal, mensaje, grupo, matches, descartados, publicables = []) {
   if (!RADAR_REVISOR_PHONE) return;
 
-  // "Cercano" = fallo SOLO por puntaje_bajo. Si tambien le falta un dato
-  // (sin_ref, sin_link_wasi, etc.) o es de zona equivocada o de un aliado,
-  // no es un "casi" — es un no real, y avisar igual solo generaria ruido.
+  // Dos formas de llegar aca, unidas en una sola lista para Natalia:
+  //   1. publicables: match de calidad COMPLETA que no se publico solo
+  //      porque el grupo todavia esta en modo escucha (responde=false) —
+  //      nunca porque el puntaje o el dato fueran el problema.
+  //   2. "cercanos": fallo SOLO por puntaje_bajo, con todo lo demas limpio.
+  // Si ADEMAS le falta un dato (sin_ref, sin_link_wasi) o es de zona
+  // equivocada o de un aliado, no es un "casi" — es un no real, y avisar
+  // igual solo generaria ruido.
   const cercanos = descartados
     .filter((d) => d.motivos.length === 1 && d.motivos[0] === "puntaje_bajo")
     .map((d) => (matches || []).find((m) => String(m.ref) === String(d.ref)))
     .filter(Boolean);
-  if (!cercanos.length) return;
+  const candidatas = [...publicables, ...cercanos];
+  if (!candidatas.length) return;
 
   const revisor = await advisors.findByPhone(org.id, RADAR_REVISOR_PHONE).catch(() => null);
   if (!revisor) return;
 
   const señalParaAviso = { grupo_nombre: grupo.nombre || grupo.jid, autor_nombre: mensaje.autor, texto_original: mensaje.texto };
-  const texto = avisoCercano.construir(señalParaAviso, cercanos);
+  const texto = avisoCercano.construir(señalParaAviso, candidatas);
   if (!texto) return;
 
   const envio = await mensajeAsesor.enviarYRegistrar(org, revisor.phone, texto).catch((e) => ({ ok: false, error: e.message }));

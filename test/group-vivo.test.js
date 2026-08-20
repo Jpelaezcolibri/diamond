@@ -587,7 +587,7 @@ test("avisarCercano: un pedido que SOLO fallo por puntaje bajo avisa al revisor"
   assert.strictEqual(r.resultado, "callado");
   assert.strictEqual(avisosCercanosEnviados.length, 1);
   assert.strictEqual(avisosCercanosEnviados[0].telefono, "573001878024");
-  assert.match(avisosCercanosEnviados[0].texto, /calló un pedido por poco/);
+  assert.match(avisosCercanosEnviados[0].texto, /no salió solo/);
   assert.match(avisosCercanosEnviados[0].texto, /AP004/);
   assert.strictEqual(avisosCercanosMarcados.length, 1);
   assert.strictEqual(avisosCercanosMarcados[0].id, "sig-1");
@@ -638,5 +638,39 @@ test("avisarCercano: un pedido que si se publica (score alto) no molesta al revi
 
   delete process.env.RADAR_REVISOR_PHONE;
   assert.strictEqual(r.resultado, "publicado");
+  assert.strictEqual(avisosCercanosEnviados.length, 0);
+});
+
+// Caso real (Regnum Realty, 2026-08-20): un pedido con match de calidad
+// COMPLETA no salio porque "SOLO VIVIENDA >$1000 MLLS" todavia esta en modo
+// escucha (responde=false) — y no se avisó a nadie, nadie se enteró. Juan:
+// "tenemos que crear una norma que no se salte ninguno de los dos" (ni el
+// automatico ni el humano).
+test("avisarCercano: un match de CALIDAD COMPLETA en un grupo que solo escucha SI avisa al revisor", async () => {
+  process.env.RADAR_REVISOR_PHONE = "573001878024";
+  vivo = instalarDobles();
+  // matchBueno() por defecto puntua 88 — pasaria la compuerta si el grupo respondiera.
+
+  const grupoSoloEscucha = { ...GRUPO, responde: false };
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: grupoSoloEscucha, modo: "auto", ahora: MEDIODIA });
+
+  delete process.env.RADAR_REVISOR_PHONE;
+
+  assert.strictEqual(r.resultado, "callado");
+  assert.strictEqual(r.motivo, "grupo_no_habilitado");
+  assert.strictEqual(avisosCercanosEnviados.length, 1);
+  assert.match(avisosCercanosEnviados[0].texto, /AP004/);
+});
+
+test("avisarCercano: un grupo apagado sin ningun match limpio no genera ruido", async () => {
+  process.env.RADAR_REVISOR_PHONE = "573001878024";
+  vivo = instalarDobles();
+  // Zona equivocada Y precio $0: ni publicable ni "casi" — nada que avisar.
+  matchesDevueltos = [matchBueno({ puntaje: 60, ubicacion: "otra_zona", precio: "$0" })];
+
+  const grupoSoloEscucha = { ...GRUPO, responde: false };
+  await vivo.procesarMensaje(ORG, mensaje(), { grupo: grupoSoloEscucha, modo: "auto", ahora: MEDIODIA });
+
+  delete process.env.RADAR_REVISOR_PHONE;
   assert.strictEqual(avisosCercanosEnviados.length, 0);
 });
