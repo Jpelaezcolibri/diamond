@@ -469,7 +469,7 @@ function señalCallada(extra = {}) {
 }
 
 function grupoHabilitado(extra = {}) {
-  return { id: "grp-1", jid: "vivo:gremial", nombre: "Gremial", responde: true, ...extra };
+  return { id: "grp-1", jid: "vivo:gremial", nombre: "Gremial", responde: true, modo: "sombra", ...extra };
 }
 
 test("aprobarManual: publica el pedido callado y lo marca respondido", async () => {
@@ -498,9 +498,24 @@ test("aprobarManual: una señal ya respondida no se vuelve a publicar", async ()
   assert.strictEqual(enviadosManual.length, 0);
 });
 
-test("aprobarManual: un grupo sin permiso de responder no publica", async () => {
+// Caso real (Juan, 2026-08-20): "el problema es que el bot debe de estar
+// habilitado para responder por que si no no daría" — antes aprobarManual
+// exigia grupo.responde=true, el MISMO permiso que el camino automatico. Eso
+// habria obligado a activar "responder" en TODOS los grupos solo para poder
+// aprobar algo a mano, justo lo que la norma de "avisale a Natalia" vino a
+// evitar (grupos en modo escucha SI tienen que poder aprobarse a mano).
+test("aprobarManual: un grupo en modo escucha (responde=false) SI se puede aprobar a mano", async () => {
   señalParaAprobar = señalCallada();
   grupoParaAprobar = grupoHabilitado({ responde: false });
+
+  const r = await vivo.aprobarManual({ id: "org-1" }, "sig-callada");
+  assert.strictEqual(r.resultado, "publicado");
+  assert.strictEqual(enviadosManual.length, 1);
+});
+
+test("aprobarManual: un grupo apagado del todo (modo ignorar) SI sigue sin publicarse", async () => {
+  señalParaAprobar = señalCallada();
+  grupoParaAprobar = grupoHabilitado({ modo: "ignorar" });
 
   const r = await vivo.aprobarManual({ id: "org-1" }, "sig-callada");
   assert.strictEqual(r.resultado, "grupo_no_habilitado");

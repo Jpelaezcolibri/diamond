@@ -396,7 +396,16 @@ async function aprobarManual(org, signalId) {
 
   const grupo = await whatsappGroups.obtenerGrupo(org.id, signal.group_id);
   if (!grupo) return { resultado: "grupo_no_encontrado" };
-  if (grupo.responde !== true) return { resultado: "grupo_no_habilitado" };
+  // OJO: aca NO se exige grupo.responde=true (a diferencia del camino
+  // automatico). Ese permiso existe para controlar la publicacion SIN
+  // supervision — un grupo nuevo en modo escucha, sin nadie revisando. Una
+  // aprobacion manual YA ES esa supervision: Natalia (o el admin) miro el
+  // pedido y decidio. Exigir el mismo permiso aca habria obligado a Juan a
+  // activar "responder" en cada grupo antes de poder aprobar nada — justo lo
+  // que la norma del 2026-08-20 vino a evitar. Lo unico que sigue duro es que
+  // el grupo se este escuchando de verdad (no "ignorar"): eso no es
+  // supervision, es si el radar sigue prestando atencion a ese grupo.
+  if (grupo.modo === "ignorar") return { resultado: "grupo_no_habilitado" };
 
   // BUG real (Juan, 2026-08-20): "aun no puedo enviar mensajes que el bot
   // callo". La causa: esto seguia exigiendo el mismo umbral de puntaje (70)
