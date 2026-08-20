@@ -141,4 +141,38 @@ function sonVecinas(tokensPedido, tokensPropiedad) {
   return false;
 }
 
-module.exports = { STOPWORDS, GENERIC_GEO, zonaTokens, distinctiveTokens, sonVecinas, vecinosDe, VECINDAD };
+// ── Sub-zonas: contencion, no vecindad ───────────────────────────────────
+//
+// Distinto de VECINDAD (dos sectores contiguos, pero cada uno es el suyo):
+// aca un sector es LITERALMENTE parte del otro. Quien pide "Laureles" y una
+// propiedad esta en "San Joaquin" no esta mirando el barrio de al lado, esta
+// mirando exactamente lo que pidio.
+//
+// Evidencia real (Juan, 2026-08-20 — auditoria del veredicto de Sofi en modo
+// asistido, dos pedidos distintos): "San Joaquin es parte de Laureles" y
+// "[Rodeo Alto] estan dentro de Belen, no son 'vecinas' sino que estan EN la
+// zona pedida" — el motor las calificaba como 'vecina' (grado mas debil,
+// -5 puntos) cuando deberian ser 'exacta' (+20). La contencion no es
+// simetrica: Laureles no es una sub-zona de San Joaquin, por eso el mapa va
+// en un solo sentido (subzona -> zona madre) y se consulta solo desde el
+// lado de la propiedad.
+const SUBZONA_DE = new Map([
+  ["joaquin", "laureles"], // San Joaquin
+  ["rodeo", "belen"], // Rodeo Alto / Rodeo Bajo
+]);
+
+// ¿Algun token de la propiedad es una sub-zona conocida de algun token
+// pedido? Mismo criterio de token exacto que el resto del archivo — nunca
+// substring.
+function subzonaCoincide(tokensPedido, tokensPropiedad) {
+  const pedidos = new Set((tokensPedido || []).map(sinTildes));
+  for (const t of tokensPropiedad || []) {
+    const madre = SUBZONA_DE.get(sinTildes(t));
+    if (madre && pedidos.has(madre)) return true;
+  }
+  return false;
+}
+
+module.exports = {
+  STOPWORDS, GENERIC_GEO, zonaTokens, distinctiveTokens, sonVecinas, vecinosDe, subzonaCoincide, VECINDAD, SUBZONA_DE,
+};

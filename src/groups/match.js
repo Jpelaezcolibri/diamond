@@ -146,10 +146,14 @@ function zonasPedidas(c) {
 }
 
 function zonaCoincide(p, c) {
-  const tokensPropiedad = new Set(properties.zonaTokens(p.zona || ""));
+  const tokensPropiedadArr = properties.zonaTokens(p.zona || "");
+  const tokensPropiedad = new Set(tokensPropiedadArr);
   for (const z of zonasPedidas(c)) {
     const tokensPedido = properties.distinctiveTokens(properties.zonaTokens(z));
     if (tokensPedido.length && tokensPedido.some((t) => tokensPropiedad.has(t))) return true;
+    // Sub-zona conocida ("San Joaquin" pedido "Laureles"): es tan exacta como
+    // el token literal, no una vecina. Ver la nota en src/lib/zonas.js.
+    if (tokensPedido.length && properties.subzonaCoincide(tokensPedido, tokensPropiedadArr)) return true;
   }
   return false;
 }
@@ -268,6 +272,19 @@ function evaluarCandidata(p, c, fuente) {
   const razones = [ubicacion.razon];
   let puntaje = PUNTAJE_BASE + ubicacion.puntos;
 
+  // Descuento por fuente no verificable (Juan, 2026-08-20 — auditoria del
+  // veredicto de Sofi en modo asistido): distinto de "lo desconocido no
+  // descalifica" (mas abajo). Ahi el hueco es incidental — nuestro propio
+  // sync de Wasi no trajo el dato todavia. Una propiedad de un aliado NUNCA
+  // puede tener alcobas/area/banos/garajes/estrato: ally_properties no tiene
+  // esas columnas, la captura es un texto de WhatsApp. Sin este descuento,
+  // una propiedad de la que solo se sabe zona y precio quedaba con el MISMO
+  // puntaje que una nuestra que verifico cuatro o cinco cosas — Sofi lo
+  // marco cuatro veces distintas: "sin esa info verificable, no deberia
+  // pasar de 55", "no tiene datos de area ni alcobas verificables, deberia
+  // estar mas abajo".
+  if (fuente === "aliado") puntaje -= 8;
+
   // ── Precio: banda, no techo — con margen de captura sobre el techo ──
   const precio = formato.parsearPrecio(p.precio);
   const techo = c.precio_max > 0 ? c.precio_max : null;
@@ -293,7 +310,14 @@ function evaluarCandidata(p, c, fuente) {
   // Cada una: si la propiedad tiene el dato, tiene que cumplir; si no lo tiene,
   // no descalifica (es un hueco de nuestro sync, no un defecto del inmueble).
   const exigencias = [
-    { pide: c.habitaciones, tiene: p.habitaciones, ok: (t, q) => t >= q && t <= q + 1, texto: (t) => `${t} alcobas`, puntos: 10 },
+    // Puntaje distinto para el exacto (t===q) y el "uno de mas" que igual
+    // pasa la compuerta (t===q+1): antes valian lo mismo. Caso real (Juan,
+    // 2026-08-20 — auditoria del veredicto de Sofi): "la de 4 alcobas tiene
+    // puntaje mas alto pero sirve menos [que la de 3, cuando pidieron 3]...
+    // deberia tener el puntaje mayor [la que calza exacto]". Una alcoba de
+    // mas cambia el negocio (mas cara, distinto uso); sigue sirviendo -por
+    // eso la compuerta la deja pasar- pero no tan bien como la exacta.
+    { pide: c.habitaciones, tiene: p.habitaciones, ok: (t, q) => t >= q && t <= q + 1, texto: (t) => `${t} alcobas`, puntos: (t, q) => (t === q ? 10 : 6) },
     // Area SI lleva margen de captura (Juan, 2026-08-20): unos metros menos
     // de lo pedido casi nunca descarta un negocio real. Alcobas/banos/garajes/
     // estrato no lo llevan a proposito: son las que si le importan al
@@ -309,7 +333,7 @@ function evaluarCandidata(p, c, fuente) {
     if (e.tiene == null || !(e.tiene > 0)) continue; // sin dato: ni suma ni resta
     if (!e.ok(e.tiene, e.pide)) return null;
     razones.push(e.texto(e.tiene));
-    puntaje += e.puntos;
+    puntaje += typeof e.puntos === "function" ? e.puntos(e.tiene, e.pide) : e.puntos;
   }
 
   return {
@@ -342,6 +366,33 @@ function evaluarCandidata(p, c, fuente) {
   };
 }
 
+// Un colega republica la MISMA propiedad varias veces —en el mismo grupo o en
+// varios— y ally_properties no dedupea al guardar (src/groups/ofertas.js):
+// cada repost es una fila nueva. Caso real medido (Juan, 2026-08-20 —
+// auditoria del veredicto de Sofi): un pedido trajo 6 candidatas, 5 de ellas
+// la MISMA casa de "Alto de Las Palmas" con el titulo apenas distinto cada
+// vez ("Casa de diseño exclusivo...", "Casa de diseño exclusivo en...", "Casa
+// en el alto de Las Palmas..."). Con el tope de 6 candidatas, esas repeticiones
+// tapaban CUALQUIER otra propiedad real que hubiera calzado. Se dedupe por
+// fuente + precio + zona normalizada: mismo precio y misma zona, casi seguro
+// la misma propiedad — nunca dos negocios distintos por casualidad.
+function claveDuplicado(m) {
+  const tokens = properties.distinctiveTokens(properties.zonaTokens(m.zona || "")).sort().join(",");
+  return `${m.fuente}|${formato.parsearPrecio(m.precio) ?? m.precio}|${tokens}`;
+}
+
+function sinDuplicados(matches) {
+  const vistos = new Set();
+  const out = [];
+  for (const m of matches) {
+    const clave = claveDuplicado(m);
+    if (vistos.has(clave)) continue;
+    vistos.add(clave);
+    out.push(m);
+  }
+  return out;
+}
+
 async function cruzarDemanda(org, c) {
   // Sin zona NI ciudad no hay match posible. Antes esto devolvia media ciudad,
   // que es peor que no devolver nada: quema la credibilidad de la pantalla y
@@ -353,15 +404,18 @@ async function cruzarDemanda(org, c) {
     allyProperties.search(org.id, filtrosAliados(c), 30).catch(() => []),
   ]);
 
-  const matches = [
-    ...propios.map((p) => evaluarCandidata(p, c, "diamond")),
-    ...aliados.map((p) => evaluarCandidata(p, c, "aliado")),
-  ]
-    .filter(Boolean)
-    // El inventario propio primero: la comisión completa vale más que la
-    // compartida. Dentro de cada fuente, el que mejor calza arriba.
-    .sort((a, b) => (a.fuente === b.fuente ? b.puntaje - a.puntaje : a.fuente === "diamond" ? -1 : 1))
-    .slice(0, 6);
+  const matches = sinDuplicados(
+    [
+      ...propios.map((p) => evaluarCandidata(p, c, "diamond")),
+      ...aliados.map((p) => evaluarCandidata(p, c, "aliado")),
+    ]
+      .filter(Boolean)
+      // El inventario propio primero: la comisión completa vale más que la
+      // compartida. Dentro de cada fuente, el que mejor calza arriba — y el
+      // dedup de arriba se queda con el primero que ve, asi que este orden
+      // es tambien el que decide CUAL copia del duplicado sobrevive.
+      .sort((a, b) => (a.fuente === b.fuente ? b.puntaje - a.puntaje : a.fuente === "diamond" ? -1 : 1))
+  ).slice(0, 6);
 
   return { ...c, matches };
 }
@@ -420,5 +474,5 @@ async function cruzar(clasificados, { org = null } = {}) {
 module.exports = {
   cruzar, filtrosInventario, filtrosAliados, mismaOperacion, evaluarOferta,
   evaluarCandidata, zonaCoincide, ciudadCoincide, ubicacionCoincide, zonaExcluida, BANDA_INFERIOR,
-  MARGEN_PRECIO, MARGEN_AREA,
+  MARGEN_PRECIO, MARGEN_AREA, sinDuplicados,
 };

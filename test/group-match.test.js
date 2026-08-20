@@ -423,3 +423,96 @@ test("un token completo SIGUE matcheando aunque sea prefijo de otra palabra", ()
   // "Belén" pedido debe seguir matcheando una propiedad en "Belén".
   assert.strictEqual(zonaCoincide({ zona: "Belén" }, { zona: "Belén" }), true);
 });
+
+// ══ Auditoria del veredicto de Sofi en modo asistido (Juan, 2026-08-20) ═══
+//
+// "necesito que hagas una auditoria de los mensajes que se aprobaron y de
+// los que no para que aprendas del resultado, corrigete y afina el motor de
+// scoring". Con datos reales (28 señales con veredicto de Sofi, 18 con
+// desacuerdo explicito contra el puntaje) aparecieron tres patrones
+// consistentes, cada uno con su fix abajo.
+
+const { sinDuplicados } = require("../src/groups/match");
+
+// PATRON 1 (4 desacuerdos independientes): una propiedad de aliado —sin ref,
+// sin area, sin alcobas, sin nada verificable mas alla de zona y precio—
+// puntuaba IGUAL que una nuestra que confirmo varios datos. ally_properties
+// no tiene columnas de area/habitaciones/banos (confirmado contra el schema
+// real): esas propiedades NUNCA pueden ganar esos puntos, asi que no son
+// comparables con las nuestras en igualdad de condiciones.
+test("SCORING: una propiedad de aliado puntua menos que una nuestra identica en zona y precio", () => {
+  const diamond = evaluarCandidata(apto(), pide(), "diamond");
+  const aliado = evaluarCandidata(apto({ ref: null }), pide(), "aliado");
+  assert.ok(diamond.puntaje > aliado.puntaje, "el aliado no puede tener el mismo puntaje sin nada verificado");
+  assert.strictEqual(diamond.puntaje - aliado.puntaje, 8);
+});
+
+// PATRON 2 (1 desacuerdo, senal 640172eb): "la de 4 alcobas tiene puntaje mas
+// alto pero sirve menos [que la de 3, cuando pidieron 3]... deberia tener el
+// puntaje mayor [la exacta]". La compuerta ya dejaba pasar t===q+1 (una de
+// mas); lo que no hacia era puntuarla distinto de la exacta.
+test("SCORING: pedir 3 alcobas y encontrar exactamente 3 puntua mas que encontrar 4", () => {
+  const exacta = evaluarCandidata(apto({ habitaciones: 3 }), pide({ habitaciones: 3 }), "diamond");
+  const unaDeMas = evaluarCandidata(apto({ habitaciones: 4 }), pide({ habitaciones: 3 }), "diamond");
+  assert.ok(exacta && unaDeMas, "las dos tienen que pasar la compuerta");
+  assert.ok(exacta.puntaje > unaDeMas.puntaje);
+});
+
+// PATRON 3 (2 desacuerdos): "San Joaquin es parte de Laureles" / "Rodeo Alto
+// [...] estan dentro de Belen, no son 'vecinas' sino que estan EN la zona
+// pedida" — el motor las calificaba 'vecina' cuando son exactamente lo
+// pedido, solo que con otro nombre.
+test("SCORING: San Joaquin cuenta como zona EXACTA de un pedido en Laureles, no vecina", () => {
+  const m = evaluarCandidata(apto({ zona: "San Joaquín" }), pide({ zona: "Laureles" }), "diamond");
+  assert.ok(m);
+  assert.strictEqual(m.ubicacion, "exacta");
+});
+
+test("SCORING: Rodeo Alto cuenta como zona EXACTA de un pedido en Belen, no vecina", () => {
+  const m = evaluarCandidata(apto({ zona: "Rodeo Alto" }), pide({ zona: "Belén" }), "diamond");
+  assert.ok(m);
+  assert.strictEqual(m.ubicacion, "exacta");
+});
+
+test("SCORING: la contencion de sub-zona no es simetrica — pedir San Joaquin y encontrar Laureles sigue siendo VECINA, no exacta", () => {
+  // La contencion solo promueve subzona -> zona madre a exacta (San Joaquin
+  // ES Laureles). Al reves, "Laureles" es el barrio entero, mas grande que
+  // lo pedido: sigue matcheando por la vecindad YA declarada
+  // (["laureles","joaquin"] en zonas.js, de antes de este fix), pero como
+  // 'vecina', no como si fuera exactamente lo pedido.
+  const m = evaluarCandidata(apto({ zona: "Laureles" }), pide({ zona: "San Joaquín" }), "diamond");
+  assert.ok(m);
+  assert.strictEqual(m.ubicacion, "vecina");
+});
+
+// DUPLICADOS (senal 3cdbee86): un pedido real trajo 6 candidatas, 5 la MISMA
+// casa de "Alto de Las Palmas" republicada por el colega con el titulo
+// apenas distinto cada vez — ally_properties no dedupea al guardar. Con el
+// tope de 6, esas repeticiones tapaban cualquier otra propiedad real.
+test("DUPLICADOS: la misma propiedad de aliado repetida con distinto titulo se colapsa en una sola", () => {
+  const base = { fuente: "aliado", zona: "Alto de Las Palmas, vía aeropuerto", precio: "$4.000.000.000", puntaje: 67 };
+  const matches = [
+    { ...base, titulo: "Casa de diseño exclusivo Alto de Las Palmas" },
+    { ...base, titulo: "Casa de diseño exclusivo en Alto de Las Palmas", puntaje: 70 },
+    { ...base, titulo: "Casa en el alto de Las Palmas, vía aeropuerto" },
+    { fuente: "aliado", zona: "Sabaneta", precio: "$655.000.000", puntaje: 60, titulo: "Otra propiedad, distinta de verdad" },
+  ];
+  const out = sinDuplicados(matches);
+  assert.strictEqual(out.length, 2, "las 3 copias de Las Palmas colapsan en 1, Sabaneta queda aparte");
+});
+
+test("DUPLICADOS: dos propiedades distintas del mismo colega y misma zona NO se confunden si el precio difiere", () => {
+  const matches = [
+    { fuente: "aliado", zona: "Laureles", precio: "$500.000.000", puntaje: 65, titulo: "Apto A" },
+    { fuente: "aliado", zona: "Laureles", precio: "$700.000.000", puntaje: 63, titulo: "Apto B" },
+  ];
+  assert.strictEqual(sinDuplicados(matches).length, 2);
+});
+
+test("DUPLICADOS: sin la funcion de arriba, dos fuentes distintas (nuestra y de aliado) nunca se confunden entre si", () => {
+  const matches = [
+    { fuente: "diamond", zona: "Laureles", precio: "$500.000.000", puntaje: 85, titulo: "Nuestra" },
+    { fuente: "aliado", zona: "Laureles", precio: "$500.000.000", puntaje: 65, titulo: "Del colega" },
+  ];
+  assert.strictEqual(sinDuplicados(matches).length, 2);
+});
