@@ -196,6 +196,17 @@ const TOOL_DEFINITIONS = [
       required: ["tipo"],
     },
   },
+  {
+    name: "aprobar_pedido_radar",
+    description:
+      "Publica en el grupo gremial un pedido del radar que quedo callado SOLO por puntaje bajo — el aviso que te llego con 'El radar callo un pedido por poco'. Usala cuando el asesor diga 'si', 'mandalo', 'publicalo' respondiendo a ese aviso. Si citó (swipe-to-reply) el aviso exacto, no hace falta que aclare cual. Si dice que NO o que no sirve, no llames esta herramienta — no hay nada que registrar, simplemente no se publica.",
+    input_schema: {
+      type: "object",
+      properties: {
+        cual: { type: "string", description: "Si hay varios avisos pendientes y el asesor especifico cual (zona, colega, o parte del texto), pasalo para desambiguar." },
+      },
+    },
+  },
 ];
 
 // Si la propiedad de interes tiene captador, arma el aviso inmediato para su
@@ -524,6 +535,10 @@ async function executeTool(name, input, ctx) {
     return registrarResultadoRadar(input, ctx);
   }
 
+  if (name === "aprobar_pedido_radar") {
+    return aprobarPedidoRadar(input, ctx);
+  }
+
   return `Herramienta desconocida: ${name}`;
 }
 
@@ -758,4 +773,67 @@ async function registrarResultadoRadar(input, ctx) {
   return "Listo, quedo registrado. Gracias por contarme — eso es justo lo que hace que el radar mejore.";
 }
 
-module.exports = { TOOL_DEFINITIONS, executeTool, maybeCaptadorAlert, registrarDemandaColega, consultarRadarGrupos, registrarResultadoRadar };
+// Publica un pedido que el radar callo por poco (Juan, 2026-08-20): "que
+// desde el mismo celular se responda en el grupo correspondiente al mensaje
+// correspondiente". El aviso lo manda src/groups/vivo.js#avisarCercano; esto
+// es el otro lado, cuando el asesor contesta "si". Reusa exactamente el mismo
+// motor de publicacion que aprobar_pedido_radar en Sofi-Comando
+// (src/groups/vivo.js#aprobarManual) — misma via auditada, mismo registro.
+async function aprobarPedidoRadar(input, ctx) {
+  if (!ctx.advisor) {
+    return "Esta herramienta es para cuando un asesor de la casa aprueba un pedido del radar. No aplica con un cliente.";
+  }
+
+  let signalId = ctx.radarSignalId || null;
+
+  if (!signalId) {
+    let pendientes;
+    try {
+      pendientes = await groupSignals.pendientesDeAviso(ctx.org.id, ctx.advisor.id);
+    } catch (e) {
+      console.warn("[tools] No se pudieron leer los avisos pendientes del radar:", e.message);
+      return "No pude consultar los pedidos pendientes en este momento.";
+    }
+    if (pendientes.length === 0) {
+      return "No encuentro ningun pedido del radar esperando tu aprobacion en este momento.";
+    }
+    if (input?.cual && pendientes.length > 1) {
+      const q = String(input.cual).toLowerCase();
+      const filtrados = pendientes.filter((s) =>
+        `${s.texto_original || ""} ${s.zona || ""} ${s.tipo || ""}`.toLowerCase().includes(q)
+      );
+      if (filtrados.length >= 1) pendientes = filtrados;
+    }
+    if (pendientes.length > 1) {
+      const lista = pendientes.slice(0, 5).map((s) => `- ${(s.texto_original || "").replace(/\s+/g, " ").slice(0, 90)}`).join("\n");
+      return `Tenes ${pendientes.length} pedidos esperando aprobacion:\n${lista}\n\nPreguntale a cual se refiere (o que cite el aviso) antes de publicar nada.`;
+    }
+    signalId = pendientes[0].id;
+  }
+
+  // Require tardio a proposito: src/groups/vivo.js importa src/channels/whatsapp.js,
+  // que a su vez importa src/agent/engine.js, que importa este archivo — un
+  // require al tope crearia una dependencia circular.
+  const vivo = require("../groups/vivo");
+  const r = await vivo.aprobarManual(ctx.org, signalId);
+
+  switch (r.resultado) {
+    case "publicado":
+      return `Listo, publicado en el grupo:\n\n${r.texto}`;
+    case "ya_respondida":
+      return "Ese pedido ya se habia publicado — no hay nada que hacer.";
+    case "sin_propiedades_publicables":
+      return "La candidata ya no pasa la compuerta de calidad (puede que el inventario haya cambiado) — no se publico.";
+    case "grupo_no_habilitado":
+    case "grupo_no_encontrado":
+      return "Ese grupo ya no esta habilitado para responder.";
+    case "sesion_ambigua":
+      return "No hay exactamente una sesion de WhatsApp activa — no se puede saber por cual linea publicar.";
+    case "error_envio":
+      return `El envio fallo: ${r.error || "sin detalle"}.`;
+    default:
+      return `No se pudo publicar (${r.resultado}).`;
+  }
+}
+
+module.exports = { TOOL_DEFINITIONS, executeTool, maybeCaptadorAlert, registrarDemandaColega, consultarRadarGrupos, registrarResultadoRadar, aprobarPedidoRadar };

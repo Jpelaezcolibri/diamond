@@ -29,6 +29,11 @@ let grupoParaAprobar = null;
 let sesionesActivas = [{ nombre: "RADA-NATALIA", estado: "activa" }];
 let envioResultado = { ok: true, wamid: "wm-aprobado" };
 let enviadosManual = [];
+// Dobles para vivo.js#avisarCercano (Juan, 2026-08-20).
+let revisorEncontrado = { id: "adv-natalia", name: "Natalia Velez", phone: "573001878024" };
+let avisosCercanosMarcados = [];
+let avisosCercanosEnviados = [];
+let envioAvisoCercanoResultado = { ok: true, wamid: "wm-aviso-cercano" };
 
 function instalarDobles() {
   require.cache[RUTA("groups/classify.js")] = {
@@ -84,6 +89,7 @@ function instalarDobles() {
       marcarRespondida: async (orgId, id, datos) => { marcadas.push({ id, ...datos }); return true; },
       guardarPolitica: async (orgId, id, datos) => { politicasGuardadas.push({ id, ...datos }); return true; },
       obtenerPorId: async () => señalParaAprobar,
+      marcarAvisoEnviado: async (orgId, id, datos) => { avisosCercanosMarcados.push({ id, ...datos }); return true; },
     },
   };
   require.cache[RUTA("data/whatsapp-groups.js")] = {
@@ -92,11 +98,24 @@ function instalarDobles() {
       listSessions: async () => sesionesActivas,
     },
   };
+  require.cache[RUTA("data/advisors.js")] = {
+    exports: {
+      findByPhone: async () => revisorEncontrado,
+    },
+  };
   require.cache[RUTA("lib/waha.js")] = {
     exports: {
       enviarTexto: async (sesion, chatId, texto, opts) => {
         enviadosManual.push({ sesion, chatId, texto, replyTo: opts && opts.replyTo });
         return envioResultado;
+      },
+    },
+  };
+  require.cache[RUTA("lib/mensaje-asesor.js")] = {
+    exports: {
+      enviarYRegistrar: async (org, telefono, texto) => {
+        avisosCercanosEnviados.push({ telefono, texto });
+        return envioAvisoCercanoResultado;
       },
     },
   };
@@ -171,6 +190,10 @@ beforeEach(() => {
   sesionesActivas = [{ nombre: "RADA-NATALIA", estado: "activa" }];
   envioResultado = { ok: true, wamid: "wm-aprobado" };
   enviadosManual = [];
+  revisorEncontrado = { id: "adv-natalia", name: "Natalia Velez", phone: "573001878024" };
+  avisosCercanosMarcados = [];
+  avisosCercanosEnviados = [];
+  envioAvisoCercanoResultado = { ok: true, wamid: "wm-aviso-cercano" };
   vivo = instalarDobles();
 });
 
@@ -546,4 +569,74 @@ test("aprobarManual: si el envio falla, no se marca como respondida", async () =
   const r = await vivo.aprobarManual({ id: "org-1" }, "sig-callada");
   assert.strictEqual(r.resultado, "error_envio");
   assert.strictEqual(marcadas.length, 0);
+});
+
+// ── avisarCercano: "necesito que catherine uribe reciba que se envió y que
+// no y por que no para que ella apruebe desde su celular" — corregido despues
+// a Natalia Velez, la misma linea vinculada al radar (Juan, 2026-08-20).
+
+test("avisarCercano: un pedido que SOLO fallo por puntaje bajo avisa al revisor", async () => {
+  process.env.RADAR_REVISOR_PHONE = "573001878024";
+  vivo = instalarDobles();
+  matchesDevueltos = [matchBueno({ puntaje: 60 })];
+
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "auto", ahora: MEDIODIA });
+
+  delete process.env.RADAR_REVISOR_PHONE;
+
+  assert.strictEqual(r.resultado, "callado");
+  assert.strictEqual(avisosCercanosEnviados.length, 1);
+  assert.strictEqual(avisosCercanosEnviados[0].telefono, "573001878024");
+  assert.match(avisosCercanosEnviados[0].texto, /calló un pedido por poco/);
+  assert.match(avisosCercanosEnviados[0].texto, /AP004/);
+  assert.strictEqual(avisosCercanosMarcados.length, 1);
+  assert.strictEqual(avisosCercanosMarcados[0].id, "sig-1");
+  assert.strictEqual(avisosCercanosMarcados[0].advisorId, "adv-natalia");
+});
+
+test("avisarCercano: sin RADAR_REVISOR_PHONE configurado, no avisa a nadie", async () => {
+  delete process.env.RADAR_REVISOR_PHONE;
+  vivo = instalarDobles();
+  matchesDevueltos = [matchBueno({ puntaje: 60 })];
+
+  await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "auto", ahora: MEDIODIA });
+
+  assert.strictEqual(avisosCercanosEnviados.length, 0);
+});
+
+test("avisarCercano: si TAMBIEN le falta un dato (no solo puntaje), no es un 'casi' — no avisa", async () => {
+  process.env.RADAR_REVISOR_PHONE = "573001878024";
+  vivo = instalarDobles();
+  // precio $0 => sin_precio, ADEMAS de puntaje bajo: dos motivos, no uno.
+  matchesDevueltos = [matchBueno({ puntaje: 60, precio: "$0" })];
+
+  await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "auto", ahora: MEDIODIA });
+
+  delete process.env.RADAR_REVISOR_PHONE;
+  assert.strictEqual(avisosCercanosEnviados.length, 0);
+});
+
+test("avisarCercano: una propiedad de un aliado con puntaje bajo tampoco es un 'casi'", async () => {
+  process.env.RADAR_REVISOR_PHONE = "573001878024";
+  vivo = instalarDobles();
+  matchesDevueltos = [matchBueno({ puntaje: 60, fuente: "aliado", link: null })];
+
+  await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "auto", ahora: MEDIODIA });
+
+  delete process.env.RADAR_REVISOR_PHONE;
+  assert.strictEqual(avisosCercanosEnviados.length, 0);
+});
+
+test("avisarCercano: un pedido que si se publica (score alto) no molesta al revisor", async () => {
+  process.env.RADAR_REVISOR_PHONE = "573001878024";
+  vivo = instalarDobles();
+  // matchBueno() por defecto puntua 88 — pasa la compuerta, se publica solo.
+
+  const r = await vivo.procesarMensaje(ORG, mensaje(), {
+    grupo: GRUPO, modo: "auto", ahora: MEDIODIA, enviar: async () => ({ ok: true, wamid: "w" }),
+  });
+
+  delete process.env.RADAR_REVISOR_PHONE;
+  assert.strictEqual(r.resultado, "publicado");
+  assert.strictEqual(avisosCercanosEnviados.length, 0);
 });

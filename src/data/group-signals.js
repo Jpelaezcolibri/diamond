@@ -368,7 +368,11 @@ async function pendientesDeAviso(orgId, advisorId = null, { limite = 20 } = {}) 
     .from("group_signals")
     .select("id, texto_original, zona, tipo, operacion, enviado_at, matches, aviso_advisor_id")
     .eq("org_id", orgId)
-    .not("enviado_at", "is", null);
+    .not("enviado_at", "is", null)
+    // Un aviso ya publicado (aprobado a mano, Juan 2026-08-20) no es
+    // "pendiente" — respondida_at solo lo pisa el camino auto/sombra, asi
+    // que en modo asistido esto no cambia nada.
+    .is("respondida_at", null);
   if (advisorId) q = q.eq("aviso_advisor_id", advisorId);
   q = q.order("enviado_at", { ascending: false }).limit(limite);
   const { data, error } = await q;

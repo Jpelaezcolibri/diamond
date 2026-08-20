@@ -34,6 +34,8 @@ const groupSignals = require("../data/group-signals");
 const organizations = require("../data/organizations");
 const syncEstado = require("../data/sync-estado");
 const whatsappGroups = require("../data/whatsapp-groups");
+const advisors = require("../data/advisors");
+const avisoCercano = require("./aviso-cercano");
 const waha = require("../lib/waha");
 // Se importa el MODULO y no la funcion suelta: destructurar congela la
 // referencia y deja los tests sin forma de mockear el envio.
@@ -41,6 +43,12 @@ const canalWhatsapp = require("../channels/whatsapp");
 const mensajeAsesor = require("../lib/mensaje-asesor");
 
 const VENTANA_LIMITE_HORAS = 24;
+
+// Quien revisa los "casi" del radar (Juan, 2026-08-20) — el telefono de
+// Natalia Velez, la misma linea vinculada al radar. Configurable a proposito,
+// mismo criterio que RADAR_ALERTA_TO: si cambia quien revisa, no hay que
+// tocar codigo.
+const RADAR_REVISOR_PHONE = process.env.RADAR_REVISOR_PHONE || "";
 
 // El id de la senal en vivo NO se calcula con el hash del EPE: WhatsApp ya trae
 // un id unico y estable por mensaje. Se prefija para que convivan las tres vias
@@ -172,6 +180,12 @@ async function procesarMensaje(org, mensaje, { grupo, modo = "sombra", enviar = 
     // que no se envio X" solo se podia responder buscando a mano entre los
     // mensajes del feed — y Sofi, sin ese cruce, terminaba inventando un motivo.
     await groupSignals.guardarPolitica(org.id, signal.id, { motivo: decision.motivo, traza: decision.traza }).catch(() => {});
+    // Solo cuando lo UNICO que falto fue puntaje (nunca zona equivocada ni
+    // propiedad de un aliado — esos no se avisan, aprobados o no).
+    if (decision.motivo === "sin_propiedades_publicables") {
+      await avisarCercano(org, signal, mensaje, grupo, señal.matches || [], descartados)
+        .catch((e) => console.warn("[radar] No se pudo avisar el candidato cercano:", e.message));
+    }
     return { resultado: "callado", motivo: decision.motivo, traza: decision.traza, descartados, signalId: signal && signal.id };
   }
 
@@ -320,6 +334,37 @@ function destinatarios(asesor) {
     .filter(Boolean);
   const base = asesor && asesor.phone ? [String(asesor.phone).replace(/\D/g, "")] : [];
   return [...new Set([...base, ...extra])];
+}
+
+// Aviso a quien revisa los "casi" del radar (Juan, 2026-08-20): "necesito que
+// catherine uribe reciba que se envió y que no y por que no para que ella
+// apruebe desde su celular" — corregido despues a Natalia Velez, la misma
+// linea vinculada, "para no perder la trazabilidad". Si dice que si, se
+// publica por la MISMA via auditada (aprobarManual mas abajo) desde su
+// propio chat con Sofi (src/agent/tools.js#aprobar_pedido_radar).
+async function avisarCercano(org, signal, mensaje, grupo, matches, descartados) {
+  if (!RADAR_REVISOR_PHONE) return;
+
+  // "Cercano" = fallo SOLO por puntaje_bajo. Si tambien le falta un dato
+  // (sin_ref, sin_link_wasi, etc.) o es de zona equivocada o de un aliado,
+  // no es un "casi" — es un no real, y avisar igual solo generaria ruido.
+  const cercanos = descartados
+    .filter((d) => d.motivos.length === 1 && d.motivos[0] === "puntaje_bajo")
+    .map((d) => (matches || []).find((m) => String(m.ref) === String(d.ref)))
+    .filter(Boolean);
+  if (!cercanos.length) return;
+
+  const revisor = await advisors.findByPhone(org.id, RADAR_REVISOR_PHONE).catch(() => null);
+  if (!revisor) return;
+
+  const señalParaAviso = { grupo_nombre: grupo.nombre || grupo.jid, autor_nombre: mensaje.autor, texto_original: mensaje.texto };
+  const texto = avisoCercano.construir(señalParaAviso, cercanos);
+  if (!texto) return;
+
+  const envio = await mensajeAsesor.enviarYRegistrar(org, revisor.phone, texto).catch((e) => ({ ok: false, error: e.message }));
+  if (envio && envio.ok) {
+    await groupSignals.marcarAvisoEnviado(org.id, signal.id, { wamid: envio.wamid, advisorId: revisor.id }).catch(() => {});
+  }
 }
 
 // Aprobacion manual de un pedido que el radar callo (Juan, 2026-08-20): "que
