@@ -309,22 +309,43 @@ function evaluarCandidata(p, c, fuente) {
   // ── Compuertas que sólo aplican si el pedido las menciona ──
   // Cada una: si la propiedad tiene el dato, tiene que cumplir; si no lo tiene,
   // no descalifica (es un hueco de nuestro sync, no un defecto del inmueble).
+  //
+  // FLEXIBILIDAD POR INTENCION (Juan, 2026-08-20): un pedido que dice
+  // "estudio" (ej. "3 alcobas o 2 con estudio") o "para inversion" acepta una
+  // alcoba/bano/parqueadero MENOS de lo pedido si el resto calza — a
+  // diferencia de precio/area, que llevan margen SIEMPRE, esto es condicional:
+  // solo se activa si el colega lo dijo explicitamente (classify.js lo extrae
+  // como `flexible_habitaciones`). Sin la señal, siguen exigiendo el minimo
+  // exacto — de ahi que baños/garajes NO llevaran margen antes de hoy.
+  const flexible = Boolean(c.flexible_habitaciones);
   const exigencias = [
-    // Puntaje distinto para el exacto (t===q) y el "uno de mas" que igual
-    // pasa la compuerta (t===q+1): antes valian lo mismo. Caso real (Juan,
+    // Puntaje distinto para el exacto (t===q) y el "uno de mas/menos" que
+    // igual pasa la compuerta: antes valian lo mismo. Caso real (Juan,
     // 2026-08-20 — auditoria del veredicto de Sofi): "la de 4 alcobas tiene
     // puntaje mas alto pero sirve menos [que la de 3, cuando pidieron 3]...
-    // deberia tener el puntaje mayor [la que calza exacto]". Una alcoba de
-    // mas cambia el negocio (mas cara, distinto uso); sigue sirviendo -por
-    // eso la compuerta la deja pasar- pero no tan bien como la exacta.
-    { pide: c.habitaciones, tiene: p.habitaciones, ok: (t, q) => t >= q && t <= q + 1, texto: (t) => `${t} alcobas`, puntos: (t, q) => (t === q ? 10 : 6) },
-    // Area SI lleva margen de captura (Juan, 2026-08-20): unos metros menos
-    // de lo pedido casi nunca descarta un negocio real. Alcobas/banos/garajes/
-    // estrato no lo llevan a proposito: son las que si le importan al
-    // cliente y una de menos si cambia lo que puede hacer con la propiedad.
+    // deberia tener el puntaje mayor [la que calza exacto]". Sigue sirviendo
+    // -por eso la compuerta la deja pasar- pero no tan bien como la exacta.
+    {
+      pide: c.habitaciones, tiene: p.habitaciones,
+      ok: (t, q) => t >= q - (flexible ? 1 : 0) && t <= q + 1,
+      texto: (t) => `${t} alcobas`, puntos: (t, q) => (t === q ? 10 : 6),
+    },
+    // Area SI lleva margen de captura SIEMPRE (Juan, 2026-08-20): unos metros
+    // menos de lo pedido casi nunca descarta un negocio real.
     { pide: c.area_min, tiene: formato.parsearArea(p.area), ok: (t, q) => t >= q * (1 - MARGEN_AREA), texto: (t) => `${t} m²`, puntos: 8 },
-    { pide: c.banos, tiene: p.banos, ok: (t, q) => t >= q, texto: (t) => `${t} baños`, puntos: 6 },
-    { pide: c.garajes, tiene: p.garaje, ok: (t, q) => t >= q, texto: (t) => `${t} garaje${t > 1 ? "s" : ""}`, puntos: 6 },
+    {
+      pide: c.banos, tiene: p.banos,
+      ok: (t, q) => t >= q - (flexible ? 1 : 0),
+      texto: (t) => `${t} baños`, puntos: (t, q) => (t >= q ? 6 : 4),
+    },
+    {
+      pide: c.garajes, tiene: p.garaje,
+      ok: (t, q) => t >= q - (flexible ? 1 : 0),
+      texto: (t) => `${t} garaje${t > 1 ? "s" : ""}`, puntos: (t, q) => (t >= q ? 6 : 4),
+    },
+    // Estrato NO entra en la flexibilidad: no es una preferencia de espacio
+    // negociable como una alcoba de menos, es la clasificacion socioeconomica
+    // del sector y no cambia porque el cliente compre "para inversion".
     { pide: c.estrato, tiene: p.estrato, ok: (t, q) => t >= q, texto: (t) => `estrato ${t}`, puntos: 5 },
   ];
 

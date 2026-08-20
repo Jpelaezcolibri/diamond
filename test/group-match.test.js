@@ -187,6 +187,47 @@ test("BUG: pedir 3 alcobas no puede traer una de 6", () => {
   assert.ok(evaluarCandidata(apto({ habitaciones: 4 }), pide(), "diamond"), "una de más sí sirve");
 });
 
+// FLEXIBILIDAD POR INTENCION (Juan, 2026-08-20): "depende de si menciona
+// 'estudio' o 'para inversion'" — solo esos dos pedidos aceptan una alcoba,
+// bano o parqueadero MENOS de lo pedido. Sin la señal, sigue siendo estricto.
+test("FLEXIBLE: sin la señal del clasificador, pedir 3 alcobas SIGUE sin aceptar 2", () => {
+  assert.strictEqual(evaluarCandidata(apto({ habitaciones: 2 }), pide({ habitaciones: 3 }), "diamond"), null);
+});
+
+test("FLEXIBLE: con flexible_habitaciones, pedir 3 alcobas SI acepta 2", () => {
+  const m = evaluarCandidata(apto({ habitaciones: 2 }), pide({ habitaciones: 3, flexible_habitaciones: true }), "diamond");
+  assert.ok(m, "el pedido dijo 'estudio' o 'para inversion': una de menos tiene que servir");
+  assert.match(m.razones.join(" | "), /2 alcobas/);
+});
+
+test("FLEXIBLE: sigue sin aceptar DOS de menos, ni con la señal activa", () => {
+  assert.strictEqual(evaluarCandidata(apto({ habitaciones: 1 }), pide({ habitaciones: 3, flexible_habitaciones: true }), "diamond"), null);
+});
+
+test("FLEXIBLE: baños y garajes reciben el MISMO margen que alcobas — antes eran estrictos", () => {
+  // garaje:0/banos:0 en el inventario se leen como "sin dato" (no
+  // descalifica, pero tampoco entra en esta prueba) — se usa 1 real contra
+  // un pedido de 2, que es justo el caso "una de menos" que se esta probando.
+  assert.strictEqual(evaluarCandidata(apto({ banos: 1 }), pide({ banos: 2 }), "diamond"), null, "sin la señal, sigue exigiendo exacto");
+  assert.strictEqual(evaluarCandidata(apto({ garaje: 1 }), pide({ garajes: 2 }), "diamond"), null, "lo mismo para garajes");
+
+  const conBanos = evaluarCandidata(apto({ banos: 1 }), pide({ banos: 2, flexible_habitaciones: true }), "diamond");
+  const conGarajes = evaluarCandidata(apto({ garaje: 1 }), pide({ garajes: 2, flexible_habitaciones: true }), "diamond");
+  assert.ok(conBanos, "con la señal, un baño menos tiene que servir");
+  assert.ok(conGarajes, "con la señal, un garaje menos tiene que servir");
+});
+
+test("FLEXIBLE: estrato NO es flexible — no es una preferencia de espacio, es la clasificacion del sector", () => {
+  const m = evaluarCandidata(apto({ estrato: 3 }), pide({ estrato: 5, flexible_habitaciones: true }), "diamond");
+  assert.strictEqual(m, null, "un estrato de menos no puede colarse aunque el pedido sea 'para inversion'");
+});
+
+test("FLEXIBLE: alcobas exacto sigue puntuando mas que la de menos permitida por flexibilidad", () => {
+  const exacta = evaluarCandidata(apto({ habitaciones: 3 }), pide({ habitaciones: 3, flexible_habitaciones: true }), "diamond");
+  const unaDeMenos = evaluarCandidata(apto({ habitaciones: 2 }), pide({ habitaciones: 3, flexible_habitaciones: true }), "diamond");
+  assert.ok(exacta.puntaje > unaDeMenos.puntaje);
+});
+
 test("un dato que el inventario no tiene NO descalifica la propiedad", () => {
   // El área vacía es un hueco de nuestro sync, no un defecto del inmueble.
   const m = evaluarCandidata(apto({ area: null }), pide({ area_min: 90 }), "diamond");

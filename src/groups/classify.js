@@ -81,11 +81,21 @@ const ESQUEMA = {
           estrato: { type: "integer", description: "0 si no se especifica" },
           contacto: { type: "string", description: "Telefono o nombre si el mensaje lo trae. Vacio si no" },
           notas: { type: "string", description: "Detalle relevante en pocas palabras" },
+          // Juan, 2026-08-20 (auditoria del veredicto de Sofi): "depende de si
+          // menciona 'estudio' o 'para inversion'" — un cliente que dice
+          // "3 alcobas o 2 con estudio" o compra "para inversion" acepta una
+          // alcoba/bano/parqueadero menos de lo pedido si el resto calza. Sin
+          // esta señal el motor no puede distinguirlo de un pedido exacto.
+          flexible_habitaciones: {
+            type: "boolean",
+            description:
+              "true SOLO si el mensaje dice explicitamente 'estudio' (ej. '3 alcobas o 2 con estudio') o 'para inversion'/'para invertir'. false en cualquier otro caso, incluido cuando no se menciona nada.",
+          },
         },
         required: [
           "id", "clase", "confianza", "operacion", "tipo", "zonas", "zona", "zonas_excluidas", "ciudad",
           "precio_min", "precio_max", "habitaciones", "area_min", "banos",
-          "garajes", "estrato", "contacto", "notas",
+          "garajes", "estrato", "contacto", "notas", "flexible_habitaciones",
         ],
         additionalProperties: false,
       },
@@ -114,6 +124,7 @@ Reglas de extracción:
 - Si el mensaje sólo nombra el municipio ("Medellín"), eso va en \`ciudad\`, no en \`zonas\`. Pero ojo: Envigado, Sabaneta, Itagüí y La Estrella son municipios que en estos grupos se usan como zona — van en \`zonas\`.
 - \`area_min\` en metros cuadrados: "mínimo 85 m2" → 85; "de 100 metros" → 100.
 - \`banos\`, \`garajes\` y \`estrato\`: sólo si el mensaje los pide explícitamente. "2 baños, parqueadero doble" → banos 2, garajes 2. "estrato 5 o 6" → 5 (el mínimo).
+- \`flexible_habitaciones\`: true SOLO si el mensaje dice "estudio" (ej. "3 alcobas o 2 con estudio", "2 alcobas y estudio") o "para inversión"/"para invertir". No lo actives por intuición ni por el tono del pedido — solo por esas palabras.
 - Un mensaje de una sola propiedad con foto y ficha es oferta aunque no diga "vendo".
 - Devolvé exactamente un objeto por mensaje de entrada, con su id textual.`;
 
