@@ -19,6 +19,37 @@ const conversations = require("../data/conversations");
 // tests sin forma de mockear el envio (mismo criterio que src/groups/vivo.js).
 const canalWhatsapp = require("../channels/whatsapp");
 
+// ALERTA DE ENVIO FALLIDO (Juan, 2026-08-21 — caso Natalia/radar: 7 avisos
+// seguidos quedaron en `delivery: sent` porque Meta acepta el POST y nosotros
+// IGNORAMOS a proposito los acuses de entrega/lectura que llegan despues por
+// webhook (ver src/channels/whatsapp.js, `if (value?.statuses) return`). Un
+// mensaje que Meta rechaza silenciosamente mas tarde, o que nunca llega
+// porque la ventana de 24h con ESE numero esta cerrada, se veia igual que uno
+// que si llego — hasta que el asesor decia "a mi no me llego nada".
+//
+// Esto no arregla el hueco de fondo (seguimos sin leer los `statuses`), pero
+// cierra el caso mas comun y mas detectable: la Graph API SI devuelve un
+// error sincronico cuando la ventana esta cerrada (via ese numero no escribio
+// en las ultimas 24h). Reusa RADAR_WATCHDOG_TO — el mismo numero de Juan que
+// ya usa src/scheduler/radar-watchdog.js para todo lo demas que falla
+// silencioso en este ecosistema.
+const ADMIN_ALERTA_TO = (process.env.RADAR_WATCHDOG_TO || "").split(",").map((t) => t.trim()).filter(Boolean);
+const VENTANA_CERRADA = /24\s*hours?|24\s*horas?|re-?engagement|131047/i;
+
+async function avisarFalloEnvio(org, telefono, texto, error) {
+  if (ADMIN_ALERTA_TO.length === 0) return;
+  const motivo = VENTANA_CERRADA.test(error || "")
+    ? "la ventana de 24h con ese numero esta cerrada (no te escribio en las ultimas 24h, asi que WhatsApp no deja mandarle texto libre)"
+    : `error: ${error || "sin detalle"}`;
+  const recorte = texto.length > 200 ? `${texto.slice(0, 200)}...` : texto;
+  const aviso = `⚠️ No se pudo mandar un WhatsApp a +${telefono}: ${motivo}.\n\nMensaje que no salio:\n"${recorte}"`;
+  for (const to of ADMIN_ALERTA_TO) {
+    if (to === telefono) continue; // no alertar al mismo numero que ya fallo
+    const r = await canalWhatsapp.sendWhatsApp(org, to, aviso).catch((e) => ({ ok: false, error: e.message }));
+    if (!r || !r.ok) console.error(`[mensaje-asesor] tampoco se pudo avisar del fallo a ${to}: ${r && r.error}`);
+  }
+}
+
 /**
  * @param org       organizacion resuelta
  * @param telefono  numero del asesor, solo digitos
@@ -38,6 +69,7 @@ async function enviarYRegistrar(org, telefono, texto) {
     await conversations.setDelivery(msg.id, envio && envio.ok ? "sent" : "failed", envio && envio.error);
     if (envio && envio.wamid) await conversations.setWaMessageId(msg.id, envio.wamid);
   }
+  if (!envio || !envio.ok) await avisarFalloEnvio(org, telefono, texto, envio && envio.error);
   return envio || { ok: false, wamid: null, error: "sin_respuesta" };
 }
 

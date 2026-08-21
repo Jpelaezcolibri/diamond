@@ -79,3 +79,99 @@ test("con la ventana de 24h cerrada, marca delivery=failed y no truena", async (
   assert.strictEqual(r.ok, false);
   assert.strictEqual(delivery, "failed");
 });
+
+// ── ALERTA DE ENVIO FALLIDO (Juan, 2026-08-21) ─────────────────────────────
+// ADMIN_ALERTA_TO se lee de RADAR_WATCHDOG_TO al cargar el modulo — hay que
+// setearlo ANTES del primer require, y volver a requerir con cache limpio
+// para cada escenario (mismo patron que test/group-dm.test.js con
+// RADAR_VISITAS_ALERTA_TO: el env var se lee en el top-level del modulo).
+const RUTA_MODULO = require.resolve("../src/lib/mensaje-asesor");
+
+function requerirConEnv(env) {
+  const previo = process.env.RADAR_WATCHDOG_TO;
+  process.env.RADAR_WATCHDOG_TO = env;
+  delete require.cache[RUTA_MODULO];
+  const mod = require("../src/lib/mensaje-asesor");
+  process.env.RADAR_WATCHDOG_TO = previo;
+  return mod;
+}
+
+test("ALERTA: si el envio al asesor falla, avisa a RADAR_WATCHDOG_TO", async (t) => {
+  const { enviarYRegistrar: enviarConAlerta } = requerirConEnv("573016981200");
+  t.mock.method(leads, "findOrCreate", async () => ({ id: "lead-1" }));
+  t.mock.method(conversations, "findOrCreate", async () => ({ id: "conv-1" }));
+  t.mock.method(conversations, "appendMessage", async () => ({ id: "msg-1" }));
+  t.mock.method(conversations, "setDelivery", async () => {});
+  const llamadas = [];
+  t.mock.method(canalWhatsapp, "sendWhatsApp", async (org, to) => {
+    llamadas.push(to);
+    if (to === "573028536489") return { ok: false, error: "algo raro" };
+    return { ok: true, wamid: "w-alerta" };
+  });
+
+  await enviarConAlerta(ORG, "573028536489", "hola Catherine");
+
+  assert.deepStrictEqual(llamadas, ["573028536489", "573016981200"]);
+
+  delete require.cache[RUTA_MODULO];
+});
+
+test("ALERTA: distingue la ventana de 24h cerrada del error generico", async (t) => {
+  const { enviarYRegistrar: enviarConAlerta } = requerirConEnv("573016981200");
+  t.mock.method(leads, "findOrCreate", async () => ({ id: "lead-1" }));
+  t.mock.method(conversations, "findOrCreate", async () => ({ id: "conv-1" }));
+  t.mock.method(conversations, "appendMessage", async () => ({ id: "msg-1" }));
+  t.mock.method(conversations, "setDelivery", async () => {});
+  let textoAlerta = null;
+  t.mock.method(canalWhatsapp, "sendWhatsApp", async (org, to, texto) => {
+    if (to === "573028536489") {
+      return { ok: false, error: "(#131047) Message failed to send because more than 24 hours have passed" };
+    }
+    textoAlerta = texto;
+    return { ok: true, wamid: "w-alerta" };
+  });
+
+  await enviarConAlerta(ORG, "573028536489", "hola");
+
+  assert.match(textoAlerta, /ventana de 24h/);
+
+  delete require.cache[RUTA_MODULO];
+});
+
+test("ALERTA: sin RADAR_WATCHDOG_TO configurado, no intenta avisar a nadie", async (t) => {
+  const { enviarYRegistrar: enviarSinAlerta } = requerirConEnv("");
+  t.mock.method(leads, "findOrCreate", async () => ({ id: "lead-1" }));
+  t.mock.method(conversations, "findOrCreate", async () => ({ id: "conv-1" }));
+  t.mock.method(conversations, "appendMessage", async () => ({ id: "msg-1" }));
+  t.mock.method(conversations, "setDelivery", async () => {});
+  const llamadas = [];
+  t.mock.method(canalWhatsapp, "sendWhatsApp", async (org, to) => {
+    llamadas.push(to);
+    return { ok: false, error: "algo raro" };
+  });
+
+  await enviarSinAlerta(ORG, "573028536489", "hola");
+
+  assert.deepStrictEqual(llamadas, ["573028536489"]);
+
+  delete require.cache[RUTA_MODULO];
+});
+
+test("ALERTA: no se autoalerta si el numero que fallo es el mismo configurado como alerta", async (t) => {
+  const { enviarYRegistrar: enviarConAlerta } = requerirConEnv("573028536489");
+  t.mock.method(leads, "findOrCreate", async () => ({ id: "lead-1" }));
+  t.mock.method(conversations, "findOrCreate", async () => ({ id: "conv-1" }));
+  t.mock.method(conversations, "appendMessage", async () => ({ id: "msg-1" }));
+  t.mock.method(conversations, "setDelivery", async () => {});
+  const llamadas = [];
+  t.mock.method(canalWhatsapp, "sendWhatsApp", async (org, to) => {
+    llamadas.push(to);
+    return { ok: false, error: "algo raro" };
+  });
+
+  await enviarConAlerta(ORG, "573028536489", "hola");
+
+  assert.deepStrictEqual(llamadas, ["573028536489"]);
+
+  delete require.cache[RUTA_MODULO];
+});
