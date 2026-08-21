@@ -35,6 +35,14 @@ function ficha(match) {
  * @param candidatas matches con dato usable que el bot no respondio solo
  * @returns el texto del aviso, o null si no hay nada que decir
  */
+// BOTONES (Juan, 2026-08-21): "se esta enredando con las respuestas y
+// estamos perdiendo es plata" — pedirle "sí"/"no" en texto libre obligaba a
+// Sofi a interpretar la respuesta en medio de otra conversacion, y con mas
+// de un pedido pendiente a la vez ni una persona sabe a cual se refiere un
+// "sí" suelto. El mensaje ya NO pide una respuesta escrita — src/groups/vivo.js
+// lo manda con dos botones (Sí, publicar / No sirve) que traen el id de la
+// señal adentro, asi que la accion se resuelve sola, sin ambigüedad. Ver
+// src/channels/whatsapp.js#sendWhatsAppButtons.
 function construir(señal, candidatas) {
   if (!Array.isArray(candidatas) || candidatas.length === 0) return null;
 
@@ -47,13 +55,8 @@ function construir(señal, candidatas) {
     `Pidió:`,
     `"${(señal.texto_original || "").trim()}"`,
     ``,
-    candidatas.length === 1 ? `Lo que tenemos:` : `Lo que tenemos:`,
+    `Lo que tenemos:`,
     candidatas.map(ficha).join("\n"),
-    ``,
-    // Pide SIEMPRE una respuesta explícita, no solo el "sí" (Juan,
-    // 2026-08-20): sin el "no" registrado, un pedido que ella descartó y uno
-    // que nunca leyó se ven exactamente igual en la trazabilidad.
-    `Respondeme "sí" si te sirve y lo publico en el grupo citando el pedido original, o "no" si no sirve — necesito la respuesta aunque sea negativa, para que quede el registro y no tengamos diferencias.`,
   ].join("\n");
 }
 

@@ -113,8 +113,8 @@ function instalarDobles() {
   };
   require.cache[RUTA("lib/mensaje-asesor.js")] = {
     exports: {
-      enviarYRegistrar: async (org, telefono, texto) => {
-        avisosCercanosEnviados.push({ telefono, texto });
+      enviarYRegistrar: async (org, telefono, texto, opts) => {
+        avisosCercanosEnviados.push({ telefono, texto, botones: opts && opts.botones });
         return envioAvisoCercanoResultado;
       },
     },
@@ -613,6 +613,15 @@ test("avisarCercano: un pedido que SOLO fallo por puntaje bajo avisa al revisor"
   assert.strictEqual(avisosCercanosMarcados.length, 1);
   assert.strictEqual(avisosCercanosMarcados[0].id, "sig-1");
   assert.strictEqual(avisosCercanosMarcados[0].advisorId, "adv-natalia");
+
+  // BOTONES (Juan, 2026-08-21): el aviso ya no le pide escribir "si"/"no" —
+  // el id del boton lleva la señal adentro, para que la respuesta se
+  // resuelva sola sin depender de que el modelo interprete texto libre.
+  const botones = avisosCercanosEnviados[0].botones;
+  assert.strictEqual(botones.length, 2);
+  assert.deepStrictEqual(botones[0], { id: "radar_si:sig-1", title: "Sí, publicar" });
+  assert.deepStrictEqual(botones[1], { id: "radar_no:sig-1", title: "No sirve" });
+  assert.doesNotMatch(avisosCercanosEnviados[0].texto, /Respondeme/);
 });
 
 test("avisarCercano: sin RADAR_REVISOR_PHONE configurado, no avisa a nadie", async () => {

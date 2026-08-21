@@ -4,6 +4,8 @@ const organizations = require("../data/organizations");
 const conversations = require("../data/conversations");
 const groupSignals = require("../data/group-signals");
 const supabase = require("../data/supabase");
+const leads = require("../data/leads");
+const advisors = require("../data/advisors");
 const { procesarMensaje } = require("../agent/engine");
 const { verifyMetaSignature } = require("../lib/signature");
 const { enqueue } = require("../lib/user-queue");
@@ -71,6 +73,36 @@ async function sendWhatsApp(org, to, text, opts = {}) {
   };
   if (opts.contextWaId) body.context = { message_id: opts.contextWaId };
   return graphSendMessage(phoneId, token, body, "mensaje");
+}
+
+// Botones de respuesta rapida (Juan, 2026-08-21 — "se esta enredando con las
+// respuestas y estamos perdiendo es plata"): el aviso "Tenes un match del
+// radar" le pedia a la asesora escribir "si"/"no" en texto libre, que Sofi
+// tenia que interpretar en medio de una conversacion con otros temas — con
+// varios pedidos pendientes a la vez, ambiguo hasta para una persona. Un boton
+// no se interpreta: trae el id de la señal adentro (ver
+// src/groups/vivo.js#avisarCercano), asi que el webhook puede resolver la
+// accion en el acto sin pasar por el modelo. Maximo 3 botones, titulo <=20
+// caracteres, cuerpo <=1024 — limites duros de la API de Meta.
+// buttons: [{id, title}]. Devuelve {ok, wamid, error}.
+async function sendWhatsAppButtons(org, to, body, buttons, opts = {}) {
+  const { token, phoneId } = credsFor(org, opts.fromPhoneId);
+  if (!token || !phoneId) {
+    console.warn("[whatsapp] Sin token/phoneId configurado — botones no enviados:", body.slice(0, 80));
+    return { ok: false, wamid: null, error: "sin_credenciales" };
+  }
+  const payload = {
+    messaging_product: "whatsapp",
+    to,
+    type: "interactive",
+    interactive: {
+      type: "button",
+      body: { text: body },
+      action: { buttons: buttons.map((b) => ({ type: "reply", reply: { id: b.id, title: b.title } })) },
+    },
+  };
+  if (opts.contextWaId) payload.context = { message_id: opts.contextWaId };
+  return graphSendMessage(phoneId, token, payload, "botones");
 }
 
 // Envia una PLANTILLA aprobada de WhatsApp (HSM) — unica forma de escribirle
@@ -160,6 +192,49 @@ async function persistIncomingMedia(org, mediaId) {
   }
 }
 
+// Resuelve el toque de un boton "Sí, publicar" / "No sirve" del aviso del
+// radar (ver src/groups/vivo.js#avisarCercano). El id del boton ES la señal:
+// "radar_si:<uuid>" / "radar_no:<uuid>", asi que la accion se ejecuta directo,
+// SIN pasar por Claude ni por la desambiguacion de pedidos pendientes que
+// usa el camino de texto libre (src/agent/tools.js#aprobarPedidoRadar /
+// rechazarPedidoRadar) — igual se reusan esas dos funciones, solo que con
+// ctx.radarSignalId ya resuelto, para que la respuesta y el registro sean
+// identicos a los del camino existente.
+async function procesarBotonRadar(org, userPhone, botonId, tituloBoton, phoneNumberId) {
+  const separador = String(botonId).indexOf(":");
+  const accion = separador === -1 ? botonId : botonId.slice(0, separador);
+  const signalId = separador === -1 ? null : botonId.slice(separador + 1);
+  if ((accion !== "radar_si" && accion !== "radar_no") || !signalId) {
+    console.warn(`[whatsapp] Boton desconocido: "${botonId}"`);
+    return;
+  }
+
+  const advisor = await advisors.findByPhone(org.id, userPhone).catch(() => null);
+  if (!advisor) {
+    console.warn(`[whatsapp] Boton del radar desde un numero que no es asesor: ${userPhone}`);
+    return;
+  }
+
+  // Se deja registrado el toque en si (no solo la confirmacion) para que el
+  // Inbox del panel "Equipo" del CRM muestre la conversacion completa.
+  const lead = await leads.findOrCreate(org.id, userPhone, "asesor");
+  const conv = await conversations.findOrCreate(org.id, lead.id, null);
+  await conversations.appendMessage(conv.id, "user", `[Botón] ${tituloBoton || accion}`).catch(() => {});
+
+  // Require tardio (mismo motivo que src/agent/tools.js#aprobarPedidoRadar):
+  // este archivo -> engine.js -> tools.js -> (lazy) vivo.js -> este archivo.
+  const tools = require("../agent/tools");
+  const ctx = { org, advisor, radarSignalId: signalId };
+  const respuesta = accion === "radar_si"
+    ? await tools.aprobarPedidoRadar({}, ctx)
+    : await tools.rechazarPedidoRadar({}, ctx);
+
+  const mensajeAsesor = require("../lib/mensaje-asesor");
+  await mensajeAsesor.enviarYRegistrar(org, userPhone, respuesta).catch((e) =>
+    console.error(`[whatsapp] No se pudo confirmar la accion del boton a ${userPhone}:`, e.message)
+  );
+}
+
 // Verificacion del webhook (Meta)
 router.get("/webhook", (req, res) => {
   const mode = req.query["hub.mode"];
@@ -217,6 +292,21 @@ router.post("/webhook", async (req, res) => {
     // respuesta o silencio. Keys distintas (otros clientes) no se bloquean
     // entre si. Ver src/lib/user-queue.js.
     await enqueue(`${org.id}:${userPhone}`, async () => {
+      // BOTON DEL RADAR (Juan, 2026-08-21): un toque en "Sí, publicar" / "No
+      // sirve" llega como type=interactive, con el id de la señal ya adentro
+      // del boton (ver src/groups/vivo.js#avisarCercano) — se resuelve ACA,
+      // antes de tocar procesarMensaje/Claude. Nunca hay que desambiguar cual
+      // pedido ni depender de que el modelo interprete un "si"/"no" suelto en
+      // medio de otra conversacion — la causa real de "se enreda con las
+      // respuestas" cuando hay mas de un pedido pendiente a la vez.
+      const botonId = message.type === "interactive" && message.interactive?.type === "button_reply"
+        ? message.interactive.button_reply?.id
+        : null;
+      if (botonId) {
+        await procesarBotonRadar(org, userPhone, botonId, message.interactive.button_reply?.title, phoneNumberId);
+        return;
+      }
+
       // Respuesta citada: Meta manda context.id (wamid del mensaje citado)
       let replyToId = null;
       // Si la asesora cita (swipe-to-reply) el aviso de un pedido del radar,
@@ -317,6 +407,8 @@ router.post("/webhook", async (req, res) => {
 
 module.exports = router;
 module.exports.sendWhatsApp = sendWhatsApp;
+module.exports.sendWhatsAppButtons = sendWhatsAppButtons;
 module.exports.sendWhatsAppTemplate = sendWhatsAppTemplate;
 module.exports.uploadMediaToMeta = uploadMediaToMeta;
 module.exports.sendWhatsAppMedia = sendWhatsAppMedia;
+module.exports.procesarBotonRadar = procesarBotonRadar;

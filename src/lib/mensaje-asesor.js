@@ -53,10 +53,14 @@ async function avisarFalloEnvio(org, telefono, texto, error) {
 /**
  * @param org       organizacion resuelta
  * @param telefono  numero del asesor, solo digitos
- * @param texto     el mensaje a mandar
+ * @param texto     el mensaje a mandar (o el cuerpo, si va con botones)
+ * @param opts.botones  [{id, title}] — si vienen, se manda como mensaje
+ *   interactivo (ver canalWhatsapp.sendWhatsAppButtons) en vez de texto
+ *   libre. El `texto` completo igual queda guardado como contenido del
+ *   mensaje, para que el Inbox del CRM muestre lo mismo que via en el chat.
  * @returns { ok, wamid, error } — mismo shape que canalWhatsapp.sendWhatsApp
  */
-async function enviarYRegistrar(org, telefono, texto) {
+async function enviarYRegistrar(org, telefono, texto, opts = {}) {
   const lead = await leads.findOrCreate(org.id, telefono, "asesor");
   const conv = await conversations.findOrCreate(org.id, lead.id, null);
   // Se guarda ANTES de mandar: si el envio revienta antes de responder (timeout,
@@ -64,7 +68,9 @@ async function enviarYRegistrar(org, telefono, texto) {
   // — es lo mismo que ya hace src/agent/engine.js con la respuesta del cliente.
   const msg = await conversations.appendMessage(conv.id, "assistant", texto);
 
-  const envio = await canalWhatsapp.sendWhatsApp(org, telefono, texto).catch((e) => ({ ok: false, error: e.message }));
+  const envio = opts.botones
+    ? await canalWhatsapp.sendWhatsAppButtons(org, telefono, texto, opts.botones).catch((e) => ({ ok: false, error: e.message }))
+    : await canalWhatsapp.sendWhatsApp(org, telefono, texto).catch((e) => ({ ok: false, error: e.message }));
   if (msg?.id) {
     await conversations.setDelivery(msg.id, envio && envio.ok ? "sent" : "failed", envio && envio.error);
     if (envio && envio.wamid) await conversations.setWaMessageId(msg.id, envio.wamid);

@@ -386,10 +386,26 @@ async function avisarCercano(org, signal, mensaje, grupo, matches) {
   if (!revisor) return;
 
   const señalParaAviso = { grupo_nombre: grupo.nombre || grupo.jid, autor_nombre: mensaje.autor, texto_original: mensaje.texto };
-  const texto = avisoCercano.construir(señalParaAviso, candidatas);
+  let texto = avisoCercano.construir(señalParaAviso, candidatas);
   if (!texto) return;
+  // El cuerpo de un mensaje interactivo tiene tope duro de 1024 caracteres en
+  // la API de Meta (un pedido con muchas candidatas lo puede pasar); un
+  // recorte silencioso es preferible a que el envio entero falle sin avisar.
+  if (texto.length > 1024) texto = `${texto.slice(0, 1000)}\n\n(recortado — ver el pedido completo en el CRM)`;
 
-  const envio = await mensajeAsesor.enviarYRegistrar(org, revisor.phone, texto).catch((e) => ({ ok: false, error: e.message }));
+  // BOTONES, no texto libre (Juan, 2026-08-21): el id de cada boton lleva la
+  // señal adentro, asi que src/channels/whatsapp.js resuelve la accion en el
+  // acto cuando llega el toque, sin pasarla por el modelo ni desambiguar
+  // entre varios pedidos pendientes. Ver src/agent/tools.js#aprobarPedidoRadar
+  // / rechazarPedidoRadar, que ya sabian resolver por radarSignalId directo.
+  const botones = [
+    { id: `radar_si:${signal.id}`, title: "Sí, publicar" },
+    { id: `radar_no:${signal.id}`, title: "No sirve" },
+  ];
+
+  const envio = await mensajeAsesor
+    .enviarYRegistrar(org, revisor.phone, texto, { botones })
+    .catch((e) => ({ ok: false, error: e.message }));
   if (envio && envio.ok) {
     await groupSignals.marcarAvisoEnviado(org.id, signal.id, { wamid: envio.wamid, advisorId: revisor.id }).catch(() => {});
   }
