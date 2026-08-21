@@ -154,6 +154,28 @@ async function setCaptador(orgId, propertyId, advisorId) {
   return data;
 }
 
+// Marca (o desmarca) la urgencia de venta de una propiedad. Suma puntaje en
+// el cruce del radar de grupos (src/groups/match.js) — ver
+// db/migrations/2026-08-21_property_prioridad_venta.sql. Devuelve la fila
+// actualizada.
+async function setPrioridadVenta(orgId, propertyId, prioridad) {
+  if (!supabase) {
+    const prop = memory.properties.find((p) => p.org_id === orgId && p.id === propertyId);
+    if (!prop) return null;
+    prop.prioridad_venta = prioridad;
+    return prop;
+  }
+  const { data, error } = await supabase
+    .from("properties")
+    .update({ prioridad_venta: prioridad })
+    .eq("org_id", orgId)
+    .eq("id", propertyId)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
 // Propiedades disponibles marcadas a nombre de un asesor.
 async function listByCaptador(orgId, advisorId, limit = 20) {
   if (!supabase) {
@@ -170,4 +192,4 @@ async function listByCaptador(orgId, advisorId, limit = 20) {
   return data || [];
 }
 
-module.exports = { search, findByRef, matchesFilters, zonaTokens, distinctiveTokens, sonVecinas, vecinosDe, subzonaCoincide, withLandingLink, enlazarWasiPublico, setCaptador, listByCaptador };
+module.exports = { search, findByRef, matchesFilters, zonaTokens, distinctiveTokens, sonVecinas, vecinosDe, subzonaCoincide, withLandingLink, enlazarWasiPublico, setCaptador, listByCaptador, setPrioridadVenta };

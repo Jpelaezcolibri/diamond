@@ -166,6 +166,19 @@ const COMMAND_TOOL_DEFINITIONS = [
     },
   },
   {
+    name: "marcar_prioridad_venta",
+    description:
+      "Marca (o desmarca) una propiedad del inventario propio con urgencia/prioridad de venta. Le suma puntaje en el cruce del radar de grupos para que le llegue a mas pedidos (por ejemplo, zonas vecinas que hoy quedan justo por debajo del umbral) — el resto del inventario no se afecta. Usala cuando digan 'esta tiene urgencia de venta', 'marcala con prioridad', 'dale prioridad a la ref X'; para quitarla, 'ya no tiene urgencia' o 'quitale la prioridad'.",
+    input_schema: {
+      type: "object",
+      properties: {
+        ref: { type: "string", description: "Referencia de la propiedad (codigo Wasi), ej 8989725" },
+        prioridad: { type: "boolean", description: "true para marcar con urgencia de venta, false para quitarla. Si no lo dicen, asume true." },
+      },
+      required: ["ref"],
+    },
+  },
+  {
     name: "consultar_captador",
     description:
       "Consulta quien es el captador de una propiedad (por ref) o que propiedades tiene marcadas un asesor (por nombre). Usala para 'de quien es la ref X' o 'que propiedades tiene Natalia'.",
@@ -535,6 +548,18 @@ async function executeCommandTool(name, input, ctx) {
       await properties.setCaptador(scope.orgId, prop.id, nuevo.id);
       const reemplazo = anterior ? ` (reemplaza a ${anterior.name})` : "";
       return `Listo: la propiedad ${prop.ref} — ${prop.titulo} quedo marcada a nombre de ${nuevo.name}${reemplazo}. Cuando un cliente muestre interes, le avisamos y el lead se le transfiere.`;
+    }
+    case "marcar_prioridad_venta": {
+      const prop = await properties.findByRef(scope.orgId, input?.ref || "");
+      if (!prop) {
+        return `No encontre la referencia ${input?.ref} en el inventario. Verifica el codigo con el asesor o buscala con buscar_inventario.`;
+      }
+      const prioridad = input?.prioridad !== false;
+      const actualizada = await properties.setPrioridadVenta(scope.orgId, prop.id, prioridad);
+      if (!actualizada) return `No pude actualizar la referencia ${prop.ref} — intenta de nuevo.`;
+      return prioridad
+        ? `Listo: la propiedad ${prop.ref} — ${prop.titulo} quedo marcada con urgencia de venta. Le va a llegar a mas pedidos del radar de grupos.`
+        : `Listo: le quite la urgencia de venta a la propiedad ${prop.ref} — ${prop.titulo}.`;
     }
     case "consultar_captador": {
       if (input?.ref) {
