@@ -80,6 +80,39 @@ async function citasDeLaOrg(orgId) {
   return (data || []).filter((l) => l.cita && l.cita.fecha_hora);
 }
 
+// PROXIMO DISPONIBLE (Juan, 2026-08-21): "todo lo que digan que cuando se
+// puede ver inmediatamente se agenda... si el calendario esta todo
+// disponible utilizalo y ocupa un espacio". Antes agendar_cita exigia que el
+// CLIENTE propusiera dia/hora; esto lo invierte para cuando el cliente solo
+// pregunta "¿cuando se puede ver?" sin dar preferencia — el sistema busca el
+// primer espacio libre y lo propone, en vez de preguntar y esperar.
+//
+// Busqueda determinista en codigo, no adivinada por el modelo: hora en punto,
+// avanzando de a una hora, reusando exactamente las mismas reglas que ya
+// validan una cita puesta a mano (dentroDeHorario + hayChoque) — un espacio
+// que este metodo encuentra SIEMPRE pasaria checkAvailability tambien.
+const AVISO_MINIMO_MIN = 120; // no ofrecer un espacio a menos de 2h de ahora
+const HORIZONTE_DIAS = 21; // si no hay nada libre en 3 semanas, mejor fallar explicito
+const HORA_MS = 60 * 60 * 1000;
+
+async function proximoDisponible(orgId, advisor, { desde = new Date() } = {}) {
+  const leadsConCita = await citasDeLaOrg(orgId);
+  const advisorId = advisor && advisor.auth_user_id;
+
+  const minimo = desde.getTime() + AVISO_MINIMO_MIN * 60 * 1000;
+  let ms = Math.ceil(minimo / HORA_MS) * HORA_MS; // proxima hora en punto
+  const limite = desde.getTime() + HORIZONTE_DIAS * 24 * HORA_MS;
+
+  while (ms < limite) {
+    const iso = new Date(ms).toISOString();
+    if (dentroDeHorario(advisor && advisor.horario, iso) && (!advisorId || !hayChoque(leadsConCita, advisorId, iso))) {
+      return iso;
+    }
+    ms += HORA_MS;
+  }
+  return null;
+}
+
 // Valida si un asesor puede atender una cita en fechaHoraIso.
 // -> { disponible: true } | { disponible: false, motivo: "fuera_de_horario" | "choque" }
 async function checkAvailability(orgId, advisor, fechaHoraIso, { excludeLeadId = null } = {}) {
@@ -133,6 +166,7 @@ module.exports = {
   dentroDeHorario,
   hayChoque,
   checkAvailability,
+  proximoDisponible,
   isReminderDue,
   dueReminders,
 };

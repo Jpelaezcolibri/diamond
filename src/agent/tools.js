@@ -6,7 +6,7 @@ const propertyContext = require("../data/property-context");
 const appointments = require("../data/appointments");
 const { computeScore, isQualified } = require("./qualification");
 const propertyOwnerAlerts = require("../data/property-owner-alerts");
-const { buildClientLink, buildAllyClientMatchAlert, buildAppointmentAlert, buildCaptadorInterestAlert } = require("../notifications/advisor");
+const { buildClientLink, buildAllyClientMatchAlert, buildAppointmentAlert, buildCaptadorInterestAlert, formatCitaFechaHora } = require("../notifications/advisor");
 const { LEGAL_TOPICS, LEGAL_DISCLAIMER } = require("./knowledge");
 const crypto = require("node:crypto");
 const groupSignals = require("../data/group-signals");
@@ -76,18 +76,23 @@ const TOOL_DEFINITIONS = [
   {
     name: "agendar_cita",
     description:
-      "Registra la cita o preferencia de contacto del cliente con el asesor (dia y hora). Usala cuando el cliente indique cuando quiere que lo contacten, cuando quiere visitar un inmueble, o cuando agenda una asesoria (ej para vender). Si das fecha y hora concretas, el sistema valida la agenda del asesor (horario laboral y que no haya otra cita a esa hora): si el resultado dice que NO se pudo agendar, pidele al cliente otro dia u hora y vuelve a intentar — no insistas con el mismo horario ni inventes horas libres. Llamala ANTES de transferir_a_asesor cuando el cliente ya dio dia/hora, para que el asesor reciba todo junto.",
+      "Registra la cita o preferencia de contacto del cliente con el asesor (dia y hora). Usala cuando el cliente indique cuando quiere que lo contacten, cuando quiere visitar un inmueble, o cuando agenda una asesoria (ej para vender). Si das fecha y hora concretas, el sistema valida la agenda del asesor (horario laboral y que no haya otra cita a esa hora): si el resultado dice que NO se pudo agendar, pidele al cliente otro dia u hora y vuelve a intentar — no insistas con el mismo horario ni inventes horas libres. Llamala ANTES de transferir_a_asesor cuando el cliente ya dio dia/hora, para que el asesor reciba todo junto. Si el cliente PREGUNTA cuando se puede ver (sin proponer el el mismo un dia/hora — ej '¿cuando se puede ver?', 'quiero verlo ya'), usa proximo_disponible=true en vez de preguntarle que dia le queda mejor: el sistema busca y agenda el primer espacio libre de una, y vos se lo confirmas.",
     input_schema: {
       type: "object",
       properties: {
         descripcion: {
           type: "string",
-          description: "La preferencia tal como la dijo el cliente, ej 'manana a las 8 am', 'el jueves en la tarde', 'este fin de semana'",
+          description: "La preferencia tal como la dijo el cliente, ej 'manana a las 8 am', 'el jueves en la tarde', 'este fin de semana'. Si usas proximo_disponible, poné algo como 'quiere ver la propiedad lo antes posible'.",
         },
         fecha_hora_iso: {
           type: "string",
           description:
-            "Fecha y hora en formato ISO 8601 con zona horaria de Colombia (-05:00), calculada a partir de la fecha y hora ACTUAL que se te indica en el contexto. Ej '2026-07-05T08:00:00-05:00'. Si el cliente fue vago (ej 'la otra semana') y no puedes fijar una hora exacta, omite este campo.",
+            "Fecha y hora en formato ISO 8601 con zona horaria de Colombia (-05:00), calculada a partir de la fecha y hora ACTUAL que se te indica en el contexto. Ej '2026-07-05T08:00:00-05:00'. Si el cliente fue vago (ej 'la otra semana') y no puedes fijar una hora exacta, omite este campo. No la mandes junto con proximo_disponible — son excluyentes.",
+        },
+        proximo_disponible: {
+          type: "boolean",
+          description:
+            "true cuando el cliente pregunta por ver la propiedad (o ser contactado) SIN proponer el un dia/hora concreto — el sistema busca el primer espacio libre en la agenda del asesor y lo agenda de una, sin preguntarle al cliente que dia prefiere primero. Omite fecha_hora_iso si usas esto.",
         },
         tipo: {
           type: "string",
@@ -268,6 +273,39 @@ async function resolveLeadAdvisor(ctx, especialidad) {
   return advisors.findForTransfer(ctx.org, especialidad);
 }
 
+// ALERTA DE CITA AUTO-AGENDADA (Juan, 2026-08-21): "me lo pones en el super
+// admin tambien y lo marcas para yo hacerle seguimiento... avisanos". Una
+// cita que agendo el sistema solo (nadie la reviso antes de confirmarsela al
+// cliente) necesita que Juan se entere, ademas del aviso normal al asesor —
+// para poder verificarla. Reusa RADAR_ALERTA_TO, el mismo numero que ya usa
+// src/groups/vivo.js para avisos de monitoreo/calibracion a Juan. Best-effort:
+// nunca bloquea la confirmacion al cliente ni la cita misma.
+const AUTO_AGENDA_ALERTA_TO = process.env.RADAR_ALERTA_TO || "";
+
+async function avisarCitaAutoAgendada(ctx, cita) {
+  const destinos = AUTO_AGENDA_ALERTA_TO.split(",").map((t) => t.trim().replace(/\D/g, "")).filter(Boolean);
+  if (destinos.length === 0) return;
+  const cuando = formatCitaFechaHora(cita.fecha_hora) || cita.fecha_hora;
+  const texto = [
+    `🤖 Cita auto-agendada — revisala`,
+    ``,
+    `Cliente: ${ctx.lead.nombre || `+${ctx.lead.phone}`}`,
+    `Propiedad: ${ctx.propertyInteres ? `${ctx.propertyInteres.titulo || "sin titulo"} (ref ${ctx.propertyInteres.ref})` : "sin propiedad de origen"}`,
+    `Cuando: ${cuando}`,
+    `Tipo: ${cita.tipo}`,
+    ``,
+    `El cliente pregunto cuando podia ver la propiedad y Sofi agendo sola el primer espacio libre. Confirmá con el asesor que le quede bien.`,
+  ].join("\n");
+  // Require tardio (mismo motivo que src/agent/tools.js#aprobarPedidoRadar):
+  // este archivo -> mensaje-asesor.js -> whatsapp.js -> engine.js -> este archivo.
+  const mensajeAsesor = require("../lib/mensaje-asesor");
+  for (const to of destinos) {
+    await mensajeAsesor.enviarYRegistrar(ctx.org, to, texto).catch((e) =>
+      console.warn(`[tools] No se pudo avisar la cita auto-agendada a ${to}:`, e.message)
+    );
+  }
+}
+
 // Ejecuta una tool. ctx: { org, lead, propertyInteres, transfer } — el engine lee
 // ctx.lead (actualizado) y ctx.transfer despues del loop.
 async function executeTool(name, input, ctx) {
@@ -403,6 +441,14 @@ async function executeTool(name, input, ctx) {
   }
 
   if (name === "agendar_cita") {
+    if (input.proximo_disponible && input.fecha_hora_iso) {
+      return "No mandes fecha_hora_iso junto con proximo_disponible — son excluyentes. Si el cliente ya dio un dia/hora, usa fecha_hora_iso solo; si no propuso nada, usa solo proximo_disponible.";
+    }
+
+    const ESP_POR_INTENCION = { vender: "venta", comprar: "venta", arrendar: "arriendo", vehiculos: "vehiculos" };
+    const especialidad =
+      ESP_POR_INTENCION[ctx.lead.intencion] || (ctx.propertyInteres?.operacion || "").toLowerCase() || "venta";
+
     const cita = {
       descripcion: input.descripcion,
       fecha_hora: input.fecha_hora_iso || null,
@@ -411,14 +457,41 @@ async function executeTool(name, input, ctx) {
       creada_at: new Date().toISOString(),
     };
 
-    // Con dia/hora concretos: resolver el asesor de la especialidad (misma
-    // logica que transferir_a_asesor, sin el input.especialidad que aqui no
-    // existe) y validar SU agenda antes de confirmar. Sin fecha_hora (cliente
-    // vago) no hay nada que validar: se guarda como texto, como siempre.
+    // PROXIMO DISPONIBLE (Juan, 2026-08-21): "todo lo que digan que cuando se
+    // puede ver inmediatamente se agenda... si el calendario esta todo
+    // disponible utilizalo y ocupa un espacio". El cliente pregunto por ver
+    // la propiedad SIN proponer dia/hora — en vez de preguntarle (como hacia
+    // antes), el sistema busca el primer espacio libre y lo agenda de una.
+    // Necesita el asesor resuelto ANTES de poder buscar en su agenda.
+    if (input.proximo_disponible) {
+      let advisor = null;
+      try {
+        advisor = await resolveLeadAdvisor(ctx, especialidad);
+      } catch (e) {
+        console.warn("[tools] No se pudo resolver el asesor para buscar el proximo disponible:", e.message);
+      }
+      if (!advisor) {
+        return "No pude resolver el asesor para buscar un espacio libre. Preguntale al cliente que dia y hora le queda mejor y agenda con fecha_hora_iso en vez de proximo_disponible.";
+      }
+      let slot = null;
+      try {
+        slot = await appointments.proximoDisponible(ctx.org.id, advisor);
+      } catch (e) {
+        console.warn("[tools] No se pudo buscar el proximo disponible:", e.message);
+      }
+      if (!slot) {
+        return "No encontre ningun espacio libre en las proximas semanas — la agenda del asesor esta muy llena. Preguntale al cliente que dia y hora le queda mejor y agenda con fecha_hora_iso en vez de proximo_disponible.";
+      }
+      cita.fecha_hora = slot;
+      cita.origen = "auto";
+    }
+
+    // Con dia/hora concretos (dado por el cliente, o recien encontrado
+    // arriba): resolver el asesor de la especialidad (misma logica que
+    // transferir_a_asesor) y validar SU agenda antes de confirmar. Sin
+    // fecha_hora (cliente vago, sin proximo_disponible) no hay nada que
+    // validar: se guarda como texto, como siempre.
     if (cita.fecha_hora) {
-      const ESP_POR_INTENCION = { vender: "venta", comprar: "venta", arrendar: "arriendo", vehiculos: "vehiculos" };
-      const especialidad =
-        ESP_POR_INTENCION[ctx.lead.intencion] || (ctx.propertyInteres?.operacion || "").toLowerCase() || "venta";
       let advisor = null;
       try {
         advisor = await resolveLeadAdvisor(ctx, especialidad);
@@ -433,6 +506,12 @@ async function executeTool(name, input, ctx) {
           console.warn("[tools] No se pudo validar la disponibilidad de la agenda:", e.message);
         }
         if (!dispo.disponible) {
+          // proximoDisponible encontro un choque de ultimo momento (otra cita
+          // se agendo justo entre la busqueda y esta validacion): el error es
+          // nuestro, no del cliente — no tiene sentido pedirle otro horario.
+          if (cita.origen === "auto") {
+            return "El espacio que encontre se ocupo justo antes de confirmar. Volve a intentar con proximo_disponible.";
+          }
           const motivo =
             dispo.motivo === "fuera_de_horario"
               ? "ese horario esta fuera del horario de atencion del asesor"
@@ -458,10 +537,20 @@ async function executeTool(name, input, ctx) {
     } catch (e) {
       console.warn("[tools] No se pudo persistir la cita (revisar migracion leads.cita):", e.message);
     }
+
+    // "me lo pones en el super admin tambien y lo marcas para yo hacerle
+    // seguimiento... avisanos" — cita.origen="auto" ya la marca (el
+    // Calendario del equipo puede distinguirla) y esto le avisa a Juan.
+    if (cita.origen === "auto") {
+      avisarCitaAutoAgendada(ctx, cita).catch((e) =>
+        console.warn("[tools] No se pudo avisar la cita auto-agendada:", e.message)
+      );
+    }
+
     const notificado = ctx.appointmentAlert
       ? " El asesor ya fue notificado de la cita."
       : " Cuando transfieras al asesor la vera en la alerta.";
-    return `Cita registrada: ${cita.descripcion}${cita.fecha_hora ? ` (${cita.fecha_hora})` : ""} — tipo ${cita.tipo}.${notificado} Confirma al cliente con calidez, repitiendo el dia y la hora, y deja claro el siguiente paso.`;
+    return `Cita registrada: ${cita.descripcion}${cita.fecha_hora ? ` (${cita.fecha_hora})` : ""} — tipo ${cita.tipo}.${notificado} Confirma al cliente con calidez, repitiendo EXACTAMENTE el dia y la hora agendados, y deja claro el siguiente paso.`;
   }
 
   if (name === "consultar_guia_legal") {

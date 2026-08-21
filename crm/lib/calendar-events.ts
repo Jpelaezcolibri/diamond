@@ -27,6 +27,11 @@ export type CalendarEvent = {
    *  Solo lo trae "avance_colega" — las citas de cliente y los recordatorios
    *  no tienen un chat de grupo al que volver. */
   linkChat: string | null;
+  /** Sofi la agendó sola (src/agent/tools.js:agendar_cita, proximo_disponible)
+   *  porque el cliente preguntó cuándo podía ver la propiedad sin proponer
+   *  día/hora — nadie la revisó antes de confirmarla (Juan, 2026-08-21:
+   *  "lo marcas para yo hacerle seguimiento"). Solo aplica a "cita_cliente". */
+  autoAgendada: boolean;
 };
 
 type Cita = {
@@ -34,6 +39,7 @@ type Cita = {
   fecha_hora?: string | null;
   tipo?: string | null;
   advisor_id?: string | null;
+  origen?: string | null;
 };
 
 type LeadConCita = {
@@ -140,6 +146,7 @@ export async function getCalendarEvents(supabase: any): Promise<{
       propertyRef: l.property_ref_origen,
       origen: "cita_cliente" as const,
       linkChat: null,
+      autoAgendada: l.cita?.origen === "auto",
     }));
 
   const reminderEvents: CalendarEvent[] = ((remindersRes.data as AdvisorReminder[]) || [])
@@ -154,6 +161,7 @@ export async function getCalendarEvents(supabase: any): Promise<{
       propertyRef: null,
       linkChat: null,
       origen: "recordatorio_equipo" as const,
+      autoAgendada: false,
     }));
 
   const avanceEvents: CalendarEvent[] = ((dmRes.data as LineaDmAvance[]) || [])
@@ -170,6 +178,7 @@ export async function getCalendarEvents(supabase: any): Promise<{
       // Mismo id de ancla que crm/components/linea-dm-inbox.tsx#anclaHilo —
       // si uno cambia, el otro tiene que cambiar igual.
       linkChat: `/grupos#dm-${m.remitente_telefono || "sin-telefono"}`,
+      autoAgendada: false,
     }));
 
   const events = [...citaEvents, ...reminderEvents, ...avanceEvents].sort(
