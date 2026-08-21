@@ -555,6 +555,16 @@ test("SCORING: Rodeo Alto cuenta como zona EXACTA de un pedido en Belen, no veci
   assert.strictEqual(m.ubicacion, "exacta");
 });
 
+// Caso Alberto Posada (Juan, 2026-08-21, pedido codigo 629): "las palmas se
+// puede tomar como poblado, hace parte de El Poblado". Antes calificaba
+// 'vecina' (-5, 58 puntos, bajo el umbral de publicacion) y se descartaba;
+// ahora 'exacta' (+20), igual que San Joaquin/Laureles y Rodeo Alto/Belen.
+test("SCORING: Las Palmas cuenta como zona EXACTA de un pedido en El Poblado, no vecina", () => {
+  const m = evaluarCandidata(apto({ zona: "Las Palmas" }), pide({ zona: "El Poblado" }), "diamond");
+  assert.ok(m);
+  assert.strictEqual(m.ubicacion, "exacta");
+});
+
 test("SCORING: la contencion de sub-zona no es simetrica — pedir San Joaquin y encontrar Laureles sigue siendo VECINA, no exacta", () => {
   // La contencion solo promueve subzona -> zona madre a exacta (San Joaquin
   // ES Laureles). Al reves, "Laureles" es el barrio entero, mas grande que

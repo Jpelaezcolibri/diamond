@@ -159,6 +159,15 @@ function sonVecinas(tokensPedido, tokensPropiedad) {
 const SUBZONA_DE = new Map([
   ["joaquin", "laureles"], // San Joaquin
   ["rodeo", "belen"], // Rodeo Alto / Rodeo Bajo
+  // Juan, 2026-08-21 (caso Alberto Posada, pedido codigo 629): "las palmas se
+  // puede tomar como poblado, hace parte de El Poblado" — quien pide El
+  // Poblado y una propiedad esta en Las Palmas no esta mirando el sector de
+  // al lado, esta mirando lo que pidio. Antes calificaba 'vecina' (-5, sin
+  // publicar por puntaje_bajo); ahora 'exacta' (+20). La entrada en VECINDAD
+  // (linea de arriba en este archivo) se conserva a proposito: es la que
+  // hace que el prefiltro SQL siquiera traiga Las Palmas cuando se busca
+  // Poblado — sin ella esta subzona nunca llegaria al motor para evaluarse.
+  ["palmas", "poblado"],
 ]);
 
 // ¿Algun token de la propiedad es una sub-zona conocida de algun token
