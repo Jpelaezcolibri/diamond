@@ -24,6 +24,21 @@ test("las habitaciones van como habitaciones_min al inventario propio", () => {
   assert.strictEqual(filtrosInventario(demanda).habitaciones_min, 3);
 });
 
+// BUG real (Juan, 2026-08-21 — caso GLOVI/VC9091): habitaciones_min es un
+// .gte() duro en la consulta SQL. Sin este ajuste, una propiedad de 2 alcobas
+// quedaba fuera del prefiltro ANTES de que evaluarCandidata pudiera aplicarle
+// la flexibilidad de "3 alcobas + estudio" — la ref 8989725 (2 alcobas,
+// marcada con prioridad de venta) nunca llegaba a evaluarse para un pedido
+// asi, sin importar cuanto puntaje tuviera.
+test("BUG: con flexible_habitaciones, el prefiltro SQL acepta una alcoba menos", () => {
+  const flexible = { ...demanda, flexible_habitaciones: true };
+  assert.strictEqual(filtrosInventario(flexible).habitaciones_min, 2);
+});
+
+test("sin flexible_habitaciones, el prefiltro sigue exigiendo el minimo exacto", () => {
+  assert.strictEqual(filtrosInventario(demanda).habitaciones_min, 3);
+});
+
 test("los campos vacíos o en cero no se mandan como filtro", () => {
   // Un precio_max: 0 filtraría todo el inventario a nada.
   const sinDatos = { operacion: "", tipo: "", zona: "", precio_max: 0, precio_min: 0, habitaciones: 0 };

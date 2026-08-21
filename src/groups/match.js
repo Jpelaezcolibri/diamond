@@ -35,7 +35,16 @@ function filtrosInventario(c) {
     f.zona = c.ciudad;
   }
   if (c.precio_max > 0) f.precio_max = c.precio_max;
-  if (c.habitaciones > 0) f.habitaciones_min = c.habitaciones;
+  // BUG real (Juan, 2026-08-21 — caso GLOVI/VC9091, ref 8989725): este corte
+  // es un .gte() duro en la consulta SQL (properties.search), que no sabe
+  // nada de la flexibilidad de evaluarCandidata mas abajo (la que acepta una
+  // alcoba menos cuando el pedido dice "estudio" o "para inversion"). Sin
+  // este ajuste, una propiedad de 2 alcobas quedaba descartada ACA, antes de
+  // que el codigo pudiera aplicarle esa flexibilidad — la señal
+  // flexible_habitaciones nunca llegaba a importar. Restar 1 cuando aplica
+  // deja pasar esos candidatos al prefiltro; evaluarCandidata sigue siendo
+  // quien decide de verdad, con la misma regla exacta que ya tenia.
+  if (c.habitaciones > 0) f.habitaciones_min = Math.max(0, c.habitaciones - (c.flexible_habitaciones ? 1 : 0));
   return f;
 }
 
