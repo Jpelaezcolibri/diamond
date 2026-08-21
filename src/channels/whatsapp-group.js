@@ -26,9 +26,17 @@
 // grupos: es inherente al protocolo, no hay forma de pedirle otra cosa a
 // WhatsApp. La unica defensa honesta es arquitectonica:
 //
-//   1. Se descarta cualquier chat que no termine en @g.us, en la primera linea,
-//      antes de cualquier log, consulta o escritura.
-//   2. Se descarta cualquier grupo que no este en la lista blanca.
+//   1. Se descarta cualquier chat que no sea un grupo (@g.us) o un mensaje
+//      directo (@c.us), en la primera linea, antes de cualquier log, consulta
+//      o escritura. El DM se habilito el 2026-08-21 SOLO porque esta linea es
+//      100% dedicada al radar, sin uso personal (Juan, confirmado ese dia) —
+//      ver la nota completa junto a INVARIANTE 1 mas abajo y
+//      db/migrations/2026-08-21_linea_dm.sql. Cualquier OTRO tipo de chat
+//      (broadcast, status, canales) sigue sin existir en ningun lado.
+//   2. Se descarta cualquier grupo que no este en la lista blanca. El DM no
+//      tiene lista blanca — no hay "grupos" que habilitar en un chat 1 a 1 —
+//      pero tampoco responde nada (ver src/groups/dm.js): solo lee, clasifica
+//      y alerta por la linea OFICIAL de Sofi, nunca por la vinculada.
 //   3. Solo se publica en grupos con permiso explicito (`responde`), que es un
 //      permiso distinto del de escuchar y arranca apagado.
 //   4. Lo que no es senal no se persiste: el ruido muere en memoria.
