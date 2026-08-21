@@ -224,6 +224,49 @@ test("lo que NO toca WhatsApp sigue disponible con el radar apagado", () => {
   }
 });
 
+// ── Inbox de DM (Juan, 2026-08-21) ──────────────────────────────────────
+//
+// "necesito hacer un cruce de datos de cuales mensajes respondio el bot y
+// cuales el colega de regreso le respondio al numero de natalia... que me
+// alerte". Existe SOLO porque la linea es 100% dedicada al radar, sin uso
+// personal (confirmado por Juan) — ver db/migrations/2026-08-21_linea_dm.sql.
+
+test("_esDM reconoce un chat 1 a 1 (@c.us) y lo distingue de un grupo", () => {
+  const canal = require("../src/channels/whatsapp-group");
+  assert.strictEqual(canal._esDM("573001112222@c.us"), true);
+  assert.strictEqual(canal._esDM("123456@g.us"), false);
+  assert.strictEqual(canal._esDM("status@broadcast"), false);
+  assert.strictEqual(canal._esDM(null), false);
+});
+
+test("la invariante ahora deja pasar DOS formas de chat (grupo o DM), nunca cualquier otra", () => {
+  const codigo = soloCodigo(leer("src/channels/whatsapp-group.js"));
+  const guardia = codigo.indexOf("!esGrupo(ev.chatId) && !esDM(ev.chatId)");
+  const primeraConsulta = codigo.indexOf("organizations.getDefault()");
+  assert.ok(guardia > 0, "el guard tiene que exigir NI grupo NI dm para descartar");
+  assert.ok(primeraConsulta > guardia, "el descarte sigue yendo antes de cualquier consulta");
+});
+
+test("el camino de DM nunca llama a procesar() (el de grupos) ni a waha.enviarTexto", () => {
+  // El inbox de DM es de solo lectura: si algun dia alguien lo conecta al
+  // camino de publicacion de grupos, esto lo agarra.
+  const codigo = soloCodigo(leer("src/channels/whatsapp-group.js"));
+  const inicio = codigo.indexOf("async function procesarDM");
+  const fin = codigo.indexOf("router.post(\"/webhook/grupos\"");
+  const cuerpo = codigo.slice(inicio, fin);
+  assert.ok(!cuerpo.includes("waha.enviarTexto"), "el inbox de DM no puede publicar nada");
+  assert.ok(!cuerpo.includes("vivo.procesarMensaje"), "el inbox de DM usa dm.procesarMensaje, no el de grupos");
+});
+
+test("dm.js no expone ninguna forma de responderle al colega", () => {
+  // Juan fue explicito: "por ahora no es necesario responder, solo necesito
+  // leer". Esto lo protege estructuralmente, no solo por convencion.
+  const codigo = soloCodigo(leer("src/groups/dm.js"));
+  for (const prohibido of ["waha.enviarTexto", "sendWhatsApp(", "canalWhatsapp."]) {
+    assert.ok(!codigo.includes(prohibido), `dm.js no puede contener "${prohibido}": es un inbox pasivo, no un canal de conversacion`);
+  }
+});
+
 test("el canal solo se monta con las dos variables puestas", () => {
   const codigo = soloCodigo(leer("src/server.js"));
   assert.ok(codigo.includes("config.groups.webhookSecret && config.groups.enabled"));

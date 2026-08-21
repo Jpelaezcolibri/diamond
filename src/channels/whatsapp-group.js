@@ -45,6 +45,7 @@ const { huella } = require("../../epe/core/hash");
 const { enqueue } = require("../lib/user-queue");
 const vivo = require("../groups/vivo");
 const waha = require("../lib/waha");
+const dm = require("../groups/dm");
 
 const router = express.Router();
 
@@ -186,6 +187,11 @@ function esAnteriorAlCorte(tsMs, sesion, grupo) {
 }
 
 const esGrupo = (chatId) => typeof chatId === "string" && chatId.endsWith("@g.us");
+// Chat 1 a 1 de WhatsApp (protocolo NOWEB de WAHA). Distinto de @g.us
+// (grupo) y de cualquier otro tipo de chat (broadcast, status, etc.), que
+// sigue sin procesarse — ver INVARIANTE 1 mas abajo, que ahora deja pasar
+// DOS formas de chat en vez de una, nunca "cualquier cosa".
+const esDM = (chatId) => typeof chatId === "string" && chatId.endsWith("@c.us");
 const soloDigitos = (jid) => String(jid || "").replace(/\D/g, "") || null;
 
 // Procesa el mensaje despues de haber respondido 200. WAHA reintenta si el
@@ -239,23 +245,66 @@ async function procesar(org, ev, grupo, sesion) {
   return r;
 }
 
+// Mensaje DIRECTO a la linea vinculada (Juan, 2026-08-21) — inbox pasivo, ver
+// la nota de diseno completa en src/groups/dm.js. En un chat 1 a 1 `from` ES
+// el JID de quien escribe (no hay "participant" como en un grupo).
+async function procesarDM(org, ev, sesion) {
+  const mensaje = {
+    waMessageId: ev.waMessageId,
+    sesion: ev.sesion,
+    remitenteTelefono: soloDigitos(ev.chatId),
+    remitenteNombre: ev.autorNombre,
+    texto: ev.texto,
+    fechaMensaje: typeof ev.tsMs === "number" ? new Date(ev.tsMs).toISOString() : null,
+  };
+  return dm.procesarMensaje(org, mensaje);
+}
+
 router.post("/webhook/grupos", async (req, res) => {
   if (!autorizado(req)) return res.status(401).json({ ok: false });
 
   const ev = normalizar(req.body);
 
   // ── INVARIANTE 1 ─────────────────────────────────────────────────────
-  // Todo lo que no sea un mensaje de grupo se descarta ACA, antes de cualquier
-  // log, consulta o escritura. Los chats privados de esa linea no llegan a
-  // existir en ningun lado de este sistema.
-  if (req.body?.event !== "message" || !esGrupo(ev.chatId) || !ev.waMessageId) {
+  // Todo lo que no sea un mensaje de grupo O un mensaje directo (DM) se
+  // descarta ACA, antes de cualquier log, consulta o escritura. Cualquier
+  // OTRO tipo de chat (broadcast, status, canales) sigue sin existir en
+  // ningun lado de este sistema. El DM se habilito el 2026-08-21 (Juan:
+  // "necesito hacer un cruce de datos de... cuales el colega de regreso le
+  // respondio al numero de natalia") SOLO porque esta linea es 100% dedicada
+  // al radar, sin uso personal — ver la nota completa en
+  // db/migrations/2026-08-21_linea_dm.sql antes de tocar esto.
+  if (req.body?.event !== "message" || !ev.waMessageId || (!esGrupo(ev.chatId) && !esDM(ev.chatId))) {
     return res.json({ ok: true });
   }
 
   try {
     const org = await organizations.getDefault();
 
-    // ── INVARIANTE 2 ───────────────────────────────────────────────────
+    // Lo que escribe la propia linea no es senal de nadie — y evita que el
+    // radar se conteste o se guarde a si mismo.
+    if (ev.fromMe) return res.json({ ok: true });
+
+    // ── Camino DM: mas simple a proposito. Sin lista blanca (no hay "grupos"
+    // que habilitar en un chat 1 a 1) y sin publicacion — solo lectura,
+    // clasificacion y alerta. Ver src/groups/dm.js.
+    if (esDM(ev.chatId)) {
+      const sesionDM = await whatsappGroups.sesionPorNombre(org.id, ev.sesion);
+      if (esAnteriorAlCorte(ev.tsMs, sesionDM, null)) return res.json({ ok: true });
+      if (yaVisto(ev.waMessageId)) return res.json({ ok: true });
+
+      res.json({ ok: true });
+      enqueue(`dm:${soloDigitos(ev.chatId)}`, () =>
+        procesarDM(org, ev, sesionDM).catch((e) => {
+          // Nunca se registra el contenido del mensaje en el log de error.
+          console.error("[grupos] procesando DM:", e.message);
+        })
+      );
+      whatsappGroups.touchSession(org.id, ev.sesion).catch(() => {});
+      return;
+    }
+
+    // ── INVARIANTE 2 (solo grupos) ───────────────────────────────────────
     // Lista blanca. Un grupo nuevo nace apagado y no procesa nada hasta que
     // alguien lo prende a mano. Registrarlo guarda solo el jid y el nombre.
     const blanca = await whatsappGroups.whitelist(org.id);
@@ -264,10 +313,6 @@ router.post("/webhook/grupos", async (req, res) => {
       await whatsappGroups.registrarGrupo(org.id, { jid: ev.chatId }).catch(() => {});
       return res.json({ ok: true });
     }
-
-    // Lo que escribe la propia linea no es senal del gremio — y evita que el
-    // radar se conteste a si mismo.
-    if (ev.fromMe) return res.json({ ok: true });
 
     const sesion = await whatsappGroups.sesionPorNombre(org.id, ev.sesion);
     if (esAnteriorAlCorte(ev.tsMs, sesion, grupo)) {
@@ -306,6 +351,7 @@ router.get("/webhook/grupos/estado", async (req, res) => {
 module.exports = router;
 module.exports._normalizar = normalizar;
 module.exports._esGrupo = esGrupo;
+module.exports._esDM = esDM;
 module.exports._yaVisto = yaVisto;
 module.exports._esAnteriorAlCorte = esAnteriorAlCorte;
 module.exports._metricas = metricas;

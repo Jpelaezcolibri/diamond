@@ -563,11 +563,40 @@ async function respuestasDesde(orgId, groupId, desdeIso) {
   return { cantidad: data.length, ultimaIso: data.length ? data[0].respondida_at : null };
 }
 
+// El pedido de grupo MAS RECIENTE de este remitente, si lo hay — el cruce que
+// necesita el inbox de DM (Juan, 2026-08-21: "hacer un cruce de datos de
+// cuales mensajes respondio el bot y cuales el colega de regreso le
+// respondio al numero de natalia"). Ver src/groups/dm.js.
+async function buscarPorTelefono(orgId, telefono) {
+  if (!telefono) return null;
+  if (!supabase) {
+    return (
+      memory.groupSignals
+        .filter((s) => s.org_id === orgId && s.autor_telefono === telefono && s.clase === "demanda")
+        .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))[0] || null
+    );
+  }
+  const { data, error } = await supabase
+    .from("group_signals")
+    .select("id, texto_original, zona, tipo, operacion, created_at, matches")
+    .eq("org_id", orgId)
+    .eq("autor_telefono", telefono)
+    .eq("clase", "demanda")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    console.error("[grupos] No se pudo buscar la señal por telefono:", error.message);
+    return null;
+  }
+  return data;
+}
+
 module.exports = {
   create, list, setEstado, resumen, marcarEnviada, ultimaFechaImportada,
   pendientesDigest, marcarDigest, revertirDigest,
   marcarRespondida, respuestasDesde, guardarRevalidacion, marcarAvisoEnviado,
-  guardarPolitica, obtenerPorId, calladosPendientes,
+  guardarPolitica, obtenerPorId, calladosPendientes, buscarPorTelefono,
   findByWamid, pendientesDeAviso, candidatosRecordatorio, claimRecordatorio,
   CLASES, ORIGENES, MODOS_RESPUESTA, _resetBlindaje,
 };
