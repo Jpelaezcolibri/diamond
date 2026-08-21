@@ -111,4 +111,8 @@ app.listen(config.port, () => {
   // para calibrar (signal_events) y renueva la ventana de 24h de los avisos
   // siguientes.
   if (config.supabaseUrl) require("./scheduler/radar-recordatorio").start();
+  // Cruce diario visitas -> ventas (Juan, 2026-08-21): de lo que el sistema
+  // pudo capturar como visita agendada, ¿cual propiedad ya no esta
+  // disponible? "quiero tener el control de las visitas y ventas".
+  if (config.supabaseUrl) require("./scheduler/visitas-venta").start();
 });

@@ -1,10 +1,16 @@
-// Unifica las dos fuentes de "eventos de calendario" del negocio en un solo
-// tipo para el Calendario del equipo:
+// Unifica las fuentes de "eventos de calendario" del negocio en un solo tipo
+// para el Calendario del equipo:
 //  - leads.cita (jsonb): citas de CLIENTES agendadas desde el bot de WhatsApp
 //    (src/agent/tools.js:agendar_cita).
 //  - advisor_reminders con fecha_hora: recordatorios que un asesor le pidio a
 //    Sofi-Comando y SI tienen dia/hora (los que no tienen fecha son notas
 //    privadas y no entran aqui — quedan fuera por RLS ademas de por este filtro).
+//  - linea_dm con avance detectado (Juan, 2026-08-21): un COLEGA de otra
+//    inmobiliaria que confirmo fecha/hora de visita por la linea de Natalia
+//    (src/groups/dm.js) — "todo lo que pase por Diamond que se pueda poner
+//    como agendada la pones y la mides". Solo entran las que SI tienen
+//    fecha (cita_fecha_hora_iso); "agendando"/"interes_avanzado" sin fecha
+//    exacta no tienen donde caer en un calendario — esas se ven en el inbox.
 import { getTeamRoster } from "@/lib/team";
 
 export type CalendarEvent = {
@@ -15,7 +21,7 @@ export type CalendarEvent = {
   advisorNombre: string | null;
   clienteNombre: string | null;
   propertyRef: string | null;
-  origen: "cita_cliente" | "recordatorio_equipo";
+  origen: "cita_cliente" | "recordatorio_equipo" | "avance_colega";
 };
 
 type Cita = {
@@ -38,6 +44,20 @@ type AdvisorReminder = {
   user_id: string;
   descripcion: string;
   fecha_hora: string | null;
+};
+
+type LineaDmAvance = {
+  id: string;
+  remitente_nombre: string | null;
+  remitente_telefono: string | null;
+  cita_fecha_hora_iso: string | null;
+  avance_tipo: string | null;
+  senal_id: string | null;
+};
+
+type GroupSignalRef = {
+  id: string;
+  matches: Array<{ ref?: string | null }> | null;
 };
 
 const TIPO_LABEL: Record<string, string> = {
@@ -66,7 +86,7 @@ export async function getCalendarEvents(supabase: any): Promise<{
   hasError: boolean;
   message: string | null;
 }> {
-  const [citasRes, remindersRes, roster] = await Promise.all([
+  const [citasRes, remindersRes, dmRes, roster] = await Promise.all([
     supabase.from("leads").select("id, nombre, phone, property_ref_origen, cita").not("cita", "is", null).limit(500),
     supabase
       .from("advisor_reminders")
@@ -74,12 +94,32 @@ export async function getCalendarEvents(supabase: any): Promise<{
       .not("fecha_hora", "is", null)
       .eq("completado", false)
       .limit(500),
+    supabase
+      .from("linea_dm")
+      .select("id, remitente_nombre, remitente_telefono, cita_fecha_hora_iso, avance_tipo, senal_id")
+      .eq("tiene_cita", true)
+      .not("cita_fecha_hora_iso", "is", null)
+      .limit(500),
     getTeamRoster(),
   ]);
 
   if (citasRes.error) console.error("[calendario:leads]", citasRes.error.message);
   if (remindersRes.error) console.error("[calendario:advisor_reminders]", remindersRes.error.message);
+  // linea_dm es best-effort: si la migracion 2026-08-21_linea_dm.sql todavia
+  // no corrio, el calendario sigue funcionando igual, solo sin esos eventos.
+  if (dmRes.error && dmRes.error.code !== "42P01" && dmRes.error.code !== "PGRST205") {
+    console.error("[calendario:linea_dm]", dmRes.error.message);
+  }
   const mensajes = [citasRes.error?.message, remindersRes.error?.message].filter(Boolean) as string[];
+
+  // Resolver el ref de cada avance via el pedido de grupo que el colega
+  // publico — el mismo cruce que hace src/data/visitas.js del lado del bot.
+  const idsSeñal = [...new Set(((dmRes.data as LineaDmAvance[]) || []).map((m) => m.senal_id).filter(Boolean))];
+  const refPorSeñal = new Map<string, string | null>();
+  if (idsSeñal.length) {
+    const { data: señales } = await supabase.from("group_signals").select("id, matches").in("id", idsSeñal);
+    for (const s of (señales as GroupSignalRef[]) || []) refPorSeñal.set(s.id, s.matches?.[0]?.ref ?? null);
+  }
 
   const hoyInicio = bogotaTodayStart();
 
@@ -109,7 +149,20 @@ export async function getCalendarEvents(supabase: any): Promise<{
       origen: "recordatorio_equipo" as const,
     }));
 
-  const events = [...citaEvents, ...reminderEvents].sort(
+  const avanceEvents: CalendarEvent[] = ((dmRes.data as LineaDmAvance[]) || [])
+    .filter((m) => m.cita_fecha_hora_iso && new Date(m.cita_fecha_hora_iso) >= hoyInicio)
+    .map((m) => ({
+      id: `dm:${m.id}`,
+      fechaHora: m.cita_fecha_hora_iso!,
+      titulo: `Colega · ${m.remitente_nombre || m.remitente_telefono || "sin nombre"}`,
+      advisorId: null,
+      advisorNombre: null,
+      clienteNombre: m.remitente_nombre,
+      propertyRef: m.senal_id ? refPorSeñal.get(m.senal_id) ?? null : null,
+      origen: "avance_colega" as const,
+    }));
+
+  const events = [...citaEvents, ...reminderEvents, ...avanceEvents].sort(
     (a, b) => new Date(a.fechaHora).getTime() - new Date(b.fechaHora).getTime()
   );
 
