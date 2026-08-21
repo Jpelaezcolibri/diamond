@@ -57,6 +57,10 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
   siempre `null` y `registrar_resultado_radar` no puede resolver por cita.
   Ya corrida y verificada 2026-08-18: `2026-07-25_advisor_rotacion.sql`
   (Catherine Uribe es la única con `recibe_transferencias=true` en venta).
+  `db/migrations/2026-08-21_property_prioridad_venta.sql` (columna
+  `properties.prioridad_venta`, suma puntaje en el radar de grupos solo a la
+  ref `8989725` — urgencia de venta pedida por Juan sobre esa propiedad
+  puntual, el resto del inventario no se toca).
 - **Pendientes de negocio:** teléfonos reales de asesores de arriendo/
   vehículos en `advisors` · corregir precio de la ref `9921388` en Wasi ·
   verificación de empresa en Meta · confirmar las 3 propiedades exclusivas

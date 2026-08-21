@@ -112,6 +112,11 @@ const PUNTAJE_BASE = 55;
 const MARGEN_PRECIO = Number(process.env.GRUPOS_MARGEN_PRECIO || 0.10);
 const MARGEN_AREA = Number(process.env.GRUPOS_MARGEN_AREA || 0.10);
 
+// Cuanto suma properties.prioridad_venta (ver comentario donde se usa, abajo).
+// 15 puntos convierte una zona vecina (60 tipico) en publicable (75>=70) sin
+// bajar el umbral general ni tocar ninguna otra propiedad.
+const BONUS_PRIORIDAD_VENTA = Number(process.env.GRUPOS_BONUS_PRIORIDAD_VENTA || 15);
+
 // El parseo de precio y area vive en src/lib/formato.js. Antes habia aca un
 // `aNumero` que hacia `replace(/\D/g, "")`, y ese "quitar todo lo que no sea
 // digito" tenia un bug que no fallaba ruidosamente: sobre el formato REAL de
@@ -284,6 +289,17 @@ function evaluarCandidata(p, c, fuente) {
   // pasar de 55", "no tiene datos de area ni alcobas verificables, deberia
   // estar mas abajo".
   if (fuente === "aliado") puntaje -= 8;
+
+  // PRIORIDAD DE VENTA (Juan, 2026-08-21): un inmueble propio marcado a mano
+  // por urgencia de venta ("Directa de Diamond, con urgencia de venta" —
+  // Catherine sobre la ref 8989725) suma puntaje extra para que le llegue a
+  // mas pedidos del radar que hoy se quedan por debajo del umbral (zona
+  // vecina, o exacta sin mas dato verificable). Bandera por propiedad
+  // (properties.prioridad_venta) — el resto del inventario no se toca.
+  if (fuente === "diamond" && p.prioridad_venta) {
+    puntaje += BONUS_PRIORIDAD_VENTA;
+    razones.push("prioridad de venta");
+  }
 
   // ── Precio: banda, no techo — con margen de captura sobre el techo ──
   const precio = formato.parsearPrecio(p.precio);
@@ -495,5 +511,5 @@ async function cruzar(clasificados, { org = null } = {}) {
 module.exports = {
   cruzar, filtrosInventario, filtrosAliados, mismaOperacion, evaluarOferta,
   evaluarCandidata, zonaCoincide, ciudadCoincide, ubicacionCoincide, zonaExcluida, BANDA_INFERIOR,
-  MARGEN_PRECIO, MARGEN_AREA, sinDuplicados,
+  MARGEN_PRECIO, MARGEN_AREA, BONUS_PRIORIDAD_VENTA, sinDuplicados,
 };

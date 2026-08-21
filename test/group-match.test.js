@@ -169,6 +169,31 @@ test("banos, garajes y estrato viajan en el match, no solo en el puntaje", () =>
   assert.strictEqual(m.estrato, 5);
 });
 
+// PRIORIDAD DE VENTA (Juan, 2026-08-21): ref 8989725 registrada por Catherine
+// con "urgencia de venta" — el pedido fue que ESA propiedad puntualmente
+// sume puntaje extra, sin tocar el resto del inventario.
+const { BONUS_PRIORIDAD_VENTA } = require("../src/groups/match");
+
+test("PRIORIDAD DE VENTA: una propiedad marcada suma el bonus configurado", () => {
+  const normal = evaluarCandidata(apto(), pide(), "diamond");
+  const prioritaria = evaluarCandidata(apto({ prioridad_venta: true }), pide(), "diamond");
+  assert.strictEqual(prioritaria.puntaje, Math.min(100, normal.puntaje + BONUS_PRIORIDAD_VENTA));
+  assert.match(prioritaria.razones.join(" | "), /prioridad de venta/);
+});
+
+test("PRIORIDAD DE VENTA: no aplica a propiedades de aliados", () => {
+  const aliado = { ...apto({ prioridad_venta: true }) };
+  const normal = evaluarCandidata(aliado, pide(), "aliado");
+  const marcada = evaluarCandidata({ ...aliado, prioridad_venta: true }, pide(), "aliado");
+  assert.strictEqual(marcada.puntaje, normal.puntaje, "el bonus es solo para inventario propio (diamond)");
+});
+
+test("PRIORIDAD DE VENTA: sin la bandera no cambia nada", () => {
+  const sinBandera = evaluarCandidata(apto({ prioridad_venta: false }), pide(), "diamond");
+  const sinCampo = evaluarCandidata(apto(), pide(), "diamond");
+  assert.strictEqual(sinBandera.puntaje, sinCampo.puntaje);
+});
+
 test("BUG: el precio es una banda, no sólo un techo", () => {
   // A un cliente con $600M no se le ofrece uno de $150M: cabe en el
   // presupuesto y no es lo que busca.
