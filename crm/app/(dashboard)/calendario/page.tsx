@@ -163,15 +163,22 @@ export default async function CalendarioPage({
                   {cell.day}
                 </span>
                 <div className="mt-1 space-y-1">
-                  {dayEvents.slice(0, 3).map((ev) => (
-                    <div
-                      key={ev.id}
-                      title={`${horaBogota(ev.fechaHora)} · ${ev.titulo}${ev.advisorNombre ? ` · ${ev.advisorNombre}` : ""}`}
-                      className={`truncate rounded-md border px-1.5 py-0.5 text-[11px] font-medium ${colorFor(ev.advisorId)}`}
-                    >
-                      {horaBogota(ev.fechaHora)} {ev.titulo}
-                    </div>
-                  ))}
+                  {dayEvents.slice(0, 3).map((ev) => {
+                    // "que la agenda quede marcada con el link directo al
+                    // chat" (Juan, 2026-08-21) — solo avance_colega lo trae.
+                    const contenido = `${horaBogota(ev.fechaHora)} ${ev.titulo}`;
+                    const titulo = `${horaBogota(ev.fechaHora)} · ${ev.titulo}${ev.advisorNombre ? ` · ${ev.advisorNombre}` : ""}${ev.linkChat ? " · ver chat" : ""}`;
+                    const clase = `block truncate rounded-md border px-1.5 py-0.5 text-[11px] font-medium ${colorFor(ev.advisorId)}${ev.linkChat ? " hover:brightness-95" : ""}`;
+                    return ev.linkChat ? (
+                      <Link key={ev.id} href={ev.linkChat} title={titulo} className={clase}>
+                        {contenido}
+                      </Link>
+                    ) : (
+                      <div key={ev.id} title={titulo} className={clase}>
+                        {contenido}
+                      </div>
+                    );
+                  })}
                   {dayEvents.length > 3 && (
                     <div className="px-1.5 text-[11px] font-medium text-slate-400">+{dayEvents.length - 3} más</div>
                   )}

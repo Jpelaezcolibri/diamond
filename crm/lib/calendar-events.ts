@@ -22,6 +22,11 @@ export type CalendarEvent = {
   clienteNombre: string | null;
   propertyRef: string | null;
   origen: "cita_cliente" | "recordatorio_equipo" | "avance_colega";
+  /** Link directo al hilo en el Inbox de la línea vinculada (Juan,
+   *  2026-08-21: "la agenda quede marcada con el link directo al chat").
+   *  Solo lo trae "avance_colega" — las citas de cliente y los recordatorios
+   *  no tienen un chat de grupo al que volver. */
+  linkChat: string | null;
 };
 
 type Cita = {
@@ -134,6 +139,7 @@ export async function getCalendarEvents(supabase: any): Promise<{
       clienteNombre: l.nombre,
       propertyRef: l.property_ref_origen,
       origen: "cita_cliente" as const,
+      linkChat: null,
     }));
 
   const reminderEvents: CalendarEvent[] = ((remindersRes.data as AdvisorReminder[]) || [])
@@ -146,6 +152,7 @@ export async function getCalendarEvents(supabase: any): Promise<{
       advisorNombre: roster[r.user_id]?.nombre ?? null,
       clienteNombre: null,
       propertyRef: null,
+      linkChat: null,
       origen: "recordatorio_equipo" as const,
     }));
 
@@ -160,6 +167,9 @@ export async function getCalendarEvents(supabase: any): Promise<{
       clienteNombre: m.remitente_nombre,
       propertyRef: m.senal_id ? refPorSeñal.get(m.senal_id) ?? null : null,
       origen: "avance_colega" as const,
+      // Mismo id de ancla que crm/components/linea-dm-inbox.tsx#anclaHilo —
+      // si uno cambia, el otro tiene que cambiar igual.
+      linkChat: `/grupos#dm-${m.remitente_telefono || "sin-telefono"}`,
     }));
 
   const events = [...citaEvents, ...reminderEvents, ...avanceEvents].sort(

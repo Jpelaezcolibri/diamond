@@ -11,6 +11,8 @@ import RadarToggle from "@/components/radar-toggle";
 import ModoRespuestaToggle from "@/components/modo-respuesta-toggle";
 import VincularLinea, { type Sesion, type Asesor } from "@/components/vincular-linea";
 import GruposPermisos, { type GrupoVivo } from "@/components/grupos-permisos";
+import LineaDmInbox, { type DmMensaje } from "@/components/linea-dm-inbox";
+import PosiblesVentas, { type PosibleVenta } from "@/components/posibles-ventas";
 
 export const dynamic = "force-dynamic";
 
@@ -130,6 +132,71 @@ export default async function GruposPage() {
   const sesiones = sesionesRes?.data || [];
   const gruposVivos: GrupoVivo[] = grupos.filter((g) => g.jid.endsWith("@g.us"));
 
+  // Inbox de la línea vinculada y "Posibles ventas" (Juan, 2026-08-21): mismo
+  // criterio de admin-only que el resto de "Escucha en vivo" — es la misma
+  // línea sensible, no tarea diaria de un asesor. Ambas consultas se
+  // degradan solas si las migraciones del 2026-08-21 todavía no corrieron.
+  const [dmRes, ventasRes] = admin
+    ? await Promise.all([
+        fetchSafe<DmMensaje>(
+          supabase
+            .from("linea_dm")
+            .select("id, remitente_telefono, remitente_nombre, texto, created_at, tiene_cita, avance_tipo, cita_fecha_hora_iso, senal_id")
+            .order("created_at", { ascending: false })
+            .limit(300),
+          "grupos:linea_dm"
+        ),
+        fetchSafe<PosibleVenta>(
+          supabase
+            .from("visita_venta_alertas")
+            .select("id, ref, visita_quien, visita_origen, visita_fecha_hora_iso, alertado_at, estado")
+            .order("alertado_at", { ascending: false })
+            .limit(200),
+          "grupos:visita_venta_alertas"
+        ),
+      ])
+    : [null, null];
+
+  // Pedido original de cada hilo de DM, resuelto via group_signals.senal_id
+  // (un solo viaje a la base para todos los hilos, no uno por hilo).
+  const dmMensajes = dmRes?.data || [];
+  const idsSeñalDm = [...new Set(dmMensajes.map((m) => m.senal_id).filter(Boolean))] as string[];
+  const pedidoPorSeñal = new Map<string, string | null>();
+  if (idsSeñalDm.length > 0) {
+    // select("*") y no una lista de columnas: con una lista angosta el
+    // helper generico de mias() dispara TS2589 (no logra resolver el tipo
+    // de retorno). El aislamiento por asesor sigue siendo el mismo filtro,
+    // sin excepciones — ver test/crm-grupos-aislamiento.test.js.
+    const { data: señales } = await mias(
+      supabase.from("group_signals").select("*").in("id", idsSeñalDm)
+    );
+    for (const s of (señales || []) as { id: string; texto_original: string | null }[]) {
+      pedidoPorSeñal.set(s.id, s.texto_original);
+    }
+  }
+  const dmConPedido: DmMensaje[] = dmMensajes.map((m) => ({
+    ...m,
+    pedido_original: m.senal_id ? pedidoPorSeñal.get(m.senal_id) ?? null : null,
+  }));
+
+  // Título/link de cada propiedad de "Posibles ventas" — se lee de
+  // `properties`, no se arrastra desde el aviso: precio y disponibilidad
+  // pueden haber cambiado desde que se avisó.
+  const ventasCrudas = ventasRes?.data || [];
+  const refsVentas = [...new Set(ventasCrudas.map((v) => v.ref))];
+  const propiedadPorRef = new Map<string, { titulo: string | null; link: string | null }>();
+  if (refsVentas.length > 0) {
+    const { data: props } = await supabase
+      .from("properties").select("ref, titulo, link").in("ref", refsVentas);
+    for (const p of props || []) {
+      propiedadPorRef.set(p.ref as string, { titulo: p.titulo as string | null, link: p.link as string | null });
+    }
+  }
+  const ventas: PosibleVenta[] = ventasCrudas.map((v) => ({
+    ...v,
+    propiedad: propiedadPorRef.get(v.ref) ?? null,
+  }));
+
   // De qué grupo salió cada señal. Sin esto el asesor lee un pedido, copia el
   // borrador… y no sabe a dónde ir a pegarlo. Se resuelve acá y no con un join
   // en la consulta: los grupos ya vienen completos para el panel de abajo, así
@@ -208,6 +275,32 @@ export default async function GruposPage() {
             <VincularLinea sesiones={sesiones} asesores={asesoresRes?.data || []} />
             <GruposPermisos grupos={gruposVivos} />
           </div>
+        </section>
+      )}
+
+      {admin && (
+        <section className="mb-8">
+          <h2 className="mb-1 text-lg font-semibold text-slate-900">Inbox de la línea vinculada</h2>
+          <p className="mb-3 text-sm text-slate-500">
+            Mensajes directos (no de grupo) que le llegan a esa línea — nadie responde desde acá,
+            es solo lectura. Cuando un hilo muestra fecha de visita, coordinación de agenda, o
+            cualquier señal de posible venta, queda marcado.
+          </p>
+          {dmRes?.hasError && <ErrorBanner message={dmRes.message} />}
+          <LineaDmInbox mensajes={dmConPedido} />
+        </section>
+      )}
+
+      {admin && (
+        <section className="mb-8">
+          <h2 className="mb-1 text-lg font-semibold text-slate-900">Posibles ventas</h2>
+          <p className="mb-3 text-sm text-slate-500">
+            Cruce diario: propiedades con una visita agendada (cliente directo o colega) que ya no
+            están disponibles según Wasi. No es una venta confirmada — puede haberse retirado o
+            vendido por otro medio. Confirmá o descartá para llevar el conteo real.
+          </p>
+          {ventasRes?.hasError && <ErrorBanner message={ventasRes.message} />}
+          <PosiblesVentas ventas={ventas} />
         </section>
       )}
 

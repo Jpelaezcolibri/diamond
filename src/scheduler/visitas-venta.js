@@ -67,7 +67,7 @@ async function runOnce({ ahora = new Date(), forzar = false } = {}) {
         const texto = construirAlerta(ref, prop, visita);
         const envio = await mensajeAsesor.enviarYRegistrar(org, ALERTA_TO, texto).catch((e) => ({ ok: false, error: e.message }));
         if (envio && envio.ok) {
-          await visitas.marcarAlertada(org.id, ref);
+          await visitas.marcarAlertada(org.id, ref, visita);
           alertadas++;
         } else {
           console.error(`[visitas-venta] No se pudo avisar la posible venta de ${ref}:`, envio && envio.error);

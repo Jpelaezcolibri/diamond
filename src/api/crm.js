@@ -392,6 +392,27 @@ router.post("/api/grupos/senal/estado", async (req, res) => {
   }
 });
 
+// Panel "Posibles ventas" del CRM (Juan, 2026-08-21): confirmar o descartar
+// un aviso del cruce diario visitas -> ventas. No es solo de admin — mismo
+// criterio que /api/grupos/senal/estado, es trabajo diario de revisar avisos,
+// no una decision sobre la privacidad de ninguna linea.
+router.post("/api/grupos/venta/estado", async (req, res) => {
+  const { id, estado, actualizadoPor } = req.body || {};
+  if (!id) return res.status(400).json({ error: "Falta el id del aviso" });
+  try {
+    const org = await organizations.getDefault();
+    const visitas = require("../data/visitas");
+    if (!visitas.ESTADOS_ALERTA.includes(estado)) {
+      return res.status(400).json({ error: `Estado invalido. Use: ${visitas.ESTADOS_ALERTA.join(", ")}` });
+    }
+    const alerta = await visitas.setEstadoAlerta(org.id, id, estado, actualizadoPor || null);
+    if (!alerta) return res.status(404).json({ error: "Aviso no encontrado" });
+    res.json({ ok: true, alerta });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 async function getConversation(id) {
   const { data, error } = await supabase
     .from("conversations")

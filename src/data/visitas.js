@@ -85,9 +85,19 @@ async function yaAlertada(orgId, ref) {
   return Boolean(data);
 }
 
-async function marcarAlertada(orgId, ref) {
+// `visita` (quien/origen/fechaHoraIso) se guarda TAL CUAL estaba al avisar —
+// no se recalcula despues. `recientes()` solo mira los ultimos 30 dias: sin
+// esto, el panel "Posibles ventas" del CRM perderia el dato de que visita
+// fue una vez que la ventana pasa.
+async function marcarAlertada(orgId, ref, visita = {}) {
   if (!supabase) return true;
-  const { error } = await supabase.from("visita_venta_alertas").insert({ org_id: orgId, ref });
+  const { error } = await supabase.from("visita_venta_alertas").insert({
+    org_id: orgId,
+    ref,
+    visita_quien: visita.quien || null,
+    visita_origen: visita.origen || null,
+    visita_fecha_hora_iso: visita.fechaHoraIso || null,
+  });
   // 23505: ya estaba marcada (carrera entre dos corridas) — no es un fallo.
   if (error && error.code !== "23505") {
     if (esTablaFaltante(error)) return false;
@@ -97,4 +107,25 @@ async function marcarAlertada(orgId, ref) {
   return true;
 }
 
-module.exports = { recientes, yaAlertada, marcarAlertada };
+const ESTADOS_ALERTA = ["pendiente", "confirmada", "descartada"];
+
+// El panel "Posibles ventas" del CRM (Juan, 2026-08-21) confirma o descarta
+// cada aviso — queda guardado, no solo el mensaje de WhatsApp que ya llego.
+async function setEstadoAlerta(orgId, id, estado, actualizadoPor = null) {
+  if (!ESTADOS_ALERTA.includes(estado)) throw new Error(`Estado invalido: ${estado}`);
+  if (!supabase) return null;
+  const { data, error } = await supabase
+    .from("visita_venta_alertas")
+    .update({ estado, actualizado_por: actualizadoPor, actualizado_at: new Date().toISOString() })
+    .eq("org_id", orgId)
+    .eq("id", id)
+    .select()
+    .maybeSingle();
+  if (error) {
+    if (esTablaFaltante(error)) return null;
+    throw error;
+  }
+  return data;
+}
+
+module.exports = { recientes, yaAlertada, marcarAlertada, setEstadoAlerta, ESTADOS_ALERTA };
