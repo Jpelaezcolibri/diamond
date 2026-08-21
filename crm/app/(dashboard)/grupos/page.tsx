@@ -263,18 +263,20 @@ export default async function GruposPage() {
       <RadarToggle activo={radarActivo} puedeCambiar={admin} />
       {radarActivo && <ModoRespuestaToggle modo={modoRespuesta} puedeCambiar={admin} />}
 
+      {/* Arriba de todo (Juan, 2026-08-21: "pasa el inbox y las posibles
+          ventas pra la parte superior... para tener mejor acceso"): son los
+          dos paneles que se revisan a diario, antes que la configuración de
+          "Escucha en vivo" (vincular línea, permisos), que casi no cambia. */}
       {admin && (
         <section className="mb-8">
-          <h2 className="mb-1 text-lg font-semibold text-slate-900">Escucha en vivo</h2>
+          <h2 className="mb-1 text-lg font-semibold text-slate-900">Posibles ventas</h2>
           <p className="mb-3 text-sm text-slate-500">
-            Una línea dedicada de la empresa se vincula por QR y el radar lee los grupos que se
-            habiliten. En los que además tengan <strong>Responder</strong> prendido, publica una
-            respuesta cuando encuentra propiedades que encajan.
+            Cruce diario: propiedades con una visita agendada (cliente directo o colega) que ya no
+            están disponibles según Wasi. No es una venta confirmada — puede haberse retirado o
+            vendido por otro medio. Confirmá o descartá para llevar el conteo real.
           </p>
-          <div className="flex flex-col gap-4">
-            <VincularLinea sesiones={sesiones} asesores={asesoresRes?.data || []} />
-            <GruposPermisos grupos={gruposVivos} />
-          </div>
+          {ventasRes?.hasError && <ErrorBanner message={ventasRes.message} />}
+          <PosiblesVentas ventas={ventas} />
         </section>
       )}
 
@@ -293,14 +295,16 @@ export default async function GruposPage() {
 
       {admin && (
         <section className="mb-8">
-          <h2 className="mb-1 text-lg font-semibold text-slate-900">Posibles ventas</h2>
+          <h2 className="mb-1 text-lg font-semibold text-slate-900">Escucha en vivo</h2>
           <p className="mb-3 text-sm text-slate-500">
-            Cruce diario: propiedades con una visita agendada (cliente directo o colega) que ya no
-            están disponibles según Wasi. No es una venta confirmada — puede haberse retirado o
-            vendido por otro medio. Confirmá o descartá para llevar el conteo real.
+            Una línea dedicada de la empresa se vincula por QR y el radar lee los grupos que se
+            habiliten. En los que además tengan <strong>Responder</strong> prendido, publica una
+            respuesta cuando encuentra propiedades que encajan.
           </p>
-          {ventasRes?.hasError && <ErrorBanner message={ventasRes.message} />}
-          <PosiblesVentas ventas={ventas} />
+          <div className="flex flex-col gap-4">
+            <VincularLinea sesiones={sesiones} asesores={asesoresRes?.data || []} />
+            <GruposPermisos grupos={gruposVivos} />
+          </div>
         </section>
       )}
 
