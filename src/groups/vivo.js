@@ -154,7 +154,7 @@ async function procesarMensaje(org, mensaje, { grupo, modo = "sombra", enviar = 
   );
 
   const decision = politica.decidir({
-    senal: { clase: c.clase, confianza: c.confianza, respondida_at: signal && signal.respondida_at },
+    senal: { clase: c.clase, confianza: c.confianza, respondida_at: signal && signal.respondida_at, edificio: c.edificio || null },
     publicables,
     grupo,
     modo,
@@ -193,7 +193,7 @@ async function procesarMensaje(org, mensaje, { grupo, modo = "sombra", enviar = 
     //   - modo_apagado: la respuesta del radar esta apagada a proposito para
     //     toda la org — avisar contradiria esa decision.
     if (!["ya_respondida", "modo_apagado"].includes(decision.motivo)) {
-      await avisarCercano(org, signal, mensaje, grupo, señal.matches || [])
+      await avisarCercano(org, signal, mensaje, grupo, señal.matches || [], { edificio: c.edificio || null })
         .catch((e) => console.warn("[radar] No se pudo avisar el candidato cercano:", e.message));
     }
     return { resultado: "callado", motivo: decision.motivo, traza: decision.traza, descartados, signalId: signal && signal.id };
@@ -370,7 +370,7 @@ function destinatarios(asesor) {
 // no se relajaron: siguen bloqueando la PUBLICACION incluso si Natalia dice
 // que si (ver aprobarManual mas abajo) — lo que cambia aca es solo a quien
 // se le avisa, nunca que se puede publicar sin revisar.
-async function avisarCercano(org, signal, mensaje, grupo, matches) {
+async function avisarCercano(org, signal, mensaje, grupo, matches, { edificio = null } = {}) {
   if (!RADAR_REVISOR_PHONE) return;
 
   // `formato.parsearPrecio` y no un truthy check crudo: un precio "$0" (label
@@ -380,31 +380,45 @@ async function avisarCercano(org, signal, mensaje, grupo, matches) {
   const candidatas = (matches || []).filter(
     (m) => m && (m.titulo || m.ref) && String(m.zona || "").trim() && formato.parsearPrecio(m.precio) !== null
   );
-  if (!candidatas.length) return;
+  // EDIFICIO ESPECIFICO (Juan, 2026-08-21): se avisa SIEMPRE, aunque no haya
+  // ninguna candidata por zona — Natalia puede conocer un inmueble en ese
+  // edificio que el cruce por zona nunca iba a encontrar, y es justo por eso
+  // que el pedido tiene que llegarle (ver politica.js#edificio_especifico).
+  if (!candidatas.length && !edificio) return;
 
   const revisor = await advisors.findByPhone(org.id, RADAR_REVISOR_PHONE).catch(() => null);
   if (!revisor) return;
 
   const señalParaAviso = { grupo_nombre: grupo.nombre || grupo.jid, autor_nombre: mensaje.autor, texto_original: mensaje.texto };
-  let texto = avisoCercano.construir(señalParaAviso, candidatas);
+  let texto = edificio
+    ? avisoCercano.construirEdificio(señalParaAviso, candidatas, edificio)
+    : avisoCercano.construir(señalParaAviso, candidatas);
   if (!texto) return;
   // El cuerpo de un mensaje interactivo tiene tope duro de 1024 caracteres en
   // la API de Meta (un pedido con muchas candidatas lo puede pasar); un
   // recorte silencioso es preferible a que el envio entero falle sin avisar.
   if (texto.length > 1024) texto = `${texto.slice(0, 1000)}\n\n(recortado — ver el pedido completo en el CRM)`;
 
-  // BOTONES, no texto libre (Juan, 2026-08-21): el id de cada boton lleva la
+  // SIN BOTONES en el caso de edificio (Juan, 2026-08-21): "Sí, publicar"
+  // publicaria las candidatas de zona tal cual, como si fueran el edificio
+  // pedido — exactamente el dato no verificable que esta señal existe para
+  // frenar. Aca la accion correcta no es un toque, es que Natalia responda
+  // ELLA con lo que sabe del edificio.
+  //
+  // BOTONES en el resto (Juan, 2026-08-21): el id de cada boton lleva la
   // señal adentro, asi que src/channels/whatsapp.js resuelve la accion en el
   // acto cuando llega el toque, sin pasarla por el modelo ni desambiguar
   // entre varios pedidos pendientes. Ver src/agent/tools.js#aprobarPedidoRadar
   // / rechazarPedidoRadar, que ya sabian resolver por radarSignalId directo.
-  const botones = [
-    { id: `radar_si:${signal.id}`, title: "Sí, publicar" },
-    { id: `radar_no:${signal.id}`, title: "No sirve" },
-  ];
+  const opts = edificio
+    ? {}
+    : { botones: [
+        { id: `radar_si:${signal.id}`, title: "Sí, publicar" },
+        { id: `radar_no:${signal.id}`, title: "No sirve" },
+      ] };
 
   const envio = await mensajeAsesor
-    .enviarYRegistrar(org, revisor.phone, texto, { botones })
+    .enviarYRegistrar(org, revisor.phone, texto, opts)
     .catch((e) => ({ ok: false, error: e.message }));
   if (envio && envio.ok) {
     await groupSignals.marcarAvisoEnviado(org.id, signal.id, { wamid: envio.wamid, advisorId: revisor.id }).catch(() => {});

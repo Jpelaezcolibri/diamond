@@ -80,6 +80,19 @@ test("una demanda ya respondida no se responde de nuevo", () => {
   assert.strictEqual(motivo({ senal: { clase: "demanda", confianza: 0.95, respondida_at: "2026-08-17T15:00:00Z" } }), "ya_respondida");
 });
 
+// EDIFICIO ESPECIFICO (Juan, 2026-08-21 — caso Esteban Higuita, "edificio
+// Murano Plaza" en Envigado): un puntaje alto por zona/precio no dice nada
+// sobre si el match es EL edificio pedido — Wasi no marca por edificio.
+test("un pedido que nombra un edificio especifico nunca se publica solo, aunque el match sea perfecto", () => {
+  assert.strictEqual(motivo({ senal: { clase: "demanda", confianza: 0.95, respondida_at: null, edificio: "Murano Plaza" } }), "edificio_especifico");
+});
+
+test("sin nombrar edificio, la señal se publica normal (no se frena por algo que no aplica)", () => {
+  const d = politica.decidir(escenario({ senal: { clase: "demanda", confianza: 0.95, respondida_at: null, edificio: "" } }));
+  assert.strictEqual(d.publicar, true);
+  assert.ok(d.traza.includes("sin_edificio_especifico"));
+});
+
 test("SIN restriccion de horario (Juan, 2026-08-20): el radar publica 24/7", () => {
   // Antes esto se callaba fuera de las 8am-7pm de Colombia. Un pedido real a
   // las 3am de un cliente no espera menos que uno a mediodia, y el que

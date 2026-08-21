@@ -60,4 +60,46 @@ function construir(señal, candidatas) {
   ].join("\n");
 }
 
-module.exports = { construir, ficha };
+// EDIFICIO ESPECIFICO (Juan, 2026-08-21 — caso Esteban Higuita, pidiendo por
+// el "*edificio Murano Plaza*" en Envigado): "el asesor sabe donde quedan las
+// propiedades pero en wasi no las tenemos marcadas por edificio por
+// seguridad... se debe pasar de una a natalia sin responder nada". Distinto
+// del aviso normal en dos formas:
+//   1. Se manda AUNQUE no haya candidatas por zona (vivo.js#avisarCercano) —
+//      Natalia puede conocer algo en ese edificio que el cruce por zona nunca
+//      iba a encontrar.
+//   2. Nunca lleva los botones Sí/No: publicar una candidata de zona como si
+//      fuera el edificio pedido es exactamente el dato no verificable que
+//      esta señal existe para frenar. La accion correcta es que ELLA
+//      responda con lo que sabe, no que apruebe un match a ciegas.
+/**
+ * @param señal      { grupo_nombre, autor_nombre, texto_original }
+ * @param candidatas matches con dato usable en la misma zona (puede ser [])
+ * @param edificio   nombre del edificio/torre/conjunto que el pedido nombró
+ * @returns el texto del aviso, o null si falta el nombre del edificio
+ */
+function construirEdificio(señal, candidatas, edificio) {
+  if (!edificio) return null;
+  const lista = Array.isArray(candidatas) ? candidatas : [];
+
+  return [
+    `🏢 Piden el edificio "${edificio}" — esto lo tenés que revisar vos`,
+    ``,
+    `Grupo: ${señal.grupo_nombre || "sin nombre"}`,
+    `Colega: ${señal.autor_nombre || "un colega"}`,
+    ``,
+    `Pidió:`,
+    `"${(señal.texto_original || "").trim()}"`,
+    ``,
+    `Wasi no tiene las propiedades marcadas por edificio (por seguridad), así que el sistema no puede confirmar si algo del inventario es exactamente ese lugar — por eso no le respondió solo.`,
+    ``,
+    lista.length
+      ? [
+          `Esto es lo que encontró por zona (puede o no ser ese edificio, confirmalo vos):`,
+          lista.map(ficha).join("\n"),
+        ].join("\n")
+      : `Por zona tampoco encontró nada. Si conocés algo en ese edificio, respondele directo en el grupo.`,
+  ].join("\n");
+}
+
+module.exports = { construir, construirEdificio, ficha };

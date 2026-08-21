@@ -91,11 +91,24 @@ const ESQUEMA = {
             description:
               "true SOLO si el mensaje dice explicitamente 'estudio' (ej. '3 alcobas o 2 con estudio') o 'para inversion'/'para invertir'. false en cualquier otro caso, incluido cuando no se menciona nada.",
           },
+          // Juan, 2026-08-21 (caso Esteban Higuita / edificio Murano Plaza):
+          // "el asesor sabe donde quedan las propiedades pero en wasi no las
+          // tenemos marcadas por edificio por seguridad" — el motor no puede
+          // verificar si algo del inventario ES ese edificio, asi que un
+          // pedido asi nunca se puede responder solo por zona sin arriesgarse
+          // a ofrecer el edificio equivocado. Esta señal es lo que le permite
+          // a politica.js frenar el auto-publicado y mandarlo derecho a la
+          // asesora en vez de dejar que el puntaje decida.
+          edificio: {
+            type: "string",
+            description:
+              "Nombre PROPIO de un edificio, torre, conjunto o unidad especifica que el pedido nombra explicitamente (ej. 'edificio Murano Plaza', 'Torre Aqua', 'Conjunto Los Cerezos'). Vacio si el pedido solo da zona/barrio, o si dice 'unidad cerrada'/'conjunto cerrado' como caracteristica generica SIN nombre propio. No confundir con el nombre de la inmobiliaria del colega ni con el barrio.",
+          },
         },
         required: [
           "id", "clase", "confianza", "operacion", "tipo", "zonas", "zona", "zonas_excluidas", "ciudad",
           "precio_min", "precio_max", "habitaciones", "area_min", "banos",
-          "garajes", "estrato", "contacto", "notas", "flexible_habitaciones",
+          "garajes", "estrato", "contacto", "notas", "flexible_habitaciones", "edificio",
         ],
         additionalProperties: false,
       },
@@ -125,6 +138,7 @@ Reglas de extracción:
 - \`area_min\` en metros cuadrados: "mínimo 85 m2" → 85; "de 100 metros" → 100.
 - \`banos\`, \`garajes\` y \`estrato\`: sólo si el mensaje los pide explícitamente. "2 baños, parqueadero doble" → banos 2, garajes 2. "estrato 5 o 6" → 5 (el mínimo).
 - \`flexible_habitaciones\`: true SOLO si el mensaje dice "estudio" (ej. "3 alcobas o 2 con estudio", "2 alcobas y estudio") o "para inversión"/"para invertir". No lo actives por intuición ni por el tono del pedido — solo por esas palabras.
+- \`edificio\`: nombre PROPIO de un edificio, torre, conjunto o unidad que el pedido nombre explícitamente — "en el *edificio Murano Plaza*", "Torre Aqua", "Conjunto Los Cerezos". Vacío si el pedido solo da zona/barrio, o si dice "unidad cerrada"/"conjunto cerrado" como característica genérica SIN nombre propio ("que sea unidad cerrada" no cuenta; "en la unidad Reserva del Parque" sí). No confundas esto con el nombre de la inmobiliaria de quien pide, ni con el nombre del barrio.
 - Un mensaje de una sola propiedad con foto y ficha es oferta aunque no diga "vendo".
 - Devolvé exactamente un objeto por mensaje de entrada, con su id textual.`;
 

@@ -84,6 +84,18 @@ function decidir({
   if (senal.respondida_at) return no("ya_respondida");
   traza.push("sin_respuesta_previa");
 
+  // EDIFICIO ESPECIFICO (Juan, 2026-08-21 — caso Esteban Higuita / edificio
+  // Murano Plaza): "el asesor sabe donde quedan las propiedades pero en wasi
+  // no las tenemos marcadas por edificio por seguridad". El puntaje del cruce
+  // solo verifica zona/precio/area — nunca puede confirmar que un match sea
+  // EL edificio que pidieron, sin importar que tan alto puntue. Publicar algo
+  // "de Envigado" como si fuera "del edificio Murano Plaza" es exactamente el
+  // tipo de dato no verificable que este radar existe para no ofrecer. Se
+  // frena SIEMPRE, no solo cuando el puntaje es bajo — un match del 100% en
+  // zona sigue sin decir nada sobre el edificio.
+  if (senal.edificio) return no("edificio_especifico");
+  traza.push("sin_edificio_especifico");
+
   // SIN restriccion de horario (Juan, 2026-08-20): el radar responde 24/7. Un
   // pedido a las 3 a.m. es un cliente real esperando igual que uno a mediodia,
   // y hasta ahora un match perfecto llegado antes de las 8 a.m. se callaba

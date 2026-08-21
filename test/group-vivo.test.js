@@ -34,6 +34,8 @@ let revisorEncontrado = { id: "adv-natalia", name: "Natalia Velez", phone: "5730
 let avisosCercanosMarcados = [];
 let avisosCercanosEnviados = [];
 let envioAvisoCercanoResultado = { ok: true, wamid: "wm-aviso-cercano" };
+// Doble para el caso "edificio especifico" (Juan, 2026-08-21).
+let edificioDevuelto = "";
 
 function instalarDobles() {
   require.cache[RUTA("groups/classify.js")] = {
@@ -43,7 +45,7 @@ function instalarDobles() {
           id: m.id, clase: claseDevuelta, confianza: 0.95, operacion: "venta",
           tipo: "apartamento", zona: "el poblado", ciudad: "medellin",
           precio_min: 0, precio_max: 1200000000, habitaciones: 0, area_min: 0,
-          banos: 0, garajes: 0, estrato: 0, contacto: "", notas: "", mensaje: m,
+          banos: 0, garajes: 0, estrato: 0, contacto: "", notas: "", edificio: edificioDevuelto, mensaje: m,
         })),
         uso: { costoUsd: 0 }, lotesFallidos: 0, reintentos: 0, lotes: 1,
       }),
@@ -194,6 +196,7 @@ beforeEach(() => {
   avisosCercanosMarcados = [];
   avisosCercanosEnviados = [];
   envioAvisoCercanoResultado = { ok: true, wamid: "wm-aviso-cercano" };
+  edificioDevuelto = "";
   vivo = instalarDobles();
 });
 
@@ -746,4 +749,54 @@ test("avisarCercano: un grupo apagado sin ningun match limpio no genera ruido", 
 
   delete process.env.RADAR_REVISOR_PHONE;
   assert.strictEqual(avisosCercanosEnviados.length, 0);
+});
+
+// EDIFICIO ESPECIFICO (Juan, 2026-08-21 — caso Esteban Higuita, "*edificio
+// Murano Plaza*" en Envigado): Wasi no marca por edificio, asi que un match
+// perfecto por zona no dice nada sobre si es ESE edificio. Nunca se publica
+// solo, y el aviso a Natalia va SIN botones (aprobar publicaria a ciegas la
+// candidata de zona como si fuera el edificio pedido).
+test("EDIFICIO: un pedido que nombra un edificio nunca se publica solo, aunque el match sea perfecto", async () => {
+  process.env.RADAR_REVISOR_PHONE = "573001878024";
+  vivo = instalarDobles();
+  edificioDevuelto = "Murano Plaza";
+  matchesDevueltos = [matchBueno({ puntaje: 88, ubicacion: "exacta" })];
+
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "auto", ahora: MEDIODIA });
+
+  delete process.env.RADAR_REVISOR_PHONE;
+  assert.strictEqual(r.resultado, "callado");
+  assert.strictEqual(r.motivo, "edificio_especifico");
+  assert.strictEqual(avisosCercanosEnviados.length, 1);
+  assert.match(avisosCercanosEnviados[0].texto, /Murano Plaza/);
+  assert.match(avisosCercanosEnviados[0].texto, /revisar vos/);
+  // Sin botones: "Sí, publicar" publicaria el match de zona a ciegas.
+  assert.strictEqual(avisosCercanosEnviados[0].botones, undefined);
+});
+
+test("EDIFICIO: avisa a Natalia AUNQUE no haya ninguna candidata por zona — ella puede saber algo que el cruce no ve", async () => {
+  process.env.RADAR_REVISOR_PHONE = "573001878024";
+  vivo = instalarDobles();
+  edificioDevuelto = "Torre Aqua";
+  matchesDevueltos = []; // sin match alguno por zona
+
+  await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "auto", ahora: MEDIODIA });
+
+  delete process.env.RADAR_REVISOR_PHONE;
+  assert.strictEqual(avisosCercanosEnviados.length, 1);
+  assert.match(avisosCercanosEnviados[0].texto, /Torre Aqua/);
+  assert.match(avisosCercanosEnviados[0].texto, /Por zona tampoco encontró nada/);
+});
+
+test("EDIFICIO: sin nombrar edificio, sigue publicando normal (no se rompe el camino de siempre)", async () => {
+  vivo = instalarDobles();
+  edificioDevuelto = "";
+  matchesDevueltos = [matchBueno({ puntaje: 88, ubicacion: "exacta" })];
+
+  const r = await vivo.procesarMensaje(ORG, mensaje(), {
+    grupo: GRUPO, modo: "auto", ahora: MEDIODIA,
+    enviar: async () => ({ ok: true, wamid: "wm-1" }),
+  });
+
+  assert.strictEqual(r.resultado, "publicado");
 });
