@@ -188,9 +188,16 @@ Catherine `https://wa.me/message/YOUR_CONTACT_LINK` — un placeholder inventado
 y de ahí salió la compuerta `validarMensaje.motivoDeBloqueo`. Entonces:
 
 - El link lo arma **código**, nunca lo redacta la IA.
-- Sale de una env nueva, `SOFI_WA_NUMERO` (el número público de la línea oficial;
-  hoy solo existe `WHATSAPP_PHONE_ID`, que es el id de Meta, no el número).
-- **Si esa env falta, el mensaje sale sin link.** Nunca con un link a medias: ya
+- Sale de `CONTACT_WHATSAPP_NUMBER` = `573044653609` (Juan, 2026-08-22). **No es
+  una variable nueva**: es la misma que DMAP ya valida en `config/env.ts` (regex
+  `^\d{8,15}$`, dígitos con indicativo y sin `+`) y usa en `publish.service.ts`
+  para cerrar cada publicación de Meta con *"📲 Escríbenos por WhatsApp al … y
+  menciona la Ref …"*. Mismo número, mismo propósito, mismo patrón: traer la
+  conversación a la línea oficial. En el bot hoy solo existe
+  `WHATSAPP_PHONE_ID`, que es el id de Meta y no sirve para armar un `wa.me`.
+- Efecto lateral bueno de reusarla: un colega que ve un anuncio en Instagram y
+  uno que recibe un DM del radar llegan **al mismo número por la misma puerta**.
+- **Si la env falta, el mensaje sale sin link.** Nunca con un link a medias: ya
   hay precedente de lo que pasa cuando algo así se cuela.
 - El `text` prellenado incluye un marcador corto del pedido
   (ej. `Hola Sofi, soy colega — pedido #A3F2`), que es lo que permite reconocer al
