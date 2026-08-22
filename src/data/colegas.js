@@ -95,11 +95,10 @@ async function porTelefono(orgId, telefono) {
   if (!orgId || !tel || tel.length < 10) return null;
 
   if (!supabase) {
-    return (
-      memory.colegasGrupos.find(
-        (c) => c.org_id === orgId && c.telefono && mismoTelefono(c.telefono, tel)
-      ) || null
+    const colega = memory.colegasGrupos.find(
+      (c) => c.org_id === orgId && c.telefono && mismoTelefono(c.telefono, tel)
     );
+    return colega ? { lid: colega.lid, telefono: colega.telefono, nombre: colega.nombre } : null;
   }
 
   try {

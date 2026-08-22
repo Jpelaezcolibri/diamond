@@ -11,14 +11,13 @@ const assert = require("node:assert");
 
 const memory = require("../src/data/memory");
 
-// Limpiar el cache de módulos para permitir mock posterior
+// Limpiar el cache de modulos para permitir mock posterior
 delete require.cache[require.resolve("../src/data/supabase")];
 delete require.cache[require.resolve("../src/data/colegas")];
 
-// Mockear el módulo supabase directamente en el cache como null
-const Module = require("module");
+// Mockear el modulo supabase directamente en el cache como null
 const supabaseRules = require.resolve("../src/data/supabase");
-require.cache[supabaseRules] = { exports: null };
+require.cache[supabaseRules] = { id: supabaseRules, filename: supabaseRules, loaded: true, exports: null };
 
 const colegas = require("../src/data/colegas");
 
