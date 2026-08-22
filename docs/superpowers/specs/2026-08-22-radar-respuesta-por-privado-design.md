@@ -133,6 +133,18 @@ El tope de 60 es regulador de ritmo, no restricción comercial: lo que pasa de a
 sale por Natalia. La ventana de 30 minutos existe porque un DM por un pedido de
 ayer se lee como spam y es lo que se reporta.
 
+**La antigüedad se mide contra la fecha del mensaje en el grupo** (el `timestamp`
+que manda WAHA, ya normalizado en `fecha_mensaje`), no contra `created_at` de la
+señal: si el bot estuvo caído dos horas y procesa un backlog al arrancar, esos
+pedidos son viejos aunque la fila se acabe de escribir. Es la misma lógica del
+corte temporal que ya protege al radar (`esAnteriorAlCorte`).
+
+**Si el envío del DM falla**, el pedido se desvía a Natalia igual que los demás
+casos. Un `ok:false` de WAHA no puede terminar en silencio: sería el único camino
+que deja pasar un pedido, justo lo que §3 promete que no pasa. Tampoco se
+reintenta el DM — un reintento sobre un envío que quizá sí salió duplica el
+mensaje, que es la conducta que hace que a uno lo reporten.
+
 ## 6. Fases
 
 **Fase 1 — resolver y respaldar, sin enviar nada.** El directorio y la tabla de
@@ -153,7 +165,9 @@ horas no cuesta nada.
   válido. `group-canal` actualizado a dos puertas.
 - `politica`: los tres motivos nuevos desvían y **nunca descartan**.
 - Cascada en `vivo.js`: con teléfono → DM; sin teléfono → aviso; segundo pedido
-  del mismo colega → aviso; en ningún caso se publica en el grupo.
+  del mismo colega → aviso; **DM que falla → aviso**; pedido más viejo que la
+  ventana → aviso. En ningún caso se publica en el grupo, y en ningún caso se
+  termina sin hacer nada.
 
 ## 8. Riesgo, dicho sin adornos
 
