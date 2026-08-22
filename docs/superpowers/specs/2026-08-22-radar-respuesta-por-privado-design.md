@@ -1,7 +1,7 @@
 # Radar: responder por privado al colega, no en el grupo
 
 **Fecha:** 2026-08-22
-**Estado:** diseño aprobado, pendiente de plan de implementación
+**Estado:** diseño aprobado · Fase 1 aprobada para implementar (Juan, 2026-08-22)
 **Pedido por:** Juan
 
 ## 1. Qué se quiere y por qué
@@ -203,17 +203,50 @@ y de ahí salió la compuerta `validarMensaje.motivoDeBloqueo`. Entonces:
   (ej. `Hola Sofi, soy colega — pedido #A3F2`), que es lo que permite reconocer al
   colega desde su primer mensaje.
 
-### 4.7 Panel de colegas en Sofi (previsto, NO en este alcance)
+### 4.7 Sofi atiende al colega como colega (Juan, 2026-08-22)
 
-Juan, 2026-08-22: *"crear un panel de sofi dedicado a colegas, que sepa que es un
-colega quien le habla para que las soluciones y las respuestas estén más acordes
-— esto último es para un futuro cercano"*.
+*"necesito que el link vaya identificado con algo que sepamos que es colega y que
+Sofi lo atienda con tono para colega"*.
 
-No se construye acá. Lo único que este diseño aporta es **dejarlo posible**: el
-marcador del `text` prellenado (§4.6) hace que la conversación nazca identificada
-como colega, así que cuando ese panel se diseñe no tendrá que adivinar quién es
-quién retroactivamente. Es una decisión de dos líneas hoy que ahorra una
-migración de datos después.
+**Esto ya tiene mecanismo en el repo, y sale de un caso real.** El 2026-07-29
+Natalia escribió "hola buenas tardes" y Sofi le contestó "¿Qué tipo de propiedad
+estás buscando hoy?" — la trató como clienta y le dejó un lead falso en el
+embudo. De ahí salió la detección de asesores: `engine.js` resuelve
+`advisors.findByPhone(org.id, phone)` y, si hay asesor, `buildSystemPrompt`
+cambia entero (`test/asesor-escribe-a-sofi.test.js` lo fija).
+
+El colega es **el tercer caso de ese mismo mecanismo**, no un sistema nuevo:
+
+| Quién escribe | Detección | Trato |
+|---|---|---|
+| Cliente final | por defecto | venta, calificación, transferencia |
+| Asesor de la casa | `advisors.findByPhone` | ya existe: no se le vende nada |
+| **Colega** | **`directorio.esColega(telefono)`** | **par profesional (abajo)** |
+
+**Detección por teléfono, no por el marcador.** El número del colega ya está en el
+directorio (§4.1): si quien escribe está ahí, es colega. Eso **sobrevive a que
+borre el texto prellenado** del link, que es lo que va a pasar seguido. El
+marcador del `text` queda para lo que sí necesita: saber *qué pedido* originó el
+contacto, para que Sofi retome el hilo en vez de arrancar de cero.
+
+Precedencia: asesor de la casa gana sobre colega (un asesor propio que además
+esté en un grupo gremial sigue siendo de la casa).
+
+**Qué cambia en el trato.** Un colega no es un cliente ni es de la casa:
+
+- **Sí** se le ofrece inventario, con ref, área y precio — a diferencia del asesor
+  de la casa, al colega se le ofrece.
+- **No** se le pregunta presupuesto propio: el presupuesto es de *su* cliente.
+- **No** se le ofrece "conectarte con un asesor": es un par, no un lead.
+- **No** entra al embudo como cliente final. Un colega contado como lead ensucia
+  las métricas igual que el caso de Natalia.
+- Comisión: se comparte y lo acuerdan entre ellos — el sistema no reparte.
+- Tono profesional entre pares, no discurso de venta.
+
+**Panel de colegas en el CRM: sigue fuera de alcance.** Lo que se construye acá es
+la detección y el tono, que es lo que pidió Juan. La pantalla dedicada queda para
+después, y este diseño la deja posible sin migración de datos: las conversaciones
+ya nacen marcadas.
 
 ### 4.8 Lo que NO se toca
 
@@ -255,15 +288,31 @@ mensaje, que es la conducta que hace que a uno lo reporten.
 
 ## 6. Fases
 
-**Fase 1 — resolver y respaldar, sin enviar nada.** El directorio y la tabla de
-respaldo corren en producción con el radar comportándose como hoy. A los dos días
-se sabe si el 67% se sostiene con pedidos reales, sin haber mandado un DM.
+**APROBADA la Fase 1** (Juan, 2026-08-22).
 
-**Fase 2 — encender el DM** con los frenos de §5 y el grupo en silencio.
+**Fase 1 — resolver, respaldar y atender al colega. Sin enviar un solo DM.**
+
+1. `directorio.js`: resolución LID → teléfono y persistencia (§4.1).
+2. Tabla `colegas_grupos` + su migración (§4.5).
+3. Detección de colega y tono de colega en Sofi (§4.7).
+
+Nada de esto manda nada por la línea del radar: el punto 3 opera sobre la línea
+**oficial**, que no tiene riesgo de baneo. Y entrega valor desde el primer día —
+un colega que hoy escriba a Sofi por un anuncio de Meta ya queda bien atendido,
+sin esperar la Fase 2.
+
+Al cabo de dos días de operación se sabe si el 67% se sostiene con pedidos reales.
+
+**Fase 2 — encender el DM** con los frenos de §5, el link del §4.6 y el grupo en
+silencio.
 
 El 67% viene de 45 colegas de un solo día. Encender envíos sobre esa muestra, con
 la línea del radar en juego, es apostar más de lo necesario cuando esperar 48
 horas no cuesta nada.
+
+Dependencia que conviene tener a la vista: la Fase 1 construye el directorio, y el
+directorio es lo que hace posible **tanto** el DM de la Fase 2 **como** la
+detección de colega. No son dos trabajos que se suman — es uno que habilita dos.
 
 ## 7. Pruebas
 
@@ -304,7 +353,9 @@ más aún si el radar se vuelve producto para otras inmobiliarias.
 | Respaldo solo sobre interacción real | propuesto y aceptado, 2026-08-22 |
 | Dos fases, la primera sin enviar | propuesto, 2026-08-22 |
 | Todo mensaje lleva link a la línea oficial de Sofi | Juan, 2026-08-22 |
-| Panel de colegas: previsto, fuera de alcance | Juan, 2026-08-22 |
+| Detección y tono de colega: SÍ en Fase 1 | Juan, 2026-08-22 |
+| Panel de colegas en el CRM: fuera de alcance | Juan, 2026-08-22 |
+| Fase 1 aprobada para implementar | Juan, 2026-08-22 |
 | Tope como cortacircuitos (150), no como cuota | medido, 2026-08-22 |
 | Catherine atiende ambas líneas: sin problema de enrutamiento | Juan, 2026-08-22 |
 
