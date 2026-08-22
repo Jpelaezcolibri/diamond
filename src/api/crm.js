@@ -380,14 +380,34 @@ router.get("/api/grupos/diagnostico-lids", async (req, res) => {
     // lo oculte — y ese falso negativo nos haria descartar el camino por nada.
     const grupos = (await whatsappGroups.listGroups(org.id).catch(() => []))
       .filter((g) => g.jid && g.jid.endsWith("@g.us") && g.modo && g.modo !== "ignorar");
+
+    // Quien es "yo" en esta sesion, para saber si la linea es admin de un grupo.
+    // La primera version preguntaba si ALGUN participante era admin y daba
+    // true en los 12 grupos, que es informacion cero: todo grupo tiene admins.
+    const estado = await waha.estadoSesion(sesion).catch(() => null);
+    const miId = String(estado?.me?.id || estado?.me?._serialized || "").replace(/\D/g, "") || null;
+
+    // El indice que de verdad importa: lid -> telefono, armado desde la lista de
+    // participantes. La Lids API resolvio 0 de 45 en produccion (2026-08-22) y
+    // /lids/count no respondio, asi que en esta version de WAHA no sirve. Pero
+    // el participante trae `pn` para ~80% de la gente, y de ahi si sale el
+    // mapeo. Este es el dato que decide si el DM es viable.
+    const indice = new Map();
     const porGrupo = [];
     for (const g of grupos) {
       const participantes = await waha.participantesDeGrupo(sesion, g.jid);
+      for (const p of participantes) {
+        const lid = String(p.id || "").replace(/\D/g, "");
+        if (lid && p.telefono) indice.set(lid, p.telefono);
+      }
+      const yo = miId ? participantes.find((p) => String(p.id || "").replace(/\D/g, "") === miId) : null;
       porGrupo.push({
         grupo: g.nombre || g.jid,
-        // Si la linea es admin, WhatsApp deja ver los telefonos. Es la via que
-        // de verdad escala, y esto dice en cuales grupos ya la tenemos.
-        soy_admin: participantes.some((p) => p.rol === "admin" || p.rol === "superadmin"),
+        // Si la linea es admin, WhatsApp deja ver los telefonos de todos. Es la
+        // via que escala y no depende de codigo, sino de que los duenos del
+        // grupo la promuevan.
+        soy_admin: yo ? yo.rol === "admin" || yo.rol === "superadmin" : null,
+        me_encontre_en_la_lista: Boolean(yo),
         participantes: participantes.length,
         con_lid: participantes.filter((p) => p.esLid).length,
         con_telefono_visible: participantes.filter((p) => p.telefono).length,
@@ -411,11 +431,19 @@ router.get("/api/grupos/diagnostico-lids", async (req, res) => {
 
     const colegas = [];
     for (const [id, nombre] of porId) {
-      const telefono = await waha.telefonoDeLid(sesion, id);
+      // 12 digitos = ya venia siendo un telefono de verdad; mas = LID.
+      const yaEsTelefono = id.length <= 12;
+      // El indice de participantes primero: es el que funciona. La Lids API
+      // queda como segundo intento por si una version futura la arregla.
+      const porLista = indice.get(id) || null;
+      const porApi = porLista || yaEsTelefono ? null : await waha.telefonoDeLid(sesion, id);
+      // (la condicion de arriba: si ya lo tengo por la lista, o si nunca fue un
+      //  lid, no hay nada que preguntarle a la Lids API)
+      const telefono = yaEsTelefono ? id : porLista || porApi;
       colegas.push({
         autor: nombre,
-        // 12 digitos = ya era un telefono (ej. 573001234567); mas = LID.
-        parece_lid: id.length > 12,
+        parece_lid: !yaEsTelefono,
+        via: yaEsTelefono ? "ya_era_telefono" : porLista ? "lista_participantes" : porApi ? "lids_api" : null,
         resuelto: Boolean(telefono),
         telefono: telefono ? `***${telefono.slice(-4)}` : null,
       });
@@ -429,6 +457,7 @@ router.get("/api/grupos/diagnostico-lids", async (req, res) => {
       resueltos,
       sin_resolver: colegas.length - resueltos,
       cobertura: colegas.length ? `${Math.round((resueltos / colegas.length) * 100)}%` : "n/a",
+      lid_telefono_en_el_indice: indice.size,
       grupos: porGrupo,
       colegas,
     });
