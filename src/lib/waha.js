@@ -382,6 +382,41 @@ async function telefonoDeLid(sesion, lid) {
   }
 }
 
+// Participantes de un grupo, con su telefono cuando WhatsApp lo deja ver.
+//
+// Dos motivos para pasar por aca antes de resolver LIDs uno por uno:
+//
+//   1. La doc de WAHA dice que llamar a los endpoints de grupos POBLA el mapeo
+//      lid→telefono que despues sirve /lids/{lid}. Consultar los LIDs en frio
+//      puede devolver null por no haber preguntado nunca, no por no existir.
+//   2. Desde 2026.8.1 el participante trae `pn` con el telefono "cuando esta
+//      disponible" — disponible significa que la linea puede verlo: es contacto
+//      suyo, o la linea es admin del grupo.
+//
+// Devuelve [] si no se pudo listar: es un diagnostico, no puede tumbar nada.
+async function participantesDeGrupo(sesion, jid) {
+  if (!sesion || !jid) return [];
+  // v2 normaliza la respuesta entre engines; si la version desplegada no la
+  // tiene, se cae al endpoint viejo.
+  for (const ruta of [
+    `/api/${encodeURIComponent(sesion)}/groups/${encodeURIComponent(jid)}/participants/v2`,
+    `/api/${encodeURIComponent(sesion)}/groups/${encodeURIComponent(jid)}/participants`,
+  ]) {
+    try {
+      const r = await pedir(ruta);
+      const lista = Array.isArray(r) ? r : Array.isArray(r?.participants) ? r.participants : [];
+      return lista.map((p) => {
+        const id = String(p?.id?._serialized || p?.id || p?.jid || "");
+        const telefono = String(p?.pn || p?.phoneNumber || "").replace(/\D/g, "") || null;
+        return { id, esLid: id.includes("@lid"), telefono, rol: p?.role || null };
+      });
+    } catch (e) {
+      if (e.status !== 404) console.warn(`[waha] No se pudieron listar participantes de ${jid}: ${e.message}`);
+    }
+  }
+  return [];
+}
+
 /** Cuantos mapeos lid→telefono conoce la sesion. Sirve de termometro barato. */
 async function contarLids(sesion) {
   try {
@@ -395,5 +430,5 @@ async function contarLids(sesion) {
 
 module.exports = {
   configurado, crearSesion, estadoSesion, reintentarUnaVez, revincular, qr,
-  listarGrupos, nombresPorJid, enviarTexto, telefonoDeLid, contarLids,
+  listarGrupos, nombresPorJid, enviarTexto, telefonoDeLid, contarLids, participantesDeGrupo,
 };

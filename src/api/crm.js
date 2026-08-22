@@ -373,6 +373,27 @@ router.get("/api/grupos/diagnostico-lids", async (req, res) => {
     if (!sesiones.length) return res.status(404).json({ error: "No hay sesion vinculada" });
     const sesion = sesiones[0].nombre;
 
+    // PRIMERO los participantes de los grupos que se escuchan, y no como dato
+    // de color: la doc de WAHA dice que llamar a los endpoints de grupos POBLA
+    // el mapeo lid→telefono que despues sirve /lids/{lid}. Sin esta pasada, un
+    // lid podria dar null por no haberlo preguntado nunca y no porque WhatsApp
+    // lo oculte — y ese falso negativo nos haria descartar el camino por nada.
+    const grupos = (await whatsappGroups.listGroups(org.id).catch(() => []))
+      .filter((g) => g.jid && g.jid.endsWith("@g.us") && g.modo && g.modo !== "ignorar");
+    const porGrupo = [];
+    for (const g of grupos) {
+      const participantes = await waha.participantesDeGrupo(sesion, g.jid);
+      porGrupo.push({
+        grupo: g.nombre || g.jid,
+        // Si la linea es admin, WhatsApp deja ver los telefonos. Es la via que
+        // de verdad escala, y esto dice en cuales grupos ya la tenemos.
+        soy_admin: participantes.some((p) => p.rol === "admin" || p.rol === "superadmin"),
+        participantes: participantes.length,
+        con_lid: participantes.filter((p) => p.esLid).length,
+        con_telefono_visible: participantes.filter((p) => p.telefono).length,
+      });
+    }
+
     const { data, error } = await supabase
       .from("group_signals")
       .select("autor_nombre, autor_telefono")
@@ -407,6 +428,8 @@ router.get("/api/grupos/diagnostico-lids", async (req, res) => {
       colegas_distintos: colegas.length,
       resueltos,
       sin_resolver: colegas.length - resueltos,
+      cobertura: colegas.length ? `${Math.round((resueltos / colegas.length) * 100)}%` : "n/a",
+      grupos: porGrupo,
       colegas,
     });
   } catch (e) {
