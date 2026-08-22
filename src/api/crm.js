@@ -352,6 +352,68 @@ router.post("/api/grupos/radar", async (req, res) => {
   }
 });
 
+// ¿A cuantos colegas del grupo podriamos escribirle al privado?
+//
+// SOLO MIDE. No envia nada, no cambia nada, no toca el flujo del radar. Existe
+// porque la pregunta "responder por interno" (Juan, 2026-08-22) depende de un
+// dato que nadie tenia: WhatsApp oculta el numero de los participantes de un
+// grupo y lo reemplaza por un LID, y la doc de WAHA advierte que resolverlo
+// falla si el numero no esta en los contactos de la linea o si la linea no es
+// admin del grupo — Natalia es miembro, no admin. Sin este numero, disenar el
+// flujo de DM seria adivinar.
+//
+// Los telefonos resueltos salen enmascarados: alcanza para contar, y son datos
+// de terceros que no hay razon para volcar completos en una respuesta HTTP.
+router.get("/api/grupos/diagnostico-lids", async (req, res) => {
+  if (!waha.configurado()) return res.status(501).json({ error: "WAHA no configurado" });
+  const limite = Math.min(Number(req.query.limite) || 40, 200);
+  try {
+    const org = await organizations.getDefault();
+    const sesiones = await whatsappGroups.listSessions(org.id);
+    if (!sesiones.length) return res.status(404).json({ error: "No hay sesion vinculada" });
+    const sesion = sesiones[0].nombre;
+
+    const { data, error } = await supabase
+      .from("group_signals")
+      .select("autor_nombre, autor_telefono")
+      .eq("org_id", org.id)
+      .eq("origen", "vivo")
+      .not("autor_telefono", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(limite);
+    if (error) throw error;
+
+    // Un colega puede haber publicado diez pedidos: lo que se mide es cuantas
+    // PERSONAS distintas son alcanzables, no cuantos mensajes.
+    const porId = new Map();
+    for (const s of data) if (!porId.has(s.autor_telefono)) porId.set(s.autor_telefono, s.autor_nombre);
+
+    const colegas = [];
+    for (const [id, nombre] of porId) {
+      const telefono = await waha.telefonoDeLid(sesion, id);
+      colegas.push({
+        autor: nombre,
+        // 12 digitos = ya era un telefono (ej. 573001234567); mas = LID.
+        parece_lid: id.length > 12,
+        resuelto: Boolean(telefono),
+        telefono: telefono ? `***${telefono.slice(-4)}` : null,
+      });
+    }
+
+    const resueltos = colegas.filter((c) => c.resuelto).length;
+    res.json({
+      sesion,
+      lids_conocidos_por_waha: await waha.contarLids(sesion),
+      colegas_distintos: colegas.length,
+      resueltos,
+      sin_resolver: colegas.length - resueltos,
+      colegas,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Cambia el modo de respuesta del radar en los grupos (sombra | asistido |
 // auto) — org entera, no un grupo puntual. Nombre distinto de
 // /api/grupos/modo a proposito: esa ruta ya existe y es el modo de una

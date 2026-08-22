@@ -349,7 +349,51 @@ async function enviarTexto(sesion, chatId, texto, { replyTo = null } = {}) {
   }
 }
 
+// ── LIDs: de identificador oculto a telefono ────────────────────────────
+//
+// WhatsApp ya no expone el numero de los participantes de un grupo: manda un
+// "LID" (identificador oculto, `<digitos>@lid`). Lo que este canal guarda hoy
+// en `group_signals.autor_telefono` NO es un telefono — son LIDs de 14-17
+// digitos, contra los 12 de un movil colombiano. Verificado sobre las senales
+// reales del 2026-08-22: 12 de 12 eran LIDs.
+//
+// Esto NO habilita por si solo responderle al privado a un colega: la guarda de
+// `enviarTexto` sigue en pie y la decision de conducta no vive aca. Existe para
+// poder MEDIR cuantos colegas son alcanzables antes de disenar nada — la propia
+// doc de WAHA advierte que la resolucion falla si el numero no esta en los
+// contactos de la linea o si la linea no es admin del grupo, y Natalia es
+// miembro, no admin.
+//
+// Devuelve el telefono en digitos, o null si WAHA no lo conoce. No lanza: "no
+// se pudo resolver" es un dato del flujo, igual que un envio fallido.
+async function telefonoDeLid(sesion, lid) {
+  const digitos = String(lid || "").replace(/\D/g, "");
+  if (!sesion || !digitos) return null;
+  try {
+    const r = await pedir(`/api/${encodeURIComponent(sesion)}/lids/${digitos}`);
+    // Segun version, WAHA devuelve { pn } o { phoneNumber }, con o sin @c.us.
+    const crudo = r?.pn || r?.phoneNumber || r?.phone || null;
+    const telefono = String(crudo || "").replace(/\D/g, "");
+    return telefono || null;
+  } catch (e) {
+    // 404 = no hay mapeo conocido, y es el caso esperado, no un error.
+    if (e.status !== 404) console.warn(`[waha] No se pudo resolver el lid ${digitos}: ${e.message}`);
+    return null;
+  }
+}
+
+/** Cuantos mapeos lid→telefono conoce la sesion. Sirve de termometro barato. */
+async function contarLids(sesion) {
+  try {
+    const r = await pedir(`/api/${encodeURIComponent(sesion)}/lids/count`);
+    return typeof r?.count === "number" ? r.count : null;
+  } catch (e) {
+    console.warn(`[waha] No se pudo contar los lids: ${e.message}`);
+    return null;
+  }
+}
+
 module.exports = {
   configurado, crearSesion, estadoSesion, reintentarUnaVez, revincular, qr,
-  listarGrupos, nombresPorJid, enviarTexto,
+  listarGrupos, nombresPorJid, enviarTexto, telefonoDeLid, contarLids,
 };
