@@ -33,7 +33,7 @@ const soloDigitos = (t) => String(t || "").replace(/\D/g, "") || null;
 // lid (digitos) -> telefono. Se siembra de la base al primer uso por org.
 const indice = new Map();
 const sembrado = new Set(); // orgIds ya sembrados
-const ultimoRefresco = new Map(); // jid -> ms
+const ultimoRefresco = new Map(); // orgId:jid -> ms
 
 async function sembrar(orgId) {
   if (sembrado.has(orgId)) return;
@@ -49,9 +49,10 @@ async function sembrar(orgId) {
 // guarda todo lo que vino, no solo el lid que se estaba buscando.
 async function refrescarGrupo(orgId, sesion, jid) {
   const ahora = Date.now();
-  const previo = ultimoRefresco.get(jid) || 0;
+  const cacheKey = `${orgId}:${jid}`;
+  const previo = ultimoRefresco.get(cacheKey) || 0;
   if (ahora - previo < MS_ENTRE_REFRESCOS) return;
-  ultimoRefresco.set(jid, ahora);
+  ultimoRefresco.set(cacheKey, ahora);
 
   let participantes = [];
   try {

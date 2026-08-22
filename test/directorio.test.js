@@ -31,12 +31,18 @@ const SESION = "RADA-TEST";
 const JID = "123@g.us";
 
 const participantesReal = waha.participantesDeGrupo;
+const telefonoDelIdReal = waha.telefonoDeLid;
 
 function conParticipantes(lista, contador = { n: 0 }) {
   waha.participantesDeGrupo = async () => {
     contador.n += 1;
     return lista;
   };
+  // Mocka telefonoDeLid para evitar requests reales contra WAHA de producción.
+  // En esta máquina no hay credenciales configuradas, pero en otra que las tuviera
+  // este test haría GETs reales contra /api/{sesion}/lids/{lid} con LIDs inventados
+  // (111, 999, 888, etc). Por eso se mocka también aquí.
+  waha.telefonoDeLid = async () => null;
   return contador;
 }
 
@@ -56,6 +62,7 @@ test("resuelve el telefono desde la lista de participantes", async () => {
     assert.strictEqual(tel, "573001234567");
   } finally {
     waha.participantesDeGrupo = participantesReal;
+    waha.telefonoDeLid = telefonoDelIdReal;
   }
 });
 
@@ -66,6 +73,7 @@ test("un participante sin telefono devuelve null, no una excepcion", async () =>
     assert.strictEqual(await directorio.telefonoDe(ORG, "999", { sesion: SESION, jid: JID }), null);
   } finally {
     waha.participantesDeGrupo = participantesReal;
+    waha.telefonoDeLid = telefonoDelIdReal;
   }
 });
 
@@ -80,6 +88,7 @@ test("el segundo pedido del mismo lid NO vuelve a pedir los participantes", asyn
     assert.strictEqual(contador.n, 1, "el indice tiene que servir el segundo");
   } finally {
     waha.participantesDeGrupo = participantesReal;
+    waha.telefonoDeLid = telefonoDelIdReal;
   }
 });
 
@@ -94,6 +103,7 @@ test("un lid que no aparece tampoco se vuelve a preguntar enseguida", async () =
     assert.strictEqual(contador.n, 1, "refrescar el mismo grupo dos veces seguidas es caro y no cambia nada");
   } finally {
     waha.participantesDeGrupo = participantesReal;
+    waha.telefonoDeLid = telefonoDelIdReal;
   }
 });
 
@@ -105,6 +115,7 @@ test("sin jid no se refresca nada: solo mira el indice", async () => {
     assert.strictEqual(contador.n, 0);
   } finally {
     waha.participantesDeGrupo = participantesReal;
+    waha.telefonoDeLid = telefonoDelIdReal;
   }
 });
 
@@ -123,6 +134,7 @@ test("registrar guarda al colega y devuelve su telefono", async () => {
     assert.strictEqual(memory.colegasGrupos[0].nombre, "Colega Siete");
   } finally {
     waha.participantesDeGrupo = participantesReal;
+    waha.telefonoDeLid = telefonoDelIdReal;
   }
 });
 
@@ -140,6 +152,7 @@ test("registrar guarda al colega aunque NO se resuelva el telefono", async () =>
     assert.strictEqual(memory.colegasGrupos[0].telefono, null);
   } finally {
     waha.participantesDeGrupo = participantesReal;
+    waha.telefonoDeLid = telefonoDelIdReal;
   }
 });
 
@@ -156,6 +169,7 @@ test("esColega reconoce a quien ya esta en el respaldo", async () => {
     assert.strictEqual(await directorio.esColega(ORG, "573000000000"), null);
   } finally {
     waha.participantesDeGrupo = participantesReal;
+    waha.telefonoDeLid = telefonoDelIdReal;
   }
 });
 
@@ -164,9 +178,40 @@ test("si WAHA revienta, telefonoDe devuelve null y no propaga", async () => {
   waha.participantesDeGrupo = async () => {
     throw new Error("WAHA caido");
   };
+  waha.telefonoDeLid = async () => {
+    throw new Error("WAHA caido");
+  };
   try {
     assert.strictEqual(await directorio.telefonoDe(ORG, "111", { sesion: SESION, jid: JID }), null);
   } finally {
     waha.participantesDeGrupo = participantesReal;
+    waha.telefonoDeLid = telefonoDelIdReal;
+  }
+});
+
+test("dos organizaciones con el mismo LID no se pisan", async () => {
+  preparar();
+  const ORG2 = "org-directorio-test-2";
+
+  // Org1: registra LID 555000111 con telefono
+  conParticipantes([
+    { id: "555000111@lid", esLid: true, telefono: "573005555555", rol: "participant" },
+  ]);
+  try {
+    await directorio.registrar(ORG, {
+      lid: "555000111", nombre: "Colega Org1", grupo: "G1", sesion: SESION, jid: JID,
+    });
+
+    // Org2: intenta resolver el mismo LID pero la lista de participantes viene vacia
+    waha.participantesDeGrupo = async () => [];
+    waha.telefonoDeLid = async () => null;
+
+    const telOrgDos = await directorio.telefonoDe(ORG2, "555000111", { sesion: SESION, jid: JID });
+
+    // Org2 debe obtener null, NO el telefono que Org1 registro
+    assert.strictEqual(telOrgDos, null, "org2 no debe ver el telefono que org1 registro");
+  } finally {
+    waha.participantesDeGrupo = participantesReal;
+    waha.telefonoDeLid = telefonoDelIdReal;
   }
 });
