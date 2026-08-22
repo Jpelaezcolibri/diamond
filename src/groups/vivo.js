@@ -66,6 +66,9 @@ function idEnVivo(waMessageId) {
  * @param modo     'sombra' (redacta y no publica) | 'auto' (publica)
  * @param enviar   async (texto) => { ok, wamid } — lo provee el transporte
  * @param asesor   a quien se deriva en el mensaje (se resuelve afuera)
+ * @param sesion   nombre de la sesion de WAHA (ej. "RADA-NATALIA"), no la fila
+ *                 de whatsapp_groups; es lo que el directorio necesita para
+ *                 pedirle a WAHA los participantes de este grupo.
  *
  * Devuelve siempre un objeto con `resultado`, para poder medir la corrida sin
  * leer logs. Nunca lanza por un mensaje suelto: un error en uno no puede tumbar
@@ -126,11 +129,17 @@ async function procesarMensaje(org, mensaje, { grupo, modo = "sombra", enviar = 
   // los grupos (ver db/migrations/2026-08-22_colegas_grupos.sql — el limite es
   // deliberado, no una optimizacion).
   //
-  // Best-effort: guardar un contacto no puede tumbar el pipeline del radar.
-  await directorio.registrar(org.id, {
+  // Best-effort y SIN await, mismo patron que whatsappGroups.touchSession en
+  // src/channels/whatsapp-group.js: nada rio abajo (politica.decidir, la
+  // redaccion, la publicacion) usa el telefono que devuelve, y el primer
+  // registro de cada ventana de 10 min puede disparar un HTTP a WAHA que trae
+  // hasta 878 participantes — esperarlo pagaria esa latencia ANTES de que el
+  // radar decida si publica, y como el procesamiento va en cola por grupo, el
+  // pedido siguiente esperaria detras.
+  directorio.registrar(org.id, {
     lid: mensaje.autorTelefono,
     nombre: mensaje.autor,
-    grupo: grupo.nombre || grupo.jid,
+    grupo: mensaje.grupo,
     sesion,
     jid: grupo.jid,
   }).catch((e) => console.warn("[radar] No se pudo registrar al colega en el directorio:", e.message));

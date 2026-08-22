@@ -142,6 +142,15 @@ function instalarDobles() {
       },
     },
   };
+  // Sin este doble, cada test que llega a "demanda" dispara un colegas.upsert
+  // REAL contra la Supabase compartida por las 4 apps (vivo.js hace
+  // directorio.registrar best-effort, sin await). Hoy no falla nada porque
+  // "org-1" no es un UUID valido y Postgres lo rechaza en silencio — pero eso
+  // no protege a nadie: el dia que un fixture use un UUID valido, la suite
+  // empieza a escribir basura en produccion sin que ningun test lo note.
+  require.cache[RUTA("groups/directorio.js")] = {
+    exports: { registrar: async () => null },
+  };
   delete require.cache[RUTA("groups/vivo.js")];
   return require("../src/groups/vivo");
 }
