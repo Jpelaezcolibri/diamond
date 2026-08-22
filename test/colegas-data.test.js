@@ -88,12 +88,12 @@ test("porTelefono no cruza organizaciones", async () => {
 test("listarConTelefono devuelve solo los resueltos", async () => {
   limpiar();
 
-  await colegas.upsert(ORG, { lid: "a", telefono: "573001111111", nombre: "Con", grupo: "G1" });
-  await colegas.upsert(ORG, { lid: "b", telefono: null, nombre: "Sin", grupo: "G1" });
+  await colegas.upsert(ORG, { lid: "901", telefono: "573001111111", nombre: "Con", grupo: "G1" });
+  await colegas.upsert(ORG, { lid: "902", telefono: null, nombre: "Sin", grupo: "G1" });
 
   const lista = await colegas.listarConTelefono(ORG);
   assert.strictEqual(lista.length, 1);
-  assert.strictEqual(lista[0].lid, "a");
+  assert.strictEqual(lista[0].lid, "901");
 });
 
 test("sin lid no escribe nada", async () => {
@@ -101,4 +101,17 @@ test("sin lid no escribe nada", async () => {
 
   await colegas.upsert(ORG, { lid: "", telefono: "573001234567", nombre: "N", grupo: "G1" });
   assert.strictEqual(memory.colegasGrupos.length, 0);
+});
+
+test("lid con sufijo @lid se normaliza y no duplica", async () => {
+  limpiar();
+
+  // Simular dos upserts: uno con el sufijo de WhatsApp y otro sin
+  await colegas.upsert(ORG, { lid: "198161251463188@lid", telefono: "573007654321", nombre: "Colega", grupo: "G1" });
+  await colegas.upsert(ORG, { lid: "198161251463188", telefono: "573007654321", nombre: "Colega", grupo: "G2" });
+
+  // Debe haber una sola fila con ambos grupos
+  assert.strictEqual(memory.colegasGrupos.length, 1, "no debe duplicar por sufijo @lid");
+  assert.strictEqual(memory.colegasGrupos[0].lid, "198161251463188");
+  assert.deepStrictEqual(memory.colegasGrupos[0].grupos.sort(), ["G1", "G2"]);
 });

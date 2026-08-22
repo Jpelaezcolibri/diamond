@@ -36,7 +36,7 @@ function avisarFaltaTabla() {
  * retroceso silencioso.
  */
 async function upsert(orgId, { lid, telefono = null, nombre = null, grupo = null } = {}) {
-  const clave = String(lid || "").trim();
+  const clave = soloDigitos(lid);
   if (!orgId || !clave) return;
   const tel = soloDigitos(telefono);
   const ahora = new Date().toISOString();
