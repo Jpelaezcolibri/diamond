@@ -1,6 +1,10 @@
 import { Queue } from "bullmq";
 import { redisConnectionOptions } from "./connection.js";
-import { PUBLISH_MAX_ATTEMPTS, PUBLISH_RETRY_BACKOFF_MS } from "../config/constants.js";
+import {
+  PUBLISH_MAX_ATTEMPTS,
+  PUBLISH_RETRY_BACKOFF_MS,
+  SYNC_RETRY_BACKOFF_MS
+} from "../config/constants.js";
 
 export const QUEUE_NAMES = {
   sync: "sync",
@@ -88,4 +92,9 @@ export async function enqueueCognitiveBuild(orgId: string, propertyId: string): 
 
 export function backoffForAttempt(attemptsMade: number): number {
   return PUBLISH_RETRY_BACKOFF_MS[Math.min(attemptsMade, PUBLISH_RETRY_BACKOFF_MS.length - 1)] ?? 0;
+}
+
+/** Backoff del sync (ver SYNC_RETRY_BACKOFF_MS: un 502 de Wasi deja mudo al radar). */
+export function backoffForSyncAttempt(attemptsMade: number): number {
+  return SYNC_RETRY_BACKOFF_MS[Math.min(attemptsMade, SYNC_RETRY_BACKOFF_MS.length - 1)] ?? 0;
 }

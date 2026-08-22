@@ -1,6 +1,11 @@
 import { getQueue, QUEUE_NAMES, jobIds } from "../queue/queues.js";
 import { listOrgIdsWithMarketingEnabled, getOrgMarketingSettings } from "../repositories/settings.repo.js";
-import { COGNITIVE_REBUILD_CRON, METRICS_INTERVAL_HOURS, TOKEN_REFRESH_INTERVAL_DAYS } from "../config/constants.js";
+import {
+  COGNITIVE_REBUILD_CRON,
+  METRICS_INTERVAL_HOURS,
+  SYNC_MAX_ATTEMPTS,
+  TOKEN_REFRESH_INTERVAL_DAYS
+} from "../config/constants.js";
 import { logger } from "../lib/logger.js";
 
 /**
@@ -42,9 +47,62 @@ export async function reconcileSyncSchedules(): Promise<void> {
       logger.info({ orgId, previousEvery: stale.every }, "Sync repetible desactualizado eliminado");
     }
 
-    await queue.add("sync", { orgId }, { jobId, repeat: { every: desiredEvery } });
+    await registrarSyncConReintentos(queue, jobId, orgId, desiredEvery);
     logger.info({ orgId, intervalMinutes: settings.sync_interval_minutes }, "Sync repetible registrado");
   }
+}
+
+/**
+ * Registra el repetible de sync CON reintentos, y se asegura de que la
+ * iteracion ya encolada tambien los tenga.
+ *
+ * POR QUE `attempts` (incidente del 2026-08-22): Wasi devolvio un 502 en
+ * /property/search y el sync murio en 7 segundos. Sin reintentos la corrida se
+ * perdia hasta la siguiente —24 h en Diamond— y a las 30 h del ultimo sync
+ * exitoso el bot marca todo el inventario como `sync_viejo`
+ * (src/groups/publicable.js): el radar de grupos se callo ante tres pedidos con
+ * match, uno de puntaje 99. Ver SYNC_RETRY_BACKOFF_MS.
+ *
+ * POR QUE HAY QUE BORRAR LA ITERACION PENDIENTE: el lua de BullMQ
+ * (addStandardJob-9.lua) ve que el jobId de la proxima iteracion ya existe y
+ * devuelve sin tocarlo, y cada iteracion hereda las opciones de la anterior.
+ * Sin borrarla, un cambio de `attempts` no entraria NUNCA — ni con redeploy, ni
+ * con el paso de los dias. Es el mismo tipo de trampa que ya documenta
+ * reconcileSyncSchedules para el cambio de `every`.
+ *
+ * Borrarla no mueve la cadencia: con `every`, BullMQ alinea cada disparo a un
+ * multiplo del intervalo contado desde el epoch —por eso el sync de Diamond cae
+ * siempre a las 00:00 UTC—, asi que la iteracion recreada queda en el mismo
+ * instante que la que se borro.
+ */
+async function registrarSyncConReintentos(
+  queue: ReturnType<typeof getQueue>,
+  jobId: string,
+  orgId: string,
+  every: number
+): Promise<void> {
+  const opciones = {
+    jobId,
+    repeat: { every },
+    attempts: SYNC_MAX_ATTEMPTS,
+    backoff: { type: "custom" }
+  };
+
+  await queue.add("sync", { orgId }, opciones);
+
+  const desactualizadas = (await queue.getDelayed()).filter(
+    (job) => job.opts?.repeat && job.data?.orgId === orgId && job.opts.attempts !== SYNC_MAX_ATTEMPTS
+  );
+  if (!desactualizadas.length) return;
+
+  for (const job of desactualizadas) {
+    await job.remove();
+    logger.warn(
+      { orgId, jobId: job.id, attempts: job.opts?.attempts, esperado: SYNC_MAX_ATTEMPTS },
+      "Iteracion de sync encolada sin los reintentos vigentes: se borra para recrearla"
+    );
+  }
+  await queue.add("sync", { orgId }, opciones);
 }
 
 /** Reconciliar el refresh semanal de tokens de Meta (ver ARCHITECTURE.md #8). */

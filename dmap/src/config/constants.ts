@@ -17,6 +17,28 @@ export const IG_DAILY_PUBLISH_QUOTA = 50;
 export const PUBLISH_RETRY_BACKOFF_MS = [30_000, 120_000, 480_000, 1_800_000, 7_200_000];
 export const PUBLISH_MAX_ATTEMPTS = PUBLISH_RETRY_BACKOFF_MS.length;
 
+/**
+ * Reintentos del sync — incidente del 2026-08-22.
+ *
+ * Wasi devolvio un 502 en /property/search a las 00:00 UTC y el sync murio en 7
+ * segundos. Sin reintentos, el proximo intento quedaba 24 h despues; a las 30 h
+ * del ultimo sync exitoso el bot marca todo el inventario como `sync_viejo`
+ * (src/groups/publicable.js) y el radar de grupos se calla. Un 502 de siete
+ * segundos costo mas de nueve horas de radar mudo, con tres pedidos con match
+ * sin responder.
+ *
+ * La escalera tiene que caber en el margen entre la cadencia del sync (24 h en
+ * Diamond) y la ventana de frescura del bot (30 h): 6 h. Estos escalones suman
+ * ~4.4 h de reintentos efectivos, asi que si se agotan todos todavia queda
+ * tiempo para que el watchdog avise antes de que el radar enmudezca — y ahi el
+ * problema en Wasi ya es real, no un hipo.
+ *
+ * El indice 0 casi nunca se usa: BullMQ llama la estrategia con `attemptsMade`,
+ * que vale 1 en el primer reintento (mismo comportamiento que publish).
+ */
+export const SYNC_RETRY_BACKOFF_MS = [60_000, 300_000, 1_200_000, 3_600_000, 10_800_000];
+export const SYNC_MAX_ATTEMPTS = SYNC_RETRY_BACKOFF_MS.length;
+
 export const GRAPH_API_VERSION = "v21.0";
 export const GRAPH_API_BASE = `https://graph.facebook.com/${GRAPH_API_VERSION}`;
 
