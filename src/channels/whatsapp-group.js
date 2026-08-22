@@ -231,6 +231,10 @@ async function procesar(org, ev, grupo, sesion) {
     modo: organizations.modoDeRespuesta(org),
     asesor,
     advisorId: sesion?.advisor_id || null,
+    // El NOMBRE de la sesion de WAHA (ej "RADA-NATALIA"), no la fila de la
+    // base: es lo que necesita el directorio para preguntarle a WAHA por los
+    // participantes de este grupo y resolver el telefono del colega.
+    sesion: ev.sesion,
     // La UNICA via de salida. Se ata aca, al grupo del que vino el mensaje: el
     // radar no tiene forma de escribirle a otro chat. replyTo cita el pedido
     // original — en un grupo activo ya se perdio en el scroll para cuando

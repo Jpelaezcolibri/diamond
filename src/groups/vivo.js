@@ -34,6 +34,7 @@ const syncEstado = require("../data/sync-estado");
 const whatsappGroups = require("../data/whatsapp-groups");
 const advisors = require("../data/advisors");
 const avisoCercano = require("./aviso-cercano");
+const directorio = require("./directorio");
 const waha = require("../lib/waha");
 const formato = require("../lib/formato");
 // Se importa el MODULO y no la funcion suelta: destructurar congela la
@@ -70,7 +71,7 @@ function idEnVivo(waMessageId) {
  * leer logs. Nunca lanza por un mensaje suelto: un error en uno no puede tumbar
  * la escucha del grupo.
  */
-async function procesarMensaje(org, mensaje, { grupo, modo = "sombra", enviar = null, asesor = null, advisorId = null, ahora = new Date() } = {}) {
+async function procesarMensaje(org, mensaje, { grupo, modo = "sombra", enviar = null, asesor = null, advisorId = null, sesion = null, ahora = new Date() } = {}) {
   // Mismo interruptor que apaga el import: si el radar esta apagado no se gasta
   // un token ni se escribe una fila.
   if (!organizations.radarEncendido(org)) return { resultado: "radar_apagado" };
@@ -118,6 +119,21 @@ async function procesarMensaje(org, mensaje, { grupo, modo = "sombra", enviar = 
     waMessageId: idEnVivo(mensaje.waMessageId || mensaje.id),
   });
   if (duplicado) return { resultado: "duplicado" };
+
+  // Deja constancia de QUIEN publico, con su telefono si WhatsApp lo deja ver.
+  // Va aca y no antes a proposito: se registra a quien publica un pedido que
+  // vale la pena cruzar, no a los 1.012 participantes que se podrian listar de
+  // los grupos (ver db/migrations/2026-08-22_colegas_grupos.sql — el limite es
+  // deliberado, no una optimizacion).
+  //
+  // Best-effort: guardar un contacto no puede tumbar el pipeline del radar.
+  await directorio.registrar(org.id, {
+    lid: mensaje.autorTelefono,
+    nombre: mensaje.autor,
+    grupo: grupo.nombre || grupo.jid,
+    sesion,
+    jid: grupo.jid,
+  }).catch((e) => console.warn("[radar] No se pudo registrar al colega en el directorio:", e.message));
 
   // MODO ASISTIDO: no se publica NADA en el grupo. Sofi revalida las candidatas
   // y, si aprueba, le escribe a la asesora. Es el paso previo a encender las
