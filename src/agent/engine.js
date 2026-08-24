@@ -3,6 +3,7 @@ const leads = require("../data/leads");
 const conversations = require("../data/conversations");
 const properties = require("../data/properties");
 const advisors = require("../data/advisors");
+const directorio = require("../groups/directorio");
 const { buildSystemPrompt } = require("./prompts");
 const { TOOL_DEFINITIONS, executeTool, maybeCaptadorAlert } = require("./tools");
 const { isQualified } = require("./qualification");
@@ -67,14 +68,28 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
     return null;
   });
 
-  const lead = await leads.findOrCreate(org.id, phone, advisor ? "asesor" : source);
-  // Un asesor que ya tenia lead de antes (le escribio a Sofi antes de que
-  // existiera esta rama) queda marcado, para que el embudo no lo cuente.
-  if (advisor && lead.source !== "asesor") {
+  // ¿Y si no es de la casa, es un colega de otra inmobiliaria? Se resuelve
+  // contra el directorio de los grupos gremiales (src/groups/directorio.js).
+  //
+  // Solo se pregunta si NO hay asesor: un asesor propio que ademas esta en un
+  // grupo sigue siendo de la casa, y asi no se paga la consulta de mas.
+  //
+  // Falla ABIERTA, igual que la del asesor: si revienta se lo atiende como
+  // cliente, que es el comportamiento de siempre.
+  const colega = advisor ? null : await directorio.esColega(org.id, phone).catch((e) => {
+    console.warn("[engine] No se pudo verificar si el telefono es de un colega:", e.message);
+    return null;
+  });
+
+  const fuenteLead = advisor ? "asesor" : colega ? "colega" : source;
+  const lead = await leads.findOrCreate(org.id, phone, fuenteLead);
+  // Un asesor o un colega que ya tenia lead de antes (escribio a Sofi antes de
+  // que existiera esta rama) queda marcado, para que el embudo no lo cuente.
+  if ((advisor || colega) && lead.source !== fuenteLead) {
     try {
-      Object.assign(lead, await leads.update(lead.id, { source: "asesor" }));
+      Object.assign(lead, await leads.update(lead.id, { source: fuenteLead }));
     } catch (e) {
-      console.warn("[engine] No se pudo marcar el lead como asesor:", e.message);
+      console.warn(`[engine] No se pudo marcar el lead como ${fuenteLead}:`, e.message);
     }
   }
 
@@ -170,7 +185,7 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
     }
   }
 
-  const system = buildSystemPrompt({ org, lead, qualified: isQualified(lead), now: nowInBogota(), advisor });
+  const system = buildSystemPrompt({ org, lead, qualified: isQualified(lead), now: nowInBogota(), advisor, colega });
 
   const extractText = (r) =>
     r.content.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
