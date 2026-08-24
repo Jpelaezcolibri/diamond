@@ -16,6 +16,7 @@ const groupSignals = require("../src/data/group-signals");
 const whatsappGroups = require("../src/data/whatsapp-groups");
 const allyProperties = require("../src/data/ally-properties");
 const properties = require("../src/data/properties");
+const advisors = require("../src/data/advisors");
 
 function ctxAsesor() {
   return {

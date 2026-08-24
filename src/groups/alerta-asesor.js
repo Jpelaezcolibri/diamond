@@ -26,10 +26,13 @@
 //
 // autor_telefono se usa igual, pero solo como ULTIMO intento (revision
 // 2026-08-24): WhatsApp a veces entrega el participante como @c.us —numero
-// visible, no LID— y ese numero SI es marcable de una. Descartarlo de
-// entrada porque "normalmente" es un LID dejaba el aviso diciendo "no se
-// pudo resolver el numero" con el numero ahi mismo en la señal. linkWhatsapp
-// filtra con esMarcable, asi que un LID de verdad sigue sin mostrarse.
+// visible, no LID— y ese numero SI tiene forma de celular real de una.
+// Descartarlo de entrada porque "normalmente" es un LID dejaba el aviso
+// diciendo "no se pudo resolver el numero" con el numero ahi mismo en la
+// señal. linkWhatsappEstricto filtra con esCelularColombiano (revision
+// posterior, code review post-merge 2026-08-24: esMarcable solo exigia <=13
+// digitos y un LID de 10-13 lo hubiera pasado igual), asi que un LID de
+// verdad sigue sin mostrarse.
 //
 // Sin ninguno de los dos (el 33% esperado, no un error): la salida real es
 // tocar el nombre del colega en el grupo, que WhatsApp abre el chat sin pedir
@@ -37,7 +40,7 @@
 
 const formato = require("../lib/formato");
 const { normalizarTitulo } = require("../lib/formato");
-const { linkWhatsapp, linkContactoOficial, tocarNombreEnGrupo } = require("../lib/contacto");
+const { linkWhatsappEstricto, linkContactoOficial, tocarNombreEnGrupo } = require("../lib/contacto");
 
 // Una propiedad, corta: la asesora ya conoce el inventario, no necesita la
 // ficha entera. Necesita reconocerla y tener el link a mano.
@@ -74,12 +77,20 @@ function linea(match) {
 // (67% de resolucion medido el 2026-08-22) y cubre el caso normal. Pero
 // cuando WhatsApp entrega el participante como @c.us — numero visible, no
 // LID — este aviso decia "no se pudo resolver el numero" TENIENDO el numero
-// a mano en senal.autor_telefono. linkWhatsapp ya valida con esMarcable, asi
-// que si autorTelefono resulta ser un LID (14-17 digitos) esto sigue
-// devolviendo null y cae al mismo mensaje de siempre — no hay riesgo de
-// mostrar un LID como si fuera un telefono.
+// a mano en senal.autor_telefono. linkWhatsappEstricto exige forma de celular
+// colombiano (3 + 9 digitos), asi que si autorTelefono resulta ser un LID
+// (14-17 digitos, o incluso uno mas corto de 10-13) esto sigue devolviendo
+// null y cae al mismo mensaje de siempre — no hay riesgo de mostrar un LID
+// como si fuera un telefono.
+//
+// linkWhatsappEstricto y NO linkWhatsapp (code review post-merge, 2026-08-24):
+// este es exactamente el camino que le entrega a la asesora un numero para
+// que le escriba DESDE SU PROPIO WhatsApp — el mismo tipo de paso que ya
+// termino en el baneo de una cuenta en julio de 2026 (ver src/lib/waha.js) por
+// escribirle a alguien fuera del circuito oficial. linkWhatsapp (esMarcable,
+// <=13 digitos) es un techo demasiado ancho para ese riesgo.
 function contactoPara(telefonoColega, autorTelefono, quien) {
-  const link = linkWhatsapp(telefonoColega) || linkWhatsapp(autorTelefono);
+  const link = linkWhatsappEstricto(telefonoColega) || linkWhatsappEstricto(autorTelefono);
   if (link) return link;
   return `no se pudo resolver el número — ${tocarNombreEnGrupo(quien)}`;
 }

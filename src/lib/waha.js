@@ -24,7 +24,36 @@
 //   3. Quien decide si se habla es src/groups/politica.js, no este modulo. Aca
 //      no hay reglas de negocio: si te llaman, envias.
 //
+// ═══ SEGUNDA PUERTA: `enviarDm` (Juan, 2026-08-24) ═══
+//
+// Hasta hoy la unica salida era `enviarTexto`, y a proposito solo hablaba
+// DENTRO del grupo (@g.us). La norma del gremio para el radar en vivo es que
+// el colega espera la respuesta AL PRIVADO, no en el grupo — asi que hace
+// falta una via nueva, no una guarda mas floja en la que ya existe.
+//
+// Son dos puertas, cada una con su propia validacion, y ninguna reemplaza a
+// la otra:
+//
+//   · `enviarTexto` protege el GRUPO: solo escribe si el destino termina en
+//     @g.us. Un chatId que no sea de grupo es un error de quien llama, y
+//     escribirle por error al privado de un colega es peor que no enviar.
+//   · `enviarDm` protege al COLEGA: solo escribe si el destino tiene forma de
+//     celular colombiano real (esCelularColombiano, src/lib/contacto.js) — ni
+//     un @lid disfrazado de numero ni un chatId cualquiera. Ese exactamente es
+//     el dato que ya causo el baneo de julio de 2026 (ver mas abajo).
+//
+// El riesgo de `enviarDm` es MAYOR que el de responder en el grupo: escribir
+// al 1 a 1 de alguien que no pidio nada es el patron con mas reportes de
+// baneo en lineas no oficiales, y es justo lo que se le escribio a Diamond
+// cuando perdio la cuenta. Por eso los limites de frecuencia en
+// src/groups/politica.js#decidirDm no son decorativos, y por eso esta funcion
+// —igual que enviarTexto— NUNCA reintenta: un reintento sobre un DM que quiza
+// si salio duplica el mensaje al privado de un colega, que es la conducta que
+// hace que a uno lo reporten.
+//
 // Docs: https://waha.devlike.pro/docs/how-to/sessions/
+
+const { esCelularColombiano } = require("./contacto");
 
 const BASE = () => (process.env.WAHA_URL || "").replace(/\/+$/, "");
 const KEY = () => process.env.WAHA_API_KEY || "";
@@ -370,6 +399,49 @@ async function enviarTexto(sesion, chatId, texto, { replyTo = null } = {}) {
   }
 }
 
+// La UNICA via de salida hacia el PRIVADO de un colega. Ver la nota grande de
+// "SEGUNDA PUERTA" al inicio del archivo para el por que de esta funcion y de
+// por que no reutiliza la guarda de enviarTexto.
+//
+// Devuelve { ok, wamid, error } — misma forma que enviarTexto, para que
+// src/groups/vivo.js no tenga que distinguir el transporte. No lanza: un DM
+// que no salio es un dato del flujo (se cae al aviso a la asesora), no una
+// excepcion.
+//
+// esCelularColombiano (src/lib/contacto.js) y NO esMarcable: esMarcable solo
+// exige <=13 digitos, un techo pensado para distinguir un LID (14-17,
+// medido en produccion) de un telefono real, pero un LID de 10-13 digitos
+// (nunca medido, pero tampoco imposible) pasaria igual. Esta es exactamente
+// la funcion que le escribe al privado a un desconocido — el mismo tipo de
+// paso que ya costo el baneo de julio de 2026 — asi que exige la FORMA de un
+// celular colombiano (3 + 9 digitos), no un rango de longitud.
+async function enviarDm(sesion, telefono, texto) {
+  if (!configurado()) return { ok: false, error: "Falta WAHA_URL o WAHA_API_KEY" };
+  if (!esCelularColombiano(telefono)) {
+    // Guarda dura, simetrica a la de enviarTexto: un destino que no tenga
+    // forma de celular colombiano real significa que algo aguas arriba se
+    // equivoco (un @lid sin resolver, un chatId de grupo, basura), y
+    // escribirle a eso es peor que no enviar nada.
+    return { ok: false, error: `Destino invalido para el DM: ${telefono}` };
+  }
+  // Se normaliza a los 12 digitos con indicativo de pais: esCelularColombiano
+  // acepta tambien la forma corta (10 digitos, sin 57), pero el chatId de
+  // WhatsApp necesita el numero completo.
+  const digitos = String(telefono).replace(/\D/g, "");
+  const completo = digitos.length === 10 ? `57${digitos}` : digitos;
+  try {
+    const r = await pedir("/api/sendText", {
+      metodo: "POST",
+      body: { session: sesion, chatId: `${completo}@c.us`, text: texto },
+    });
+    const wamid = r?.id?._serialized || r?.id || r?.key?.id || null;
+    return { ok: true, wamid };
+  } catch (e) {
+    console.error(`[waha] No se pudo mandar el DM a ${completo}: ${e.message}`);
+    return { ok: false, error: e.message };
+  }
+}
+
 // ── LIDs: de identificador oculto a telefono ────────────────────────────
 //
 // WhatsApp ya no expone el numero de los participantes de un grupo: manda un
@@ -451,5 +523,5 @@ async function contarLids(sesion) {
 
 module.exports = {
   configurado, crearSesion, estadoSesion, reintentarUnaVez, revincular, qr,
-  listarGrupos, nombresPorJid, enviarTexto, telefonoDeLid, contarLids, participantesDeGrupo,
+  listarGrupos, nombresPorJid, enviarTexto, enviarDm, telefonoDeLid, contarLids, participantesDeGrupo,
 };

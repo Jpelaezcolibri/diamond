@@ -63,8 +63,20 @@ function lineaDestacada(señales) {
 
 // Devuelve null si no hay nada que valga la pena contar. El silencio es
 // deliberado: un digest vacio todos los dias entrena a ignorar el canal.
+//
+// `demandas` cuenta TODA demanda pendiente, tenga o no match (code review
+// post-merge, 2026-08-24) — antes exigia matches.length > 0, igual que
+// lineaDestacada mas arriba. Con ese filtro, una demanda sin zona (el propio
+// ejemplo del prompt de Sofi, "quiere agendar visita para su cliente en la
+// ref 9702941", no menciona zona) no calzaba nunca, quedaba en 0 matches, y
+// si no habia OTRA señal ese dia buildDigest devolvia null: la fila seguia
+// "pendiente" indefinidamente y el pedido nunca llegaba a nadie, ni ese dia
+// ni ninguno futuro salvo que por azar llegara otra señal el mismo dia. Contar
+// toda demanda (con o sin match) asegura que el digest se dispare igual y la
+// marque como procesada — lineaDestacada sigue prefiriendo mostrar una con
+// match cuando existe, pero ya no es la puerta que decide si el digest sale.
 function buildDigest(señales, advisor) {
-  const demandas = señales.filter((s) => s.clase === "demanda" && (s.matches || []).length > 0);
+  const demandas = señales.filter((s) => s.clase === "demanda");
   const ofertas = señales.filter((s) => s.clase === "oferta");
   if (demandas.length === 0 && ofertas.length === 0) return null;
 

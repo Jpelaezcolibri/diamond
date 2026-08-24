@@ -20,6 +20,39 @@ function linkWhatsapp(telefono) {
   return esMarcable(telefono) ? `https://wa.me/${String(telefono).replace(/\D/g, "")}` : null;
 }
 
+// VALIDACION ESTRICTA para el camino que ESCRIBE al colega (revision
+// 2026-08-24, code review post-merge). esMarcable de arriba es solo un techo
+// de longitud (<=13 digitos) y existia para distinguir un LID (14-17) de un
+// telefono real -- pero la medicion que lo motivo fue de 12 de 12 LIDs con
+// 14-17 digitos, no una garantia de que nunca haya uno mas corto. Un LID de
+// 10-13 digitos pasaria esMarcable como si fuera bueno, y el modo de falla no
+// es un numero raro en una tabla: es alertaAsesor.construir armando un link
+// wa.me con ese LID y la asesora escribiendole desde SU propio numero a un
+// desconocido -- exactamente lo que ya termino en el baneo de una cuenta en
+// julio de 2026 (ver src/lib/waha.js). Un celular colombiano real tiene forma
+// fija: 3 + 9 digitos (10 en total), con o sin el 57 de pais adelante -- nunca
+// un rango de longitud.
+//
+// Se agrega AL LADO de esMarcable en vez de endurecerla porque esMarcable
+// tiene otros usos que no escriben a nadie con datos de un grupo (ver
+// linkContactoOficial abajo, que valida un numero de CONFIGURACION fijo, y
+// src/data/radar-trazabilidad.js, que solo pinta un flag informativo en el
+// CRM) -- exigirles forma de celular colombiano ahi no hacia falta y podia
+// romper un numero fijo valido que no calce ese patron.
+function esCelularColombiano(telefono) {
+  return /^(57)?3\d{9}$/.test(String(telefono || "").replace(/\D/g, ""));
+}
+
+// Version estricta de linkWhatsapp: solo arma el link si el numero tiene
+// forma de celular colombiano real (ver esCelularColombiano). Para el camino
+// que le da a la asesora un link para escribirle a un colega detectado en un
+// grupo (src/groups/alerta-asesor.js) o que guarda un telefono resuelto para
+// despues escribirle (src/groups/directorio.js) -- nunca para el numero fijo
+// de la linea oficial de Sofi, que sigue usando linkWhatsapp/esMarcable.
+function linkWhatsappEstricto(telefono) {
+  return esCelularColombiano(telefono) ? `https://wa.me/${String(telefono).replace(/\D/g, "")}` : null;
+}
+
 // Link a la linea OFICIAL de Sofi (Juan, 2026-08-22): "que todo mensaje que
 // salga hacia un colega invite a escribirle a Sofi" -- asi se abre la ventana
 // de 24h en la linea oficial (sin el riesgo de baneo de la linea vinculada al
@@ -71,4 +104,4 @@ function tocarNombreEnGrupo(quien) {
   return `tocá el nombre de ${quien} en el grupo para abrirle el chat directo — no hace falta tenerlo guardado`;
 }
 
-module.exports = { esMarcable, linkWhatsapp, linkContactoOficial, tocarNombreEnGrupo };
+module.exports = { esMarcable, linkWhatsapp, esCelularColombiano, linkWhatsappEstricto, linkContactoOficial, tocarNombreEnGrupo };
