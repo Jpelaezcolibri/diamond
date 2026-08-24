@@ -8,8 +8,23 @@ type BotResult<T> =
   | { ok: true; data: T }
   | { ok: false; error: string; status: number };
 
-export async function callBot<T = unknown>(path: string, body: unknown): Promise<BotResult<T>> {
-  // timeout: evita que la request del CRM quede colgada si el bot no responde.
+// Cuanto se le da al bot para contestar. 60 s alcanza para todo lo que es una
+// consulta directa a la base.
+//
+// El Centro de Comando (SOFI) es otra cosa: una pregunta como "por que se estan
+// rechazando los pedidos" le hace usar varias herramientas y medido en
+// produccion el 2026-08-24 tardo 45 s. Con 60 s pasaba raspando, y cualquier
+// consulta un poco mas pesada caia en el timeout — y lo que veia Juan en el
+// chat era "El bot no respondio", cuando en realidad Sofi habia respondido bien
+// y nadie estaba escuchando. Por eso el llamador puede pedir mas.
+const TIMEOUT_DEFAULT_MS = 60_000;
+
+export async function callBot<T = unknown>(
+  path: string,
+  body: unknown,
+  { timeoutMs = TIMEOUT_DEFAULT_MS }: { timeoutMs?: number } = {}
+): Promise<BotResult<T>> {
+  let abortado = false;
   const res = await fetch(`${process.env.BOT_API_URL}${path}`, {
     method: "POST",
     headers: {
@@ -17,14 +32,24 @@ export async function callBot<T = unknown>(path: string, body: unknown): Promise
       "x-api-key": process.env.BOT_API_KEY!,
     },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(60000),
-  }).catch(() => null);
+    signal: AbortSignal.timeout(timeoutMs),
+  }).catch((e) => {
+    // Distinguir "se corto el tiempo" de "el bot esta caido": el mensaje
+    // generico manda a buscar el problema al lugar equivocado, que es
+    // exactamente lo que paso el 2026-08-24.
+    abortado = e?.name === "TimeoutError" || e?.name === "AbortError";
+    return null;
+  });
 
   if (!res || !res.ok) {
     const b = res ? await res.json().catch(() => ({})) : {};
     return {
       ok: false,
-      error: (b as { error?: string }).error || "El bot no respondió",
+      error:
+        (b as { error?: string }).error ||
+        (abortado
+          ? `Sofi tardo mas de ${Math.round(timeoutMs / 1000)} s en responder. Volve a preguntarle.`
+          : "El bot no respondió"),
       status: res?.status || 502,
     };
   }

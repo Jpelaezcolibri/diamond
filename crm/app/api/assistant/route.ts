@@ -6,6 +6,15 @@ import { callBot } from "@/lib/bot";
 // Proxy autenticado al Centro de Comando del bot. Valida la sesion del CRM y
 // pasa la identidad (viewerUid, role) al bot; el bot resuelve el alcance. El
 // modelo nunca recibe el alcance del browser.
+
+// SIN ESTO EL CHAT DE SOFI PARECIA ROTO (2026-08-24). Una funcion de Vercel sin
+// maxDuration se corta a los 10 segundos, y una pregunta que le hace usar
+// herramientas ("por que se estan rechazando los pedidos") tarda ~45 s medidos
+// en produccion: Vercel mataba la funcion, el chat mostraba "El bot no
+// respondio" y Sofi contestaba bien medio minuto despues, sin nadie del otro
+// lado. Los routes de marketing de este mismo CRM ya lo declaran (300 s en
+// generate, 120 en regenerate) — este se habia quedado sin el.
+export const maxDuration = 300;
 export async function POST(request: Request) {
   const supabase = await createClient();
   const {
@@ -26,7 +35,14 @@ export async function POST(request: Request) {
     if (!body.sessionId || !body.text?.trim()) {
       return NextResponse.json({ error: "Faltan datos" }, { status: 400 });
     }
-    const r = await callBot("/api/assistant/message", { ...identity, sessionId: body.sessionId, text: body.text });
+    // Un turno de chat puede encadenar varias herramientas; 45 s medidos en
+    // produccion para una sola pregunta. El default de 60 s dejaba afuera
+    // cualquier consulta un poco mas pesada que esa.
+    const r = await callBot(
+      "/api/assistant/message",
+      { ...identity, sessionId: body.sessionId, text: body.text },
+      { timeoutMs: 240_000 }
+    );
     return r.ok ? NextResponse.json(r.data) : NextResponse.json({ error: r.error }, { status: r.status });
   }
 
