@@ -15,8 +15,8 @@
 -- GRUPOS_RESPUESTA_MODO (ver 2026-08-18_grupos_respuesta_modo.sql).
 --
 -- No se llena para Diamond aca a proposito: seguira sirviendose del env
--- (SOFI_WHATSAPP_NUMBER / CONTACT_WHATSAPP_NUMBER en Railway) hasta que Juan
--- decida moverlo a la fila explicitamente.
+-- (CONTACT_WHATSAPP_NUMBER en Railway) hasta que Juan decida moverlo a la
+-- fila explicitamente.
 
 alter table organizations
   add column if not exists contact_whatsapp_number text;

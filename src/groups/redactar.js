@@ -37,22 +37,28 @@
 // el negocio por su cuenta. Decision de negocio, no un descuido.
 //
 // AJUSTE (Juan, 2026-08-20): la firma "Sofi, asistente virtual" ahora lleva
-// el link de WhatsApp de Sofi ("para mayor informacion o propiedades
-// similares") — el mismo numero publico que ya usa la landing
-// (web/config/tenants/diamond.ts). No es un retroceso del blanqueado: el
-// texto sigue sin decir "Diamond" en ningun lado, solo abre un canal directo
-// con el asistente para quien quiera seguir la conversacion.
-
-const formato = require("../lib/formato");
-
-// Mismo numero que web/config/tenants/diamond.ts (contact.whatsapp.number) —
-// no hay todavia un lugar unico de donde leerlo en el backend, asi que se
-// declara aca con el mismo valor. Configurable para no tener que redesplegar
-// si cambia.
+// una invitacion a escribirle a la linea oficial de Sofi. No es un retroceso
+// del blanqueado: el texto sigue sin decir "Diamond" en ningun lado, solo abre
+// un canal directo con el asistente para quien quiera seguir la conversacion.
+//
+// CORRECCION (Juan, 2026-08-24): este mismo texto se reusa TAL CUAL para el DM
+// directo al colega (ver src/groups/vivo.js#textoParaColega) porque es "el
+// mismo mensaje que antes iba al grupo". Antes de esta fecha, vivo.js le
+// agregaba UN SEGUNDO renglon con otro link a Sofi encima del que ya ponia
+// esta funcion -- el colega recibia dos invitaciones seguidas a escribirle a
+// la misma linea, una debajo de la otra, que se lee como descuido. Se deja
+// UN SOLO renglon, armado aca, y se quita la duplicacion en vivo.js.
+//
+// El numero ya NO se declara con un default hardcodeado (rompia multi-tenant:
+// otra organizacion heredaria el numero de Diamond). Se resuelve con
+// linkContactoOficial(org) -- org por columna, env como fallback, sin link a
+// medias si no hay numero configurado por ningun lado (ver src/lib/contacto.js).
 //
 // Sin ?text= (Juan, 2026-08-20): el mensaje precargado hacia el link larguisimo
 // e ilegible en el chat. Se prefiere el wa.me limpio, sin abrir con un texto.
-const SOFI_WHATSAPP_NUMBER = process.env.SOFI_WHATSAPP_NUMBER || "573044653609";
+
+const formato = require("../lib/formato");
+const { linkContactoOficial } = require("../lib/contacto");
 
 // SIN TOPE (Juan, 2026-08-20): "que no se restrinja a 3, que se envien los
 // que tengan un scoring alto" — se manda TODO lo que ya paso la compuerta de
@@ -135,7 +141,12 @@ function ficha(match, indice) {
 // No recibe (ni deriva a) ningun asesor a proposito: es el mensaje
 // "blanqueado" que el colega reenvia tal cual a su cliente, y no puede
 // llevar nada que identifique a Diamond — ver la nota arriba.
-function mensajeGrupo(senal, publicables, { maxPropiedades = MAX_PROPIEDADES } = {}) {
+//
+// `org` (2026-08-24, opcional) es el registro de organizations, para que
+// linkContactoOficial resuelva el numero multi-tenant (columna de la org,
+// env como fallback). Sin org y sin env definida, el mensaje sale sin el
+// renglon de invitacion a Sofi -- nunca con un link a medias.
+function mensajeGrupo(senal, publicables, { maxPropiedades = MAX_PROPIEDADES, org = null } = {}) {
   const props = (publicables || []).slice(0, maxPropiedades);
   if (props.length === 0) return null;
 
@@ -154,8 +165,21 @@ function mensajeGrupo(senal, publicables, { maxPropiedades = MAX_PROPIEDADES } =
     // colega identifica a quien responder por el numero de WhatsApp que
     // publico esto en el grupo, no por un nombre o link en el texto.
     "— Sofi, asistente virtual",
-    `Mas informacion o propiedades similares: https://wa.me/${SOFI_WHATSAPP_NUMBER}`,
   ];
+
+  const linkSofi = linkContactoOficial(org);
+  if (linkSofi) {
+    // Un solo renglon de invitacion (2026-08-24): la razon real de invitar a
+    // escribirle a la linea oficial no es "mas informacion", es que ahi la
+    // conversacion no corre el riesgo de baneo de una linea personal y queda
+    // registrada en el CRM -- decirlo asi tambien es mejor copy para el DM
+    // directo al colega, que reusa este mismo texto (ver vivo.js).
+    cierre.push(
+      "",
+      "Para que la conversación quede en nuestro sistema, también podés escribirle directo a Sofi (nuestra línea oficial):",
+      linkSofi
+    );
+  }
 
   return [encabezado, "", bloques.join("\n\n"), "", cierre.join("\n")].join("\n");
 }

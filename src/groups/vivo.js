@@ -37,7 +37,6 @@ const avisoCercano = require("./aviso-cercano");
 const directorio = require("./directorio");
 const waha = require("../lib/waha");
 const formato = require("../lib/formato");
-const { linkContactoOficial } = require("../lib/contacto");
 // Se importa el MODULO y no la funcion suelta: destructurar congela la
 // referencia y deja los tests sin forma de mockear el envio.
 const canalWhatsapp = require("../channels/whatsapp");
@@ -226,8 +225,9 @@ async function procesarMensaje(org, mensaje, { grupo, modo = "sombra", enviar = 
   }
 
   // Mensaje "blanqueado" (Juan, 2026-08-18): sin asesor, a proposito — ver
-  // la nota de diseño en redactar.js.
-  const texto = redactar.mensajeGrupo({ autor_nombre: mensaje.autor }, publicables);
+  // la nota de diseño en redactar.js. Se pasa `org` para que el renglon de
+  // invitacion a Sofi (si lo hay) resuelva el numero multi-tenant.
+  const texto = redactar.mensajeGrupo({ autor_nombre: mensaje.autor }, publicables, { org });
   if (!texto) return { resultado: "callado", motivo: "sin_texto", traza: decision.traza, signalId: signal && signal.id };
 
   const refs = publicables.map((m) => m.ref).filter(Boolean);
@@ -263,25 +263,16 @@ async function procesarMensaje(org, mensaje, { grupo, modo = "sombra", enviar = 
 // grupo" (mismo mensaje "blanqueado": ficha completa, sin mencionar Diamond,
 // firmado "Sofi, asistente virtual"). Ver la nota de diseño en redactar.js.
 //
-// Se le agrega SOLO el link a la linea OFICIAL de Sofi
-// (linkContactoOficial(org), multi-tenant — src/lib/contacto.js), que es
-// distinto del link fijo que redactar.js ya pone en su firma
-// (SOFI_WHATSAPP_NUMBER, una sola variable global sin nocion de org): este
-// repo es multi-tenant por diseño, y un DM que sale de la señal de la org B no
-// puede invitar a la linea de Diamond. Nunca a medias — si la org no tiene
-// numero configurado (ni columna ni env), el renglon no se agrega, igual que
-// linkContactoOficial ya se comporta en alerta-asesor.js.
+// CORRECCION (Juan, 2026-08-24): esta funcion armaba su PROPIO renglon
+// adicional con linkContactoOficial(org) encima del que redactar.js ya ponia
+// con su propio numero fijo (SOFI_WHATSAPP_NUMBER) -- el colega recibia dos
+// invitaciones a escribirle a Sofi, una debajo de la otra. redactar.js#mensajeGrupo
+// ya resuelve el numero multi-tenant (recibe `org` en las opciones), asi que
+// no hace falta nada mas aca. Se deja la funcion, en vez de llamar a
+// mensajeGrupo directo desde el llamador, porque documenta con nombre la
+// intencion (el texto que le llega al colega por DM).
 function textoParaColega(autorNombre, utiles, org) {
-  const base = redactar.mensajeGrupo({ autor_nombre: autorNombre }, utiles);
-  if (!base) return null;
-  const linkSofi = linkContactoOficial(org);
-  if (!linkSofi) return base;
-  return [
-    base,
-    "",
-    "Para que la conversación quede en nuestro sistema, también podés escribirle directo a Sofi (nuestra línea oficial):",
-    linkSofi,
-  ].join("\n");
+  return redactar.mensajeGrupo({ autor_nombre: autorNombre }, utiles, { org });
 }
 
 // Sofi da su veredicto y, si aprueba, le avisa a la asesora.

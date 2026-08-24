@@ -6,9 +6,23 @@
 // puede llevar nada que identifique a Diamond — ver la nota de diseño en
 // src/groups/redactar.js.
 
-const { test } = require("node:test");
+const { test, beforeEach, afterEach } = require("node:test");
 const assert = require("node:assert");
 const redactar = require("../src/groups/redactar");
+
+// El renglon de invitacion a Sofi (linkContactoOficial, src/lib/contacto.js)
+// ya no tiene un default hardcodeado (correccion 2026-08-24, ver la nota en
+// redactar.js) -- se prende/apaga por caso, igual que ya hacen
+// contacto.test.js, aviso-cercano.test.js y alerta-asesor.test.js.
+let anteriorContactNumber;
+beforeEach(() => {
+  anteriorContactNumber = process.env.CONTACT_WHATSAPP_NUMBER;
+  process.env.CONTACT_WHATSAPP_NUMBER = "573044653609";
+});
+afterEach(() => {
+  if (anteriorContactNumber === undefined) delete process.env.CONTACT_WHATSAPP_NUMBER;
+  else process.env.CONTACT_WHATSAPP_NUMBER = anteriorContactNumber;
+});
 
 function match(extra = {}) {
   return {
@@ -96,16 +110,42 @@ test("un maxPropiedades explicito SI se respeta — el default es sin tope, no l
 test("no deriva a ninguna asesora — solo lleva el link de Sofi, no el de una persona", () => {
   const texto = redactar.mensajeGrupo({ autor_nombre: "Ana" }, [match()]);
   assert.ok(!texto.includes("Catherine"));
-  assert.ok(!texto.includes("Mas informacion con"));
   assert.ok(texto.includes("Comision compartida."));
 });
 
-// Firma con link (Juan, 2026-08-20): "marcalo con el link directo de sofi
-// para mayor informacion o propiedades similares". Sin ?text=: "no ponga ese
-// link tan largo, no se puede poner solo el wa.me" — limpio, sin mensaje precargado.
-test("la firma lleva el link de WhatsApp de Sofi, limpio y sin mensaje precargado", () => {
+// Firma con link (Juan, 2026-08-20, texto reescrito 2026-08-24): sin ?text=:
+// "no ponga ese link tan largo, no se puede poner solo el wa.me" — limpio,
+// sin mensaje precargado. El texto de invitacion (2026-08-24) dice POR QUE
+// escribirle a la linea oficial en vez de solo "mas informacion", porque este
+// mismo texto se reusa tal cual para el DM directo al colega (ver
+// src/groups/vivo.js#textoParaColega) y ahi la razon real importa: sin
+// riesgo de baneo y con la conversacion registrada en el CRM.
+test("la firma invita a escribirle a la linea oficial de Sofi, limpio y sin mensaje precargado", () => {
   const texto = redactar.mensajeGrupo({ autor_nombre: "Ana" }, [match()]);
-  assert.match(texto, /— Sofi, asistente virtual\nMas informacion o propiedades similares: https:\/\/wa\.me\/\d+$/m);
+  assert.match(
+    texto,
+    /— Sofi, asistente virtual\n\nPara que la conversación quede en nuestro sistema, también podés escribirle directo a Sofi \(nuestra línea oficial\):\nhttps:\/\/wa\.me\/\d+$/m
+  );
+});
+
+// Multi-tenant (2026-08-24): antes SOFI_WHATSAPP_NUMBER tenia un default
+// hardcodeado con el numero de Diamond -- rompia multi-tenant y era, ademas,
+// la causa raiz de que el DM al colega (vivo.js) terminara agregando un
+// SEGUNDO renglon de invitacion por su cuenta. Ahora el link sale de
+// linkContactoOficial (org o env), y sin ninguno de los dos el mensaje sale
+// sin el renglon -- nunca con un link a medias.
+test("sin CONTACT_WHATSAPP_NUMBER ni org, el mensaje sale sin el renglon de invitacion -- nunca un link a medias", () => {
+  delete process.env.CONTACT_WHATSAPP_NUMBER;
+  const texto = redactar.mensajeGrupo({ autor_nombre: "Ana" }, [match()]);
+  assert.ok(texto.includes("— Sofi, asistente virtual"));
+  assert.ok(!texto.includes("línea oficial"));
+  assert.ok(!texto.includes("wa.me"));
+});
+
+test("el numero de la org (multi-tenant) manda sobre el env para el renglon de invitacion", () => {
+  const org = { id: "org-b", contact_whatsapp_number: "573000000002" };
+  const texto = redactar.mensajeGrupo({ autor_nombre: "Ana" }, [match()], { org });
+  assert.match(texto, /https:\/\/wa\.me\/573000000002$/m);
 });
 
 test("el mensaje se firma como Sofi, asistente virtual — sin mencionar a Diamond", () => {
