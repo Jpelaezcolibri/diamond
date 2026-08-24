@@ -213,6 +213,22 @@ async function procesar(org, ev, grupo, sesion) {
     autorTelefono: soloDigitos(ev.autorId),
     texto: ev.texto,
     waMessageId: ev.waMessageId,
+    // CUANDO se escribio el mensaje EN EL GRUPO, no cuando lo procesamos.
+    //
+    // FALTABA, y no era cosmetico (Juan, 2026-08-24): el DM automatico al
+    // colega exige que el pedido sea reciente (politica.js#decidirDm), y sin
+    // esta fecha `decidirDm` devolvia `sin_fecha_mensaje` SIEMPRE — o sea que
+    // el DM no mandaba nada y nunca lo iba a hacer. Verificado en produccion:
+    // `fecha_mensaje` estaba NULL en 12 de 12 senales en vivo.
+    //
+    // Se toma de ev.tsMs, que viene del epoch de WhatsApp (absoluto, sin zona
+    // horaria): se compara contra Date.now(), tambien absoluto, asi que no hay
+    // conversion en el medio que pueda desfasarlo. La ruta del export ya lo
+    // traia (parse-export.js#instanteIso); solo faltaba en vivo.
+    //
+    // Ademas alimenta group_signals.fecha_mensaje, que usan el digest de la
+    // manana y la trazabilidad del radar.
+    instanteIso: typeof ev.tsMs === "number" ? new Date(ev.tsMs).toISOString() : null,
     esSistema: false,
     esMultimedia: ev.tieneMedia,
   };
