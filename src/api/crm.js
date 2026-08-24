@@ -364,6 +364,43 @@ router.post("/api/grupos/radar", async (req, res) => {
 //
 // Los telefonos resueltos salen enmascarados: alcanza para contar, y son datos
 // de terceros que no hay razon para volcar completos en una respuesta HTTP.
+// Prueba de humo del DM: manda un mensaje directo por la linea del radar, y
+// SOLO al numero de RADAR_ALERTA_TO.
+//
+// POR QUE EXISTE (Juan, 2026-08-24). El DM al privado es la conducta que se
+// llevo la cuenta en julio de 2026 (ver la nota de diseno en src/lib/waha.js),
+// y WAHA solo es alcanzable desde la red interna de Railway: no hay forma de
+// probar `enviarDm` sin desplegar. Estrenarlo directo contra un colega real
+// significaria que el primer mensaje mal formado lo lee alguien de afuera.
+// Esto deja que lo lea Juan primero, en su propio WhatsApp.
+//
+// NO acepta destinatario por parametro, a proposito: si la BOT_API_KEY se
+// filtrara, un endpoint que manda WhatsApp a cualquier numero convertiria al
+// bot en una herramienta de spam. El destino sale de la config del servidor y
+// no se puede sobrescribir desde el request.
+router.post("/api/grupos/probar-dm", async (req, res) => {
+  const destino = (process.env.RADAR_ALERTA_TO || "").split(",")[0].trim();
+  if (!destino) return res.status(501).json({ error: "Falta RADAR_ALERTA_TO" });
+  if (!waha.configurado()) return res.status(501).json({ error: "WAHA no configurado" });
+
+  try {
+    const org = await organizations.getDefault();
+    const sesiones = await whatsappGroups.listSessions(org.id);
+    if (!sesiones.length) return res.status(404).json({ error: "No hay sesion vinculada" });
+
+    const texto =
+      typeof req.body?.texto === "string" && req.body.texto.trim()
+        ? req.body.texto.trim()
+        : "Prueba del radar: este es un mensaje directo enviado por la linea del radar. " +
+          "Si lo estas leyendo, el DM al colega funciona.";
+
+    const envio = await waha.enviarDm(sesiones[0].nombre, destino, texto);
+    res.json({ destino: `***${destino.slice(-4)}`, sesion: sesiones[0].nombre, ...envio });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 router.get("/api/grupos/diagnostico-lids", async (req, res) => {
   if (!waha.configurado()) return res.status(501).json({ error: "WAHA no configurado" });
   const limite = Math.min(Number(req.query.limite) || 40, 200);
