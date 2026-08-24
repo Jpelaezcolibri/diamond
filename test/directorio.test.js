@@ -25,6 +25,7 @@ const supabasePath = require.resolve("../src/data/supabase");
 require.cache[supabasePath] = { id: supabasePath, filename: supabasePath, loaded: true, exports: null };
 
 const directorio = require("../src/groups/directorio");
+const colegas = require("../src/data/colegas");
 
 const ORG = "org-directorio-test";
 const SESION = "RADA-TEST";
@@ -151,6 +152,30 @@ test("registrar guarda al colega aunque NO se resuelva el telefono", async () =>
     assert.strictEqual(memory.colegasGrupos.length, 1);
     assert.strictEqual(memory.colegasGrupos[0].telefono, null);
   } finally {
+    waha.participantesDeGrupo = participantesReal;
+    waha.telefonoDeLid = telefonoDelIdReal;
+  }
+});
+
+test("registrar NO devuelve el telefono si el guardado en si mismo fallo (Juan, 2026-08-24)", async () => {
+  // Antes, colegas.upsert tragaba el error en un catch generico y devolvia
+  // undefined igual que en exito; registrar devolvia el telefono como si la
+  // constancia hubiera quedado escrita aunque nunca se guardara nada. Este
+  // test fija el contrato nuevo: si upsert dice que no se guardo, registrar
+  // no puede prometer una constancia que no existe.
+  preparar();
+  conParticipantes([
+    { id: "999@lid", esLid: true, telefono: "573009999999", rol: "participant" },
+  ]);
+  const upsertReal = colegas.upsert;
+  colegas.upsert = async () => false;
+  try {
+    const tel = await directorio.registrar(ORG, {
+      lid: "999", nombre: "Colega Nueve", grupo: "SOLO POBLADO", sesion: SESION, jid: JID,
+    });
+    assert.strictEqual(tel, null, "sin guardado real, registrar no puede devolver el telefono como si hubiera quedado constancia");
+  } finally {
+    colegas.upsert = upsertReal;
     waha.participantesDeGrupo = participantesReal;
     waha.telefonoDeLid = telefonoDelIdReal;
   }

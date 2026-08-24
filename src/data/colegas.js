@@ -49,8 +49,59 @@ function avisarFaltaTabla() {
   );
 }
 
+// select-then-insert contra un unique(org_id, lid), un solo reintento
+// (Juan, revision 2026-08-24). La carrera es real, no teorica: un colega
+// difunde el mismo pedido a varios grupos y la cola del radar es POR GRUPO
+// (src/groups/vivo.js), asi que dos mensajes del mismo colega se procesan en
+// paralelo. Los dos hacen el SELECT antes de que cualquiera termine el
+// INSERT, los dos ven "no existe" y los dos intentan crear la fila: el
+// segundo pisa el unique(org_id, lid) con 23505 (unique_violation). Sin este
+// reintento esa fila se perdia sin rastro en un catch generico — este
+// proyecto ya perdio 16 dias de sync y 9 horas de radar por fallos silenciosos
+// exactamente asi (ver migraciones-supabase-pendientes en la memoria del
+// repo). Un reintento alcanza: para cuando este segundo intento vuelve a
+// preguntar, la fila que gano la carrera ya existe, y esta pasada la
+// encuentra y actualiza en vez de reinsertar.
+async function guardarEnBase(orgId, clave, tel, nombre, grupo, ahora, yaReintento = false) {
+  const { data, error } = await supabase
+    .from("colegas_grupos")
+    .select("id, telefono, nombre, grupos")
+    .eq("org_id", orgId)
+    .eq("lid", clave)
+    .maybeSingle();
+  if (error) throw error;
+
+  if (!data) {
+    const { error: e2 } = await supabase.from("colegas_grupos").insert({
+      org_id: orgId, lid: clave, telefono: tel, nombre,
+      grupos: grupo ? [grupo] : [],
+    });
+    if (e2) {
+      if (e2.code === "23505" && !yaReintento) {
+        return guardarEnBase(orgId, clave, tel, nombre, grupo, ahora, true);
+      }
+      throw e2;
+    }
+    return;
+  }
+
+  const grupos = Array.isArray(data.grupos) ? data.grupos : [];
+  const patch = { ultimo_visto: ahora };
+  if (tel) patch.telefono = tel;
+  if (nombre) patch.nombre = nombre;
+  if (grupo && !grupos.includes(grupo)) patch.grupos = [...grupos, grupo];
+
+  const { error: e3 } = await supabase.from("colegas_grupos").update(patch).eq("id", data.id);
+  if (e3) throw e3;
+}
+
 /**
- * Alta o actualizacion de un colega, por `lid`.
+ * Alta o actualizacion de un colega, por `lid`. Devuelve true si de verdad
+ * quedo guardado, false si no (Juan, revision 2026-08-24: el catch generico
+ * devolvia undefined tanto en exito como en fallo — indistinguible — y
+ * directorio.registrar devolvia el telefono como si se hubiera guardado
+ * aunque el guardado hubiera fallado. Este proyecto ya perdio 16 dias de sync
+ * y 9 horas de radar por fallos silenciosos exactamente asi).
  *
  * Un telefono ya conocido NUNCA se sobrescribe con null: si un refresco de
  * participantes viene sin `pn`, perder el numero que ya teniamos seria un
@@ -58,7 +109,7 @@ function avisarFaltaTabla() {
  */
 async function upsert(orgId, { lid, telefono = null, nombre = null, grupo = null } = {}) {
   const clave = soloDigitos(lid);
-  if (!orgId || !clave) return;
+  if (!orgId || !clave) return false;
   const tel = soloDigitos(telefono);
   const ahora = new Date().toISOString();
 
@@ -69,44 +120,27 @@ async function upsert(orgId, { lid, telefono = null, nombre = null, grupo = null
       if (nombre) existente.nombre = nombre;
       if (grupo && !existente.grupos.includes(grupo)) existente.grupos.push(grupo);
       existente.ultimo_visto = ahora;
-      return;
+      return true;
     }
     memory.colegasGrupos.push({
       id: memory.uid(), org_id: orgId, lid: clave, telefono: tel, nombre,
       grupos: grupo ? [grupo] : [], primer_visto: ahora, ultimo_visto: ahora,
     });
-    return;
+    return true;
   }
 
   try {
-    const { data, error } = await supabase
-      .from("colegas_grupos")
-      .select("id, telefono, nombre, grupos")
-      .eq("org_id", orgId)
-      .eq("lid", clave)
-      .maybeSingle();
-    if (error) throw error;
-
-    if (!data) {
-      const { error: e2 } = await supabase.from("colegas_grupos").insert({
-        org_id: orgId, lid: clave, telefono: tel, nombre,
-        grupos: grupo ? [grupo] : [],
-      });
-      if (e2) throw e2;
-      return;
-    }
-
-    const grupos = Array.isArray(data.grupos) ? data.grupos : [];
-    const patch = { ultimo_visto: ahora };
-    if (tel) patch.telefono = tel;
-    if (nombre) patch.nombre = nombre;
-    if (grupo && !grupos.includes(grupo)) patch.grupos = [...grupos, grupo];
-
-    const { error: e3 } = await supabase.from("colegas_grupos").update(patch).eq("id", data.id);
-    if (e3) throw e3;
+    await guardarEnBase(orgId, clave, tel, nombre, grupo, ahora);
+    return true;
   } catch (e) {
-    if (esTablaFaltante(e)) return avisarFaltaTabla();
-    console.warn("[colegas] No se pudo guardar el colega:", e.message);
+    if (esTablaFaltante(e)) {
+      avisarFaltaTabla();
+      return false;
+    }
+    // console.error (no warn): esto es un fallo real de escritura, no una
+    // migracion pendiente. El warn de antes no lo miraba nadie.
+    console.error(`[colegas] No se pudo guardar el colega ${clave} (org ${orgId}):`, e.message);
+    return false;
   }
 }
 

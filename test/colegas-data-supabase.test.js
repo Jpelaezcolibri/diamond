@@ -136,3 +136,82 @@ test("listarConTelefono no pide una pagina de mas cuando el total es multiplo ex
   assert.strictEqual(resultado.length, TOTAL);
   assert.strictEqual(llamadasRange, 2, "la pagina llena no basta para saber que termino: hace falta una vuelta vacia");
 });
+
+// ── upsert: carrera del unique(org_id, lid) y fallos reales ───────────────
+//
+// Un colega difunde el mismo pedido a varios grupos y la cola del radar es
+// POR GRUPO (src/groups/vivo.js): dos mensajes del mismo colega se procesan
+// en paralelo, los dos ven "no existe" en el SELECT antes de que cualquiera
+// termine el INSERT, y el segundo INSERT choca con el unique. Antes eso caia
+// en un catch generico: console.warn y la fila se perdia sin rastro.
+
+test("upsert reintenta si el insert choca con la carrera del unique(org_id, lid), y termina actualizando", async (t) => {
+  let selects = 0;
+  let intentosInsert = 0;
+  let updates = 0;
+  let filaCreadaPorElOtroProceso = null;
+
+  t.mock.method(supabase, "from", () => {
+    const c = {
+      select: () => c,
+      eq: () => c,
+      maybeSingle: () => {
+        selects += 1;
+        // 1a vuelta (antes del insert): no existe todavia. 2a vuelta (tras el
+        // 23505): ya existe, la creo el proceso paralelo que gano la carrera.
+        return Promise.resolve({ data: selects === 1 ? null : filaCreadaPorElOtroProceso, error: null });
+      },
+      insert: (fila) => {
+        intentosInsert += 1;
+        filaCreadaPorElOtroProceso = { id: "fila-ganadora", telefono: fila.telefono, nombre: fila.nombre, grupos: fila.grupos };
+        return Promise.resolve({ error: { code: "23505", message: "duplicate key value violates unique constraint" } });
+      },
+      update: () => ({
+        eq: () => { updates += 1; return Promise.resolve({ error: null }); },
+      }),
+    };
+    return c;
+  });
+
+  const guardado = await colegas.upsert("org-1", {
+    lid: "111222333", telefono: "573001112233", nombre: "Ana", grupo: "SOLO POBLADO",
+  });
+
+  assert.strictEqual(guardado, true, "el reintento deberia terminar guardando la fila");
+  assert.strictEqual(intentosInsert, 1, "no debe insistir con un segundo insert: la segunda pasada actualiza, no reinserta");
+  assert.strictEqual(updates, 1);
+  assert.strictEqual(selects, 2, "un select antes del insert, y otro tras el 23505 para encontrar la fila que ya existe");
+});
+
+test("upsert no reintenta infinito: un 23505 persistente (no una carrera real) se propaga como fallo, no como exito", async (t) => {
+  t.mock.method(supabase, "from", () => ({
+    select() { return this; },
+    eq() { return this; },
+    maybeSingle: () => Promise.resolve({ data: null, error: null }),
+    insert: () => Promise.resolve({ error: { code: "23505", message: "duplicate key value violates unique constraint" } }),
+  }));
+
+  const guardado = await colegas.upsert("org-1", { lid: "444555666", telefono: "573004445566" });
+  assert.strictEqual(guardado, false, "un solo reintento agotado sigue siendo un fallo, no un exito silencioso");
+});
+
+test("upsert devuelve false (no undefined) ante un error real de escritura, y lo deja en el log", async (t) => {
+  const original = console.error;
+  const llamadasError = [];
+  console.error = (...args) => llamadasError.push(args);
+
+  t.mock.method(supabase, "from", () => ({
+    select() { return this; },
+    eq() { return this; },
+    maybeSingle: () => Promise.resolve({ data: null, error: null }),
+    insert: () => Promise.resolve({ error: { code: "23514", message: "check constraint violation" } }),
+  }));
+
+  try {
+    const guardado = await colegas.upsert("org-1", { lid: "777888999", telefono: "573007778899" });
+    assert.strictEqual(guardado, false, "un fallo real no puede ser indistinguible de un exito (antes devolvia undefined en ambos casos)");
+    assert.ok(llamadasError.length > 0, "el fallo tiene que dejar rastro en el log, no solo un warn que nadie mira");
+  } finally {
+    console.error = original;
+  }
+});

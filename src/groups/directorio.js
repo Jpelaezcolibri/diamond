@@ -107,14 +107,19 @@ async function telefonoDe(orgId, lid, { sesion = null, jid = null } = {}) {
  *
  * Se guarda SIEMPRE, con telefono o sin el: el 33% sin numero es justamente la
  * lista de a quienes hay que responderle a mano.
+ *
+ * Si el guardado en si mismo falla (colegas.upsert devuelve false), esto
+ * devuelve null en vez del telefono resuelto — Juan, revision 2026-08-24: antes
+ * se devolvia el telefono igual, como si "registrar" hubiera funcionado aunque
+ * la fila nunca se hubiera escrito. No prometas una constancia que no quedo.
  */
 async function registrar(orgId, { lid, nombre = null, grupo = null, sesion = null, jid = null } = {}) {
   const clave = soloDigitos(lid);
   if (!orgId || !clave) return null;
 
   const telefono = await telefonoDe(orgId, clave, { sesion, jid });
-  await colegas.upsert(orgId, { lid: clave, telefono, nombre, grupo });
-  return telefono;
+  const guardado = await colegas.upsert(orgId, { lid: clave, telefono, nombre, grupo });
+  return guardado ? telefono : null;
 }
 
 /**
