@@ -476,9 +476,13 @@ async function marcarRespondida(orgId, signalId, { texto, wamid = null, modo = "
 // (aprobacion manual, Juan 2026-08-20 — ver vivo.js#aprobarManual).
 async function obtenerPorId(orgId, signalId) {
   if (!supabase) return memory.groupSignals?.find((s) => s.org_id === orgId && s.id === signalId) || null;
+  // autor_telefono se agrego (Juan, 2026-08-24) para vivo.js#responderPorDmManual:
+  // sin el no hay como resolver el telefono del colega ni contar los DMs que
+  // ya salieron hoy por el mismo remitente. aprobarManual (el otro llamador)
+  // simplemente no usa esta columna extra.
   const { data, error } = await supabase
     .from("group_signals")
-    .select("id, group_id, clase, matches, autor_nombre, texto_original, respondida_at, wa_message_id")
+    .select("id, group_id, clase, matches, autor_nombre, autor_telefono, texto_original, respondida_at, wa_message_id")
     .eq("org_id", orgId)
     .eq("id", signalId)
     .maybeSingle();

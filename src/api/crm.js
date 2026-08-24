@@ -543,6 +543,38 @@ router.post("/api/grupos/senal/estado", async (req, res) => {
   }
 });
 
+// DM manual al colega, desde el CRM (Juan, 2026-08-24): dispara
+// vivo.js#responderPorDmManual para un pedido que quedo sin responder por DM
+// -- ver la nota de diseño grande en ese archivo (dos casos reales: entro en
+// otro modo, o quedo fuera de la ventana de antiguedad y un admin decide
+// mandarlo igual).
+//
+// Misma resolucion de sesion que aprobarManual (una sola sesion vinculada por
+// org en este piloto, ver la nota de diseño en vivo.js#aprobarManual): sin
+// exactamente una activa, falla cerrado en vez de adivinar por cual linea
+// salir -- se resuelve ACA y no dentro de vivo.js porque responderPorDmManual
+// recibe `sesion` como dato ya averiguado, igual que procesarMensaje.
+router.post("/api/grupos/senal/responder-dm", async (req, res) => {
+  const { signalId } = req.body || {};
+  if (!signalId) return res.status(400).json({ error: "Falta signalId" });
+  try {
+    const org = await organizations.getDefault();
+    const sesiones = await whatsappGroups.listSessions(org.id);
+    const activas = sesiones.filter((s) => s.estado === "activa");
+    if (activas.length !== 1) {
+      return res.status(409).json({
+        error: "No hay exactamente una sesion de WAHA activa para mandar el DM",
+        cantidad: activas.length,
+      });
+    }
+    const vivo = require("../groups/vivo");
+    const r = await vivo.responderPorDmManual(org, signalId, { sesion: activas[0].nombre });
+    res.json({ ok: true, ...r });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Panel "Posibles ventas" del CRM (Juan, 2026-08-21): confirmar o descartar
 // un aviso del cruce diario visitas -> ventas. No es solo de admin — mismo
 // criterio que /api/grupos/senal/estado, es trabajo diario de revisar avisos,

@@ -636,4 +636,96 @@ async function aprobarManual(org, signalId) {
   return { resultado: "publicado", texto, wamid: envio.wamid, publicables, grupo: grupo.nombre || grupo.jid };
 }
 
-module.exports = { procesarMensaje, idEnVivo, asistir, destinatarios, aprobarManual, VENTANA_LIMITE_HORAS };
+// DM manual al colega, desde el CRM (Juan, 2026-08-24): "que pueda mandar el
+// DM despues, no solo en el momento en que entro el pedido". El camino
+// automatico (asistir, mas arriba) solo corre EN VIVO, cuando el mensaje
+// acaba de llegar -- dos casos reales quedan sin cubrir: un pedido que entro
+// cuando la org estaba en otro modo (sombra/auto, no asistido) y nunca se
+// intento el DM, y un pedido que si se intento pero quedo fuera de la
+// ventana de RADAR_DM_ANTIGUEDAD_MAX_MIN y un admin decide mandarlo igual.
+//
+// Mismo espiritu que aprobarManual, pero por DM en vez de publicacion en el
+// grupo: se recalcula la compuerta de calidad con el estado ACTUAL del
+// inventario (umbral:0 -- la aprobacion humana reemplaza esa confianza, no
+// el dato) y las barreras de seguridad (zona_no_publicable,
+// no_es_inventario_propio, sin_ref, sin_precio, sync_viejo, link_no_abre)
+// siguen exactamente igual de duras: no son de confianza, son de seguridad.
+async function responderPorDmManual(org, signalId, { sesion = null } = {}) {
+  const signal = await groupSignals.obtenerPorId(org.id, signalId);
+  if (!signal) return { resultado: "no_encontrada" };
+  if (signal.respondida_at) return { resultado: "ya_respondida" };
+  if (signal.clase !== "demanda") return { resultado: "no_es_demanda" };
+
+  // El grupo se usa SOLO por su `jid`, para que directorio.telefonoDe pueda
+  // refrescar la lista de participantes si el lid todavia no esta resuelto.
+  // A diferencia de aprobarManual, aca NO se exige grupo.modo !== "ignorar":
+  // esa compuerta protege que el radar siga ESCUCHANDO ese grupo, algo que
+  // no tiene nada que ver con escribirle al privado a un colega que ya
+  // publico su pedido -- si el grupo se dejo de escuchar despues, el DM
+  // manual sigue siendo una decision valida sobre un pedido ya capturado.
+  const grupo = await whatsappGroups.obtenerGrupo(org.id, signal.group_id).catch(() => null);
+
+  const inventario = await syncEstado.estadoDelInventario(org.id, {});
+  const { publicables: candidatas, descartados } = publicable.filtrar(signal.matches || [], {
+    syncFresco: inventario.fresco,
+    umbral: 0,
+  });
+  const { verificadas: publicables, rotas } = await verificarLink.verificar(candidatas);
+  for (const r of rotas) descartados.push({ ref: r.ref, motivos: ["link_no_abre"] });
+  if (!publicables.length) return { resultado: "sin_propiedades_publicables", descartados };
+
+  const telefonoColega = await directorio
+    .telefonoDe(org.id, signal.autor_telefono, { sesion, jid: grupo && grupo.jid })
+    .catch((e) => {
+      console.warn("[radar] No se pudo resolver el telefono del colega para el DM manual:", e.message);
+      return null;
+    });
+  // Nunca se inventa un envio: sin telefono resuelto, el resultado lo dice
+  // clarito para que el CRM lo muestre, en vez de quedarse en silencio.
+  if (!telefonoColega) return { resultado: "sin_telefono" };
+
+  if (!sesion) return { resultado: "sin_sesion" };
+
+  const texto = redactar.mensajeGrupo({ autor_nombre: signal.autor_nombre }, publicables, { org });
+  if (!texto) return { resultado: "sin_texto" };
+
+  // LIMITES QUE SI SE RESPETAN (Juan, 2026-08-24): una vez por colega por dia
+  // y el tope diario de la linea. Protegen al colega (spam) y a la linea (la
+  // misma que ya fue baneada en julio de 2026, ver src/lib/waha.js) -- no son
+  // una cuota de confianza, siguen firmes aunque decida un humano.
+  //
+  // NO se aplica el limite de antiguedad de politica.js#decidirDm (los 30 min
+  // desde el mensaje del grupo): ese es EXACTAMENTE el freno que esta funcion
+  // existe para saltar a conciencia -- "que un admin decida mandarlo igual"
+  // (ver la nota de diseno arriba). Por eso no se llama a decidirDm (no tiene
+  // como apagar solo esa pieza) y se replica aca a mano solo lo que SI sigue
+  // protegiendo, con los mismos limites de politica.js#LIMITES_DM_DEFAULT.
+  const desdeIso = new Date(Date.now() - VENTANA_LIMITE_HORAS * 3600 * 1000).toISOString();
+  const [dmsColegaHoy, dmsLineaHoy] = await Promise.all([
+    groupSignals.dmsHoyPorColega(org.id, signal.autor_telefono, desdeIso),
+    groupSignals.dmsHoyLinea(org.id, desdeIso),
+  ]);
+  const limites = politica.LIMITES_DM_DEFAULT;
+  if (dmsColegaHoy === null || dmsColegaHoy === undefined) return { resultado: "limite_colega_no_verificable" };
+  if (dmsColegaHoy >= limites.dmsPorColegaDia) return { resultado: "limite_colega_alcanzado" };
+  if (dmsLineaHoy === null || dmsLineaHoy === undefined) return { resultado: "limite_linea_no_verificable" };
+  if (dmsLineaHoy >= limites.topeDiarioLinea) return { resultado: "limite_linea_alcanzado" };
+
+  const envioDm = await waha.enviarDm(sesion, telefonoColega, texto).catch((e) => ({ ok: false, error: e.message }));
+  if (!envioDm || !envioDm.ok) return { resultado: "error_envio", error: envioDm && envioDm.error };
+
+  // Mismo modo 'auto' que usa el DM automatico (ver la nota en asistir, mas
+  // arriba, y en group-signals.js#dmsHoyPorColega): en la columna
+  // respuesta_modo 'auto' solo puede significar "salio por DM directo" o
+  // "se publico en el grupo" -- las dos vias nunca coexisten para la misma
+  // org (ver organizations.js#modoDeRespuesta), asi que reusarlo aca no
+  // ambiguo nada, y evita otra migracion sobre el check existente.
+  const refs = publicables.map((m) => m.ref).filter(Boolean);
+  await groupSignals.marcarRespondida(org.id, signal.id, { texto, wamid: envioDm.wamid, modo: "auto", refs });
+
+  return { resultado: "dm_enviado", texto, wamid: envioDm.wamid, telefono: telefonoColega, publicables };
+}
+
+module.exports = {
+  procesarMensaje, idEnVivo, asistir, destinatarios, aprobarManual, responderPorDmManual, VENTANA_LIMITE_HORAS,
+};

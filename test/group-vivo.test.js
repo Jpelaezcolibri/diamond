@@ -36,6 +36,12 @@ let avisosCercanosEnviados = [];
 let envioAvisoCercanoResultado = { ok: true, wamid: "wm-aviso-cercano" };
 // Doble para el caso "edificio especifico" (Juan, 2026-08-21).
 let edificioDevuelto = "";
+// Dobles para vivo.js#responderPorDmManual (Juan, 2026-08-24).
+let telefonoColegaManual = null;
+let enviosDmManual = [];
+let envioDmManualResultado = { ok: true, wamid: "wm-dm-manual" };
+let dmsHoyColegaManualMock = 0;
+let dmsHoyLineaManualMock = 0;
 
 function instalarDobles() {
   require.cache[RUTA("groups/classify.js")] = {
@@ -92,6 +98,8 @@ function instalarDobles() {
       guardarPolitica: async (orgId, id, datos) => { politicasGuardadas.push({ id, ...datos }); return true; },
       obtenerPorId: async () => señalParaAprobar,
       marcarAvisoEnviado: async (orgId, id, datos) => { avisosCercanosMarcados.push({ id, ...datos }); return true; },
+      dmsHoyPorColega: async () => dmsHoyColegaManualMock,
+      dmsHoyLinea: async () => dmsHoyLineaManualMock,
     },
   };
   require.cache[RUTA("data/whatsapp-groups.js")] = {
@@ -110,6 +118,10 @@ function instalarDobles() {
       enviarTexto: async (sesion, chatId, texto, opts) => {
         enviadosManual.push({ sesion, chatId, texto, replyTo: opts && opts.replyTo });
         return envioResultado;
+      },
+      enviarDm: async (sesion, telefono, texto) => {
+        enviosDmManual.push({ sesion, telefono, texto });
+        return envioDmManualResultado;
       },
     },
   };
@@ -149,7 +161,7 @@ function instalarDobles() {
   // no protege a nadie: el dia que un fixture use un UUID valido, la suite
   // empieza a escribir basura en produccion sin que ningun test lo note.
   require.cache[RUTA("groups/directorio.js")] = {
-    exports: { registrar: async () => null },
+    exports: { registrar: async () => null, telefonoDe: async () => telefonoColegaManual },
   };
   delete require.cache[RUTA("groups/vivo.js")];
   return require("../src/groups/vivo");
@@ -206,6 +218,11 @@ beforeEach(() => {
   avisosCercanosEnviados = [];
   envioAvisoCercanoResultado = { ok: true, wamid: "wm-aviso-cercano" };
   edificioDevuelto = "";
+  telefonoColegaManual = null;
+  enviosDmManual = [];
+  envioDmManualResultado = { ok: true, wamid: "wm-dm-manual" };
+  dmsHoyColegaManualMock = 0;
+  dmsHoyLineaManualMock = 0;
   vivo = instalarDobles();
 });
 
@@ -600,6 +617,176 @@ test("aprobarManual: si el envio falla, no se marca como respondida", async () =
   envioResultado = { ok: false, error: "sesion caida" };
 
   const r = await vivo.aprobarManual({ id: "org-1" }, "sig-callada");
+  assert.strictEqual(r.resultado, "error_envio");
+  assert.strictEqual(marcadas.length, 0);
+});
+
+// ── responderPorDmManual: mandar el DM DESPUES, desde el CRM (Juan,
+// 2026-08-24). Dos casos reales: un pedido que entro cuando la org estaba en
+// otro modo (nunca se intento el DM), y un pedido que si se intento pero
+// quedo fuera de la ventana de antiguedad y un admin decide mandarlo igual.
+
+test("responderPorDmManual: manda el DM cuando hay telefono y la señal pasa la compuerta", async () => {
+  señalParaAprobar = señalCallada({ autor_telefono: "141746805670125" });
+  grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = "573001234567";
+
+  const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
+
+  assert.strictEqual(r.resultado, "dm_enviado");
+  assert.strictEqual(enviosDmManual.length, 1);
+  assert.strictEqual(enviosDmManual[0].sesion, "RADA-NATALIA");
+  assert.strictEqual(enviosDmManual[0].telefono, "573001234567");
+  assert.match(enviosDmManual[0].texto, /Ref AP004/);
+  assert.deepStrictEqual(marcadas, [
+    { id: "sig-callada", texto: enviosDmManual[0].texto, wamid: "wm-dm-manual", modo: "auto", refs: ["AP004"] },
+  ]);
+});
+
+test("responderPorDmManual: sin telefono resuelto, lo dice y no inventa un envio", async () => {
+  señalParaAprobar = señalCallada({ autor_telefono: "141746805670125" });
+  grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = null;
+
+  const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
+
+  assert.strictEqual(r.resultado, "sin_telefono");
+  assert.strictEqual(enviosDmManual.length, 0);
+  assert.strictEqual(marcadas.length, 0);
+});
+
+test("responderPorDmManual: sin sesion de WAHA, no se puede intentar el envio", async () => {
+  señalParaAprobar = señalCallada({ autor_telefono: "141746805670125" });
+  grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = "573001234567";
+
+  const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", {});
+
+  assert.strictEqual(r.resultado, "sin_sesion");
+  assert.strictEqual(enviosDmManual.length, 0);
+});
+
+test("responderPorDmManual: un colega ya contactado hoy (tope 1) no recibe un segundo DM manual", async () => {
+  señalParaAprobar = señalCallada({ autor_telefono: "141746805670125" });
+  grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = "573001234567";
+  dmsHoyColegaManualMock = 1;
+
+  const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
+
+  assert.strictEqual(r.resultado, "limite_colega_alcanzado");
+  assert.strictEqual(enviosDmManual.length, 0);
+});
+
+test("responderPorDmManual: al tope diario de la linea, tampoco manda -- cortacircuito de volumen", async () => {
+  señalParaAprobar = señalCallada({ autor_telefono: "141746805670125" });
+  grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = "573001234567";
+  dmsHoyLineaManualMock = 150;
+
+  const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
+
+  assert.strictEqual(r.resultado, "limite_linea_alcanzado");
+  assert.strictEqual(enviosDmManual.length, 0);
+});
+
+// NO se aplica el limite de antiguedad (Juan, 2026-08-24): es EXACTAMENTE el
+// freno que esta funcion existe para saltar a conciencia. La señal de este
+// test no lleva ninguna fecha del mensaje original -- si hubiera una
+// compuerta de antiguedad escondida en algun lado, no tendria como evaluarla
+// y fallaria cerrado (como decidirDm hace con "sin_fecha_mensaje"); en vez
+// de eso, manda.
+test("responderPorDmManual: manda igual sin importar la antiguedad del pedido -- es el freno que un humano decide saltar", async () => {
+  señalParaAprobar = señalCallada({ autor_telefono: "141746805670125" }); // sin fecha_mensaje/instanteIso
+  grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = "573001234567";
+
+  const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
+
+  assert.strictEqual(r.resultado, "dm_enviado");
+  assert.strictEqual(enviosDmManual.length, 1);
+});
+
+test("responderPorDmManual: la zona equivocada SIGUE sin mandarse aunque haya telefono -- es seguridad, no confianza", async () => {
+  señalParaAprobar = señalCallada({
+    autor_telefono: "141746805670125",
+    matches: [matchBueno({ puntaje: 66, ubicacion: "otra_zona" })],
+  });
+  grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = "573001234567";
+
+  const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
+
+  assert.strictEqual(r.resultado, "sin_propiedades_publicables");
+  assert.strictEqual(enviosDmManual.length, 0);
+});
+
+test("responderPorDmManual: una propiedad de un aliado SIGUE sin mandarse aunque haya telefono", async () => {
+  señalParaAprobar = señalCallada({
+    autor_telefono: "141746805670125",
+    matches: [matchBueno({ puntaje: 90, fuente: "aliado", link: null })],
+  });
+  grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = "573001234567";
+
+  const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
+
+  assert.strictEqual(r.resultado, "sin_propiedades_publicables");
+  assert.strictEqual(enviosDmManual.length, 0);
+});
+
+test("responderPorDmManual: si el sync de Wasi esta viejo, no manda ninguna candidata desactualizada", async () => {
+  señalParaAprobar = señalCallada({ autor_telefono: "141746805670125" });
+  grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = "573001234567";
+  inventario = { fresco: false, iso: "2026-08-10T00:00:00Z", horas: 150 };
+
+  const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
+
+  assert.strictEqual(r.resultado, "sin_propiedades_publicables");
+  assert.strictEqual(enviosDmManual.length, 0);
+});
+
+test("responderPorDmManual: una señal ya respondida no se vuelve a mandar", async () => {
+  señalParaAprobar = señalCallada({
+    autor_telefono: "141746805670125",
+    respondida_at: "2026-08-20T12:00:00Z",
+  });
+  grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = "573001234567";
+
+  const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
+
+  assert.strictEqual(r.resultado, "ya_respondida");
+  assert.strictEqual(enviosDmManual.length, 0);
+});
+
+test("responderPorDmManual: una señal que no existe no manda nada", async () => {
+  señalParaAprobar = null;
+
+  const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-inexistente", { sesion: "RADA-NATALIA" });
+
+  assert.strictEqual(r.resultado, "no_encontrada");
+  assert.strictEqual(enviosDmManual.length, 0);
+});
+
+test("responderPorDmManual: una señal que no es demanda no manda nada", async () => {
+  señalParaAprobar = señalCallada({ autor_telefono: "141746805670125", clase: "oferta" });
+
+  const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
+
+  assert.strictEqual(r.resultado, "no_es_demanda");
+  assert.strictEqual(enviosDmManual.length, 0);
+});
+
+test("responderPorDmManual: si el envio falla, no se marca como respondida -- se puede reintentar", async () => {
+  señalParaAprobar = señalCallada({ autor_telefono: "141746805670125" });
+  grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = "573001234567";
+  envioDmManualResultado = { ok: false, error: "sesion caida" };
+
+  const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
+
   assert.strictEqual(r.resultado, "error_envio");
   assert.strictEqual(marcadas.length, 0);
 });
