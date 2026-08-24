@@ -27,7 +27,7 @@
 
 const formato = require("../lib/formato");
 const { normalizarTitulo } = require("../lib/formato");
-const { linkWhatsapp, linkContactoOficial } = require("../lib/contacto");
+const { linkWhatsapp, linkContactoOficial, tocarNombreEnGrupo } = require("../lib/contacto");
 
 // Una propiedad, corta: la asesora ya conoce el inventario, no necesita la
 // ficha entera. Necesita reconocerla y tener el link a mano.
@@ -55,11 +55,13 @@ function linea(match) {
 // Texto de contacto: con telefono resuelto, el link directo al privado; sin
 // el, la instruccion real para ese 33% — nunca "respondele en el grupo"
 // (norma de Juan, 2026-08-22), porque el gremio pide no llenar los grupos de
-// informacion y esa frase invitaba justo a eso.
+// informacion y esa frase invitaba justo a eso. tocarNombreEnGrupo vive en
+// src/lib/contacto.js (2026-08-24): esta misma instruccion se necesito en
+// otros avisos, ver la nota ahi.
 function contactoPara(telefono, quien) {
   const link = linkWhatsapp(telefono);
   if (link) return link;
-  return `no se pudo resolver el número — tocá el nombre de ${quien} en el grupo para abrirle el chat directo (no hace falta tenerlo guardado)`;
+  return `no se pudo resolver el número — ${tocarNombreEnGrupo(quien)}`;
 }
 
 /**

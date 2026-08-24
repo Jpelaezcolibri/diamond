@@ -41,4 +41,20 @@ function linkContactoOficial() {
   return linkWhatsapp(process.env.CONTACT_WHATSAPP_NUMBER);
 }
 
-module.exports = { esMarcable, linkWhatsapp, linkContactoOficial };
+// La instruccion real cuando no hay telefono marcable para un colega: tocar
+// su nombre DENTRO del grupo abre el chat privado sin necesitar el numero
+// guardado (asi funciona WhatsApp). Centralizada aca 2026-08-24 porque vivia
+// repetida a mano en tres lugares (alerta-asesor.js#contactoPara y dos veces
+// en aviso-cercano.js) y una revision encontro TRES caminos mas que en vez de
+// esto decian "respondele en el grupo" — justo lo que la norma del gremio
+// (Juan, 2026-08-22) prohibe: no llenar los grupos de informacion, los
+// pedidos se responden al privado del colega. El propio codigo ya lo dice en
+// alerta-asesor.js: "cada motivo nuevo era un hueco nuevo". Con la frase en
+// un solo lugar, el dia que la politica cambie de nuevo hay un solo texto
+// que tocar, y test/contacto.test.js#no-reaparece bloquea que un aviso nuevo
+// vuelva a escribir la frase vieja a mano.
+function tocarNombreEnGrupo(quien) {
+  return `tocá el nombre de ${quien} en el grupo para abrirle el chat directo — no hace falta tenerlo guardado`;
+}
+
+module.exports = { esMarcable, linkWhatsapp, linkContactoOficial, tocarNombreEnGrupo };

@@ -1,3 +1,5 @@
+const { tocarNombreEnGrupo } = require("../lib/contacto");
+
 // Etiquetas legibles de la intencion del cliente para la alerta al asesor.
 const INTENCION_LABEL = {
   vender: "QUIERE VENDER su propiedad",
@@ -165,9 +167,12 @@ function buildAllyOfferMatchAlert(allyProperty, lead) {
   const clienteNombre = lead.nombre || "un cliente tuyo";
   const clienteTelefono = lead.phone ? ` (+${lead.phone})` : "";
   const razones = (lead.coincide_en || []).join(", ") || "lo que busca";
+  // Nunca "respondele en el grupo" (norma de Juan, 2026-08-22): sin telefono
+  // marcable, la accion real es tocar el nombre del colega en el grupo para
+  // abrirle el chat privado (tocarNombreEnGrupo, src/lib/contacto.js).
   const contactoColega = allyProperty.contacto_telefono
     ? `Contacto del colega: +${allyProperty.contacto_telefono}.`
-    : "El colega no dejo telefono marcable — respondele en el grupo.";
+    : `El colega no dejo telefono marcable — ${tocarNombreEnGrupo(contacto)}.`;
   return [
     "Oferta nueva que le puede servir a tu cliente!",
     `${contacto}${inmobiliaria} acaba de publicar en un grupo una ${tipo}${zona}${precio}.`,
@@ -224,7 +229,12 @@ function buildGroupDemandAlert(demanda, mensaje) {
     `Tenemos ${(demanda.matches || []).length} opcion(es):`,
     ...refs,
     "",
-    mensaje.grupo ? `Respondele en el grupo "${mensaje.grupo}".` : null,
+    // Nunca "respondele en el grupo" (norma de Juan, 2026-08-22): el gremio
+    // pide no llenar los grupos de informacion, se responde al privado del
+    // colega. tocarNombreEnGrupo vive en src/lib/contacto.js.
+    mensaje.grupo
+      ? `Respondele por privado a ${quien} (no en el grupo "${mensaje.grupo}"): ${tocarNombreEnGrupo(quien)}.`
+      : null,
     "Escribile vos desde tu telefono — con tus palabras, no copiando esto tal cual.",
     "Si la propiedad es de otro asesor de Diamond, la comision se comparte entre ustedes.",
   ].filter((l) => l !== null).join("\n");

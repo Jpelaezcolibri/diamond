@@ -10,12 +10,17 @@
 // siempre de trazabilidad_radar (mismo dato validado que usa alerta-asesor.js
 // para el aviso automatico), asi que no hay nada que inventar.
 
+const { tocarNombreEnGrupo } = require("../lib/contacto");
+
 function bloque(s) {
   const utiles = (s.motor?.detalle || []).filter((m) => (s.sofi?.refs || []).map(String).includes(String(m.ref)));
   const lineas = utiles
     .map((m) => `  ▸ Ref ${m.ref}${m.zona ? ` — ${m.zona}` : ""}${m.precio ? ` · ${m.precio}` : ""}`)
     .join("\n");
-  const contactoTexto = s.contacto_wa || "sin teléfono — respondele en el grupo";
+  // Nunca "respondele en el grupo" (norma de Juan, 2026-08-22): sin telefono
+  // resuelto, la accion real es tocar el nombre del colega en el grupo para
+  // abrirle el chat privado. tocarNombreEnGrupo vive en src/lib/contacto.js.
+  const contactoTexto = s.contacto_wa || `sin teléfono — ${tocarNombreEnGrupo(s.colega)}`;
   return [
     `${s.colega} (grupo ${s.grupo}):`,
     `Pidió: "${s.pidio}"`,

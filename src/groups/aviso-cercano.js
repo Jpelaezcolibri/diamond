@@ -33,7 +33,7 @@
 // motor — el juicio lo pone la persona.
 
 const formato = require("../lib/formato");
-const { linkContactoOficial } = require("../lib/contacto");
+const { linkContactoOficial, tocarNombreEnGrupo } = require("../lib/contacto");
 
 function ficha(match) {
   const titulo = formato.normalizarTitulo(match.titulo) || `Ref ${match.ref || "sin ref"}`;
@@ -70,7 +70,7 @@ function construir(señal, candidatas) {
     `Pidió:`,
     `"${(señal.texto_original || "").trim()}"`,
     ``,
-    `Respondele por privado a ${quien}, no en el grupo: desde tu WhatsApp (el que está metido en ese grupo), tocá su nombre ahí adentro para abrirle el chat directo — no hace falta tener guardado su número.`,
+    `Respondele por privado a ${quien}, no en el grupo: desde tu WhatsApp (el que está metido en ese grupo), ${tocarNombreEnGrupo(quien)}.`,
     ``,
     `Lo que tenemos, listo para copiar:`,
     candidatas.map(ficha).join("\n"),
@@ -141,7 +141,7 @@ function construirEdificio(señal, candidatas, edificio) {
     ``,
     cuerpo,
     ``,
-    `Si conocés algo en ese edificio, respondele por privado a ${quien} (no en el grupo): tocá su nombre ahí adentro para abrirle el chat directo — no hace falta tener guardado su número.`,
+    `Si conocés algo en ese edificio, respondele por privado a ${quien} (no en el grupo): ${tocarNombreEnGrupo(quien)}.`,
   ].join("\n");
 }
 

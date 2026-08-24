@@ -13,6 +13,7 @@
 // hace tres semanas.
 
 const allyProperties = require("../data/ally-properties");
+const { esMarcable } = require("../lib/contacto");
 
 // ally_properties.operacion tiene un check que exige 'Venta' | 'Arriendo'
 // capitalizado; el clasificador devuelve minusculas. Sin normalizar, cada
@@ -38,6 +39,17 @@ async function guardarOferta(org, oferta, { vistoEn = null } = {}) {
   const m = oferta.mensaje;
   const precio = oferta.precio_max || oferta.precio_min || 0;
 
+  // El @lid crudo que manda WhatsApp (14-17 digitos, ver src/lib/contacto.js)
+  // no es un telefono marcable. Guardarlo tal cual en contacto_telefono es el
+  // mismo bug de fondo que motivo el cambio de politica de Juan del
+  // 2026-08-22 (ver src/notifications/advisor.js): despues produce links
+  // muertos y avisos que dicen "no hay telefono" cuando en realidad nunca se
+  // resolvio. No se intenta resolver el LID contra el directorio ACA
+  // (2026-08-24): este modulo corre en un contexto sin I/O al directorio, y
+  // agregarle esa dependencia es mas de lo que hace falta — alcanza con no
+  // ensuciar la columna con un valor que no es telefono.
+  const telefonoCrudo = oferta.contacto || m.autorTelefono || null;
+
   return allyProperties.create(org.id, {
     titulo: oferta.notas || null,
     tipo: oferta.tipo || null,
@@ -48,7 +60,7 @@ async function guardarOferta(org, oferta, { vistoEn = null } = {}) {
     descripcion: oferta.notas || null,
     inmobiliaria_origen: null,
     contacto_nombre: m.autor || null,
-    contacto_telefono: oferta.contacto || m.autorTelefono || null,
+    contacto_telefono: esMarcable(telefonoCrudo) ? telefonoCrudo : null,
     mensaje_original: m.texto || null,
     origen: "grupo",
     group_id: m.groupId || null,
