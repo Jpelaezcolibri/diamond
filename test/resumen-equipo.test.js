@@ -28,10 +28,16 @@ test("un pendiente: cita el pedido tal cual, con la ref y el contacto real", () 
   assert.match(texto, /^Match pendiente de seguimiento:/);
 });
 
-test("sin contacto_wa, dice explicito que no hay telefono — nunca inventa un link", () => {
+// Nunca "respondele en el grupo" (norma de Juan, 2026-08-22): el gremio pide
+// no llenar los grupos de informacion. Sin telefono resuelto, la accion real
+// es tocar el nombre del colega en el grupo para abrirle el chat privado
+// (tocarNombreEnGrupo, src/lib/contacto.js) — ver test/no-respondas-en-el-grupo.test.js
+// para la garantia de que esa frase vieja no vuelva a aparecer en ningun aviso.
+test("sin contacto_wa, dice explicito que no hay telefono — nunca inventa un link, y nunca manda a responder en el grupo", () => {
   const texto = construir([señal({ contacto_wa: null })]);
-  assert.match(texto, /sin teléfono — respondele en el grupo/);
+  assert.match(texto, /sin teléfono — tocá el nombre de Liliana Giraldo en el grupo/);
   assert.doesNotMatch(texto, /wa\.me\/(?!573001234567)/);
+  assert.doesNotMatch(texto, /respondele en el grupo/);
 });
 
 test("varias señales: plural correcto, cada una con su propio bloque", () => {

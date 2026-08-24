@@ -6,6 +6,18 @@
 const { test } = require("node:test");
 const assert = require("node:assert");
 
+// src/data/supabase.js NO crea el cliente real bajo test (guard 2026-08-24,
+// ver ese archivo). Este test SI necesita un cliente truthy para poder
+// mockear su metodo from() por tabla, asi que se inyecta un doble en el
+// cache del modulo antes de cargar visitas.js — mismo patron que
+// test/colegas-data.test.js y test/directorio.test.js usan para forzar null.
+const supabasePath = require.resolve("../src/data/supabase");
+delete require.cache[supabasePath];
+require.cache[supabasePath] = {
+  id: supabasePath, filename: supabasePath, loaded: true,
+  exports: { from: () => { throw new Error("from() sin mockear en este test"); } },
+};
+
 const visitas = require("../src/data/visitas");
 const supabase = require("../src/data/supabase");
 

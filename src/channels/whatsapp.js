@@ -192,14 +192,20 @@ async function persistIncomingMedia(org, mediaId) {
   }
 }
 
-// Resuelve el toque de un boton "Sí, publicar" / "No sirve" del aviso del
-// radar (ver src/groups/vivo.js#avisarCercano). El id del boton ES la señal:
-// "radar_si:<uuid>" / "radar_no:<uuid>", asi que la accion se ejecuta directo,
-// SIN pasar por Claude ni por la desambiguacion de pedidos pendientes que
-// usa el camino de texto libre (src/agent/tools.js#aprobarPedidoRadar /
-// rechazarPedidoRadar) — igual se reusan esas dos funciones, solo que con
-// ctx.radarSignalId ya resuelto, para que la respuesta y el registro sean
-// identicos a los del camino existente.
+// Resuelve el toque de un boton "Sí, publicar" / "No sirve" del aviso VIEJO
+// del radar (ver src/groups/vivo.js#avisarCercano). El id del boton ES la
+// señal: "radar_si:<uuid>" / "radar_no:<uuid>".
+//
+// CAMBIO DE POLITICA (Juan, 2026-08-22): el radar ya no publica nada en los
+// grupos, ni con aprobacion — norma del gremio de no llenarlos de
+// informacion. El boton "Sí, publicar" se saco de los avisos NUEVOS (ver
+// vivo.js#avisarCercano), pero los avisos YA ENTREGADOS antes del cambio
+// conservan ese boton vivo en el WhatsApp de la asesora: un toque en un
+// mensaje viejo sigue llegando a este webhook. Por eso "radar_si" ya NO llama
+// a tools.aprobarPedidoRadar (que sigue existiendo intacto — es el camino de
+// aprobarManual desde el CRM, una accion deliberada y distinta) y en vez de
+// publicar le avisa que esa opcion ya no existe. "radar_no" no cambia: sigue
+// registrando el descarte con rechazarPedidoRadar, igual que siempre.
 async function procesarBotonRadar(org, userPhone, botonId, tituloBoton, phoneNumberId) {
   const separador = String(botonId).indexOf(":");
   const accion = separador === -1 ? botonId : botonId.slice(0, separador);
@@ -221,13 +227,18 @@ async function procesarBotonRadar(org, userPhone, botonId, tituloBoton, phoneNum
   const conv = await conversations.findOrCreate(org.id, lead.id, null);
   await conversations.appendMessage(conv.id, "user", `[Botón] ${tituloBoton || accion}`).catch(() => {});
 
-  // Require tardio (mismo motivo que src/agent/tools.js#aprobarPedidoRadar):
-  // este archivo -> engine.js -> tools.js -> (lazy) vivo.js -> este archivo.
-  const tools = require("../agent/tools");
-  const ctx = { org, advisor, radarSignalId: signalId };
-  const respuesta = accion === "radar_si"
-    ? await tools.aprobarPedidoRadar({}, ctx)
-    : await tools.rechazarPedidoRadar({}, ctx);
+  let respuesta;
+  if (accion === "radar_si") {
+    // Boton retirado (2026-08-22): si esto se dispara es por un aviso viejo
+    // ya entregado antes del cambio de norma. No se publica nada — se le dice
+    // a la asesora la accion que sigue viva.
+    respuesta = "Esa opción ya no está disponible: el radar dejó de publicar en los grupos (norma del gremio). Respondele al colega por privado con lo que te mandó el aviso, y contame por acá en qué quedó.";
+  } else {
+    // Require tardio (mismo motivo que src/agent/tools.js#aprobarPedidoRadar):
+    // este archivo -> engine.js -> tools.js -> (lazy) vivo.js -> este archivo.
+    const tools = require("../agent/tools");
+    respuesta = await tools.rechazarPedidoRadar({}, { org, advisor, radarSignalId: signalId });
+  }
 
   const mensajeAsesor = require("../lib/mensaje-asesor");
   await mensajeAsesor.enviarYRegistrar(org, userPhone, respuesta).catch((e) =>

@@ -7,22 +7,33 @@
 // Juan, 2026-08-20: "necesito que catherine uribe reciba que se envió y que
 // no y por que no para que ella apruebe desde su celular" → después
 // corregido a que sea el celular de Natalia Vélez, la misma línea vinculada
-// al radar, "para no perder la trazabilidad" — si ella aprueba, se publica
-// por la MISMA vía auditada (vivo.js#aprobarManual), no por una identidad
-// distinta. Ampliado el mismo día, dos veces: "tenemos que crear una norma
-// que no se salte ninguno de los dos" (ni el camino automático ni el humano
-// pueden dejar pasar un match real) y despues "lo que no se responda por el
-// bot debe de ir de una al chat de natalia... explica en el mensaje que
-// debe responder si o no para que se reenvie, asi no vamos a tener
-// diferencias" — de ahi el cierre explícito pidiendo sí O no (antes solo
-// pedía el sí, y un "no" se perdía sin quedar registrado en ningún lado; ver
-// src/agent/tools.js#rechazarPedidoRadar).
+// al radar, "para no perder la trazabilidad". Ampliado el mismo día, dos
+// veces: "tenemos que crear una norma que no se salte ninguno de los dos"
+// (ni el camino automático ni el humano pueden dejar pasar un match real) y
+// despues "lo que no se responda por el bot debe de ir de una al chat de
+// natalia... explica en el mensaje que debe responder si o no para que se
+// reenvie, asi no vamos a tener diferencias" — de ahi el cierre explícito
+// pidiendo sí O no (antes solo pedía el sí, y un "no" se perdía sin quedar
+// registrado en ningún lado; ver src/agent/tools.js#rechazarPedidoRadar).
+//
+// CAMBIO DE POLITICA (Juan, 2026-08-22): "que se notifique al celular de
+// natalia todo para que ella lo responda directamente desde su numero" — el
+// gremio pide no llenar los grupos de informacion, asi que el radar YA NO
+// publica nada ahi, ni con aprobacion. El aviso dejo de preguntar "¿lo
+// publicamos?" (eso es justo lo que Natalia toco dos veces el mismo dia — el
+// mensaje seguia ofreciendo la accion vieja aunque la norma ya habia
+// cambiado) y ahora pide que ELLA le responda al colega por privado, con las
+// refs listas para copiar. El boton "Sí, publicar" se quito en
+// vivo.js#avisarCercano por el mismo motivo; aprobarManual (vivo.js) sigue
+// existiendo para publicar a proposito desde el CRM, pero ya no se ofrece
+// como un toque en este aviso.
 //
 // Distinto de alerta-asesor.js (que depende del veredicto de Sofi en modo
 // asistido, hoy apagado): acá no hay juicio de IA, solo el dato crudo del
 // motor — el juicio lo pone la persona.
 
 const formato = require("../lib/formato");
+const { linkContactoOficial, tocarNombreEnGrupo } = require("../lib/contacto");
 
 function ficha(match) {
   const titulo = formato.normalizarTitulo(match.titulo) || `Ref ${match.ref || "sin ref"}`;
@@ -33,31 +44,56 @@ function ficha(match) {
 /**
  * @param señal      { grupo_nombre, autor_nombre, texto_original }
  * @param candidatas matches con dato usable que el bot no respondio solo
+ * @param org        el registro de organizations (numero de contacto oficial
+ *                   multi-tenant, ver src/lib/contacto.js#linkContactoOficial).
+ *                   Opcional: sin el, cae al env CONTACT_WHATSAPP_NUMBER.
  * @returns el texto del aviso, o null si no hay nada que decir
  */
-// BOTONES (Juan, 2026-08-21): "se esta enredando con las respuestas y
-// estamos perdiendo es plata" — pedirle "sí"/"no" en texto libre obligaba a
-// Sofi a interpretar la respuesta en medio de otra conversacion, y con mas
-// de un pedido pendiente a la vez ni una persona sabe a cual se refiere un
-// "sí" suelto. El mensaje ya NO pide una respuesta escrita — src/groups/vivo.js
-// lo manda con dos botones (Sí, publicar / No sirve) que traen el id de la
-// señal adentro, asi que la accion se resuelve sola, sin ambigüedad. Ver
-// src/channels/whatsapp.js#sendWhatsAppButtons.
-function construir(señal, candidatas) {
+// SIN "¿LO PUBLICAMOS?" (Juan, 2026-08-22): la norma del gremio es no llenar
+// los grupos de informacion — el radar ya no publica nada ahi, ni con
+// aprobacion. Antes este aviso ofrecia justo esa accion (antes con texto
+// libre, despues con el boton "Sí, publicar" en vivo.js#avisarCercano) y
+// Natalia lo toco dos veces el mismo dia porque nadie le avisó del cambio de
+// norma y el mensaje seguia preguntando. Ahora el aviso pide la UNICA accion
+// que sigue viva: que ELLA le responda al colega por privado, con el dato ya
+// listo para copiar — la publicacion en el grupo dejo de ofrecerse como un
+// toque (aprobarManual en vivo.js sigue existiendo para publicar a proposito
+// desde el CRM, no desde este aviso).
+function construir(señal, candidatas, org = null) {
   if (!Array.isArray(candidatas) || candidatas.length === 0) return null;
 
-  return [
-    `🔔 Tenés un match del radar que no salió solo — ¿lo publicamos?`,
+  const quien = señal.autor_nombre || "el colega";
+
+  const lineas = [
+    `🔔 Un pedido del radar no salió solo — te toca responder vos`,
     ``,
     `Grupo: ${señal.grupo_nombre || "sin nombre"}`,
-    `Colega: ${señal.autor_nombre || "un colega"}`,
+    `Colega: ${quien}`,
     ``,
     `Pidió:`,
     `"${(señal.texto_original || "").trim()}"`,
     ``,
-    `Lo que tenemos:`,
+    `Respondele por privado a ${quien}, no en el grupo: desde tu WhatsApp (el que está metido en ese grupo), ${tocarNombreEnGrupo(quien)}.`,
+    ``,
+    `Lo que tenemos, listo para copiar:`,
     candidatas.map(ficha).join("\n"),
-  ].join("\n");
+  ];
+
+  const link = linkContactoOficial(org);
+  if (link) {
+    lineas.push(
+      ``,
+      `Para que la conversación quede en nuestro sistema, cerrale invitándolo a escribirle a Sofi (nuestra línea oficial):`,
+      link
+    );
+  }
+
+  lineas.push(
+    ``,
+    `Contame en qué quedó (le escribiste, no le sirvió, hubo negocio). Con eso el radar aprende.`
+  );
+
+  return lineas.join("\n");
 }
 
 // EDIFICIO ESPECIFICO (Juan, 2026-08-21 — caso Esteban Higuita, pidiendo por
@@ -81,24 +117,34 @@ function construir(señal, candidatas) {
 function construirEdificio(señal, candidatas, edificio) {
   if (!edificio) return null;
   const lista = Array.isArray(candidatas) ? candidatas : [];
+  const quien = señal.autor_nombre || "el colega";
+
+  // Antes la rama sin candidatas decia "respondele directo en el grupo" — eso
+  // era la misma accion vieja que la norma del 2026-08-22 vino a sacar (ver la
+  // cabecera del archivo). Ahora las dos ramas (con y sin candidatas por
+  // zona) terminan igual: si Natalia sabe algo, se lo dice al colega por
+  // privado, nunca publicando en el grupo.
+  const cuerpo = lista.length
+    ? [
+        `Esto es lo que encontró por zona (puede o no ser ese edificio, confirmalo vos):`,
+        lista.map(ficha).join("\n"),
+      ].join("\n")
+    : `Por zona tampoco encontró nada.`;
 
   return [
     `🏢 Piden el edificio "${edificio}" — esto lo tenés que revisar vos`,
     ``,
     `Grupo: ${señal.grupo_nombre || "sin nombre"}`,
-    `Colega: ${señal.autor_nombre || "un colega"}`,
+    `Colega: ${quien}`,
     ``,
     `Pidió:`,
     `"${(señal.texto_original || "").trim()}"`,
     ``,
     `Wasi no tiene las propiedades marcadas por edificio (por seguridad), así que el sistema no puede confirmar si algo del inventario es exactamente ese lugar — por eso no le respondió solo.`,
     ``,
-    lista.length
-      ? [
-          `Esto es lo que encontró por zona (puede o no ser ese edificio, confirmalo vos):`,
-          lista.map(ficha).join("\n"),
-        ].join("\n")
-      : `Por zona tampoco encontró nada. Si conocés algo en ese edificio, respondele directo en el grupo.`,
+    cuerpo,
+    ``,
+    `Si conocés algo en ese edificio, respondele por privado a ${quien} (no en el grupo): ${tocarNombreEnGrupo(quien)}.`,
   ].join("\n");
 }
 

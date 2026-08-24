@@ -204,7 +204,7 @@ const TOOL_DEFINITIONS = [
   {
     name: "aprobar_pedido_radar",
     description:
-      "Publica en el grupo gremial un pedido del radar que el bot no respondio solo — el aviso que te llego con 'Tenés un match del radar que no salió solo'. Usala cuando el asesor diga 'si', 'mandalo', 'publicalo' respondiendo a ese aviso. Si citó (swipe-to-reply) el aviso exacto, no hace falta que aclare cual. Si dice que NO o que no sirve, usa rechazar_pedido_radar en vez de esta — el 'no' tambien hay que registrarlo.",
+      "ACCION EXCEPCIONAL, no la respuesta normal a un 'si': publica en el grupo gremial un pedido del radar que el bot no respondio solo. La via normal (norma del gremio, Juan 2026-08-22) es que la asesora le responda al colega por privado desde su propio telefono — Sofi NO publica en el grupo por defecto y esta tool no se dispara con un 'si'/'dale' suelto respondiendo al aviso 'Un pedido del radar no salió solo'. Usala SOLO si el asesor pide EXPLICITAMENTE publicar en el grupo (ej 'publicalo en el grupo', 'mandalo directo al grupo', 'publicalo vos'), algo raro y deliberado. Si dice que NO o que no sirve, usa rechazar_pedido_radar en vez de esta — el 'no' tambien hay que registrarlo. Si citó (swipe-to-reply) el aviso exacto, no hace falta que aclare cual.",
     input_schema: {
       type: "object",
       properties: {
@@ -230,8 +230,18 @@ const TOOL_DEFINITIONS = [
 // asesor (una sola vez por lead+propiedad). Best-effort: si la migracion del
 // captador no corrio, el bot sigue sin aviso. Lo llama buscar_propiedades y
 // tambien engine.js cuando el lead entra por un ad (property_ref_origen).
+//
+// BUG REAL (C2, 2026-08-24): esta funcion arma el aviso con texto de "un
+// cliente se intereso en tu propiedad" (ver buildCaptadorInterestAlert). Un
+// colega de otra inmobiliaria puede llegar hasta aca usando buscar_propiedades
+// (promptColega SI le ofrece inventario) — mandarle ese aviso al captador
+// seria un mensaje saliente FALSO: la persona interesada no es un cliente
+// nuestro, es un colega buscando para el suyo. ctx.colega (ver engine.js) es
+// la unica señal que esta funcion tiene para distinguirlo, porque la llaman
+// dos caminos distintos (engine.js con el origen del ad, tools.js con
+// buscar_propiedades) y los dos comparten el mismo ctx.
 async function maybeCaptadorAlert(ctx, property) {
-  if (!property || !property.captador_id || ctx.captadorAlert) return;
+  if (!property || !property.captador_id || ctx.captadorAlert || ctx.colega) return;
   try {
     const esNuevo = await propertyOwnerAlerts.registerAlert(ctx.org.id, property.id, ctx.lead.id);
     if (!esNuevo) return;
@@ -320,8 +330,14 @@ async function executeTool(name, input, ctx) {
     const disponibles = results.filter((p) => p.disponible);
     if (disponibles.length > 0 && !ctx.propertyInteres) ctx.propertyInteres = disponibles[0];
     if (disponibles.length > 0) await maybeCaptadorAlert(ctx, disponibles[0]);
-    // Las propiedades que busca definen su tablero (compra/alquiler) aunque no haya dado ref
-    if (disponibles.length > 0 && (!ctx.lead.categoria || ctx.lead.categoria === "otros")) {
+    // Las propiedades que busca definen su tablero (compra/alquiler) aunque no haya dado ref.
+    // NO aplica a un colega (C2, 2026-08-24): buscar_propiedades es justo la
+    // tool que promptColega SI le ofrece (a diferencia del asesor, que nunca
+    // deberia estar buscando para si mismo), asi que sin este guard cualquier
+    // busqueda de un colega lo metia al tablero compra/alquiler como si fuera
+    // una oportunidad de venta propia — el mismo efecto que ya se bloqueo en
+    // engine.js para property_ref_origen, solo que por este otro camino.
+    if (disponibles.length > 0 && !ctx.colega && (!ctx.lead.categoria || ctx.lead.categoria === "otros")) {
       const categoria = (disponibles[0].operacion || "").toLowerCase() === "arriendo" ? "alquiler" : "compra";
       Object.assign(ctx.lead, await leads.update(ctx.lead.id, { categoria }));
     }

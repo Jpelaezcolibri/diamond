@@ -29,13 +29,15 @@ function mockearBase(t, { advisor = NATALIA } = {}) {
   return { appended };
 }
 
-test("boton 'Sí, publicar': llama aprobarPedidoRadar con el signalId resuelto del boton, sin preguntar", async (t) => {
+// Boton retirado (Juan, 2026-08-22): el radar dejo de publicar en los
+// grupos, asi que un toque en "radar_si" solo puede venir de un aviso VIEJO
+// ya entregado antes del cambio de norma (los avisos nuevos ya no lo llevan,
+// ver vivo.js#avisarCercano). En vez de publicar, se le avisa a la asesora
+// que esa opcion ya no existe y que responda por privado.
+test("boton 'Sí, publicar' de un aviso viejo: NO publica, avisa que la opcion ya no existe", async (t) => {
   const { appended } = mockearBase(t);
-  let ctxRecibido = null;
-  t.mock.method(tools, "aprobarPedidoRadar", async (input, ctx) => {
-    ctxRecibido = ctx;
-    return "Listo, publicado en el grupo:\n\ntexto...";
-  });
+  let seLlamoAprobar = false;
+  t.mock.method(tools, "aprobarPedidoRadar", async () => { seLlamoAprobar = true; return "Listo, publicado en el grupo:\n\ntexto..."; });
   let confirmacion = null;
   t.mock.method(mensajeAsesor, "enviarYRegistrar", async (org, telefono, texto) => {
     confirmacion = { org, telefono, texto };
@@ -44,11 +46,11 @@ test("boton 'Sí, publicar': llama aprobarPedidoRadar con el signalId resuelto d
 
   await procesarBotonRadar(ORG, "573001878024", "radar_si:sig-42", "Sí, publicar", "phone-id-1");
 
-  assert.strictEqual(ctxRecibido.radarSignalId, "sig-42");
-  assert.strictEqual(ctxRecibido.advisor.id, "adv-natalia");
-  assert.strictEqual(ctxRecibido.org.id, "org-1");
+  assert.strictEqual(seLlamoAprobar, false, "no debe publicar en el grupo");
   assert.strictEqual(confirmacion.telefono, "573001878024");
-  assert.match(confirmacion.texto, /publicado/);
+  assert.match(confirmacion.texto, /ya no está disponible/);
+  assert.match(confirmacion.texto, /privado/);
+  assert.doesNotMatch(confirmacion.texto, /publicado/);
   assert.strictEqual(appended[0].role, "user");
   assert.match(appended[0].content, /Sí, publicar/);
 });

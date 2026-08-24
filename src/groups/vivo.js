@@ -34,6 +34,7 @@ const syncEstado = require("../data/sync-estado");
 const whatsappGroups = require("../data/whatsapp-groups");
 const advisors = require("../data/advisors");
 const avisoCercano = require("./aviso-cercano");
+const directorio = require("./directorio");
 const waha = require("../lib/waha");
 const formato = require("../lib/formato");
 // Se importa el MODULO y no la funcion suelta: destructurar congela la
@@ -65,12 +66,15 @@ function idEnVivo(waMessageId) {
  * @param modo     'sombra' (redacta y no publica) | 'auto' (publica)
  * @param enviar   async (texto) => { ok, wamid } — lo provee el transporte
  * @param asesor   a quien se deriva en el mensaje (se resuelve afuera)
+ * @param sesion   nombre de la sesion de WAHA (ej. "RADA-NATALIA"), no la fila
+ *                 de whatsapp_groups; es lo que el directorio necesita para
+ *                 pedirle a WAHA los participantes de este grupo.
  *
  * Devuelve siempre un objeto con `resultado`, para poder medir la corrida sin
  * leer logs. Nunca lanza por un mensaje suelto: un error en uno no puede tumbar
  * la escucha del grupo.
  */
-async function procesarMensaje(org, mensaje, { grupo, modo = "sombra", enviar = null, asesor = null, advisorId = null, ahora = new Date() } = {}) {
+async function procesarMensaje(org, mensaje, { grupo, modo = "sombra", enviar = null, asesor = null, advisorId = null, sesion = null, ahora = new Date() } = {}) {
   // Mismo interruptor que apaga el import: si el radar esta apagado no se gasta
   // un token ni se escribe una fila.
   if (!organizations.radarEncendido(org)) return { resultado: "radar_apagado" };
@@ -119,11 +123,32 @@ async function procesarMensaje(org, mensaje, { grupo, modo = "sombra", enviar = 
   });
   if (duplicado) return { resultado: "duplicado" };
 
+  // Deja constancia de QUIEN publico, con su telefono si WhatsApp lo deja ver.
+  // Va aca y no antes a proposito: se registra a quien publica un pedido que
+  // vale la pena cruzar, no a los 1.012 participantes que se podrian listar de
+  // los grupos (ver db/migrations/2026-08-22_colegas_grupos.sql — el limite es
+  // deliberado, no una optimizacion).
+  //
+  // Best-effort y SIN await, mismo patron que whatsappGroups.touchSession en
+  // src/channels/whatsapp-group.js: nada rio abajo (politica.decidir, la
+  // redaccion, la publicacion) usa el telefono que devuelve, y el primer
+  // registro de cada ventana de 10 min puede disparar un HTTP a WAHA que trae
+  // hasta 878 participantes — esperarlo pagaria esa latencia ANTES de que el
+  // radar decida si publica, y como el procesamiento va en cola por grupo, el
+  // pedido siguiente esperaria detras.
+  directorio.registrar(org.id, {
+    lid: mensaje.autorTelefono,
+    nombre: mensaje.autor,
+    grupo: mensaje.grupo,
+    sesion,
+    jid: grupo.jid,
+  }).catch((e) => console.warn("[radar] No se pudo registrar al colega en el directorio:", e.message));
+
   // MODO ASISTIDO: no se publica NADA en el grupo. Sofi revalida las candidatas
   // y, si aprueba, le escribe a la asesora. Es el paso previo a encender las
   // respuestas: sirve para calibrar el motor sin exponer la marca.
   if (modo === "asistido") {
-    return asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora });
+    return asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, sesion });
   }
 
   // 5. Compuerta de calidad del dato, y despues politica de conducta. Son dos
@@ -239,7 +264,7 @@ async function procesarMensaje(org, mensaje, { grupo, modo = "sombra", enviar = 
 //
 // Quien decide si se avisa es Sofi, no el puntaje. El veredicto se guarda
 // SIEMPRE —aunque diga que no sirve— porque el "no" tambien ensena.
-async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora }) {
+async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, sesion = null }) {
   const matches = señal.matches || [];
   if (matches.length === 0) return { resultado: "sin_candidatas", signalId: signal && signal.id };
 
@@ -261,6 +286,19 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora }
     return { resultado: "descartada_por_sofi", veredicto, signalId: signal.id };
   }
 
+  // Telefono REAL del colega, resuelto por el directorio a partir del @lid
+  // (mensaje.autorTelefono) — nunca se le pasa el lid crudo a alertaAsesor,
+  // que ya no sabe interpretarlo (ver la nota de politica en ese archivo,
+  // 2026-08-22). Falla cerrado y en silencio: sin telefono, alertaAsesor.construir
+  // arma igual el aviso, solo que con la instruccion de tocar el nombre en el
+  // grupo en vez de un link directo — un fallo aca nunca puede tumbar el aviso.
+  const telefonoColega = await directorio
+    .telefonoDe(org.id, mensaje.autorTelefono, { sesion, jid: grupo.jid })
+    .catch((e) => {
+      console.warn("[radar] No se pudo resolver el telefono del colega para el aviso:", e.message);
+      return null;
+    });
+
   const texto = alertaAsesor.construir(
     {
       grupo_nombre: grupo.nombre || grupo.jid,
@@ -269,7 +307,9 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora }
       texto_original: mensaje.texto,
     },
     veredicto,
-    matches
+    matches,
+    telefonoColega,
+    org
   );
   if (!texto) {
     await feedComando.registrar(org, señalParaFeed, veredicto, matches).catch((e) =>
@@ -392,7 +432,7 @@ async function avisarCercano(org, signal, mensaje, grupo, matches, { edificio = 
   const señalParaAviso = { grupo_nombre: grupo.nombre || grupo.jid, autor_nombre: mensaje.autor, texto_original: mensaje.texto };
   let texto = edificio
     ? avisoCercano.construirEdificio(señalParaAviso, candidatas, edificio)
-    : avisoCercano.construir(señalParaAviso, candidatas);
+    : avisoCercano.construir(señalParaAviso, candidatas, org);
   if (!texto) return;
   // El cuerpo de un mensaje interactivo tiene tope duro de 1024 caracteres en
   // la API de Meta (un pedido con muchas candidatas lo puede pasar); un
@@ -405,15 +445,17 @@ async function avisarCercano(org, signal, mensaje, grupo, matches, { edificio = 
   // frenar. Aca la accion correcta no es un toque, es que Natalia responda
   // ELLA con lo que sabe del edificio.
   //
-  // BOTONES en el resto (Juan, 2026-08-21): el id de cada boton lleva la
-  // señal adentro, asi que src/channels/whatsapp.js resuelve la accion en el
-  // acto cuando llega el toque, sin pasarla por el modelo ni desambiguar
-  // entre varios pedidos pendientes. Ver src/agent/tools.js#aprobarPedidoRadar
-  // / rechazarPedidoRadar, que ya sabian resolver por radarSignalId directo.
+  // SOLO "No sirve" en el resto (Juan, 2026-08-22): el boton "Sí, publicar"
+  // se saco de aca — publicaba en el grupo, que es justo la accion que el
+  // gremio pidio dejar de hacer (ver la cabecera de aviso-cercano.js). Natalia
+  // lo toco dos veces el mismo dia porque el aviso se lo seguia ofreciendo
+  // aunque la norma ya habia cambiado. "No sirve" queda porque sigue siendo
+  // valido: registra el descarte (ver src/agent/tools.js#rechazarPedidoRadar)
+  // y no publica nada. aprobarManual (mas abajo) sigue existiendo para
+  // publicar a proposito desde el CRM — ese camino no se toco.
   const opts = edificio
     ? {}
     : { botones: [
-        { id: `radar_si:${signal.id}`, title: "Sí, publicar" },
         { id: `radar_no:${signal.id}`, title: "No sirve" },
       ] };
 

@@ -142,6 +142,15 @@ function instalarDobles() {
       },
     },
   };
+  // Sin este doble, cada test que llega a "demanda" dispara un colegas.upsert
+  // REAL contra la Supabase compartida por las 4 apps (vivo.js hace
+  // directorio.registrar best-effort, sin await). Hoy no falla nada porque
+  // "org-1" no es un UUID valido y Postgres lo rechaza en silencio — pero eso
+  // no protege a nadie: el dia que un fixture use un UUID valido, la suite
+  // empieza a escribir basura en produccion sin que ningun test lo note.
+  require.cache[RUTA("groups/directorio.js")] = {
+    exports: { registrar: async () => null },
+  };
   delete require.cache[RUTA("groups/vivo.js")];
   return require("../src/groups/vivo");
 }
@@ -620,11 +629,16 @@ test("avisarCercano: un pedido que SOLO fallo por puntaje bajo avisa al revisor"
   // BOTONES (Juan, 2026-08-21): el aviso ya no le pide escribir "si"/"no" —
   // el id del boton lleva la señal adentro, para que la respuesta se
   // resuelva sola sin depender de que el modelo interprete texto libre.
+  //
+  // SOLO "No sirve" (Juan, 2026-08-22): "Sí, publicar" se saco porque
+  // publicaba en el grupo, la accion que el gremio pidio dejar de ofrecer —
+  // Natalia lo toco dos veces el mismo dia porque el aviso se lo seguia
+  // ofreciendo.
   const botones = avisosCercanosEnviados[0].botones;
-  assert.strictEqual(botones.length, 2);
-  assert.deepStrictEqual(botones[0], { id: "radar_si:sig-1", title: "Sí, publicar" });
-  assert.deepStrictEqual(botones[1], { id: "radar_no:sig-1", title: "No sirve" });
+  assert.strictEqual(botones.length, 1);
+  assert.deepStrictEqual(botones[0], { id: "radar_no:sig-1", title: "No sirve" });
   assert.doesNotMatch(avisosCercanosEnviados[0].texto, /Respondeme/);
+  assert.doesNotMatch(avisosCercanosEnviados[0].texto, /Sí, publicar/);
 });
 
 test("avisarCercano: sin RADAR_REVISOR_PHONE configurado, no avisa a nadie", async () => {

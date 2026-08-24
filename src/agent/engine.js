@@ -3,6 +3,7 @@ const leads = require("../data/leads");
 const conversations = require("../data/conversations");
 const properties = require("../data/properties");
 const advisors = require("../data/advisors");
+const directorio = require("../groups/directorio");
 const { buildSystemPrompt } = require("./prompts");
 const { TOOL_DEFINITIONS, executeTool, maybeCaptadorAlert } = require("./tools");
 const { isQualified } = require("./qualification");
@@ -67,36 +68,60 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
     return null;
   });
 
-  const lead = await leads.findOrCreate(org.id, phone, advisor ? "asesor" : source);
-  // Un asesor que ya tenia lead de antes (le escribio a Sofi antes de que
-  // existiera esta rama) queda marcado, para que el embudo no lo cuente.
-  if (advisor && lead.source !== "asesor") {
+  // ¿Y si no es de la casa, es un colega de otra inmobiliaria? Se resuelve
+  // contra el directorio de los grupos gremiales (src/groups/directorio.js).
+  //
+  // Solo se pregunta si NO hay asesor: un asesor propio que ademas esta en un
+  // grupo sigue siendo de la casa, y asi no se paga la consulta de mas.
+  //
+  // Falla ABIERTA, igual que la del asesor: si revienta se lo atiende como
+  // cliente, que es el comportamiento de siempre.
+  const colega = advisor ? null : await directorio.esColega(org.id, phone).catch((e) => {
+    console.warn("[engine] No se pudo verificar si el telefono es de un colega:", e.message);
+    return null;
+  });
+
+  const fuenteLead = advisor ? "asesor" : colega ? "colega" : source;
+  const lead = await leads.findOrCreate(org.id, phone, fuenteLead);
+  // Un asesor o un colega que ya tenia lead de antes (escribio a Sofi antes de
+  // que existiera esta rama) queda marcado, para que el embudo no lo cuente.
+  if ((advisor || colega) && lead.source !== fuenteLead) {
     try {
-      Object.assign(lead, await leads.update(lead.id, { source: "asesor" }));
+      Object.assign(lead, await leads.update(lead.id, { source: fuenteLead }));
     } catch (e) {
-      console.warn("[engine] No se pudo marcar el lead como asesor:", e.message);
+      console.warn(`[engine] No se pudo marcar el lead como ${fuenteLead}:`, e.message);
     }
   }
 
   // Todo este bloque describe a un CLIENTE: de que anuncio vino, en que idioma
   // habla, por donde va en el kanban. Un asesor no tiene nada de eso, y
   // aplicarselo lo mete en el embudo como si fuera una oportunidad de venta.
+  //
+  // Un COLEGA (par de otra inmobiliaria) TAMPOCO es un cliente, pero no es
+  // identico al asesor: hasta el 2026-08-24 este bloque entero corria igual
+  // para un colega, porque solo se blindo "asesor" cuando se escribio (ver el
+  // comentario de arriba). Efecto real: un colega quedaba con property_ref_
+  // origen/ad_referral (arranca un aviso al captador como si fuera un cliente
+  // interesado, ver maybeCaptadorAlert mas abajo), pasaba de "nuevo" a
+  // "en_conversacion" en EL kanban de leads, y su categoria de tablero se
+  // fijaba como compra/alquiler — todo eso es exactamente "entrar al embudo
+  // como oportunidad de venta", lo que promptColega dice explicitamente que
+  // NO es. Por eso cada pieza de aca abajo se decide por separado, no con un
+  // solo `&& !colega` a la entrada del bloque:
+  //   - idioma: SI aplica a un colega. Es un dato neutro (como le contesta
+  //     Sofi, no que es) y no lo mete en ningun tablero.
+  //   - ref de origen / ad_referral / transicion de estado / categoria: NO
+  //     aplican. Son literalmente los campos que arman al lead como
+  //     oportunidad comercial — origen de anuncio, kanban, tablero — y un
+  //     colega no tiene ads ni oportunidad propia, tiene un cliente de OTRA
+  //     inmobiliaria.
   if (!advisor) {
-  // Deep link / click-to-WhatsApp: la primera mencion de una ref queda como origen
-  const refMatch = text.toUpperCase().match(REF_PATTERN);
-  if (refMatch && !lead.property_ref_origen) {
-    Object.assign(lead, await leads.update(lead.id, { property_ref_origen: refMatch[1] }));
-  }
-  // Igual que arriba: solo se guarda del PRIMER mensaje que lo trae (el
-  // origen del lead no cambia si mas adelante escribe mencionando otro anuncio).
-  if (adReferral && !lead.ad_referral) {
-    Object.assign(lead, await leads.update(lead.id, { ad_referral: adReferral }));
-  }
-  // Idioma del cliente, estampado UNA vez. El prellenado EN de la landing es
-  // señal fuerte en cualquier turno; la heuristica organica solo aplica al
-  // PRIMER mensaje (un cliente español que pega un anuncio en ingles despues
-  // no debe voltear la conversacion). Best-effort: sin la columna (migracion
-  // 2026-07-24_lead_idioma pendiente) queda en memoria para este turno.
+  // Idioma del cliente (o colega), estampado UNA vez. El prellenado EN de la
+  // landing es señal fuerte en cualquier turno; la heuristica organica solo
+  // aplica al PRIMER mensaje (alguien que escribe en español y pega un
+  // anuncio en ingles despues no debe voltear la conversacion). Best-effort:
+  // sin la columna (migracion 2026-07-24_lead_idioma pendiente) queda en
+  // memoria para este turno.
   if (!lead.idioma) {
     const idioma = detectClientLanguage(text);
     const esPrellenado = idioma === "en" && /^hi\b/i.test(text.trim());
@@ -109,10 +134,25 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
       }
     }
   }
+  // De aca para abajo, EXCLUSIVO de un cliente final (ver el razonamiento
+  // arriba): origen de anuncio, kanban, categoria de tablero. Un colega
+  // nunca pasa por esto.
+  if (!colega) {
+  // Deep link / click-to-WhatsApp: la primera mencion de una ref queda como origen
+  const refMatch = text.toUpperCase().match(REF_PATTERN);
+  if (refMatch && !lead.property_ref_origen) {
+    Object.assign(lead, await leads.update(lead.id, { property_ref_origen: refMatch[1] }));
+  }
+  // Igual que arriba: solo se guarda del PRIMER mensaje que lo trae (el
+  // origen del lead no cambia si mas adelante escribe mencionando otro anuncio).
+  if (adReferral && !lead.ad_referral) {
+    Object.assign(lead, await leads.update(lead.id, { ad_referral: adReferral }));
+  }
   // Un lead recien creado entra al kanban en "nuevo"; pasa a "en_conversacion"
   // cuando vuelve a escribir (segunda interaccion en adelante)
   if (!lead._isNew && lead.estado === "nuevo") {
     Object.assign(lead, await leads.update(lead.id, { estado: "en_conversacion" }));
+  }
   }
   }
 
@@ -136,7 +176,14 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
   // Un asesor diciendo "tengo un cliente que quiere vender" no es un
   // propietario declarando que vende: marcarlo dispararia el encuadre de
   // captacion y una alerta a otro asesor por un negocio que no existe.
-  if (!advisor && lead.intencion !== "vender") {
+  //
+  // Lo mismo para un colega (blindaje extendido 2026-08-24): "tengo un
+  // cliente que quiere vender" en boca de un colega de OTRA inmobiliaria es
+  // todavia menos un propietario declarando que vende — es un negocio de un
+  // tercero, del que ni siquiera sabemos el nombre. Este caso se blindo antes
+  // solo para el asesor porque el colega como rol no existia todavia; el
+  // riesgo es identico.
+  if (!advisor && !colega && lead.intencion !== "vender") {
     const clienteDijoVender = history.some((m) => m.role === "user" && detectSellerIntent(m.content));
     if (clienteDijoVender) {
       lead.intencion = "vender";
@@ -150,13 +197,24 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
   }
 
   const ctx = {
-    org, lead, advisor, propertyInteres: null, transfer: null, cita: null, allyMatch: null, allyAlert: null,
+    org, lead, advisor,
+    // Para que las tools (ver src/agent/tools.js) puedan distinguir a un
+    // colega de un cliente final sin volver a consultar el directorio. Ej:
+    // maybeCaptadorAlert lo usa para no mandarle a un asesor un aviso de
+    // "cliente interesado" cuando en realidad es un colega buscando para el
+    // suyo (Juan, 2026-08-24 — ver el comentario de esa funcion).
+    colega,
+    propertyInteres: null, transfer: null, cita: null, allyMatch: null, allyAlert: null,
     appointmentAlert: null, captadorAlert: null, lastUserMessage: text,
     // Solo tiene sentido con un asesor citando el aviso de un pedido del
     // radar; con un cliente esto siempre viene null y no se usa.
     radarSignalId,
   };
-  if (!advisor && lead.property_ref_origen) {
+  // Este bloque solo tiene sentido con property_ref_origen, que un colega ya
+  // no puede tener (ver el bloque de arriba) — el !colega es defensivo, para
+  // un colega con lead viejo de antes de este blindaje que ya traia ese campo
+  // seteado.
+  if (!advisor && !colega && lead.property_ref_origen) {
     const origen = await properties.findByRef(org, lead.property_ref_origen);
     if (origen?.disponible) {
       ctx.propertyInteres = origen;
@@ -170,7 +228,7 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
     }
   }
 
-  const system = buildSystemPrompt({ org, lead, qualified: isQualified(lead), now: nowInBogota(), advisor });
+  const system = buildSystemPrompt({ org, lead, qualified: isQualified(lead), now: nowInBogota(), advisor, colega });
 
   const extractText = (r) =>
     r.content.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();

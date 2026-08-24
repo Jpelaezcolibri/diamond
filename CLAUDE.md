@@ -61,6 +61,11 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
   `properties.prioridad_venta`, suma puntaje en el radar de grupos solo a la
   ref `8989725` — urgencia de venta pedida por Juan sobre esa propiedad
   puntual, el resto del inventario no se toca).
+  `db/migrations/2026-08-24_contact_whatsapp_number.sql` (columna
+  `organizations.contact_whatsapp_number`, el numero de la linea oficial que
+  se ofrece en los avisos al colega del radar de grupos, resuelto por
+  organización en vez de una sola env var de Railway — el código ya degrada
+  limpio a `CONTACT_WHATSAPP_NUMBER` sin ella).
 - **Pendientes de negocio:** teléfonos reales de asesores de arriendo/
   vehículos en `advisors` · corregir precio de la ref `9921388` en Wasi ·
   verificación de empresa en Meta · confirmar las 3 propiedades exclusivas
