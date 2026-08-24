@@ -33,6 +33,16 @@ export type Signal = {
   zona: string | null;
   precio_max: number | null;
   habitaciones: number | null;
+  /* Las otras exigencias del pedido. Opcionales porque llegan con
+     db/migrations/2026-08-24_group_signals_exigencias.sql: una señal anterior
+     —o un entorno donde la migración todavía no corrió— simplemente no las
+     trae, y el recuadro "Lo que pide" no dibuja esas filas. */
+  area_min?: number | null;
+  banos?: number | null;
+  garajes?: number | null;
+  estrato?: number | null;
+  /** El pedido acepta una alcoba/baño/garaje menos ("3 alcobas o 2 con estudio"). */
+  flexible_habitaciones?: boolean | null;
   texto_original: string | null;
   matches: Match[] | null;
   enviado_at: string | null;
@@ -337,7 +347,16 @@ function Ficha({ s, copias, grupos }: { s: Signal; copias: number; grupos: numbe
   const matches = s.matches || [];
   const tel = telefonoUsable(s.autor_telefono);
 
-  const extraido = [s.operacion, s.tipo, s.zona, s.habitaciones ? `${s.habitaciones} alc` : null, pesos(s.precio_max)]
+  const extraido = [
+    s.operacion, s.tipo, s.zona,
+    s.habitaciones ? `${s.habitaciones} alc` : null,
+    // Sólo los que el colega mencionó: el resumen de una línea se lee de un
+    // vistazo y no puede crecer con filas vacías.
+    s.area_min ? `${s.area_min} m²` : null,
+    s.banos ? `${s.banos} baños` : null,
+    s.garajes ? `${s.garajes} gj` : null,
+    pesos(s.precio_max),
+  ]
     .filter(Boolean)
     .join(" · ");
 
@@ -476,7 +495,22 @@ function Ficha({ s, copias, grupos }: { s: Signal; copias: number; grupos: numbe
                       ["Tipo", s.tipo],
                       ["Zona", s.zona],
                       ["Hasta", pesos(s.precio_max)],
-                      ["Alcobas", s.habitaciones ? `${s.habitaciones}` : null],
+                      /* Hasta el 2026-08-24 el recuadro terminaba en Alcobas,
+                         aunque el motor puntuara con cuatro exigencias más.
+                         Catherine leía un pedido recortado: en el de Edwin
+                         Ramírez faltaban los 98 m², los 2 baños y los 2
+                         garajes, y al lado una propiedad decía "1 garaje
+                         (pediste 2)" sin que el pedido mencionara garajes. */
+                      [
+                        "Alcobas",
+                        s.habitaciones
+                          ? `${s.habitaciones}${s.flexible_habitaciones ? " (o una menos)" : ""}`
+                          : null,
+                      ],
+                      ["Área mín.", s.area_min ? `${s.area_min} m²` : null],
+                      ["Baños", s.banos ? `${s.banos}` : null],
+                      ["Garajes", s.garajes ? `${s.garajes}` : null],
+                      ["Estrato", s.estrato ? `${s.estrato}` : null],
                     ]
                       .filter(([, v]) => v)
                       .map(([k, v]) => (

@@ -17,13 +17,38 @@ const ORIGENES = ["vivo", "export", "reenvio"];
 // `advisor_id` llega con 2026-08-02_learning_domain.sql y va en la misma
 // lista: en un entorno sin migrar, una señal guardada sin autor vale mucho mas
 // que una señal perdida.
-const COLUMNAS_NUEVAS = ["origen", "fecha_mensaje", "advisor_id"];
+// Las exigencias del pedido (area_min, banos, garajes, estrato,
+// flexible_habitaciones) llegan con 2026-08-24_group_signals_exigencias.sql y
+// van en la misma lista, por la misma razon.
+const COLUMNAS_NUEVAS = [
+  "origen", "fecha_mensaje", "advisor_id",
+  "area_min", "banos", "garajes", "estrato", "flexible_habitaciones",
+];
 let faltanColumnas = false;
+// Cuales faltan DE VERDAD, no "alguna falta". Hasta el 2026-08-24 esto era un
+// solo booleano y el reintento borraba la lista ENTERA: con una migracion
+// corrida y la otra no —el estado normal mientras se despliega— una columna
+// nueva sin migrar se llevaba puesto tambien `fecha_mensaje`, que ya existia
+// y que es de donde sale la antiguedad del pedido para decidir el DM
+// (src/groups/politica.js#decidirDm). Se habrian perdido DMs sin un solo
+// error visible, que es exactamente el modo de falla que este archivo
+// intenta evitar.
+const columnasAusentes = new Set();
 
 // PGRST204: PostgREST no encuentra la columna en su cache de esquema.
 // 42703: Postgres dice que la columna no existe.
 function esColumnaFaltante(error) {
   return error?.code === "PGRST204" || error?.code === "42703";
+}
+
+// Los dos codigos citan la columna entre comillas: PostgREST dice "Could not
+// find the 'x' column of ...", Postgres dice: column "x" of relation ... Se
+// acepta solo si es una de las nuestras — nunca se borra a ciegas un campo
+// que el error nombro por otra razon.
+function columnaDelError(error) {
+  const m = String(error?.message || "").match(/'([a-z_]+)'|"([a-z_]+)"/);
+  const nombre = m && (m[1] || m[2]);
+  return nombre && COLUMNAS_NUEVAS.includes(nombre) ? nombre : null;
 }
 
 // Alta con deduplicacion. El mismo mensaje visto por dos asesores del mismo
@@ -57,6 +82,19 @@ async function create(orgId, fields) {
     precio_min: fields.precio_min || null,
     precio_max: fields.precio_max || null,
     habitaciones: fields.habitaciones || null,
+    // Las otras cinco exigencias que classify.js extrae y match.js usa para
+    // puntuar (Juan, 2026-08-24). Sin ellas guardadas, el panel mostraba un
+    // pedido recortado —"Lo que pide" no decia que Edwin habia pedido 98 m²,
+    // 2 baños y 2 garajes— y el efecto del castigo por cumplir corto no se
+    // podia medir sobre historico. Ver
+    // db/migrations/2026-08-24_group_signals_exigencias.sql.
+    area_min: fields.area_min || null,
+    banos: fields.banos || null,
+    garajes: fields.garajes || null,
+    estrato: fields.estrato || null,
+    // Booleano, no id: `|| null` convertiria false en null y se perderia la
+    // diferencia entre "no acepta una menos" y "no se sabe".
+    flexible_habitaciones: fields.flexible_habitaciones ?? null,
     contacto: fields.contacto || null,
     texto_original: fields.texto_original || null,
     matches: fields.matches || [],
@@ -85,7 +123,7 @@ async function create(orgId, fields) {
 async function insertar(row) {
   // Si ya sabemos que la migracion no corrio, ni lo intentamos con las
   // columnas nuevas.
-  const fila = faltanColumnas ? sinColumnasNuevas(row) : row;
+  const fila = faltanColumnas || columnasAusentes.size ? sinColumnasNuevas(row) : row;
 
   const { data, error } = await supabase.from("group_signals").insert(fila).select().single();
   if (!error) return { signal: data, duplicado: false };
@@ -94,20 +132,33 @@ async function insertar(row) {
   // un fallo. Cualquier otro error si se propaga.
   if (error.code === "23505") return { signal: null, duplicado: true };
 
-  if (esColumnaFaltante(error) && !faltanColumnas) {
-    faltanColumnas = true;
-    console.warn(
-      "[grupos] Falta correr db/migrations/2026-08-01_radar_grupos.sql — " +
-      "las señales se guardan sin origen ni fecha_mensaje hasta entonces."
-    );
-    return insertar(row);
+  if (esColumnaFaltante(error)) {
+    // Solo la que el error nombro. Si no se pudo identificar, se cae al
+    // comportamiento historico (sacar todas) antes que perder la señal.
+    const columna = columnaDelError(error);
+    if (columna && !columnasAusentes.has(columna)) {
+      columnasAusentes.add(columna);
+      console.warn(`[grupos] La columna group_signals.${columna} no existe — falta correr su migracion. Las señales se guardan sin ella hasta entonces.`);
+      return insertar(row);
+    }
+    if (!columna && !faltanColumnas) {
+      faltanColumnas = true;
+      console.warn(
+        "[grupos] Falta correr una migracion de group_signals — las señales se " +
+        "guardan sin las columnas nuevas hasta entonces."
+      );
+      return insertar(row);
+    }
   }
   throw error;
 }
 
+// `faltanColumnas` (no se pudo identificar cual) saca todas, como siempre;
+// si SI se identificaron, se sacan solo esas y el resto se sigue guardando.
 function sinColumnasNuevas(row) {
   const copia = { ...row };
-  for (const c of COLUMNAS_NUEVAS) delete copia[c];
+  const aSacar = faltanColumnas ? COLUMNAS_NUEVAS : columnasAusentes;
+  for (const c of aSacar) delete copia[c];
   return copia;
 }
 
@@ -688,4 +739,5 @@ module.exports = {
 // Solo para tests: el flag de "falta la migracion" es de proceso.
 function _resetBlindaje() {
   faltanColumnas = false;
+  columnasAusentes.clear();
 }

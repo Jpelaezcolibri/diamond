@@ -49,6 +49,14 @@ async function persistirSenal(org, c, { origen = "export", advisorId = null, aut
     precio_min: c.precio_min || null,
     precio_max: c.precio_max || null,
     habitaciones: c.habitaciones || null,
+    // El resto de lo que pidio el colega (Juan, 2026-08-24): classify.js ya
+    // los extraia y match.js ya los usaba para puntuar — solo faltaba
+    // guardarlos. Ver la nota en group-signals.js#create.
+    area_min: c.area_min || null,
+    banos: c.banos || null,
+    garajes: c.garajes || null,
+    estrato: c.estrato || null,
+    flexible_habitaciones: c.flexible_habitaciones ?? null,
     contacto: c.contacto || null,
     texto_original: m.texto || null,
     matches: c.matches || [],

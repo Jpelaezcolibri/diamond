@@ -66,6 +66,13 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
   se ofrece en los avisos al colega del radar de grupos, resuelto por
   organización en vez de una sola env var de Railway — el código ya degrada
   limpio a `CONTACT_WHATSAPP_NUMBER` sin ella).
+  `db/migrations/2026-08-24_group_signals_exigencias.sql` (columnas
+  `area_min`, `banos`, `garajes`, `estrato` y `flexible_habitaciones` en
+  `group_signals`: el clasificador ya extraía esos campos y el motor de cruce
+  ya los usaba para puntuar, pero no se guardaban — el panel mostraba un
+  pedido recortado y el efecto del castigo por cumplir corto no se podía
+  medir sobre histórico. El código degrada limpio sin ella: el insert
+  reintenta sacando solo la columna que falte, y el CRM lee con `select("*")`).
 - **Pendientes de negocio:** teléfonos reales de asesores de arriendo/
   vehículos en `advisors` · corregir precio de la ref `9921388` en Wasi ·
   verificación de empresa en Meta · confirmar las 3 propiedades exclusivas
