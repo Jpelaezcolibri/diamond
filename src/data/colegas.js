@@ -13,6 +13,27 @@ const { mismoTelefono } = require("./advisors");
 
 const soloDigitos = (t) => String(t || "").replace(/\D/g, "") || null;
 
+// Variantes EXACTAS con las que la columna `telefono` podria estar guardada
+// para el mismo numero (Juan, revision 2026-08-24). La migracion dice que
+// `telefono` siempre lleva indicativo, pero dos rutas distintas lo escriben
+// (WAHA participantes / lo que llegue por Cloud API) y no siempre coincide en
+// si el indicativo esta o no. En vez de traer TODA la tabla y comparar en
+// memoria con mismoTelefono —lo que PostgREST corta en 1.000 filas por
+// defecto y el directorio ya pasa de 1.000 colegas, ademas de leer la tabla
+// entera en cada mensaje entrante— se arman las 2-3 variantes plausibles y se
+// consulta por ellas, que es lo que de verdad usa el indice parcial
+// idx_colegas_grupos_telefono. Asume indicativo de Colombia (57): es lo unico
+// que este bot atiende.
+function variantesTelefono(tel) {
+  const variantes = new Set([tel]);
+  const cola10 = tel.slice(-10);
+  if (cola10.length === 10) {
+    variantes.add(cola10);
+    variantes.add(`57${cola10}`);
+  }
+  return [...variantes];
+}
+
 function esTablaFaltante(error) {
   // 42P01: la tabla no existe. PGRST205: PostgREST no la tiene en su cache.
   return error?.code === "42P01" || error?.code === "PGRST205";
@@ -106,7 +127,8 @@ async function porTelefono(orgId, telefono) {
       .from("colegas_grupos")
       .select("lid, telefono, nombre")
       .eq("org_id", orgId)
-      .not("telefono", "is", null);
+      .in("telefono", variantesTelefono(tel))
+      .limit(5);
     if (error) throw error;
     return (data || []).find((c) => mismoTelefono(c.telefono, tel)) || null;
   } catch (e) {
@@ -119,6 +141,12 @@ async function porTelefono(orgId, telefono) {
   }
 }
 
+// Tamano de pagina para listarConTelefono. PostgREST corta en 1.000 filas por
+// defecto y el diseño apunta a ~1.012 colegas (Juan, revision 2026-08-24):
+// sin paginar, el corte es silencioso y le pega directo a la cobertura que
+// esta tabla existe para medir.
+const PAGINA_LISTADO = 1000;
+
 /** Los colegas con telefono resuelto — semilla del indice del directorio. */
 async function listarConTelefono(orgId) {
   if (!orgId) return [];
@@ -130,13 +158,22 @@ async function listarConTelefono(orgId) {
   }
 
   try {
-    const { data, error } = await supabase
-      .from("colegas_grupos")
-      .select("lid, telefono, nombre")
-      .eq("org_id", orgId)
-      .not("telefono", "is", null);
-    if (error) throw error;
-    return data || [];
+    const filas = [];
+    let desde = 0;
+    for (;;) {
+      const { data, error } = await supabase
+        .from("colegas_grupos")
+        .select("lid, telefono, nombre")
+        .eq("org_id", orgId)
+        .not("telefono", "is", null)
+        .order("id", { ascending: true })
+        .range(desde, desde + PAGINA_LISTADO - 1);
+      if (error) throw error;
+      filas.push(...(data || []));
+      if (!data || data.length < PAGINA_LISTADO) break;
+      desde += PAGINA_LISTADO;
+    }
+    return filas;
   } catch (e) {
     if (esTablaFaltante(e)) {
       avisarFaltaTabla();
