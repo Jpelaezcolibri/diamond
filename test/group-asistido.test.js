@@ -20,6 +20,9 @@ let avisosMarcados = [];
 let enviadosPorSofi = [];
 let envioFalla = false;
 let feedRegistrado = [];
+// Telefono que el directorio (src/groups/directorio.js) dice haber resuelto
+// para el @lid del colega -- null simula el 33% que no se resuelve.
+let telefonoColegaResuelto = null;
 
 function instalar() {
   require.cache[RUTA("groups/classify.js")] = {
@@ -86,7 +89,7 @@ function instalar() {
   // no protege a nadie: el dia que un fixture use un UUID valido, la suite
   // empieza a escribir basura en produccion sin que ningun test lo note.
   require.cache[RUTA("groups/directorio.js")] = {
-    exports: { registrar: async () => null },
+    exports: { registrar: async () => null, telefonoDe: async () => telefonoColegaResuelto },
   };
   require.cache[RUTA("channels/whatsapp.js")] = {
     exports: {
@@ -152,7 +155,9 @@ beforeEach(() => {
   enviadosPorSofi = [];
   envioFalla = false;
   feedRegistrado = [];
+  telefonoColegaResuelto = null;
   delete process.env.RADAR_ALERTA_TO;
+  delete process.env.CONTACT_WHATSAPP_NUMBER;
   vivo = instalar();
 });
 
@@ -243,17 +248,51 @@ test("el aviso sale por la Cloud API oficial, no por la linea vinculada", async 
   assert.strictEqual(enviadosPorSofi[0].to, "573028536489");
 });
 
-test("el link al colega solo se arma si el numero es marcable (@lid queda descartado)", async () => {
-  // Bug real 2026-08-18: antes se armaba el link con CUALQUIER telefono, sin
-  // filtrar los @lid (14-15 digitos) — el asesor lo tocaba y no llevaba a
-  // ningun lado.
+// CAMBIO DE POLITICA (Juan, 2026-08-22): "que se notifique al celular de
+// natalia todo para que ella lo responda directamente desde su numero" — el
+// gremio pide no llenar los grupos, asi que el aviso YA NO puede decir
+// "respondele en el grupo" (era el bug real: mensaje.autorTelefono es un
+// @lid, nunca marcable, asi que ese texto salia el 100% de las veces).
+// vivo.js#asistir ahora resuelve el telefono real con
+// src/groups/directorio.js ANTES de llamar a alertaAsesor.construir.
+test("con telefono resuelto por el directorio, el aviso trae el link directo al privado", async () => {
+  telefonoColegaResuelto = "573001234567";
+  await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE });
+  assert.match(enviadosPorSofi[0].texto, /Contacto: https:\/\/wa\.me\/573001234567/);
+});
+
+test("sin telefono resuelto (el 33% esperado), NO dice 'respondele en el grupo' -- dice que toque el nombre", async () => {
+  telefonoColegaResuelto = null;
   await vivo.procesarMensaje(
     ORG,
     { ...mensaje(), autorTelefono: "141746805670125" },
     { grupo: GRUPO, modo: "asistido", asesor: CATHERINE }
   );
-  assert.match(enviadosPorSofi[0].texto, /sin teléfono — respondele en el grupo/);
+  assert.doesNotMatch(enviadosPorSofi[0].texto, /respondele en el grupo/i);
+  assert.match(enviadosPorSofi[0].texto, /tocá el nombre de Patricia Gomez en el grupo/);
   assert.doesNotMatch(enviadosPorSofi[0].texto, /wa\.me\/141746805670125/);
+});
+
+test("si el directorio falla al resolver, el aviso sale igual (con la variante sin telefono)", async () => {
+  require.cache[RUTA("groups/directorio.js")].exports.telefonoDe = async () => {
+    throw new Error("WAHA caido");
+  };
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE });
+  assert.strictEqual(r.resultado, "avisada");
+  assert.match(enviadosPorSofi[0].texto, /tocá el nombre/);
+});
+
+test("con CONTACT_WHATSAPP_NUMBER definida, el aviso agrega el link a la linea oficial de Sofi", async () => {
+  process.env.CONTACT_WHATSAPP_NUMBER = "573000000001";
+  await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE });
+  assert.match(enviadosPorSofi[0].texto, /escribirle a Sofi/);
+  assert.match(enviadosPorSofi[0].texto, /https:\/\/wa\.me\/573000000001/);
+});
+
+test("sin CONTACT_WHATSAPP_NUMBER, el aviso sale sin el renglon de Sofi -- nunca un link a medias", async () => {
+  await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE });
+  assert.doesNotMatch(enviadosPorSofi[0].texto, /escribirle a Sofi/);
+  assert.doesNotMatch(enviadosPorSofi[0].texto, /YOUR_CONTACT_LINK/);
 });
 
 test("se guarda el destinatario REAL del aviso, no quien observo el grupo", async () => {

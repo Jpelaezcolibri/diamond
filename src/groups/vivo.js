@@ -148,7 +148,7 @@ async function procesarMensaje(org, mensaje, { grupo, modo = "sombra", enviar = 
   // y, si aprueba, le escribe a la asesora. Es el paso previo a encender las
   // respuestas: sirve para calibrar el motor sin exponer la marca.
   if (modo === "asistido") {
-    return asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora });
+    return asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, sesion });
   }
 
   // 5. Compuerta de calidad del dato, y despues politica de conducta. Son dos
@@ -264,7 +264,7 @@ async function procesarMensaje(org, mensaje, { grupo, modo = "sombra", enviar = 
 //
 // Quien decide si se avisa es Sofi, no el puntaje. El veredicto se guarda
 // SIEMPRE —aunque diga que no sirve— porque el "no" tambien ensena.
-async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora }) {
+async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, sesion = null }) {
   const matches = señal.matches || [];
   if (matches.length === 0) return { resultado: "sin_candidatas", signalId: signal && signal.id };
 
@@ -286,6 +286,19 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora }
     return { resultado: "descartada_por_sofi", veredicto, signalId: signal.id };
   }
 
+  // Telefono REAL del colega, resuelto por el directorio a partir del @lid
+  // (mensaje.autorTelefono) — nunca se le pasa el lid crudo a alertaAsesor,
+  // que ya no sabe interpretarlo (ver la nota de politica en ese archivo,
+  // 2026-08-22). Falla cerrado y en silencio: sin telefono, alertaAsesor.construir
+  // arma igual el aviso, solo que con la instruccion de tocar el nombre en el
+  // grupo en vez de un link directo — un fallo aca nunca puede tumbar el aviso.
+  const telefonoColega = await directorio
+    .telefonoDe(org.id, mensaje.autorTelefono, { sesion, jid: grupo.jid })
+    .catch((e) => {
+      console.warn("[radar] No se pudo resolver el telefono del colega para el aviso:", e.message);
+      return null;
+    });
+
   const texto = alertaAsesor.construir(
     {
       grupo_nombre: grupo.nombre || grupo.jid,
@@ -294,7 +307,8 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora }
       texto_original: mensaje.texto,
     },
     veredicto,
-    matches
+    matches,
+    telefonoColega
   );
   if (!texto) {
     await feedComando.registrar(org, señalParaFeed, veredicto, matches).catch((e) =>
@@ -430,15 +444,17 @@ async function avisarCercano(org, signal, mensaje, grupo, matches, { edificio = 
   // frenar. Aca la accion correcta no es un toque, es que Natalia responda
   // ELLA con lo que sabe del edificio.
   //
-  // BOTONES en el resto (Juan, 2026-08-21): el id de cada boton lleva la
-  // señal adentro, asi que src/channels/whatsapp.js resuelve la accion en el
-  // acto cuando llega el toque, sin pasarla por el modelo ni desambiguar
-  // entre varios pedidos pendientes. Ver src/agent/tools.js#aprobarPedidoRadar
-  // / rechazarPedidoRadar, que ya sabian resolver por radarSignalId directo.
+  // SOLO "No sirve" en el resto (Juan, 2026-08-22): el boton "Sí, publicar"
+  // se saco de aca — publicaba en el grupo, que es justo la accion que el
+  // gremio pidio dejar de hacer (ver la cabecera de aviso-cercano.js). Natalia
+  // lo toco dos veces el mismo dia porque el aviso se lo seguia ofreciendo
+  // aunque la norma ya habia cambiado. "No sirve" queda porque sigue siendo
+  // valido: registra el descarte (ver src/agent/tools.js#rechazarPedidoRadar)
+  // y no publica nada. aprobarManual (mas abajo) sigue existiendo para
+  // publicar a proposito desde el CRM — ese camino no se toco.
   const opts = edificio
     ? {}
     : { botones: [
-        { id: `radar_si:${signal.id}`, title: "Sí, publicar" },
         { id: `radar_no:${signal.id}`, title: "No sirve" },
       ] };
 

@@ -20,4 +20,25 @@ function linkWhatsapp(telefono) {
   return esMarcable(telefono) ? `https://wa.me/${String(telefono).replace(/\D/g, "")}` : null;
 }
 
-module.exports = { esMarcable, linkWhatsapp };
+// Link a la linea OFICIAL de Sofi (Juan, 2026-08-22): "que todo mensaje que
+// salga hacia un colega invite a escribirle a Sofi" -- asi se abre la ventana
+// de 24h en la linea oficial (sin el riesgo de baneo de la linea vinculada al
+// radar, ver sofi-grupos-whatsapp.md) y la conversacion queda en el CRM.
+// Compartido entre alerta-asesor.js y aviso-cercano.js para que los dos
+// avisos al colega usen exactamente el mismo criterio.
+//
+// Se lee la variable en cada llamado, nunca se cachea: los tests la
+// prenden/apagan por caso y la ausencia/presencia tiene que reflejarse en el
+// momento exacto de construir el aviso.
+//
+// Reusa linkWhatsapp (y no arma el link a mano) a proposito: si el numero no
+// es marcable devuelve null, nunca un link a medias. Precedente real
+// (2026-08-18, ver src/lib/validar-mensaje.js): Sofi le mando a un colega
+// "https://wa.me/message/YOUR_CONTACT_LINK", un placeholder inventado. El
+// link lo arma el codigo, nunca la IA -- sin CONTACT_WHATSAPP_NUMBER
+// definida, el aviso sale SIN esta linea, nunca con un link a medias.
+function linkContactoOficial() {
+  return linkWhatsapp(process.env.CONTACT_WHATSAPP_NUMBER);
+}
+
+module.exports = { esMarcable, linkWhatsapp, linkContactoOficial };
