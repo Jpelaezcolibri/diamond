@@ -271,11 +271,12 @@ async function procesarMensaje(org, mensaje, { grupo, modo = "sombra", enviar = 
 // no hace falta nada mas aca. Se deja la funcion, en vez de llamar a
 // mensajeGrupo directo desde el llamador, porque documenta con nombre la
 // intencion (el texto que le llega al colega por DM).
-// `sinConfirmar` (Juan, 2026-08-24, opcional): lo que el veredicto de Sofi
-// marco como no verificado para estas mismas `utiles` (ver revalidar.js). Se
-// pasa tal cual a redactar.mensajeGrupo -- ver la nota de diseño ahi.
-function textoParaColega(autorNombre, utiles, org, sinConfirmar = []) {
-  return redactar.mensajeGrupo({ autor_nombre: autorNombre }, utiles, { org, sinConfirmar });
+// `sinConfirmar` y `leFalta` (Juan, 2026-08-24, opcionales): los dos huecos
+// que el veredicto de Sofi declara sobre estas mismas `utiles` -- lo que no
+// sabemos y lo que sabemos que no cumple (ver revalidar.js). Se pasan tal
+// cual a redactar.mensajeGrupo, que decide donde va cada uno.
+function textoParaColega(autorNombre, utiles, org, sinConfirmar = [], leFalta = []) {
+  return redactar.mensajeGrupo({ autor_nombre: autorNombre }, utiles, { org, sinConfirmar, leFalta });
 }
 
 // Sofi da su veredicto y, si aprueba, le avisa a la asesora.
@@ -367,7 +368,13 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
   await groupSignals.guardarPolitica(org.id, signal.id, { motivo: decisionDm.motivo, traza: decisionDm.traza }).catch(() => {});
 
   if (decisionDm.enviarDm && sesion && utiles.length > 0) {
-    const textoDm = textoParaColega(mensaje.autor, utiles, org, veredicto.sin_confirmar || []);
+    const textoDm = textoParaColega(
+      mensaje.autor,
+      utiles,
+      org,
+      veredicto.sin_confirmar || [],
+      veredicto.le_falta || []
+    );
     if (textoDm) {
       const envioDm = await waha.enviarDm(sesion, telefonoColega, textoDm).catch((e) => ({ ok: false, error: e.message }));
       if (envioDm && envioDm.ok) {
@@ -724,7 +731,12 @@ async function responderPorDmManual(org, signalId, { sesion = null, refs = null 
   // esto se degrada a "sin salvedad", igual que un mensaje redactado antes de
   // este cambio.
   const sinConfirmar = (signal.revalidacion && signal.revalidacion.sin_confirmar) || [];
-  const texto = redactar.mensajeGrupo({ autor_nombre: signal.autor_nombre }, publicables, { org, sinConfirmar });
+  const leFalta = (signal.revalidacion && signal.revalidacion.le_falta) || [];
+  const texto = redactar.mensajeGrupo({ autor_nombre: signal.autor_nombre }, publicables, {
+    org,
+    sinConfirmar,
+    leFalta,
+  });
   if (!texto) return { resultado: "sin_texto" };
 
   // LIMITES QUE SI SE RESPETAN (Juan, 2026-08-24): una vez por colega por dia

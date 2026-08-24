@@ -101,3 +101,66 @@ test("un veredicto VIEJO sin 'sin_confirmar' (guardado antes de este cambio) no 
   assert.strictEqual(veredicto.sin_confirmar, undefined);
   assert.strictEqual(revalidar.apruebaAviso(veredicto), true, "el veredicto viejo sigue aprobando el aviso igual");
 });
+
+// LE_FALTA (Juan, 2026-08-24) — caso real Edwin Ramirez / grupo SOLO
+// Envigado. Es OTRA cosa que sin_confirmar: aca el dato SI se conoce y la
+// propiedad no cumple, pero es una sola cosa accesoria de un pedido largo.
+
+test("una propiedad que cumple todo salvo una cosa accesoria entra a refs_utiles con su aclaracion", async (t) => {
+  mockRespuesta(t, {
+    es_pedido_real: true, sirve_alguna: true, refs_utiles: ["10077095"],
+    por_que: "Cumple zona, precio, alcobas, area y baños; solo tiene un garaje.",
+    confianza: 0.92, desacuerdo_con_puntaje: "", sin_confirmar: [],
+    le_falta: [{ ref: "10077095", detalle: "tiene 1 garaje y pediste 2" }],
+  });
+
+  const { veredicto } = await revalidar.revalidar(clasificado(), [match({ ref: "10077095" })]);
+  assert.strictEqual(revalidar.apruebaAviso(veredicto), true, "no se pierde por el garaje que falta");
+  assert.deepStrictEqual(veredicto.le_falta, [{ ref: "10077095", detalle: "tiene 1 garaje y pediste 2" }]);
+});
+
+test("cuando todo lo conocido cumple, 'le_falta' sale vacio -- no se inventa una aclaracion", async (t) => {
+  mockRespuesta(t, {
+    es_pedido_real: true, sirve_alguna: true, refs_utiles: ["REF1"],
+    por_que: "Calza en todo lo que se pidio.", confianza: 0.95, desacuerdo_con_puntaje: "",
+    sin_confirmar: [], le_falta: [],
+  });
+
+  const { veredicto } = await revalidar.revalidar(clasificado(), [match()]);
+  assert.deepStrictEqual(veredicto.le_falta, []);
+});
+
+test("un veredicto VIEJO sin 'le_falta' no rompe apruebaAviso", async (t) => {
+  mockRespuesta(t, {
+    es_pedido_real: true, sirve_alguna: true, refs_utiles: ["REF1"],
+    por_que: "Calza en zona, alcobas y precio.", confianza: 0.9, desacuerdo_con_puntaje: "",
+    // sin 'le_falta' ni 'sin_confirmar' a proposito: es lo que ya esta
+    // guardado en group_signals.revalidacion de antes de esta fecha.
+  });
+
+  const { veredicto } = await revalidar.revalidar(clasificado(), [match()]);
+  assert.strictEqual(veredicto.le_falta, undefined);
+  assert.strictEqual(revalidar.apruebaAviso(veredicto), true);
+});
+
+// El esquema es el contrato con el modelo: si estos campos dejan de ser
+// obligatorios, Sofi puede omitirlos y la aclaracion desaparece sin que nada
+// falle -- exactamente el modo de falla silencioso que este cambio corrige.
+test("el esquema exige los tres campos de honestidad, no solo los de veredicto", () => {
+  for (const campo of ["sin_confirmar", "le_falta", "refs_utiles"]) {
+    assert.ok(revalidar.ESQUEMA.required.includes(campo), `${campo} es obligatorio en el esquema`);
+  }
+  const item = revalidar.ESQUEMA.properties.le_falta.items;
+  assert.deepStrictEqual(item.required, ["ref", "detalle"], "cada aclaracion dice de QUE propiedad habla");
+});
+
+// El prompt es el unico lugar donde vive la linea entre "accesorio" y "de
+// fondo". Si se borra, Sofi vuelve a descartar el caso de El Portal y no lo
+// notariamos: el sistema seguiria funcionando, solo callado.
+test("el prompt distingue las tres situaciones y nombra los innegociables", () => {
+  const s = revalidar.SISTEMA || "";
+  for (const marca of ["INCOMPATIBLE", "INCOMPLETO", "CASI", "ACCESORIO", "de FONDO"]) {
+    assert.ok(s.includes(marca), `el prompt nombra ${marca}`);
+  }
+  assert.ok(/DOS O MAS incumplimientos/.test(s), "dos huecos conocidos siguen siendo un NO");
+});

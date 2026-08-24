@@ -226,3 +226,80 @@ test("la salvedad va pegada al encabezado, antes de las fichas de las propiedade
   assert.strictEqual(lineas[2], "");
   assert.match(lineas[3], /^1\) /);
 });
+
+// ACLARACION DE LO QUE NO CUMPLE (Juan, 2026-08-24) — caso real Edwin
+// Ramirez, grupo SOLO Envigado: pidio Envigado o Poblado, hasta $980M, 3
+// alcobas, 98 m², 2 baños, 2 garajes y cuarto util. La ref 10077095 cumplia
+// todo salvo el segundo garaje y Sofi la descarto. "al menos el apartamento
+// de el portal si se podia enviar con la aclaracion de que solo le falta un
+// parqueadero de todo el pedido".
+//
+// Distinto de `sinConfirmar`: ahi el dato NO SE SABE, aca SI se sabe y no
+// cumple. Y por eso va dentro de la ficha de esa propiedad y no en el
+// encabezado — en un mensaje con varias opciones, unas cumplen y otras no.
+
+test("sin 'leFalta', el mensaje sale exactamente igual que antes -- ni un renglon de mas", () => {
+  const conOpcionVacia = redactar.mensajeGrupo({ autor_nombre: "Ana" }, [match()], { leFalta: [] });
+  const sinOpcion = redactar.mensajeGrupo({ autor_nombre: "Ana" }, [match()]);
+  assert.strictEqual(conOpcionVacia, sinOpcion);
+  assert.ok(!conOpcionVacia.includes("Aclaración:"));
+});
+
+test("la aclaracion va DENTRO de la ficha de su propiedad, entre los datos y el link", () => {
+  const texto = redactar.mensajeGrupo({ autor_nombre: "Edwin" }, [match({ ref: "10077095" })], {
+    leFalta: [{ ref: "10077095", detalle: "tiene 1 garaje y pediste 2" }],
+  });
+  const lineas = texto.split("\n");
+  const iAclaracion = lineas.findIndex((l) => l.includes("Aclaración:"));
+  const iLink = lineas.findIndex((l) => l.includes("wasi.co"));
+  assert.ok(iAclaracion > 0, "la aclaracion aparece");
+  assert.strictEqual(lineas[iAclaracion].trim(), "Aclaración: tiene 1 garaje y pediste 2");
+  assert.ok(iAclaracion < iLink, "el colega la lee mirando los datos, no despues del link");
+});
+
+test("con varias propiedades, la aclaracion solo cae en la ref que no cumple", () => {
+  const props = [match({ ref: "10077095" }), match({ ref: "9999999" })];
+  const texto = redactar.mensajeGrupo({ autor_nombre: "Edwin" }, props, {
+    leFalta: [{ ref: "10077095", detalle: "tiene 1 garaje y pediste 2" }],
+  });
+  // Una sola aclaracion en todo el mensaje: ponerla en el encabezado la
+  // volveria una advertencia sobre las dos, que seria falsa.
+  assert.strictEqual(texto.match(/Aclaración:/g).length, 1);
+  const bloques = texto.split("\n\n");
+  const bloqueUno = bloques.find((b) => b.includes("Ref 10077095"));
+  const bloqueDos = bloques.find((b) => b.includes("Ref 9999999"));
+  assert.ok(bloqueUno.includes("Aclaración: tiene 1 garaje"));
+  assert.ok(!bloqueDos.includes("Aclaración:"));
+});
+
+test("la ref se cruza aunque venga como numero en el match y como string en el veredicto", () => {
+  const texto = redactar.mensajeGrupo({ autor_nombre: "Edwin" }, [match({ ref: 10077095 })], {
+    leFalta: [{ ref: "10077095", detalle: "no tiene cuarto útil" }],
+  });
+  assert.ok(texto.includes("Aclaración: no tiene cuarto útil"));
+});
+
+test("una entrada de 'leFalta' para una ref que no esta en el mensaje se ignora sin romper nada", () => {
+  const texto = redactar.mensajeGrupo({ autor_nombre: "Edwin" }, [match({ ref: "10077095" })], {
+    leFalta: [{ ref: "8989725", detalle: "tiene 2 alcobas y pediste 3" }],
+  });
+  assert.ok(!texto.includes("Aclaración:"));
+  assert.ok(!texto.includes("8989725"));
+});
+
+test("las dos salvedades conviven: la global en el encabezado y la puntual en la ficha", () => {
+  const texto = redactar.mensajeGrupo({ autor_nombre: "Edwin" }, [match({ ref: "10077095" })], {
+    sinConfirmar: ["cuarto útil"],
+    leFalta: [{ ref: "10077095", detalle: "tiene 1 garaje y pediste 2" }],
+  });
+  const lineas = texto.split("\n");
+  assert.match(lineas[1], /No tengo confirmado si tiene cuarto útil/);
+  assert.ok(lineas.findIndex((l) => l.includes("Aclaración:")) > 3);
+});
+
+test("una entrada de 'leFalta' sin detalle no imprime una aclaracion vacia", () => {
+  const texto = redactar.mensajeGrupo({ autor_nombre: "Edwin" }, [match({ ref: "10077095" })], {
+    leFalta: [{ ref: "10077095", detalle: "   " }],
+  });
+  assert.ok(!texto.includes("Aclaración:"));
+});

@@ -586,3 +586,28 @@ test("si el envio del DM falla, se avisa a la asesora en su lugar -- ningun pedi
   assert.strictEqual(enviadosPorSofi.length, 1);
   assert.deepStrictEqual(marcadasRespondidas, [], "un DM que no salio no se marca como respondida");
 });
+
+// ACLARACION DE LO QUE NO CUMPLE (Juan, 2026-08-24) — caso real Edwin
+// Ramirez: la ref 10077095 cumplia zona, precio, alcobas, area y baños del
+// pedido, y solo tenia 1 garaje de los 2 pedidos. Se manda diciendolo, en vez
+// de perderla: "esa decision es del colega, no nuestra".
+test("el DM lleva la aclaracion cuando Sofi reporta que una propiedad no cumple algo accesorio", async () => {
+  telefonoColegaResuelto = "573001234567";
+  veredictoDeSofi = {
+    ...APRUEBA,
+    le_falta: [{ ref: "9780079", detalle: "tiene 1 garaje y pediste 2" }],
+  };
+  await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+
+  assert.match(enviosDm[0].texto, /Aclaración: tiene 1 garaje y pediste 2/);
+});
+
+test("un veredicto VIEJO sin el campo 'le_falta' no rompe el DM -- se degrada a sin aclaracion", async () => {
+  telefonoColegaResuelto = "573001234567";
+  veredictoDeSofi = { ...APRUEBA };
+  delete veredictoDeSofi.le_falta;
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+
+  assert.strictEqual(r.resultado, "dm_enviado");
+  assert.doesNotMatch(enviosDm[0].texto, /Aclaración:/);
+});

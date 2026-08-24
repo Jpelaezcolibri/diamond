@@ -30,6 +30,21 @@
 // campo 'sin_confirmar' en el esquema y el criterio en el prompt de SISTEMA.
 // Un veredicto viejo guardado antes de esta fecha no trae este campo: quien
 // lo lea debe tratar su ausencia como lista vacia, nunca como error.
+//
+// LE_FALTA (Juan, 2026-08-24, caso Edwin Ramirez / grupo SOLO Envigado): es
+// OTRA cosa que sin_confirmar y la diferencia importa. sin_confirmar es "no
+// sabemos el dato"; le_falta es "sabemos el dato y NO cumple", pero es una
+// sola cosa accesoria de un pedido largo. El colega pidio Envigado, hasta
+// $980M, 3 alcobas, 98 m², 2 baños, 2 garajes y cuarto util; la ref 10077095
+// cumplia TODO salvo el segundo garaje y Sofi la descarto. Juan: "al menos el
+// apartamento de el portal si se podia enviar con la aclaracion de que solo
+// le falta un parqueadero de todo el pedido". Esa decision es del colega, no
+// nuestra -- lo unico que nos toca es no ocultarle el hueco.
+//
+// A diferencia de sin_confirmar (que es global: el inventario no registra
+// terraza para NINGUNA), le_falta es POR PROPIEDAD -- una puede tener los dos
+// garajes y otra no. Por eso viaja como {ref, detalle} y la aclaracion se
+// imprime dentro de la ficha de esa propiedad, no en el encabezado.
 const config = require("../config");
 const { getClient } = require("../lib/anthropic");
 
@@ -49,6 +64,7 @@ const ESQUEMA = {
     "confianza",
     "desacuerdo_con_puntaje",
     "sin_confirmar",
+    "le_falta",
   ],
   properties: {
     es_pedido_real: {
@@ -63,9 +79,10 @@ const ESQUEMA = {
       type: "array",
       items: { type: "string" },
       description:
-        "Las refs que si sirven, de la mas util a la menos. Vacio si ninguna. Incluye tanto las que calzan del todo " +
-        "como las INCOMPLETAS (calzan en lo verificable pero falta un dato que el inventario no registra) -- ese " +
-        "hueco se explica en 'sin_confirmar', no descarta la propiedad.",
+        "Las refs que si sirven, de la mas util a la menos. Vacio si ninguna. Incluye las que calzan del todo, las " +
+        "INCOMPLETAS (calzan en lo verificable pero falta un dato que el inventario no registra -> 'sin_confirmar') " +
+        "y las CASI (cumplen todo salvo una sola cosa accesoria, que si conocemos -> 'le_falta'). Ninguno de esos " +
+        "dos huecos descarta la propiedad: se declaran.",
     },
     por_que: {
       type: "string",
@@ -94,6 +111,32 @@ const ESQUEMA = {
         "no falta nada. Un dato aca NUNCA es motivo para sacar la propiedad de refs_utiles -- es la diferencia " +
         "entre mentir (afirmar algo que no se sabe) y ser honesto sobre un hueco.",
     },
+    // CASO REAL (Juan, 2026-08-24 — Edwin Ramirez, grupo SOLO Envigado): ver
+    // la nota LE_FALTA arriba. Distinto de sin_confirmar: aca el dato SI se
+    // conoce y no cumple. Va por ref porque es una propiedad la que no
+    // cumple, no el inventario entero.
+    le_falta: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["ref", "detalle"],
+        properties: {
+          ref: { type: "string", description: "La ref de la propiedad, tal como aparece en la lista de candidatas." },
+          detalle: {
+            type: "string",
+            description:
+              "En pocas palabras y en tono de aclaración honesta, qué del pedido NO cumple esta propiedad, con el " +
+              "dato real y el pedido al lado: 'tiene 1 garaje y pediste 2', 'no tiene cuarto útil'. Sin disculpas " +
+              "ni adornos: el colega decide.",
+          },
+        },
+      },
+      description:
+        "Solo para refs que SI estan en refs_utiles y que incumplen algo ACCESORIO del pedido (ver el criterio en " +
+        "las instrucciones). Vacio si todas las refs_utiles cumplen lo que se pudo verificar. Nunca listes aca una " +
+        "propiedad que descartaste, ni un dato que simplemente no conocemos (eso es 'sin_confirmar').",
+    },
   },
 };
 
@@ -109,9 +152,10 @@ Como juzgar:
 - Una propiedad "sirve" si se la mostrarias a ese cliente sin que te de pena.
   Que calce en los numeros no alcanza: una finca no reemplaza un apartamento,
   y una propiedad para vivir no es lo mismo que una para inversion. Pero que
-  falte un dato que el inventario no registra (terraza, piso, antiguedad) NO
-  es motivo de pena si se lo decis con honestidad -- ver la nota mas abajo
-  sobre INCOMPATIBLE vs INCOMPLETO.
+  falte un dato que el inventario no registra (terraza, piso, antiguedad), o
+  que falte UNA cosa accesoria del pedido (el segundo garaje, el cuarto util),
+  NO es motivo de pena si se lo decis con honestidad -- ver las TRES
+  situaciones mas abajo.
 - El puntaje que ves va de 55 a 100 y premia cuanto del pedido se pudo
   VERIFICAR, no que tan buena es la propiedad. Un puntaje bajo puede ser una
   gran opcion sobre la que sabemos poco. No lo tomes como verdad.
@@ -123,7 +167,8 @@ Como juzgar:
   nunca sirve, pero si todo lo demas calza muy bien y el cliente no fue
   tajante, evaluala en vez de descartarla de plano.
 - Si el pedido nombra varias zonas, cualquiera de ellas cuenta como pedida.
-- INCOMPATIBLE no es lo mismo que INCOMPLETO, y la diferencia importa mucho:
+- Hay TRES situaciones distintas y confundirlas es el error mas caro que
+  podes cometer aca:
     · INCOMPATIBLE (no sirve, no entra a refs_utiles): otra zona no vecina,
       otro municipio, otro tipo de propiedad (finca por apartamento, local por
       vivienda), fuera de presupuesto, o algo que el cliente pidio como
@@ -139,6 +184,30 @@ Como juzgar:
       del 100% en zona/alcobas/precio que se descartaron solo porque el
       inventario no registra terraza ni antiguedad -- el colega nunca supo que
       existian. Eso es exactamente lo que 'sin_confirmar' existe para evitar.
+    · CASI (SI sirve, entra a refs_utiles, y ademas se anota en 'le_falta'):
+      SABEMOS el dato y la propiedad NO cumple, pero es UNA SOLA cosa y es
+      accesoria frente a todo lo que si cumple. Esa decision es del colega, no
+      tuya: lo unico que no podes hacer es ocultarle el hueco. Caso real —
+      colega pidio Envigado o Poblado, hasta $980M, 3 alcobas mas estudio o 4,
+      98 m² minimo, 2 baños, 2 garajes y cuarto util. La ref 10077095 (El
+      Portal) cumplia zona, precio, alcobas, area y baños, y solo tenia 1
+      garaje en vez de 2: se manda, con 'le_falta' diciendo "tiene 1 garaje y
+      pediste 2". En el MISMO pedido, la ref 8989725 tenia 2 alcobas de las 3
+      pedidas y 92 m² de los 98: falla en DOS cosas y una es de fondo (las
+      alcobas definen el producto), asi que esa NO se manda. Ahi esta la linea.
+
+- Como decidir si un incumplimiento es ACCESORIO o de FONDO:
+    · De FONDO, nunca pasa: zona, municipio, tipo de propiedad, operacion,
+      presupuesto, y la cantidad de alcobas cuando el faltante cambia el
+      producto (un 2 alcobas no resuelve un pedido de 3 o 4).
+    · ACCESORIO, puede pasar con su aclaracion: un garaje de menos, el cuarto
+      util, un baño de menos, unos pocos m² por debajo del minimo, un detalle
+      de acabados o de piso.
+    · DOS O MAS incumplimientos conocidos: NO pasa, aunque cada uno por
+      separado fuera accesorio. "Le falta un parqueadero" se le ofrece a un
+      colega; "le falta un parqueadero, un baño y 6 m²" es hacerle perder el
+      tiempo.
+    · Si dudas si algo es accesorio o de fondo, tratalo como de fondo.
 - Si el motor se equivoco —aprobo algo que no sirve, o dejo abajo algo que si—
   decilo en 'desacuerdo_con_puntaje'. Eso es lo que nos permite mejorarlo.
 - Ante la duda sobre si INCOMPATIBLE, decidi que NO sirve. Escribirle a una
@@ -226,4 +295,4 @@ function apruebaAviso(veredicto) {
   );
 }
 
-module.exports = { revalidar, apruebaAviso, formatearCandidatas, MODELO, ESQUEMA };
+module.exports = { revalidar, apruebaAviso, formatearCandidatas, MODELO, ESQUEMA, SISTEMA };

@@ -115,7 +115,13 @@ function tituloUtil(match) {
 // El link es linkWasi (no `link`) — ver la nota de "MENSAJE BLANQUEADO" arriba.
 // publicable.js ya garantizo que existe (motivo sin_link_wasi) antes de que
 // una propiedad llegue hasta aca.
-function ficha(match, indice) {
+// `detalleFalta` (Juan, 2026-08-24, caso Edwin Ramirez): la aclaracion de lo
+// que ESTA propiedad no cumple del pedido. Va DENTRO de la ficha y no en el
+// encabezado —a diferencia de la salvedad de datos no confirmados— porque es
+// un hecho de una propiedad puntual: en un mensaje con tres opciones, dos
+// pueden tener los dos garajes y una no. Ponerlo arriba lo volveria una
+// advertencia sobre el lote entero, que seria falso.
+function ficha(match, indice, { detalleFalta = null } = {}) {
   const titulo = tituloUtil(match);
   const operacion = String(match.operacion || "").trim();
   const zona = String(match.zona || "").trim();
@@ -143,6 +149,10 @@ function ficha(match, indice) {
 
   const lineas = [`${indice}) ${titulo}`, `   ${identidad}`, `   ${medidas}`];
   if (detalles) lineas.push(`   ${detalles}`);
+  // Antes del link a proposito: el colega lee la aclaracion mientras todavia
+  // esta mirando los datos de la propiedad, no despues de haberse ido al link.
+  const falta = String(detalleFalta || "").trim();
+  if (falta) lineas.push(`   Aclaración: ${falta}`);
   lineas.push(`   ${match.linkWasi}`);
   return lineas.join("\n");
 }
@@ -184,7 +194,17 @@ function lineaSalvedad(sinConfirmar, cantidadPropiedades) {
 // de Sofi (ver src/groups/revalidar.js) con lo que el pedido menciona y el
 // inventario no registra para las propiedades que SI se mandan. No filtra
 // nada -- solo agrega una linea honesta despues del encabezado.
-function mensajeGrupo(senal, publicables, { maxPropiedades = MAX_PROPIEDADES, org = null, sinConfirmar = [] } = {}) {
+//
+// `leFalta` (2026-08-24, opcional) es el otro array del veredicto: [{ref,
+// detalle}] con lo que una propiedad puntual NO cumple del pedido y si
+// conocemos. Se indexa por ref y cada aclaracion se imprime dentro de SU
+// ficha. Una ref que no esta en `publicables` simplemente no se usa; una
+// propiedad sin entrada sale exactamente igual que antes de este cambio.
+function mensajeGrupo(
+  senal,
+  publicables,
+  { maxPropiedades = MAX_PROPIEDADES, org = null, sinConfirmar = [], leFalta = [] } = {}
+) {
   const props = (publicables || []).slice(0, maxPropiedades);
   if (props.length === 0) return null;
 
@@ -196,7 +216,17 @@ function mensajeGrupo(senal, publicables, { maxPropiedades = MAX_PROPIEDADES, or
       : `${saludo} Tengo ${props.length} opciones que pueden servirte:`;
   const salvedad = lineaSalvedad(sinConfirmar, props.length);
 
-  const bloques = props.map((m, i) => ficha(m, i + 1));
+  // Se indexa por ref (como string: la ref viaja como numero desde Wasi y
+  // como string desde el veredicto de Sofi). Un veredicto guardado antes de
+  // este cambio no trae `le_falta` y esto queda vacio, igual que si todas
+  // cumplieran.
+  const faltaPorRef = new Map(
+    (Array.isArray(leFalta) ? leFalta : [])
+      .filter((f) => f && f.ref && f.detalle)
+      .map((f) => [String(f.ref), String(f.detalle)])
+  );
+
+  const bloques = props.map((m, i) => ficha(m, i + 1, { detalleFalta: faltaPorRef.get(String(m.ref)) || null }));
 
   const cierre = [
     "Comision compartida.",

@@ -1126,3 +1126,35 @@ test("EDIFICIO: sin nombrar edificio, sigue publicando normal (no se rompe el ca
 
   assert.strictEqual(r.resultado, "publicado");
 });
+
+// La aclaracion de lo que no cumple (Juan, 2026-08-24, caso Edwin Ramirez)
+// viaja por el mismo carril que la salvedad: guardada en la revalidacion de
+// la señal, reusada por el DM manual sin volver a llamar a la IA.
+
+test("responderPorDmManual: reusa la aclaracion de 'le_falta' guardada en signal.revalidacion", async () => {
+  señalParaAprobar = señalCallada({
+    autor_telefono: "141746805670125",
+    revalidacion: { le_falta: [{ ref: "AP004", detalle: "tiene 1 garaje y pediste 2" }] },
+  });
+  grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = "573001234567";
+
+  const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
+
+  assert.strictEqual(r.resultado, "dm_enviado");
+  assert.match(enviosDmManual[0].texto, /Aclaración: tiene 1 garaje y pediste 2/);
+});
+
+test("responderPorDmManual: sin 'le_falta' en la revalidacion, el DM sale sin aclaracion", async () => {
+  señalParaAprobar = señalCallada({
+    autor_telefono: "141746805670125",
+    revalidacion: { sin_confirmar: ["terraza"] }, // veredicto de antes de este cambio
+  });
+  grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = "573001234567";
+
+  const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
+
+  assert.strictEqual(r.resultado, "dm_enviado");
+  assert.doesNotMatch(enviosDmManual[0].texto, /Aclaración:/);
+});
