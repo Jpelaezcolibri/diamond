@@ -21,7 +21,15 @@
 // con el que se ajusta el umbral con evidencia en vez de intuicion.
 //
 // NO decide si se publica en el grupo. En modo asistido no se publica nada.
-
+//
+// SIN_CONFIRMAR (Juan, 2026-08-24): de 13 pedidos descartados medidos en
+// produccion, 10 eran incompatibles de verdad (otra zona, otro edificio) pero
+// 3 se perdieron solo porque el inventario no tiene un dato que el pedido
+// menciona (terraza, antiguedad). El veredicto ahora distingue INCOMPATIBLE
+// (no sirve) de INCOMPLETO (sirve, con un hueco que se declara) -- ver el
+// campo 'sin_confirmar' en el esquema y el criterio en el prompt de SISTEMA.
+// Un veredicto viejo guardado antes de esta fecha no trae este campo: quien
+// lo lea debe tratar su ausencia como lista vacia, nunca como error.
 const config = require("../config");
 const { getClient } = require("../lib/anthropic");
 
@@ -33,7 +41,15 @@ const MODELO = process.env.CLAUDE_MODEL_REVALIDAR || config.claudeModel;
 const ESQUEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["es_pedido_real", "sirve_alguna", "refs_utiles", "por_que", "confianza", "desacuerdo_con_puntaje"],
+  required: [
+    "es_pedido_real",
+    "sirve_alguna",
+    "refs_utiles",
+    "por_que",
+    "confianza",
+    "desacuerdo_con_puntaje",
+    "sin_confirmar",
+  ],
   properties: {
     es_pedido_real: {
       type: "boolean",
@@ -46,7 +62,10 @@ const ESQUEMA = {
     refs_utiles: {
       type: "array",
       items: { type: "string" },
-      description: "Las refs que si sirven, de la mas util a la menos. Vacio si ninguna.",
+      description:
+        "Las refs que si sirven, de la mas util a la menos. Vacio si ninguna. Incluye tanto las que calzan del todo " +
+        "como las INCOMPLETAS (calzan en lo verificable pero falta un dato que el inventario no registra) -- ese " +
+        "hueco se explica en 'sin_confirmar', no descarta la propiedad.",
     },
     por_que: {
       type: "string",
@@ -57,6 +76,23 @@ const ESQUEMA = {
       type: "string",
       description:
         "Vacio si coincidis con el puntaje. Si NO, explica en que se equivoco: una de puntaje alto que no sirve, o una de puntaje bajo que si. Esto se usa para calibrar el motor.",
+    },
+    // CASO REAL (Juan, 2026-08-24): colega pidio apto en Envigado con terraza,
+    // piso bajo y max 6 años de antiguedad. Habia 3 propiedades propias con
+    // match del 100% en zona/alcobas/precio, pero el inventario no registra
+    // terraza/piso/antiguedad -- Sofi las descarto por eso y el colega nunca
+    // supo que existian. Este campo es lo que evita perder ESE tipo de
+    // oportunidad: lista lo que el pedido menciona y el inventario no puede
+    // confirmar para las refs_utiles, para que el mensaje lo diga honesto en
+    // vez de que la propiedad se pierda o (peor) se afirme un dato inventado.
+    sin_confirmar: {
+      type: "array",
+      items: { type: "string" },
+      description:
+        "Datos que el pedido menciona pero que NINGUNA de las refs_utiles tiene registrados en el inventario " +
+        "(ej: 'terraza', 'antigüedad', 'piso bajo'). Cada item corto, en palabras que un colega entienda. Vacio si " +
+        "no falta nada. Un dato aca NUNCA es motivo para sacar la propiedad de refs_utiles -- es la diferencia " +
+        "entre mentir (afirmar algo que no se sabe) y ser honesto sobre un hueco.",
     },
   },
 };
@@ -72,7 +108,10 @@ Como juzgar:
   comparo zona, precio, area y alcobas; vos aportas el criterio que el no tiene.
 - Una propiedad "sirve" si se la mostrarias a ese cliente sin que te de pena.
   Que calce en los numeros no alcanza: una finca no reemplaza un apartamento,
-  y una propiedad para vivir no es lo mismo que una para inversion.
+  y una propiedad para vivir no es lo mismo que una para inversion. Pero que
+  falte un dato que el inventario no registra (terraza, piso, antiguedad) NO
+  es motivo de pena si se lo decis con honestidad -- ver la nota mas abajo
+  sobre INCOMPATIBLE vs INCOMPLETO.
 - El puntaje que ves va de 55 a 100 y premia cuanto del pedido se pudo
   VERIFICAR, no que tan buena es la propiedad. Un puntaje bajo puede ser una
   gran opcion sobre la que sabemos poco. No lo tomes como verdad.
@@ -84,10 +123,29 @@ Como juzgar:
   nunca sirve, pero si todo lo demas calza muy bien y el cliente no fue
   tajante, evaluala en vez de descartarla de plano.
 - Si el pedido nombra varias zonas, cualquiera de ellas cuenta como pedida.
+- INCOMPATIBLE no es lo mismo que INCOMPLETO, y la diferencia importa mucho:
+    · INCOMPATIBLE (no sirve, no entra a refs_utiles): otra zona no vecina,
+      otro municipio, otro tipo de propiedad (finca por apartamento, local por
+      vivienda), fuera de presupuesto, o algo que el cliente pidio como
+      innegociable y la propiedad no cumple.
+    · INCOMPLETO (SI sirve, entra a refs_utiles): calza en todo lo que se
+      puede verificar (zona, tipo, precio, alcobas) pero el pedido menciona
+      algo que el inventario no registra -- terraza, piso, antiguedad, vista,
+      lo que sea. Eso NO descarta la propiedad: se lista en 'sin_confirmar' y
+      el mensaje lo va a decir honestamente ("no tengo confirmado si tiene
+      terraza"), en vez de perder una oportunidad real por un dato que ni
+      siquiera sabemos si tiene o no. Caso real: colega pidio apto en Envigado
+      con terraza y max 6 años de antiguedad; habia 3 propiedades con match
+      del 100% en zona/alcobas/precio que se descartaron solo porque el
+      inventario no registra terraza ni antiguedad -- el colega nunca supo que
+      existian. Eso es exactamente lo que 'sin_confirmar' existe para evitar.
 - Si el motor se equivoco —aprobo algo que no sirve, o dejo abajo algo que si—
   decilo en 'desacuerdo_con_puntaje'. Eso es lo que nos permite mejorarlo.
-- Ante la duda, decidi que NO sirve. Escribirle a una asesora por algo que no
-  era le cuesta tiempo y le quita credibilidad al sistema.
+- Ante la duda sobre si INCOMPATIBLE, decidi que NO sirve. Escribirle a una
+  asesora (o a un colega) por algo que no era le cuesta tiempo y le quita
+  credibilidad al sistema. Pero un dato que el pedido pide y el inventario
+  simplemente no tiene no es motivo de duda sobre si sirve -- es motivo para
+  usar 'sin_confirmar', no para descartar.
 
 'por_que' lo va a leer Catherine, la asesora que va a llamar al colega: escribilo
 para ella, corto y concreto.`;

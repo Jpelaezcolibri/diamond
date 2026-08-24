@@ -56,6 +56,17 @@
 //
 // Sin ?text= (Juan, 2026-08-20): el mensaje precargado hacia el link larguisimo
 // e ilegible en el chat. Se prefiere el wa.me limpio, sin abrir con un texto.
+//
+// SALVEDAD DE DATOS NO CONFIRMADOS (Juan, 2026-08-24): caso real, colega
+// pidio apto en Envigado con terraza y max 6 años de antiguedad; teniamos 3
+// propiedades con match del 100% en zona/alcobas/precio que Sofi descarto
+// solo porque el inventario no registra terraza ni antiguedad -- el colega
+// nunca supo que existian. `sin_confirmar` (ver src/groups/revalidar.js) es
+// lo que evita perder ESE tipo de oportunidad: una linea honesta sobre lo que
+// no se pudo verificar, nunca una afirmacion inventada. Respeta la regla que
+// protege esta compuerta desde julio (ver publicable.js): decir "esto no lo
+// tengo confirmado" no es presentar un dato falso como verdadero, es la
+// diferencia entre mentir y ser honesto sobre un hueco.
 
 const formato = require("../lib/formato");
 const { linkContactoOficial } = require("../lib/contacto");
@@ -136,6 +147,28 @@ function ficha(match, indice) {
   return lineas.join("\n");
 }
 
+// Junta una lista de datos faltantes en una frase natural: "terraza",
+// "terraza ni antigüedad", "terraza, antigüedad ni piso". Se conecta con "ni"
+// (no "y") porque es una lista de cosas que NO se sabe, no de cosas que si
+// se tienen -- "tiene terraza y antigüedad" leeria como una afirmacion.
+function unirConNi(items) {
+  const limpios = (items || []).map((s) => String(s || "").trim()).filter(Boolean);
+  if (limpios.length === 0) return null;
+  if (limpios.length === 1) return limpios[0];
+  return `${limpios.slice(0, -1).join(", ")} ni ${limpios[limpios.length - 1]}`;
+}
+
+// La linea de salvedad (Juan, 2026-08-24, ver la nota de diseño arriba). Solo
+// existe si `sinConfirmar` trae algo -- sin datos faltantes, no hay salvedad
+// que escribir, y el mensaje sale exactamente igual que antes de este cambio
+// (sin un renglon vacio ni un "no hay salvedades").
+function lineaSalvedad(sinConfirmar, cantidadPropiedades) {
+  const lista = unirConNi(sinConfirmar);
+  if (!lista) return null;
+  const verbo = cantidadPropiedades === 1 ? "tiene" : "tienen";
+  return `No tengo confirmado si ${verbo} ${lista} — decime si querés que lo averigüe.`;
+}
+
 // Devuelve el texto listo para publicar, o null si no hay nada que decir.
 //
 // No recibe (ni deriva a) ningun asesor a proposito: es el mensaje
@@ -146,7 +179,12 @@ function ficha(match, indice) {
 // linkContactoOficial resuelva el numero multi-tenant (columna de la org,
 // env como fallback). Sin org y sin env definida, el mensaje sale sin el
 // renglon de invitacion a Sofi -- nunca con un link a medias.
-function mensajeGrupo(senal, publicables, { maxPropiedades = MAX_PROPIEDADES, org = null } = {}) {
+//
+// `sinConfirmar` (2026-08-24, opcional) es el array que devuelve el veredicto
+// de Sofi (ver src/groups/revalidar.js) con lo que el pedido menciona y el
+// inventario no registra para las propiedades que SI se mandan. No filtra
+// nada -- solo agrega una linea honesta despues del encabezado.
+function mensajeGrupo(senal, publicables, { maxPropiedades = MAX_PROPIEDADES, org = null, sinConfirmar = [] } = {}) {
   const props = (publicables || []).slice(0, maxPropiedades);
   if (props.length === 0) return null;
 
@@ -156,6 +194,7 @@ function mensajeGrupo(senal, publicables, { maxPropiedades = MAX_PROPIEDADES, or
     props.length === 1
       ? `${saludo} Tengo esta opcion que puede servirte:`
       : `${saludo} Tengo ${props.length} opciones que pueden servirte:`;
+  const salvedad = lineaSalvedad(sinConfirmar, props.length);
 
   const bloques = props.map((m, i) => ficha(m, i + 1));
 
@@ -181,7 +220,13 @@ function mensajeGrupo(senal, publicables, { maxPropiedades = MAX_PROPIEDADES, or
     );
   }
 
-  return [encabezado, "", bloques.join("\n\n"), "", cierre.join("\n")].join("\n");
+  // La salvedad va pegada al encabezado, antes del espacio en blanco que
+  // separa las fichas: se lee como parte de la presentacion del pedido, no
+  // como un aparte al final. Sin salvedad, esto es exactamente lo mismo que
+  // antes de este cambio -- ni un renglon vacio de mas.
+  const cabecera = salvedad ? [encabezado, salvedad] : [encabezado];
+
+  return [...cabecera, "", bloques.join("\n\n"), "", cierre.join("\n")].join("\n");
 }
 
-module.exports = { mensajeGrupo, ficha, primerNombre, tituloUtil, MAX_PROPIEDADES };
+module.exports = { mensajeGrupo, ficha, primerNombre, tituloUtil, lineaSalvedad, unirConNi, MAX_PROPIEDADES };

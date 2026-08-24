@@ -554,8 +554,13 @@ router.post("/api/grupos/senal/estado", async (req, res) => {
 // exactamente una activa, falla cerrado en vez de adivinar por cual linea
 // salir -- se resuelve ACA y no dentro de vivo.js porque responderPorDmManual
 // recibe `sesion` como dato ya averiguado, igual que procesarMensaje.
+// `refs` (Juan, 2026-08-24, opcional): la seleccion que el usuario marco en
+// el panel del CRM -- ver la nota de diseño grande en
+// vivo.js#responderPorDmManual. Se pasa TAL CUAL, sin validar aca: la
+// validacion de verdad (cruzar contra los matches reales de la señal) vive
+// en vivo.js, no en el endpoint, para no duplicar esa logica de seguridad.
 router.post("/api/grupos/senal/responder-dm", async (req, res) => {
-  const { signalId } = req.body || {};
+  const { signalId, refs } = req.body || {};
   if (!signalId) return res.status(400).json({ error: "Falta signalId" });
   try {
     const org = await organizations.getDefault();
@@ -568,7 +573,7 @@ router.post("/api/grupos/senal/responder-dm", async (req, res) => {
       });
     }
     const vivo = require("../groups/vivo");
-    const r = await vivo.responderPorDmManual(org, signalId, { sesion: activas[0].nombre });
+    const r = await vivo.responderPorDmManual(org, signalId, { sesion: activas[0].nombre, refs: refs ?? null });
     res.json({ ok: true, ...r });
   } catch (e) {
     res.status(500).json({ error: e.message });

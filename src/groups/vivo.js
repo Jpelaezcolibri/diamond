@@ -271,8 +271,11 @@ async function procesarMensaje(org, mensaje, { grupo, modo = "sombra", enviar = 
 // no hace falta nada mas aca. Se deja la funcion, en vez de llamar a
 // mensajeGrupo directo desde el llamador, porque documenta con nombre la
 // intencion (el texto que le llega al colega por DM).
-function textoParaColega(autorNombre, utiles, org) {
-  return redactar.mensajeGrupo({ autor_nombre: autorNombre }, utiles, { org });
+// `sinConfirmar` (Juan, 2026-08-24, opcional): lo que el veredicto de Sofi
+// marco como no verificado para estas mismas `utiles` (ver revalidar.js). Se
+// pasa tal cual a redactar.mensajeGrupo -- ver la nota de diseño ahi.
+function textoParaColega(autorNombre, utiles, org, sinConfirmar = []) {
+  return redactar.mensajeGrupo({ autor_nombre: autorNombre }, utiles, { org, sinConfirmar });
 }
 
 // Sofi da su veredicto y, si aprueba, le avisa a la asesora.
@@ -364,7 +367,7 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
   await groupSignals.guardarPolitica(org.id, signal.id, { motivo: decisionDm.motivo, traza: decisionDm.traza }).catch(() => {});
 
   if (decisionDm.enviarDm && sesion && utiles.length > 0) {
-    const textoDm = textoParaColega(mensaje.autor, utiles, org);
+    const textoDm = textoParaColega(mensaje.autor, utiles, org, veredicto.sin_confirmar || []);
     if (textoDm) {
       const envioDm = await waha.enviarDm(sesion, telefonoColega, textoDm).catch((e) => ({ ok: false, error: e.message }));
       if (envioDm && envioDm.ok) {
@@ -650,7 +653,19 @@ async function aprobarManual(org, signalId) {
 // el dato) y las barreras de seguridad (zona_no_publicable,
 // no_es_inventario_propio, sin_ref, sin_precio, sync_viejo, link_no_abre)
 // siguen exactamente igual de duras: no son de confianza, son de seguridad.
-async function responderPorDmManual(org, signalId, { sesion = null } = {}) {
+//
+// SELECCION MANUAL (Juan, 2026-08-24): "se fueron las 3 propiedades y solo
+// una servía. No tuvo forma de elegir" — caso real, el primer DM manual que
+// salio a produccion mando las 3 candidatas cuando el usuario solo queria
+// una. `refs` (opcional) es la lista de refs que el panel del CRM marco: si
+// viene, se cruza contra `signal.matches` (los matches REALES de esta señal)
+// ANTES de la compuerta de calidad -- nunca se confia en lo que llega del
+// request para armar el mensaje, porque cualquiera podria mandar la ref de
+// otra propiedad. Sin `refs` (undefined/null), el comportamiento es
+// exactamente el de antes: se manda TODO lo publicable. Una `refs` vacia
+// ([]) es una seleccion explicita de "nada", no "sin preferencia" -- se
+// respeta igual, y el resultado sale como sin_propiedades_publicables.
+async function responderPorDmManual(org, signalId, { sesion = null, refs = null } = {}) {
   const signal = await groupSignals.obtenerPorId(org.id, signalId);
   if (!signal) return { resultado: "no_encontrada" };
   if (signal.respondida_at) return { resultado: "ya_respondida" };
@@ -665,13 +680,29 @@ async function responderPorDmManual(org, signalId, { sesion = null } = {}) {
   // manual sigue siendo una decision valida sobre un pedido ya capturado.
   const grupo = await whatsappGroups.obtenerGrupo(org.id, signal.group_id).catch(() => null);
 
+  // Filtro de seguridad ANTES de la compuerta de calidad: se recorta la lista
+  // REAL de matches por las refs que el usuario elegio, nunca al reves. Una
+  // ref que no aparece en `signal.matches` (typo, o alguien probando con la
+  // ref de otra propiedad) simplemente no entra -- se ignora en silencio, no
+  // se reporta como error, porque no es un dato roto, es una eleccion que no
+  // aplica.
+  const refsElegidas = Array.isArray(refs) ? new Set(refs.map((r) => String(r || "").trim()).filter(Boolean)) : null;
+  const matchesDisponibles = signal.matches || [];
+  const matchesAEvaluar = refsElegidas
+    ? matchesDisponibles.filter((m) => m && refsElegidas.has(String(m.ref)))
+    : matchesDisponibles;
+
   const inventario = await syncEstado.estadoDelInventario(org.id, {});
-  const { publicables: candidatas, descartados } = publicable.filtrar(signal.matches || [], {
+  const { publicables: candidatas, descartados } = publicable.filtrar(matchesAEvaluar, {
     syncFresco: inventario.fresco,
     umbral: 0,
   });
   const { verificadas: publicables, rotas } = await verificarLink.verificar(candidatas);
   for (const r of rotas) descartados.push({ ref: r.ref, motivos: ["link_no_abre"] });
+  // `descartados` viaja SIEMPRE, tambien cuando si hay algo publicable: si el
+  // usuario elige una propiedad que no pasa la compuerta (zona, precio, sync
+  // viejo, etc), elegirla no la exime -- el resultado tiene que decirlo, no
+  // fallar en silencio ni desaparecer la propiedad sin explicacion.
   if (!publicables.length) return { resultado: "sin_propiedades_publicables", descartados };
 
   const telefonoColega = await directorio
@@ -686,7 +717,14 @@ async function responderPorDmManual(org, signalId, { sesion = null } = {}) {
 
   if (!sesion) return { resultado: "sin_sesion" };
 
-  const texto = redactar.mensajeGrupo({ autor_nombre: signal.autor_nombre }, publicables, { org });
+  // La salvedad de datos no confirmados (Juan, 2026-08-24) se reusa del
+  // veredicto que Sofi YA dio para esta señal, si paso por modo asistido (ver
+  // la nota en group-signals.js#obtenerPorId) -- no se vuelve a llamar a la
+  // IA aca. Una señal que nunca paso por asistido no trae `revalidacion`, y
+  // esto se degrada a "sin salvedad", igual que un mensaje redactado antes de
+  // este cambio.
+  const sinConfirmar = (signal.revalidacion && signal.revalidacion.sin_confirmar) || [];
+  const texto = redactar.mensajeGrupo({ autor_nombre: signal.autor_nombre }, publicables, { org, sinConfirmar });
   if (!texto) return { resultado: "sin_texto" };
 
   // LIMITES QUE SI SE RESPETAN (Juan, 2026-08-24): una vez por colega por dia
@@ -720,10 +758,21 @@ async function responderPorDmManual(org, signalId, { sesion = null } = {}) {
   // "se publico en el grupo" -- las dos vias nunca coexisten para la misma
   // org (ver organizations.js#modoDeRespuesta), asi que reusarlo aca no
   // ambiguo nada, y evita otra migracion sobre el check existente.
-  const refs = publicables.map((m) => m.ref).filter(Boolean);
-  await groupSignals.marcarRespondida(org.id, signal.id, { texto, wamid: envioDm.wamid, modo: "auto", refs });
+  // Nombrado distinto del parametro `refs` de entrada (la seleccion del
+  // usuario) a proposito: esto es lo que de verdad quedo dentro del mensaje
+  // enviado, que puede ser un subconjunto de lo elegido si algo no paso la
+  // compuerta (ver `descartados` mas abajo).
+  const refsEnviadas = publicables.map((m) => m.ref).filter(Boolean);
+  await groupSignals.marcarRespondida(org.id, signal.id, { texto, wamid: envioDm.wamid, modo: "auto", refs: refsEnviadas });
 
-  return { resultado: "dm_enviado", texto, wamid: envioDm.wamid, telefono: telefonoColega, publicables };
+  return {
+    resultado: "dm_enviado",
+    texto,
+    wamid: envioDm.wamid,
+    telefono: telefonoColega,
+    publicables,
+    descartados,
+  };
 }
 
 module.exports = {

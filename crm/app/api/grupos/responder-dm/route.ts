@@ -26,9 +26,14 @@ export async function POST(request: Request) {
     );
   }
 
-  const { signalId } = await request.json().catch(() => ({}));
+  const { signalId, refs } = await request.json().catch(() => ({}));
   if (!signalId) return NextResponse.json({ error: "Falta signalId" }, { status: 400 });
 
-  const r = await callBot("/api/grupos/senal/responder-dm", { signalId });
+  // `refs` (Juan, 2026-08-24, opcional): la selección de propiedades que el
+  // usuario marcó en el panel -- ver senales-grupos.tsx y la nota de diseño
+  // grande en src/groups/vivo.js#responderPorDmManual. Se reenvía tal cual;
+  // la validación real (cruzar contra los matches de la señal) vive del otro
+  // lado, no acá.
+  const r = await callBot("/api/grupos/senal/responder-dm", { signalId, refs: Array.isArray(refs) ? refs : undefined });
   return r.ok ? NextResponse.json(r.data) : NextResponse.json({ error: r.error }, { status: r.status });
 }

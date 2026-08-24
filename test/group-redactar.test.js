@@ -194,3 +194,35 @@ test("una alcoba se dice en singular", () => {
   assert.ok(texto.includes("1 alcoba ·") || texto.includes("· 1 alcoba"));
   assert.ok(!texto.includes("1 alcobas"));
 });
+
+// SALVEDAD DE DATOS NO CONFIRMADOS (Juan, 2026-08-24) — caso real: colega
+// pidio apto en Envigado con terraza y max 6 años de antiguedad, y 3
+// propiedades con match del 100% se perdieron porque el inventario no
+// registra esos dos datos. `sinConfirmar` es lo que evita que eso se repita.
+
+test("sin 'sinConfirmar', el mensaje sale exactamente igual que antes -- ni un renglon vacio de mas", () => {
+  const conOpcionVacia = redactar.mensajeGrupo({ autor_nombre: "Ana" }, [match()], { sinConfirmar: [] });
+  const sinOpcion = redactar.mensajeGrupo({ autor_nombre: "Ana" }, [match()]);
+  assert.strictEqual(conOpcionVacia, sinOpcion);
+  assert.ok(!conOpcionVacia.includes("No tengo confirmado"));
+});
+
+test("con un solo dato sin confirmar y una sola propiedad, la salvedad usa el singular", () => {
+  const texto = redactar.mensajeGrupo({ autor_nombre: "Ana" }, [match()], { sinConfirmar: ["terraza"] });
+  assert.match(texto, /No tengo confirmado si tiene terraza — decime si querés que lo averigüe\./);
+});
+
+test("con varios datos sin confirmar y varias propiedades, la salvedad usa el plural y conecta con 'ni'", () => {
+  const dos = [match({ ref: "A" }), match({ ref: "B" })];
+  const texto = redactar.mensajeGrupo({ autor_nombre: "Ana" }, dos, { sinConfirmar: ["terraza", "antigüedad"] });
+  assert.match(texto, /No tengo confirmado si tienen terraza ni antigüedad — decime si querés que lo averigüe\./);
+});
+
+test("la salvedad va pegada al encabezado, antes de las fichas de las propiedades", () => {
+  const texto = redactar.mensajeGrupo({ autor_nombre: "Ana" }, [match()], { sinConfirmar: ["piso"] });
+  const lineas = texto.split("\n");
+  assert.match(lineas[0], /^Hola Ana, vi tu solicitud\./);
+  assert.match(lineas[1], /No tengo confirmado si tiene piso/);
+  assert.strictEqual(lineas[2], "");
+  assert.match(lineas[3], /^1\) /);
+});

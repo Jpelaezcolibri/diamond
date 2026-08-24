@@ -480,9 +480,19 @@ async function obtenerPorId(orgId, signalId) {
   // sin el no hay como resolver el telefono del colega ni contar los DMs que
   // ya salieron hoy por el mismo remitente. aprobarManual (el otro llamador)
   // simplemente no usa esta columna extra.
+  //
+  // revalidacion se agrego (Juan, 2026-08-24) para el mismo llamador: si esta
+  // señal ya paso por modo asistido, ahi quedo guardado el veredicto de Sofi
+  // con `sin_confirmar` (ver src/groups/revalidar.js) -- responderPorDmManual
+  // lo reusa para que el DM manual tambien lleve la salvedad, sin volver a
+  // pagar un llamado a la IA por un pedido que Sofi ya reviso. Una señal que
+  // nunca paso por asistido (entro en modo auto/sombra) simplemente no tiene
+  // esta columna poblada, y el codigo lo trata como "sin salvedad".
   const { data, error } = await supabase
     .from("group_signals")
-    .select("id, group_id, clase, matches, autor_nombre, autor_telefono, texto_original, respondida_at, wa_message_id")
+    .select(
+      "id, group_id, clase, matches, autor_nombre, autor_telefono, texto_original, respondida_at, wa_message_id, revalidacion"
+    )
     .eq("org_id", orgId)
     .eq("id", signalId)
     .maybeSingle();

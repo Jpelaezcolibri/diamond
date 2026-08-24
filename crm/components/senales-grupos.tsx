@@ -171,6 +171,13 @@ function Fuente({ fuente }: { fuente: string }) {
  * asesor en persona, no un mensaje armado por Sofi. El borrador se limita a
  * mostrar qué hay disponible y los términos de comisión; el resto de la
  * conversación con el colega la lleva el asesor.
+ *
+ * SELECCIÓN MANUAL (Juan, 2026-08-24): el primer DM manual real mandó las 3
+ * propiedades que calzaban cuando el usuario sólo quería que saliera una —
+ * "no tuvo forma de elegir". Esta misma función arma también el preview de
+ * lo que va a salir en el DM (ver <Ficha>): recibe ya filtrado por lo que el
+ * usuario marcó, en vez de reescribir la lógica de armar el texto en un
+ * segundo lugar.
  */
 function borrador(s: Signal, matches: Match[]) {
   const propios = matches.filter((m) => m.fuente === "diamond");
@@ -210,6 +217,29 @@ function Ficha({ s, copias, grupos }: { s: Signal; copias: number; grupos: numbe
   const [estado, setEstado] = useState(s.estado);
   const [guardando, setGuardando] = useState(false);
   const [errorEstado, setErrorEstado] = useState<string | null>(null);
+
+  // SELECCIÓN MANUAL para el DM (Juan, 2026-08-24): "se fueron las 3
+  // propiedades y solo una servía. No tuvo forma de elegir" — caso real, el
+  // primer DM manual que salió a producción. Sólo el inventario propio puede
+  // terminar en el DM (la compuerta de calidad del bot ya descarta todo lo
+  // que no sea "diamond"), así que sólo esas llevan casilla.
+  //
+  // Arranca con TODAS marcadas: el comportamiento de quien no toca nada
+  // sigue siendo "mandar todo lo publicable", igual que antes de este
+  // cambio.
+  const propiosSeleccionables = (s.matches || []).filter((m) => m.fuente === "diamond" && m.ref);
+  const [refsSeleccionadas, setRefsSeleccionadas] = useState<Set<string>>(
+    () => new Set(propiosSeleccionables.map((m) => String(m.ref)))
+  );
+
+  function alternarSeleccion(ref: string) {
+    setRefsSeleccionadas((previo) => {
+      const siguiente = new Set(previo);
+      if (siguiente.has(ref)) siguiente.delete(ref);
+      else siguiente.add(ref);
+      return siguiente;
+    });
+  }
 
   async function marcar(nuevo: "gestionado" | "descartado" | "nuevo") {
     const previo = estado;
@@ -275,17 +305,28 @@ function Ficha({ s, copias, grupos }: { s: Signal; copias: number; grupos: numbe
   const [dmMensaje, setDmMensaje] = useState<string | null>(null);
 
   async function responderPorDm() {
+    // Nunca con cero seleccionadas (Juan, 2026-08-24): mandar sin decir nada
+    // se leería como "todas", que es justo el comportamiento que este cambio
+    // vino a corregir.
+    if (refsSeleccionadas.size === 0) return;
     setDmEstado("enviando");
     setDmMensaje(null);
     try {
       const res = await fetch("/api/grupos/responder-dm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ signalId: s.id }),
+        body: JSON.stringify({ signalId: s.id, refs: Array.from(refsSeleccionadas) }),
       });
       const datos = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(datos.error || "No se pudo mandar el DM");
-      setDmMensaje(mensajeResultadoDm(datos.resultado));
+      // Elegir una propiedad no la exime de la compuerta de calidad del bot
+      // (zona, precio, sync viejo, etc): si algo de lo elegido no pasó, el
+      // resultado lo tiene que decir, no fallar en silencio.
+      const descartadas = Array.isArray(datos.descartados) ? datos.descartados : [];
+      const notaDescartadas = descartadas.length
+        ? ` (${descartadas.length === 1 ? "una propiedad elegida no se mandó" : `${descartadas.length} propiedades elegidas no se mandaron`}: no pasan el control de calidad ahora mismo)`
+        : "";
+      setDmMensaje(`${mensajeResultadoDm(datos.resultado)}${notaDescartadas}`);
       setDmEstado(datos.resultado === "dm_enviado" ? "enviado" : "error");
     } catch (e) {
       setDmMensaje(e instanceof Error ? e.message : "No se pudo mandar el DM");
@@ -301,7 +342,15 @@ function Ficha({ s, copias, grupos }: { s: Signal; copias: number; grupos: numbe
     .join(" · ");
 
   const propios = matches.filter((m) => m.fuente === "diamond").length;
-  const texto = borrador(s, matches);
+  // Lo que de verdad va a salir en el DM/mensaje: inventario propio y, si
+  // tiene ref (todo lo publicable la tiene), sólo lo que quedó marcado en
+  // `refsSeleccionadas`. Un match propio sin ref (no debería pasar nunca la
+  // compuerta de calidad del bot) se deja tal cual antes de este cambio, en
+  // vez de desaparecer sin que haya como seleccionarlo.
+  const matchesSeleccionados = matches.filter(
+    (m) => m.fuente === "diamond" && (!m.ref || refsSeleccionadas.has(String(m.ref)))
+  );
+  const texto = borrador(s, matchesSeleccionados);
 
   async function copiar(que: "mensaje" | "grupo") {
     const contenido = que === "mensaje" ? texto : s.grupo_nombre || "";
@@ -443,6 +492,19 @@ function Ficha({ s, copias, grupos }: { s: Signal; copias: number; grupos: numbe
                   {matches.map((m, i) => (
                     <li key={i} className="rounded-md border border-slate-200 bg-white p-2.5">
                       <div className="flex flex-wrap items-baseline gap-x-2">
+                        {/* Sólo el inventario propio puede terminar en el DM
+                            -- la compuerta de calidad del bot descarta todo
+                            lo que no sea "diamond", así que ofrecer marcar un
+                            aliado sería una casilla que nunca hace nada. */}
+                        {m.fuente === "diamond" && m.ref && (
+                          <input
+                            type="checkbox"
+                            checked={refsSeleccionadas.has(String(m.ref))}
+                            onChange={() => alternarSeleccion(String(m.ref))}
+                            className="h-3.5 w-3.5 rounded border-slate-300"
+                            title="Incluir esta propiedad en el DM al colega"
+                          />
+                        )}
                         <Fuente fuente={m.fuente} />
                         {/* El link SIEMPRE es la ficha de la landing propia.
                             Mandar al colega a Wasi es regalarle la marca. */}
@@ -534,7 +596,7 @@ function Ficha({ s, copias, grupos }: { s: Signal; copias: number; grupos: numbe
                           <button
                             type="button"
                             onClick={responderPorDm}
-                            disabled={dmEstado === "enviando" || dmEstado === "enviado"}
+                            disabled={dmEstado === "enviando" || dmEstado === "enviado" || refsSeleccionadas.size === 0}
                             className="rounded-md bg-violet-700 px-2.5 py-1 text-[11px] font-medium text-white disabled:opacity-40"
                           >
                             {dmEstado === "enviando"
@@ -549,6 +611,14 @@ function Ficha({ s, copias, grupos }: { s: Signal; copias: number; grupos: numbe
                             </span>
                           )}
                         </div>
+                        {/* "que no se pueda mandar con cero seleccionadas"
+                            (Juan, 2026-08-24): el botón ya queda deshabilitado
+                            arriba, pero sin este texto no queda claro POR QUÉ. */}
+                        {refsSeleccionadas.size === 0 && (
+                          <p className="mt-1 text-[11px] text-violet-700">
+                            Marcá al menos una propiedad de la lista de arriba para poder mandar el DM.
+                          </p>
+                        )}
                       </div>
                     )}
 
@@ -686,6 +756,13 @@ function Ficha({ s, copias, grupos }: { s: Signal; copias: number; grupos: numbe
                       de la línea del asesor, escrito por una persona.
                     </p>
                   </div>
+                ) : propios > 0 ? (
+                  // Distinto del caso de abajo (Juan, 2026-08-24): acá SÍ hay
+                  // inventario propio, sólo que el usuario desmarcó todas las
+                  // casillas. Decir "es de la red de aliados" sería mentira.
+                  <span className="text-[11px] text-amber-700">
+                    Desmarcaste todas las propiedades — marcá al menos una arriba para armar el mensaje.
+                  </span>
                 ) : (
                   <span className="text-[11px] text-slate-500">
                     Todo lo que calza es de la red de aliados, no inventario propio: no hay borrador

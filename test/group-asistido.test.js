@@ -460,6 +460,37 @@ test("el DM al colega usa el mismo texto que antes iba al grupo (redactar.mensaj
   assert.doesNotMatch(t, /Diamond/i, "el mensaje blanqueado nunca menciona Diamond");
 });
 
+// SALVEDAD DE DATOS NO CONFIRMADOS (Juan, 2026-08-24): caso real, colega
+// pidio apto en Envigado con terraza y max 6 años de antiguedad, y 3
+// propiedades con match del 100% se descartaron solo porque el inventario no
+// registra esos dos datos. El DM directo ahora lleva esa salvedad cuando
+// Sofi la reporta en el veredicto.
+test("el DM lleva la salvedad de Sofi cuando el veredicto reporta datos sin confirmar", async () => {
+  telefonoColegaResuelto = "573001234567";
+  veredictoDeSofi = { ...APRUEBA, sin_confirmar: ["terraza", "antigüedad"] };
+  await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+
+  assert.match(enviosDm[0].texto, /No tengo confirmado si tiene terraza ni antigüedad/);
+});
+
+test("sin datos sin confirmar en el veredicto, el DM sale igual que antes -- sin salvedad", async () => {
+  telefonoColegaResuelto = "573001234567";
+  veredictoDeSofi = { ...APRUEBA, sin_confirmar: [] };
+  await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+
+  assert.doesNotMatch(enviosDm[0].texto, /No tengo confirmado/);
+});
+
+test("un veredicto VIEJO sin el campo 'sin_confirmar' no rompe el DM -- se degrada a sin salvedad", async () => {
+  telefonoColegaResuelto = "573001234567";
+  veredictoDeSofi = { ...APRUEBA };
+  delete veredictoDeSofi.sin_confirmar;
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+
+  assert.strictEqual(r.resultado, "dm_enviado");
+  assert.doesNotMatch(enviosDm[0].texto, /No tengo confirmado/);
+});
+
 test("el DM incluye el link a la linea oficial de Sofi cuando hay numero configurado", async () => {
   process.env.CONTACT_WHATSAPP_NUMBER = "573000000009";
   telefonoColegaResuelto = "573001234567";

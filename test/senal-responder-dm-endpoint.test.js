@@ -103,6 +103,40 @@ test("una sesion inactiva no cuenta como disponible", async (t) => {
   assert.strictEqual(espia.mock.callCount(), 0);
 });
 
+// SELECCION MANUAL (Juan, 2026-08-24): el panel del CRM manda las refs que
+// el usuario marco -- ver la nota de diseño en vivo.js#responderPorDmManual.
+// El endpoint solo reenvia, la validacion de verdad vive del otro lado.
+test("con refs en el body, se las pasa tal cual a responderPorDmManual", async (t) => {
+  t.mock.method(organizations, "getDefault", async () => ORG);
+  t.mock.method(whatsappGroups, "listSessions", async () => [{ nombre: "RADA-NATALIA", estado: "activa" }]);
+  const llamadas = [];
+  t.mock.method(vivo, "responderPorDmManual", async (org, signalId, opts) => {
+    llamadas.push({ org, signalId, opts });
+    return { resultado: "dm_enviado" };
+  });
+
+  const res = respuestaFalsa();
+  await rutaDe("/api/grupos/senal/responder-dm")({ body: { signalId: "sig-1", refs: ["AP004"] } }, res);
+
+  assert.strictEqual(llamadas.length, 1);
+  assert.deepStrictEqual(llamadas[0].opts.refs, ["AP004"]);
+});
+
+test("sin refs en el body, se pasa null -- responderPorDmManual manda todo lo publicable (comportamiento actual)", async (t) => {
+  t.mock.method(organizations, "getDefault", async () => ORG);
+  t.mock.method(whatsappGroups, "listSessions", async () => [{ nombre: "RADA-NATALIA", estado: "activa" }]);
+  const llamadas = [];
+  t.mock.method(vivo, "responderPorDmManual", async (org, signalId, opts) => {
+    llamadas.push({ org, signalId, opts });
+    return { resultado: "dm_enviado" };
+  });
+
+  const res = respuestaFalsa();
+  await rutaDe("/api/grupos/senal/responder-dm")({ body: { signalId: "sig-1" } }, res);
+
+  assert.strictEqual(llamadas[0].opts.refs, null);
+});
+
 test("el resultado de vivo.responderPorDmManual se devuelve tal cual, sin filtrar campos", async (t) => {
   t.mock.method(organizations, "getDefault", async () => ORG);
   t.mock.method(whatsappGroups, "listSessions", async () => [{ nombre: "RADA-NATALIA", estado: "activa" }]);

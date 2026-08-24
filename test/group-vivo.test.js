@@ -791,6 +791,131 @@ test("responderPorDmManual: si el envio falla, no se marca como respondida -- se
   assert.strictEqual(marcadas.length, 0);
 });
 
+// ── responderPorDmManual: SELECCION MANUAL (Juan, 2026-08-24) ───────────
+//
+// "se fueron las 3 propiedades y solo una servía. No tuvo forma de elegir"
+// — caso real, el primer DM manual que salio a produccion. `refs` es la
+// lista que el panel del CRM marco; se cruza contra los matches REALES de
+// la señal antes de la compuerta, nunca se confia en lo que llega del
+// request.
+
+test("responderPorDmManual: con refs elegidas, solo se manda lo seleccionado", async () => {
+  señalParaAprobar = señalCallada({
+    autor_telefono: "141746805670125",
+    matches: [matchBueno({ ref: "AP004" }), matchBueno({ ref: "AP005" })],
+  });
+  grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = "573001234567";
+
+  const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", {
+    sesion: "RADA-NATALIA", refs: ["AP004"],
+  });
+
+  assert.strictEqual(r.resultado, "dm_enviado");
+  assert.strictEqual(r.publicables.length, 1);
+  assert.strictEqual(r.publicables[0].ref, "AP004");
+  assert.match(enviosDmManual[0].texto, /Ref AP004/);
+  assert.doesNotMatch(enviosDmManual[0].texto, /Ref AP005/);
+  assert.deepStrictEqual(marcadas[0].refs, ["AP004"]);
+});
+
+test("responderPorDmManual: sin refs (undefined), se mandan todas las publicables -- comportamiento actual", async () => {
+  señalParaAprobar = señalCallada({
+    autor_telefono: "141746805670125",
+    matches: [matchBueno({ ref: "AP004" }), matchBueno({ ref: "AP005" })],
+  });
+  grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = "573001234567";
+
+  const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
+
+  assert.strictEqual(r.resultado, "dm_enviado");
+  assert.strictEqual(r.publicables.length, 2);
+  assert.match(enviosDmManual[0].texto, /Ref AP004/);
+  assert.match(enviosDmManual[0].texto, /Ref AP005/);
+});
+
+test("responderPorDmManual: una ref que no pertenece a la señal se ignora, no se manda por confiar en el request", async () => {
+  señalParaAprobar = señalCallada({
+    autor_telefono: "141746805670125",
+    matches: [matchBueno({ ref: "AP004" })],
+  });
+  grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = "573001234567";
+
+  const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", {
+    sesion: "RADA-NATALIA", refs: ["AP004", "REF-DE-OTRA-PROPIEDAD"],
+  });
+
+  assert.strictEqual(r.resultado, "dm_enviado");
+  assert.strictEqual(r.publicables.length, 1);
+  assert.strictEqual(r.publicables[0].ref, "AP004");
+});
+
+test("responderPorDmManual: una refs vacia ([]) es una seleccion de 'nada', no 'sin preferencia'", async () => {
+  señalParaAprobar = señalCallada({ autor_telefono: "141746805670125" });
+  grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = "573001234567";
+
+  const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA", refs: [] });
+
+  assert.strictEqual(r.resultado, "sin_propiedades_publicables");
+  assert.strictEqual(enviosDmManual.length, 0);
+});
+
+test("responderPorDmManual: una ref elegida que no pasa la compuerta se reporta en 'descartados', no desaparece en silencio", async () => {
+  señalParaAprobar = señalCallada({
+    autor_telefono: "141746805670125",
+    matches: [matchBueno({ ref: "AP004" }), matchBueno({ ref: "AP005", ubicacion: "otra_zona" })],
+  });
+  grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = "573001234567";
+
+  const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", {
+    sesion: "RADA-NATALIA", refs: ["AP004", "AP005"],
+  });
+
+  assert.strictEqual(r.resultado, "dm_enviado");
+  assert.strictEqual(r.publicables.length, 1, "AP004 SI se manda");
+  assert.ok(
+    r.descartados.some((d) => d.ref === "AP005" && d.motivos.includes("zona_no_publicable")),
+    "AP005 se reporta como descartada, no desaparece sin explicacion"
+  );
+  assert.doesNotMatch(enviosDmManual[0].texto, /Ref AP005/);
+});
+
+// ── responderPorDmManual: SALVEDAD REUSADA (Juan, 2026-08-24) ────────────
+//
+// Si la señal ya paso por modo asistido, Sofi ya dio su veredicto (con
+// `sin_confirmar`, ver revalidar.js) y quedo guardado en
+// group_signals.revalidacion. El DM manual lo reusa en vez de volver a
+// pagar un llamado a la IA por un pedido que ya se revalido.
+
+test("responderPorDmManual: reusa la salvedad guardada en signal.revalidacion", async () => {
+  señalParaAprobar = señalCallada({
+    autor_telefono: "141746805670125",
+    revalidacion: { sin_confirmar: ["terraza", "antigüedad"] },
+  });
+  grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = "573001234567";
+
+  const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
+
+  assert.strictEqual(r.resultado, "dm_enviado");
+  assert.match(enviosDmManual[0].texto, /No tengo confirmado si tiene terraza ni antigüedad/);
+});
+
+test("responderPorDmManual: sin revalidacion guardada (nunca paso por asistido), el DM sale sin salvedad", async () => {
+  señalParaAprobar = señalCallada({ autor_telefono: "141746805670125" }); // sin campo revalidacion
+  grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = "573001234567";
+
+  const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
+
+  assert.strictEqual(r.resultado, "dm_enviado");
+  assert.doesNotMatch(enviosDmManual[0].texto, /No tengo confirmado/);
+});
+
 // ── avisarCercano: "necesito que catherine uribe reciba que se envió y que
 // no y por que no para que ella apruebe desde su celular" — corregido despues
 // a Natalia Velez, la misma linea vinculada al radar (Juan, 2026-08-20).
