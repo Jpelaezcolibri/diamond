@@ -96,6 +96,31 @@ const ETIQUETA_EVENTO: Record<string, string> = {
  */
 const WHATSAPP_WEB = "https://web.whatsapp.com";
 
+// Lo que puede devolver vivo.js#responderPorDmManual, traducido a algo que un
+// asesor entienda sin tener que leer un log (Juan, 2026-08-24: "que muestre
+// el resultado, no un silencio"). Cualquier resultado que no esté en esta
+// lista cae al genérico de abajo — nunca se deja de mostrar algo.
+const MENSAJE_RESULTADO_DM: Record<string, string> = {
+  dm_enviado: "Listo: se le mandó el DM directo al colega.",
+  sin_telefono: "No se pudo resolver el número del colega (WhatsApp lo esconde). Escribile a mano en el grupo.",
+  sin_sesion: "No hay una línea de WhatsApp lista para mandar el DM.",
+  sin_propiedades_publicables: "Ninguna propiedad pasa el control de calidad ahora mismo (el inventario pudo cambiar).",
+  sin_texto: "No se pudo armar el mensaje.",
+  limite_colega_alcanzado: "Ya se le mandó un DM a este colega hoy — no se manda un segundo.",
+  limite_colega_no_verificable: "No se pudo verificar el límite de mensajes al colega; por seguridad, no se mandó nada.",
+  limite_linea_alcanzado: "Se llegó al tope diario de mensajes de la línea.",
+  limite_linea_no_verificable: "No se pudo verificar el tope diario de la línea; por seguridad, no se mandó nada.",
+  error_envio: "El envío falló. Se puede volver a intentar.",
+  ya_respondida: "Este pedido ya tiene una respuesta registrada.",
+  no_es_demanda: "Esto no es un pedido (demanda).",
+  no_encontrada: "No se encontró la señal.",
+  grupo_no_encontrado: "No se encontró el grupo de este pedido.",
+};
+
+function mensajeResultadoDm(resultado: string): string {
+  return MENSAJE_RESULTADO_DM[resultado] || `Resultado: ${resultado}`;
+}
+
 const pesos = (n: number | null) => (n && n > 0 ? `$${n.toLocaleString("es-CO")}` : null);
 
 /**
@@ -234,6 +259,37 @@ function Ficha({ s, copias, grupos }: { s: Signal; copias: number; grupos: numbe
       setErrorEstado(e instanceof Error ? e.message : "No se pudo registrar");
     } finally {
       setRegistrando(false);
+    }
+  }
+
+  // DM manual al colega, desde el CRM (Juan, 2026-08-24): para un pedido que
+  // quedó sin responder por DM -- entró cuando la org estaba en otro modo, o
+  // salió de la ventana de antigüedad y se decide mandarlo igual. Ver la nota
+  // de diseño grande en src/groups/vivo.js#responderPorDmManual.
+  //
+  // "enviando" bloquea el botón para no disparar dos veces el mismo pedido
+  // mientras el viaje al servidor está en curso; "enviado" lo deja bloqueado
+  // después de un éxito real, porque volver a tocarlo chocaría con el límite
+  // de una vez por colega por día -- no hay nada que ganar reintentando.
+  const [dmEstado, setDmEstado] = useState<"idle" | "enviando" | "enviado" | "error">("idle");
+  const [dmMensaje, setDmMensaje] = useState<string | null>(null);
+
+  async function responderPorDm() {
+    setDmEstado("enviando");
+    setDmMensaje(null);
+    try {
+      const res = await fetch("/api/grupos/responder-dm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ signalId: s.id }),
+      });
+      const datos = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(datos.error || "No se pudo mandar el DM");
+      setDmMensaje(mensajeResultadoDm(datos.resultado));
+      setDmEstado(datos.resultado === "dm_enviado" ? "enviado" : "error");
+    } catch (e) {
+      setDmMensaje(e instanceof Error ? e.message : "No se pudo mandar el DM");
+      setDmEstado("error");
     }
   }
 
@@ -465,6 +521,37 @@ function Ficha({ s, copias, grupos }: { s: Signal; copias: number; grupos: numbe
                       )}
                     </div>
 
+                    {/* DM automático al colega desde el CRM (Juan, 2026-08-24):
+                        para un pedido que quedó sin responder por DM -- ver la
+                        nota grande en src/groups/vivo.js#responderPorDmManual.
+                        Solo tiene sentido si todavía no hay respuesta. */}
+                    {!s.respondida_at && (
+                      <div className="mt-2 rounded-md border border-violet-200 bg-violet-50 p-2.5">
+                        <p className="text-[11px] font-semibold text-violet-900">
+                          Sofi puede mandarle este mismo mensaje directo al privado del colega.
+                        </p>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={responderPorDm}
+                            disabled={dmEstado === "enviando" || dmEstado === "enviado"}
+                            className="rounded-md bg-violet-700 px-2.5 py-1 text-[11px] font-medium text-white disabled:opacity-40"
+                          >
+                            {dmEstado === "enviando"
+                              ? "Enviando…"
+                              : dmEstado === "enviado"
+                                ? "🤖 DM enviado"
+                                : "Mandar DM automático"}
+                          </button>
+                          {dmMensaje && (
+                            <span className={`text-[11px] ${dmEstado === "error" ? "text-red-700" : "text-violet-800"}`}>
+                              {dmMensaje}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Responder EN EL GRUPO. WhatsApp no permite abrir por link
                         un grupo del que ya sos miembro, así que el último paso
                         es buscarlo por nombre — y para eso el nombre se copia. */}
@@ -594,8 +681,9 @@ function Ficha({ s, copias, grupos }: { s: Signal; copias: number; grupos: numbe
                     )}
 
                     <p className="mt-1.5 text-[11px] text-slate-500">
-                      Sofi nunca publica en el grupo: el mensaje sale de la línea del asesor, escrito
-                      por una persona.
+                      Sofi nunca publica en el grupo: si resuelve el número del colega, le escribe por
+                      privado (solo o cuando se lo pedís desde acá); si no lo resuelve, el mensaje sale
+                      de la línea del asesor, escrito por una persona.
                     </p>
                   </div>
                 ) : (
