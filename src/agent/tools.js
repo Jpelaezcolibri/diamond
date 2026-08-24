@@ -316,6 +316,57 @@ async function avisarCitaAutoAgendada(ctx, cita) {
   }
 }
 
+// AVISO INMEDIATO cuando un COLEGA (no un asesor reenviando) le hace un
+// pedido directo a Sofi via registrar_demanda_colega (code review post-merge,
+// 2026-08-24 — ver .superpowers/sdd/fix-post-merge-report.md, punto 2).
+//
+// promptColega le promete al colega que "le llega al equipo para que alguien
+// lo contacte a coordinar", pero el texto que devuelve registrar_demanda_colega
+// nunca se le lee a el (prompts.js lo dice explicito: esas instrucciones son
+// para un asesor de la casa) y quedaba viviendo solo como una fila en
+// group_signals a la espera del digest de las 7am — que ademas, hasta esta
+// misma revision, jamas incluia una demanda sin match (ver group-digest.js).
+// Resultado real: Sofi le aseguraba a un colega que lo iban a contactar y
+// nadie se enteraba nunca.
+//
+// Se reusa RADAR_REVISOR_PHONE (Natalia) — el mismo destinatario que ya usa
+// src/groups/vivo.js#avisarCercano para todo pedido de un grupo que el bot no
+// puede cerrar solo — en vez de inventar un destinatario nuevo: ya es el
+// punto de triage establecido para esto. Best-effort y nunca bloqueante:
+// un fallo aca no debe impedir que se le confirme al colega que quedo
+// anotado, ni afecta el registro en group_signals que ya se hizo antes.
+const RADAR_REVISOR_PHONE = process.env.RADAR_REVISOR_PHONE || "";
+
+async function avisarDemandaColegaInmediata(ctx, { contacto, contactoTelefono, matches, clasificado }) {
+  if (!RADAR_REVISOR_PHONE) return;
+  const revisor = await advisors.findByPhone(ctx.org.id, RADAR_REVISOR_PHONE).catch(() => null);
+  if (!revisor) return;
+
+  const que = [clasificado.tipo, clasificado.zona || clasificado.ciudad].filter(Boolean).join(" en ") || "algo sin detalle";
+  const telefonoLinea = contactoTelefono ? `+${contactoTelefono}` : "sin telefono";
+  const lista = matches.length > 0
+    ? matches
+        .map((m) => `- ${m.ref ? `ref ${m.ref}` : "sin ref"} · ${m.zona || "sin zona"} · ${m.precio || "sin precio"}`)
+        .join("\n")
+    : "No calza nada del inventario todavia.";
+
+  const texto = [
+    `🔔 Pedido directo de un colega — contactalo`,
+    ``,
+    `Colega: ${contacto} (${telefonoLinea})`,
+    `Pide: ${que}`,
+    clasificado.notas ? `Detalle: ${clasificado.notas}` : null,
+    ``,
+    lista,
+    ``,
+    `Escribile o llamalo vos, no Sofi: es un negocio compartido con otra inmobiliaria, no un cliente propio.`,
+  ].filter(Boolean).join("\n");
+
+  // Require tardio (mismo motivo que avisarCitaAutoAgendada, arriba).
+  const mensajeAsesor = require("../lib/mensaje-asesor");
+  await mensajeAsesor.enviarYRegistrar(ctx.org, revisor.phone, texto);
+}
+
 // Ejecuta una tool. ctx: { org, lead, propertyInteres, transfer } — el engine lee
 // ctx.lead (actualizado) y ctx.transfer despues del loop.
 async function executeTool(name, input, ctx) {
@@ -403,6 +454,16 @@ async function executeTool(name, input, ctx) {
           } catch (e) {
             console.warn("[tools] No se pudo generar el aviso inmediato de match de aliado:", e.message);
           }
+        }
+        // Texto distinto para un colega (code review post-merge, 2026-08-24):
+        // la version para cliente le ordenaba al modelo "tambien transferilo
+        // con transferir_a_asesor" — pero un colega SI puede llegar hasta aca
+        // (promptColega le ofrece buscar_propiedades) y esa instruccion lo
+        // mandaba derecho a la tool que el gate de arriba (~linea 583) tuvo
+        // que bloquear en codigo porque el texto de prompt no alcanzaba para
+        // frenar al modelo.
+        if (ctx.colega) {
+          return "No se encontraron propiedades en el inventario PROPIO con esos criterios para ese pedido. Este es un colega de otra inmobiliaria buscando para SU cliente, no un cliente nuestro: no lo transfieras a un asesor ni le reveles que hay una posible coincidencia de aliado. Si tiene un pedido concreto, sugerile que lo registres con registrar_demanda_colega.";
         }
         return "No se encontraron propiedades en el inventario PROPIO con esos criterios. AVISO INTERNO (no reveles al cliente precio, referencia, ni ningun dato del colega): existe una posible coincidencia en la red de aliados. Puedes decirle al cliente que tienes una opcion por la zona que el pidio y que un asesor lo contactara pronto para confirmar disponibilidad. Tambien transfierelo con transferir_a_asesor.";
       }
@@ -578,6 +639,18 @@ async function executeTool(name, input, ctx) {
   }
 
   if (name === "transferir_a_asesor") {
+    // GATE DE COLEGA (code review post-merge, 2026-08-24 — mismo criterio que
+    // maybeCaptadorAlert en tools.js:244). Un colega de otra inmobiliaria
+    // puede llegar hasta aca porque promptColega SI le ofrece buscar_propiedades
+    // (ver el texto de la linea ~410, tambien corregido en esta revision, que
+    // se lo sugeria en texto). Si el modelo la llamara igual, engine.js
+    // marcaria el lead como 'transferido' y armaria buildAdvisorAlert — el
+    // mismo aviso FALSO de "un cliente se intereso en tu propiedad" que este
+    // gate ya existia para eliminar en maybeCaptadorAlert, entrando por otra
+    // puerta. El colega no es un lead: su pedido va por registrar_demanda_colega.
+    if (ctx.colega) {
+      return "No transfieras a un colega de otra inmobiliaria: no es un cliente nuestro, es un par que busca para SU cliente. Si tiene un pedido concreto (agendar, mas info, coordinar), usa registrar_demanda_colega en su lugar.";
+    }
     // La intencion (registrada antes con registrar_dato_lead, mas deliberada y
     // confiable) MANDA sobre la especialidad que adivine el modelo aqui: evita
     // enrutamientos absurdos, ej. mandar un vendedor al asesor de vehiculos.
@@ -681,6 +754,18 @@ async function registrarDemandaColega(input, ctx) {
     return "NO registre el pedido: falta el nombre del colega que lo hace. Preguntale de quien es el pedido y volve a llamar esta herramienta cuando lo tengas.";
   }
 
+  // TELEFONO DE CONTACTO (code review post-merge, 2026-08-24): cuando quien
+  // escribe es el propio colega (ctx.colega — chat directo con Sofi, no un
+  // asesor reenviando), el numero real ya esta en ctx.lead.phone: es el mismo
+  // WhatsApp desde el que esta escribiendo AHORA. Dejar que el modelo lo saque
+  // del texto (input.contacto_telefono) es innecesario y arriesgado: si el
+  // colega no lo repite en el mensaje, la fila queda sin telefono con el que
+  // devolverle la llamada aunque lo tengamos a mano. Cuando es un asesor
+  // reenviando un pedido visto en un grupo (ctx.colega ausente), el numero del
+  // colega NO esta en ctx — ahi si hace falta lo que el mensaje reenviado
+  // traiga o lo que el asesor tipee.
+  const contactoTelefono = ctx.colega ? ctx.lead.phone : (input.contacto_telefono || "");
+
   // Se traduce al shape del clasificador para poder reusar el mismo motor de
   // cruce que corre sobre los exports: mismas compuertas (zona por token
   // exacto, precio como banda), mismos puntajes, mismas razones.
@@ -694,7 +779,7 @@ async function registrarDemandaColega(input, ctx) {
     precio_min: input.presupuesto_min || 0,
     precio_max: input.presupuesto_max || 0,
     habitaciones: input.habitaciones || 0,
-    contacto: input.contacto_telefono || "",
+    contacto: contactoTelefono || "",
     notas: input.detalle || "",
     mensaje: {
       autor: contacto,
@@ -724,7 +809,7 @@ async function registrarDemandaColega(input, ctx) {
         .update(`${plano(contacto)}|${plano(ctx.lastUserMessage || "")}`)
         .digest("hex").slice(0, 40),
       autor_nombre: contacto,
-      autor_telefono: input.contacto_telefono || null,
+      autor_telefono: contactoTelefono || null,
       clase: "demanda",
       confianza: 1,
       operacion: clasificado.operacion || null,
@@ -734,7 +819,7 @@ async function registrarDemandaColega(input, ctx) {
       precio_min: input.presupuesto_min || null,
       precio_max: input.presupuesto_max || null,
       habitaciones: input.habitaciones || null,
-      contacto: input.contacto_telefono || null,
+      contacto: contactoTelefono || null,
       texto_original: ctx.lastUserMessage || null,
       matches,
       origen: "reenvio",
@@ -742,6 +827,17 @@ async function registrarDemandaColega(input, ctx) {
     });
   } catch (e) {
     console.warn("[tools] No se pudo persistir la demanda del colega:", e.message);
+  }
+
+  // AVISO INMEDIATO A UNA PERSONA cuando quien pide es el colega mismo, no un
+  // asesor reenviando (ver avisarDemandaColegaInmediata arriba y el punto 2
+  // de .superpowers/sdd/fix-post-merge-report.md para la justificacion
+  // completa). Best-effort y disparado sin esperar (no bloquea la respuesta
+  // al colega): un fallo aca no debe demorarle la confirmacion.
+  if (ctx.colega) {
+    avisarDemandaColegaInmediata(ctx, { contacto, contactoTelefono, matches, clasificado }).catch((e) =>
+      console.warn("[tools] No se pudo avisar la demanda del colega:", e.message)
+    );
   }
 
   if (matches.length === 0) {

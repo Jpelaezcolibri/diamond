@@ -23,6 +23,13 @@ let feedRegistrado = [];
 // Telefono que el directorio (src/groups/directorio.js) dice haber resuelto
 // para el @lid del colega -- null simula el 33% que no se resuelve.
 let telefonoColegaResuelto = null;
+// ── DM directo al colega (Juan, 2026-08-24) ──────────────────────────────
+let politicasGuardadas = [];
+let marcadasRespondidas = [];
+let dmsHoyColegaMock = 0; // cupo libre por defecto
+let dmsHoyLineaMock = 0;
+let enviosDm = [];
+let envioDmResultado = { ok: true, wamid: "wm-dm-1" };
 
 function instalar() {
   require.cache[RUTA("groups/classify.js")] = {
@@ -66,7 +73,10 @@ function instalar() {
       guardarRevalidacion: async (org, id, v) => { revalidacionesGuardadas.push({ id, v }); return true; },
       marcarAvisoEnviado: async (org, id, opts) => { avisosMarcados.push({ id, ...opts }); return true; },
       respuestasDesde: async () => ({ cantidad: 0, ultimaIso: null }),
-      marcarRespondida: async () => true,
+      marcarRespondida: async (orgId, id, datos) => { marcadasRespondidas.push({ id, ...datos }); return true; },
+      guardarPolitica: async (orgId, id, datos) => { politicasGuardadas.push({ id, ...datos }); return true; },
+      dmsHoyPorColega: async () => dmsHoyColegaMock,
+      dmsHoyLinea: async () => dmsHoyLineaMock,
     },
   };
   require.cache[RUTA("data/organizations.js")] = {
@@ -90,6 +100,14 @@ function instalar() {
   // empieza a escribir basura en produccion sin que ningun test lo note.
   require.cache[RUTA("groups/directorio.js")] = {
     exports: { registrar: async () => null, telefonoDe: async () => telefonoColegaResuelto },
+  };
+  require.cache[RUTA("lib/waha.js")] = {
+    exports: {
+      enviarDm: async (sesion, telefono, texto) => {
+        enviosDm.push({ sesion, telefono, texto });
+        return envioDmResultado;
+      },
+    },
   };
   require.cache[RUTA("channels/whatsapp.js")] = {
     exports: {
@@ -140,6 +158,13 @@ function match(extra = {}) {
     fuente: "diamond", ref: "9780079", titulo: "Vendo Apartamento En Laureles",
     zona: "Laureles", precio: "$900.000.000", operacion: "Venta",
     link: "https://diamondinmobiliaria.com/propiedades/x-9780079",
+    // linkWasi (2026-08-24): match.js SIEMPRE lo agrega para fuente "diamond"
+    // (ver src/groups/match.js). Hace falta en el fixture porque el DM directo
+    // al colega arma su texto con redactar.mensajeGrupo, que publica
+    // match.linkWasi (nunca match.link, ver la nota de "MENSAJE BLANQUEADO"
+    // en ese archivo) -- sin este campo, la ficha del DM saldria con la
+    // palabra literal "undefined" en el link.
+    linkWasi: "https://info.wasi.co/vendo-apartamento-en-laureles-9780079/1234567",
     habitaciones: 3, area: "114m2", puntaje: 83, razones: ["Zona: Laureles"], ...extra,
   };
 }
@@ -162,6 +187,12 @@ beforeEach(() => {
   envioFalla = false;
   feedRegistrado = [];
   telefonoColegaResuelto = null;
+  politicasGuardadas = [];
+  marcadasRespondidas = [];
+  dmsHoyColegaMock = 0;
+  dmsHoyLineaMock = 0;
+  enviosDm = [];
+  envioDmResultado = { ok: true, wamid: "wm-dm-1" };
   delete process.env.RADAR_ALERTA_TO;
   delete process.env.CONTACT_WHATSAPP_NUMBER;
   vivo = instalar();
@@ -390,4 +421,137 @@ test("si el aviso aprobado no logra salir, el feed lo refleja (avisada:false)", 
 
   assert.strictEqual(feedRegistrado.length, 1);
   assert.strictEqual(feedRegistrado[0].resultado.avisada, false);
+});
+
+// ── DM directo al colega (Juan, 2026-08-24) ──────────────────────────────
+//
+// "que el bot responda solo": con telefono resuelto, pedido reciente, cupo
+// libre y una sesion de WAHA para salir, el radar le escribe al colega
+// directo en vez de avisarle a la asesora. Los tres limites de
+// politica.js#decidirDm NUNCA descartan el pedido: siempre desvian a la
+// asesora de siempre (ver los tests de mas abajo).
+
+test("con telefono, pedido reciente, cupo libre y sesion, se manda el DM y NO se avisa a la asesora", async () => {
+  telefonoColegaResuelto = "573001234567";
+  const r = await vivo.procesarMensaje(ORG, mensaje(), {
+    grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA",
+  });
+
+  assert.strictEqual(r.resultado, "dm_enviado");
+  assert.strictEqual(enviosDm.length, 1);
+  assert.strictEqual(enviosDm[0].sesion, "RADA-NATALIA");
+  assert.strictEqual(enviosDm[0].telefono, "573001234567");
+  assert.match(enviosDm[0].texto, /Ref 9780079/);
+  assert.strictEqual(enviadosPorSofi.length, 0, "la asesora no recibe nada: no tiene nada que hacer");
+  assert.strictEqual(avisosMarcados.length, 0, "marcarAvisoEnviado es del camino de la asesora, no de este");
+  assert.deepStrictEqual(marcadasRespondidas, [
+    { id: "sig-1", texto: enviosDm[0].texto, wamid: "wm-dm-1", modo: "auto", refs: ["9780079"] },
+  ]);
+});
+
+test("el DM al colega usa el mismo texto que antes iba al grupo (redactar.mensajeGrupo)", async () => {
+  telefonoColegaResuelto = "573001234567";
+  await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+
+  const t = enviosDm[0].texto;
+  assert.match(t, /Hola Patricia, vi tu solicitud/);
+  assert.match(t, /Comision compartida/);
+  assert.match(t, /Sofi, asistente virtual/);
+  assert.doesNotMatch(t, /Diamond/i, "el mensaje blanqueado nunca menciona Diamond");
+});
+
+test("el DM incluye el link a la linea oficial de Sofi cuando hay numero configurado", async () => {
+  process.env.CONTACT_WHATSAPP_NUMBER = "573000000009";
+  telefonoColegaResuelto = "573001234567";
+  await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+
+  assert.match(enviosDm[0].texto, /https:\/\/wa\.me\/573000000009/);
+});
+
+test("sin CONTACT_WHATSAPP_NUMBER, el DM sale sin ese renglon -- nunca un link a medias", async () => {
+  telefonoColegaResuelto = "573001234567";
+  await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+
+  assert.doesNotMatch(enviosDm[0].texto, /línea oficial/);
+});
+
+test("el feed del admin se entera del DM directo, con trazabilidad de a quien se le escribio", async () => {
+  telefonoColegaResuelto = "573001234567";
+  await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+
+  assert.strictEqual(feedRegistrado.length, 1);
+  assert.strictEqual(feedRegistrado[0].resultado.avisada, true);
+  assert.match(feedRegistrado[0].resultado.destinatarioNombre, /DM directo a Patricia Gomez/);
+});
+
+test("la decision (DM u asesora) queda guardada en la señal, igual que el resto de las decisiones del radar", async () => {
+  telefonoColegaResuelto = "573001234567";
+  await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+
+  assert.strictEqual(politicasGuardadas.length, 1);
+  assert.strictEqual(politicasGuardadas[0].id, "sig-1");
+  assert.strictEqual(politicasGuardadas[0].motivo, "ok");
+  assert.ok(Array.isArray(politicasGuardadas[0].traza));
+});
+
+test("sin telefono resuelto, se avisa a la asesora de siempre -- ningun pedido se pierde", async () => {
+  telefonoColegaResuelto = null;
+  const r = await vivo.procesarMensaje(ORG, mensaje(), {
+    grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA",
+  });
+
+  assert.strictEqual(r.resultado, "avisada");
+  assert.strictEqual(enviosDm.length, 0);
+  assert.strictEqual(enviadosPorSofi.length, 1);
+  assert.strictEqual(politicasGuardadas[0].motivo, "sin_telefono");
+});
+
+test("sin sesion de WAHA, no se puede intentar el DM -- se avisa a la asesora", async () => {
+  telefonoColegaResuelto = "573001234567";
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE }); // sin sesion
+
+  assert.strictEqual(r.resultado, "avisada");
+  assert.strictEqual(enviosDm.length, 0);
+  assert.strictEqual(enviadosPorSofi.length, 1);
+});
+
+test("un pedido fuera de ventana (mas de 30 min desde el mensaje del grupo) se avisa a la asesora", async () => {
+  telefonoColegaResuelto = "573001234567";
+  const viejo = { ...mensaje(), instanteIso: new Date(Date.now() - 31 * 60 * 1000).toISOString() };
+  const r = await vivo.procesarMensaje(ORG, viejo, { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+
+  assert.strictEqual(r.resultado, "avisada");
+  assert.strictEqual(enviosDm.length, 0);
+  assert.strictEqual(politicasGuardadas[0].motivo, "pedido_vencido");
+});
+
+test("un colega ya contactado hoy (tope 1) no recibe un segundo DM -- se avisa a la asesora", async () => {
+  telefonoColegaResuelto = "573001234567";
+  dmsHoyColegaMock = 1;
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+
+  assert.strictEqual(r.resultado, "avisada");
+  assert.strictEqual(enviosDm.length, 0);
+  assert.strictEqual(politicasGuardadas[0].motivo, "limite_colega_alcanzado");
+});
+
+test("al tope diario de la linea, se avisa a la asesora -- es cortacircuito, no descarte", async () => {
+  telefonoColegaResuelto = "573001234567";
+  dmsHoyLineaMock = 150;
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+
+  assert.strictEqual(r.resultado, "avisada");
+  assert.strictEqual(enviosDm.length, 0);
+  assert.strictEqual(politicasGuardadas[0].motivo, "limite_linea_alcanzado");
+});
+
+test("si el envio del DM falla, se avisa a la asesora en su lugar -- ningun pedido se pierde", async () => {
+  telefonoColegaResuelto = "573001234567";
+  envioDmResultado = { ok: false, error: "sesion caida" };
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+
+  assert.strictEqual(r.resultado, "avisada");
+  assert.strictEqual(enviosDm.length, 1, "si se intento, solo una vez -- sin reintento");
+  assert.strictEqual(enviadosPorSofi.length, 1);
+  assert.deepStrictEqual(marcadasRespondidas, [], "un DM que no salio no se marca como respondida");
 });

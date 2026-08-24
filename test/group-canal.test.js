@@ -51,7 +51,14 @@ test("el canal cita el mensaje original al responder (replyTo), no solo lo publi
   assert.match(codigo, /enviarTexto\(ev\.sesion, ev\.chatId, texto, \{ replyTo: ev\.waMessageId \}\)/);
 });
 
-test("el cliente de WAHA expone exactamente UN endpoint de envio", () => {
+// ACTUALIZADO 2026-08-24: la garantia de "una sola funcion que envia" paso a
+// ser "dos funciones, cada una con su propia validacion" cuando se agrego
+// waha.enviarDm (el DM directo al colega del radar en vivo — ver la nota
+// grande de "SEGUNDA PUERTA" al inicio de src/lib/waha.js). Sigue siendo el
+// mismo tipo de garantia, solo que ahora exige exactamente DOS menciones del
+// endpoint, cada una dentro de la funcion que le corresponde: si aparece una
+// tercera via, o si el endpoint se usa fuera de esas dos funciones, esto falla.
+test("el cliente de WAHA expone UN SOLO endpoint de envio, usado por DOS funciones con guarda propia", () => {
   const codigo = soloCodigo(leer("src/lib/waha.js"));
   // El unico endpoint de escritura de mensajes permitido.
   const envios = codigo.match(/\/api\/send\w*/g) || [];
@@ -60,14 +67,22 @@ test("el cliente de WAHA expone exactamente UN endpoint de envio", () => {
     ["/api/sendText"],
     "Si aparece otro /api/send*, hay una capacidad nueva que nadie decidio agregar"
   );
-  // Y una sola funcion que lo use.
+  // Y exactamente dos funciones lo usan: enviarTexto (grupo) y enviarDm (colega).
   const funciones = codigo.match(/async function (\w+)/g) || [];
   assert.ok(funciones.includes("async function enviarTexto"));
+  assert.ok(funciones.includes("async function enviarDm"));
   assert.strictEqual(
     (codigo.match(/"\/api\/sendText"/g) || []).length,
-    1,
-    "El endpoint de envio se menciona una sola vez, dentro de enviarTexto"
+    2,
+    "El endpoint de envio solo puede mencionarse dentro de enviarTexto y de enviarDm"
   );
+  // Cada una con SU guarda, no una guarda compartida que alguien podria aflojar
+  // para las dos vias de una sola vez.
+  const cuerpoTexto = codigo.slice(codigo.indexOf("async function enviarTexto"), codigo.indexOf("async function enviarDm"));
+  const cuerpoDm = codigo.slice(codigo.indexOf("async function enviarDm"));
+  assert.match(cuerpoTexto, /@g\.us/, "enviarTexto solo puede escribir a un grupo");
+  assert.match(cuerpoDm, /esCelularColombiano/, "enviarDm solo puede escribir a un celular colombiano real");
+  assert.ok(!cuerpoDm.includes("@g.us"), "la guarda de enviarDm no puede depender de @g.us");
 });
 
 test("enviarTexto se niega a escribir fuera de un grupo", async () => {
@@ -106,6 +121,92 @@ test("enviarTexto manda reply_to cuando se lo pasan, y lo omite cuando no", asyn
 
   await waha.enviarTexto("sesion", "123@g.us", "hola");
   assert.strictEqual("reply_to" in ultimoBody, false, "sin replyTo no se manda el campo, ni siquiera en null");
+});
+
+// ── enviarDm: la segunda puerta, hacia el privado del colega (2026-08-24) ──
+//
+// Ver la nota "SEGUNDA PUERTA" en src/lib/waha.js: distinta guarda de
+// enviarTexto (celular colombiano real, no @g.us), misma forma de retorno,
+// mismo "nunca reintenta".
+
+test("enviarDm rechaza un @g.us, un LID, y basura -- solo un celular colombiano real pasa", async () => {
+  process.env.WAHA_URL = "http://waha.test";
+  process.env.WAHA_API_KEY = "x";
+  const waha = require("../src/lib/waha");
+
+  const grupo = await waha.enviarDm("sesion", "123456789012345@g.us", "hola");
+  assert.strictEqual(grupo.ok, false);
+  assert.match(grupo.error, /Destino invalido/);
+
+  // LID tipico medido en produccion (14-17 digitos, ver directorio.js).
+  const lid = await waha.enviarDm("sesion", "141746805670125", "hola");
+  assert.strictEqual(lid.ok, false);
+
+  const basura = await waha.enviarDm("sesion", "abc", "hola");
+  assert.strictEqual(basura.ok, false);
+
+  const vacio = await waha.enviarDm("sesion", null, "hola");
+  assert.strictEqual(vacio.ok, false);
+});
+
+test("enviarDm manda a un celular colombiano real, como @c.us", async (t) => {
+  process.env.WAHA_URL = "http://waha.test";
+  process.env.WAHA_API_KEY = "x";
+  const waha = require("../src/lib/waha");
+
+  let ultimoBody = null;
+  t.mock.method(globalThis, "fetch", async (url, opts) => {
+    ultimoBody = JSON.parse(opts.body);
+    return { ok: true, status: 200, text: async () => JSON.stringify({ id: { _serialized: "wamid-dm-1" } }) };
+  });
+
+  const r = await waha.enviarDm("RADA-NATALIA", "573001234567", "hola colega, vi tu solicitud");
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(r.wamid, "wamid-dm-1");
+  assert.strictEqual(ultimoBody.session, "RADA-NATALIA");
+  assert.strictEqual(ultimoBody.chatId, "573001234567@c.us");
+  assert.strictEqual(ultimoBody.text, "hola colega, vi tu solicitud");
+});
+
+test("enviarDm normaliza un celular sin el 57 antes de armar el chatId", async (t) => {
+  process.env.WAHA_URL = "http://waha.test";
+  process.env.WAHA_API_KEY = "x";
+  const waha = require("../src/lib/waha");
+
+  let ultimoBody = null;
+  t.mock.method(globalThis, "fetch", async (url, opts) => {
+    ultimoBody = JSON.parse(opts.body);
+    return { ok: true, status: 200, text: async () => JSON.stringify({ id: "wamid-dm-2" }) };
+  });
+
+  await waha.enviarDm("sesion", "300 123 4567", "hola");
+  assert.strictEqual(ultimoBody.chatId, "573001234567@c.us");
+});
+
+test("sin configuracion de WAHA, enviarDm tampoco intenta nada", async () => {
+  const url = process.env.WAHA_URL;
+  delete process.env.WAHA_URL;
+  const waha = require("../src/lib/waha");
+  const r = await waha.enviarDm("sesion", "573001234567", "hola");
+  assert.strictEqual(r.ok, false);
+  assert.match(r.error, /WAHA_URL/);
+  if (url) process.env.WAHA_URL = url;
+});
+
+test("enviarDm no reintenta: un fallo es una sola llamada, nunca dos", async (t) => {
+  process.env.WAHA_URL = "http://waha.test";
+  process.env.WAHA_API_KEY = "x";
+  const waha = require("../src/lib/waha");
+
+  let llamadas = 0;
+  t.mock.method(globalThis, "fetch", async () => {
+    llamadas++;
+    return { ok: false, status: 500, text: async () => JSON.stringify({ message: "boom" }) };
+  });
+
+  const r = await waha.enviarDm("sesion", "573001234567", "hola");
+  assert.strictEqual(r.ok, false);
+  assert.strictEqual(llamadas, 1, "un DM que quiza si salio no se reintenta: duplicaria el mensaje al privado");
 });
 
 test("sin configuracion de WAHA no se intenta enviar nada", async () => {

@@ -563,6 +563,75 @@ async function respuestasDesde(orgId, groupId, desdeIso) {
   return { cantidad: data.length, ultimaIso: data.length ? data[0].respondida_at : null };
 }
 
+// ── Limites del DM directo al colega (ver src/groups/politica.js#decidirDm) ──
+//
+// Las dos consultas de abajo alimentan ese freno. Comparten un criterio con
+// respuestasDesde: cuentan filas con respuesta_modo='auto' — el mismo valor
+// que ya usa el camino que publica DENTRO del grupo. No se agrega un valor
+// nuevo a la columna (evita otra migracion sobre el check existente,
+// db/migrations/2026-08-16_radar_vivo.sql) porque las dos vias nunca
+// coexisten para la misma org: una org esta en modo 'asistido' (el UNICO que
+// manda DMs) o en modo 'auto'/'sombra' (el que publica en el grupo), nunca
+// los dos al mismo tiempo — ver organizations.js#modoDeRespuesta. Si algun
+// dia coexistieran, el peor caso de esta reutilizacion es contar de mas y
+// desviar un pedido de mas a la asesora — nunca al reves, y ningun limite de
+// este radar descarta un pedido.
+//
+// Devuelven null (no un cero) cuando no se puede contar — la migracion no
+// corrio, o la consulta fallo — para que decidirDm trate la duda como "no
+// enviar" en vez de asumir que hay cupo.
+
+// Cuantos DMs se le mandaron a ESTE colega hoy. Se identifica por
+// `autor_telefono`, el mismo valor crudo que trae el mensaje del grupo (el
+// @lid, o en el ~33% que ya llega resuelto, el telefono real) — es estable
+// por colega dentro de la señal, que es lo unico que hace falta para "cuantas
+// veces le escribimos hoy a esta persona", sin depender del telefono YA
+// RESUELTO que solo existe en el momento del envio.
+async function dmsHoyPorColega(orgId, autorTelefono, desdeIso) {
+  if (!autorTelefono) return null;
+  if (!supabase) return 0;
+  const { data, error } = await supabase
+    .from("group_signals")
+    .select("id")
+    .eq("org_id", orgId)
+    .eq("autor_telefono", autorTelefono)
+    .eq("respuesta_modo", "auto")
+    .gte("respondida_at", desdeIso);
+  if (error) {
+    if (esColumnaFaltante(error)) {
+      console.error("[grupos] Falta la migracion 2026-08-16_radar_vivo.sql: no se puede verificar el limite de DMs por colega.");
+    } else {
+      console.error("[grupos] No se pudo contar los DMs recientes al colega:", error.message);
+    }
+    return null;
+  }
+  return data.length;
+}
+
+// Cuantos DMs mando la linea HOY en total (cortacircuitos de volumen, ver
+// politica.js#LIMITES_DM_DEFAULT). Filtrado por org_id como el resto del
+// modulo: en este piloto una linea vinculada sirve a una sola organizacion
+// (ver la nota de "Una sola sesion vinculada por org" en vivo.js#aprobarManual),
+// asi que el conteo por org ES el conteo de la linea.
+async function dmsHoyLinea(orgId, desdeIso) {
+  if (!supabase) return 0;
+  const { data, error } = await supabase
+    .from("group_signals")
+    .select("id")
+    .eq("org_id", orgId)
+    .eq("respuesta_modo", "auto")
+    .gte("respondida_at", desdeIso);
+  if (error) {
+    if (esColumnaFaltante(error)) {
+      console.error("[grupos] Falta la migracion 2026-08-16_radar_vivo.sql: no se puede verificar el tope diario de DMs de la linea.");
+    } else {
+      console.error("[grupos] No se pudo contar los DMs de hoy:", error.message);
+    }
+    return null;
+  }
+  return data.length;
+}
+
 // El pedido de grupo MAS RECIENTE de este remitente, si lo hay — el cruce que
 // necesita el inbox de DM (Juan, 2026-08-21: "hacer un cruce de datos de
 // cuales mensajes respondio el bot y cuales el colega de regreso le
@@ -598,6 +667,7 @@ module.exports = {
   marcarRespondida, respuestasDesde, guardarRevalidacion, marcarAvisoEnviado,
   guardarPolitica, obtenerPorId, calladosPendientes, buscarPorTelefono,
   findByWamid, pendientesDeAviso, candidatosRecordatorio, claimRecordatorio,
+  dmsHoyPorColega, dmsHoyLinea,
   CLASES, ORIGENES, MODOS_RESPUESTA, _resetBlindaje,
 };
 

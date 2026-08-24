@@ -225,8 +225,9 @@ async function procesarMensaje(org, mensaje, { grupo, modo = "sombra", enviar = 
   }
 
   // Mensaje "blanqueado" (Juan, 2026-08-18): sin asesor, a proposito — ver
-  // la nota de diseño en redactar.js.
-  const texto = redactar.mensajeGrupo({ autor_nombre: mensaje.autor }, publicables);
+  // la nota de diseño en redactar.js. Se pasa `org` para que el renglon de
+  // invitacion a Sofi (si lo hay) resuelva el numero multi-tenant.
+  const texto = redactar.mensajeGrupo({ autor_nombre: mensaje.autor }, publicables, { org });
   if (!texto) return { resultado: "callado", motivo: "sin_texto", traza: decision.traza, signalId: signal && signal.id };
 
   const refs = publicables.map((m) => m.ref).filter(Boolean);
@@ -254,6 +255,24 @@ async function procesarMensaje(org, mensaje, { grupo, modo = "sombra", enviar = 
   await groupSignals.marcarRespondida(org.id, signal.id, { texto, wamid: envio.wamid, modo: "auto", refs });
   await avisarFeed("publicado");
   return { resultado: "publicado", texto, wamid: envio.wamid, publicables, traza: decision.traza, signalId: signal.id };
+}
+
+// El texto que recibe el colega en el DM directo (Juan, 2026-08-24).
+//
+// Reusa redactar.mensajeGrupo TAL CUAL — "el mismo texto que antes iba al
+// grupo" (mismo mensaje "blanqueado": ficha completa, sin mencionar Diamond,
+// firmado "Sofi, asistente virtual"). Ver la nota de diseño en redactar.js.
+//
+// CORRECCION (Juan, 2026-08-24): esta funcion armaba su PROPIO renglon
+// adicional con linkContactoOficial(org) encima del que redactar.js ya ponia
+// con su propio numero fijo (SOFI_WHATSAPP_NUMBER) -- el colega recibia dos
+// invitaciones a escribirle a Sofi, una debajo de la otra. redactar.js#mensajeGrupo
+// ya resuelve el numero multi-tenant (recibe `org` en las opciones), asi que
+// no hace falta nada mas aca. Se deja la funcion, en vez de llamar a
+// mensajeGrupo directo desde el llamador, porque documenta con nombre la
+// intencion (el texto que le llega al colega por DM).
+function textoParaColega(autorNombre, utiles, org) {
+  return redactar.mensajeGrupo({ autor_nombre: autorNombre }, utiles, { org });
 }
 
 // Sofi da su veredicto y, si aprueba, le avisa a la asesora.
@@ -287,17 +306,92 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
   }
 
   // Telefono REAL del colega, resuelto por el directorio a partir del @lid
-  // (mensaje.autorTelefono) — nunca se le pasa el lid crudo a alertaAsesor,
-  // que ya no sabe interpretarlo (ver la nota de politica en ese archivo,
-  // 2026-08-22). Falla cerrado y en silencio: sin telefono, alertaAsesor.construir
-  // arma igual el aviso, solo que con la instruccion de tocar el nombre en el
-  // grupo en vez de un link directo — un fallo aca nunca puede tumbar el aviso.
+  // (mensaje.autorTelefono). CORRECCION (code review post-merge, 2026-08-24):
+  // este comentario decia "nunca se le pasa el lid crudo a alertaAsesor", pero
+  // si se le pasa — como autor_telefono, mas abajo — porque construir() lo usa
+  // de ULTIMO intento para el 33% que no se resuelve (ver la nota en ese
+  // archivo, revision 2026-08-24). Lo que evita que un lid crudo se muestre
+  // como si fuera un telefono no es que no llegue, es que contactoPara lo
+  // filtra con esCelularColombiano antes de usarlo. Falla cerrado y en
+  // silencio: sin telefono resuelto NI autor_telefono que pase el filtro,
+  // alertaAsesor.construir arma igual el aviso, solo que con la instruccion
+  // de tocar el nombre en el grupo en vez de un link directo — un fallo aca
+  // nunca puede tumbar el aviso.
   const telefonoColega = await directorio
     .telefonoDe(org.id, mensaje.autorTelefono, { sesion, jid: grupo.jid })
     .catch((e) => {
       console.warn("[radar] No se pudo resolver el telefono del colega para el aviso:", e.message);
       return null;
     });
+
+  // DM DIRECTO AL COLEGA (Juan, 2026-08-24): "que el bot responda solo" — el
+  // gremio espera la respuesta al interno, nunca en el grupo. Antes de
+  // intentarlo pasa por el freno de politica.js#decidirDm (una vez por colega
+  // por dia, pedido reciente, tope diario de la linea): NINGUNO de esos tres
+  // descarta el pedido, todos desvian a la asesora de siempre — "no podemos
+  // dejar pasar ningun pedido" (Juan). Sin `sesion` (nombre de la sesion de
+  // WAHA) tampoco se puede intentar: es el dato que le dice a waha.enviarDm
+  // por cual linea salir, y sin el no hay como enviar nada.
+  //
+  // Candidatas que Sofi marco utiles — la misma lista que alertaAsesor.js
+  // recalcula mas abajo para el aviso a la asesora, pero hace falta ACA
+  // tambien para poder armar el DM con redactar.mensajeGrupo antes de saber
+  // si el DM va a poder salir.
+  const utiles = (veredicto.refs_utiles || [])
+    .map((ref) => matches.find((m) => String(m.ref) === String(ref)))
+    .filter(Boolean);
+
+  const desdeIso = new Date((ahora || new Date()).getTime() - VENTANA_LIMITE_HORAS * 3600 * 1000).toISOString();
+  const [dmsColegaHoy, dmsLineaHoy] = telefonoColega
+    ? await Promise.all([
+        groupSignals.dmsHoyPorColega(org.id, mensaje.autorTelefono, desdeIso),
+        groupSignals.dmsHoyLinea(org.id, desdeIso),
+      ])
+    : [null, null];
+
+  const decisionDm = politica.decidirDm({
+    telefono: telefonoColega,
+    fechaMensajeIso: mensaje.instanteIso,
+    ahora: ahora || new Date(),
+    dmsHoyColega: dmsColegaHoy,
+    dmsHoyLinea: dmsLineaHoy,
+  });
+
+  // Auditable igual que el resto de las decisiones del radar (mismo llamado
+  // que usa el camino auto/sombra mas arriba en este archivo, sobre la misma
+  // columna): la razon por la que un pedido salio por DM o por la asesora
+  // queda en la señal misma, no solo en un log que se pierde.
+  await groupSignals.guardarPolitica(org.id, signal.id, { motivo: decisionDm.motivo, traza: decisionDm.traza }).catch(() => {});
+
+  if (decisionDm.enviarDm && sesion && utiles.length > 0) {
+    const textoDm = textoParaColega(mensaje.autor, utiles, org);
+    if (textoDm) {
+      const envioDm = await waha.enviarDm(sesion, telefonoColega, textoDm).catch((e) => ({ ok: false, error: e.message }));
+      if (envioDm && envioDm.ok) {
+        // Se registra con modo 'auto' — igual que el camino que publica DENTRO
+        // del grupo (ver la nota en group-signals.js#dmsHoyPorColega sobre por
+        // que no hace falta un valor nuevo en la columna): en modo asistido,
+        // que es el UNICO que llega hasta aca, 'auto' solo puede significar
+        // "el sistema lo mando solo por DM", nunca "lo publico en el grupo".
+        const refsDm = utiles.map((m) => m.ref).filter(Boolean);
+        await groupSignals.marcarRespondida(org.id, signal.id, { texto: textoDm, wamid: envioDm.wamid, modo: "auto", refs: refsDm });
+        // No se avisa a la asesora: no tiene nada que hacer con un pedido que
+        // el bot ya resolvio, y avisarle igual seria ruido. El feed del admin
+        // SI se entera — es la trazabilidad que ya usa el resto de este
+        // archivo, solo que con quien realmente se avisó.
+        await feedComando
+          .registrar(org, señalParaFeed, veredicto, matches, {
+            avisada: true,
+            destinatarioNombre: `DM directo a ${mensaje.autor || "el colega"}`,
+          })
+          .catch((e) => console.warn("[radar] No se pudo escribir en el feed del admin:", e.message));
+        return { resultado: "dm_enviado", veredicto, texto: textoDm, telefono: telefonoColega, signalId: signal.id };
+      }
+      // Si el envio falla, se cae al aviso a la asesora de siempre: ningun
+      // pedido puede quedar sin que alguien lo atienda.
+      console.warn(`[radar] Fallo el DM al colega, se avisa a la asesora en su lugar: ${envioDm && envioDm.error}`);
+    }
+  }
 
   const texto = alertaAsesor.construir(
     {

@@ -138,3 +138,93 @@ test("el motivo del silencio siempre queda registrado en la traza", () => {
   assert.ok(d.traza.at(-1).startsWith("NO:"), "la traza tiene que terminar diciendo por que no");
   assert.ok(d.traza.includes("clase:demanda"), "y conservar lo que si se verifico");
 });
+
+// ── decidirDm: el freno del DM directo al colega (Juan, 2026-08-24) ──────
+//
+// Distinto de `decidir`: protege al COLEGA (spam a una persona) y a la LINEA
+// (volumen), no la calidad del dato ni el permiso del grupo. Ningun motivo de
+// aca descarta el pedido — todos desvian a la asesora, eso lo prueba vivo.js.
+
+const AHORA_DM = new Date("2026-08-24T15:00:00Z");
+
+function escenarioDm(extra = {}) {
+  return {
+    telefono: "573001234567",
+    fechaMensajeIso: new Date(AHORA_DM.getTime() - 5 * 60 * 1000).toISOString(), // hace 5 min
+    ahora: AHORA_DM,
+    dmsHoyColega: 0,
+    dmsHoyLinea: 0,
+    ...extra,
+  };
+}
+
+test("con todo en orden (telefono, pedido reciente, cupo libre), se manda el DM", () => {
+  const d = politica.decidirDm(escenarioDm());
+  assert.strictEqual(d.enviarDm, true);
+  assert.strictEqual(d.motivo, "ok");
+  assert.ok(d.traza.includes("telefono:resuelto"));
+});
+
+test("sin telefono resuelto, se calla (y vivo.js cae a la asesora)", () => {
+  const d = politica.decidirDm(escenarioDm({ telefono: null }));
+  assert.strictEqual(d.enviarDm, false);
+  assert.strictEqual(d.motivo, "sin_telefono");
+});
+
+test("sin la fecha del mensaje, no se puede medir la antiguedad -- se calla", () => {
+  const d = politica.decidirDm(escenarioDm({ fechaMensajeIso: null }));
+  assert.strictEqual(d.enviarDm, false);
+  assert.strictEqual(d.motivo, "sin_fecha_mensaje");
+});
+
+test("un pedido mas viejo que el limite de antiguedad no se manda por DM", () => {
+  // Default 30 min: a los 31 min ya se calla. La fecha es la DEL MENSAJE en el
+  // grupo, no la de la fila (ver la nota de esAnteriorAlCorte en
+  // src/channels/whatsapp-group.js: un backlog al arrancar es viejo aunque la
+  // fila sea de hoy).
+  const viejo = escenarioDm({ fechaMensajeIso: new Date(AHORA_DM.getTime() - 31 * 60 * 1000).toISOString() });
+  assert.strictEqual(politica.decidirDm(viejo).motivo, "pedido_vencido");
+
+  const justo = escenarioDm({ fechaMensajeIso: new Date(AHORA_DM.getTime() - 30 * 60 * 1000).toISOString() });
+  assert.strictEqual(politica.decidirDm(justo).enviarDm, true);
+});
+
+test("un colega ya contactado hoy (tope 1) no recibe un segundo DM", () => {
+  const d = politica.decidirDm(escenarioDm({ dmsHoyColega: 1 }));
+  assert.strictEqual(d.enviarDm, false);
+  assert.strictEqual(d.motivo, "limite_colega_alcanzado");
+});
+
+test("si no se puede contar cuantos DMs recibio el colega hoy, se calla -- ante la duda, no", () => {
+  const d = politica.decidirDm(escenarioDm({ dmsHoyColega: null }));
+  assert.strictEqual(d.enviarDm, false);
+  assert.strictEqual(d.motivo, "limite_colega_no_verificable");
+});
+
+test("al tope diario de la linea (150), se calla -- es cortacircuito, no cuota", () => {
+  assert.strictEqual(politica.LIMITES_DM_DEFAULT.topeDiarioLinea, 150);
+  const d = politica.decidirDm(escenarioDm({ dmsHoyLinea: 150 }));
+  assert.strictEqual(d.enviarDm, false);
+  assert.strictEqual(d.motivo, "limite_linea_alcanzado");
+
+  const conCupo = politica.decidirDm(escenarioDm({ dmsHoyLinea: 149 }));
+  assert.strictEqual(conCupo.enviarDm, true);
+});
+
+test("si no se puede contar el volumen de la linea, se calla", () => {
+  const d = politica.decidirDm(escenarioDm({ dmsHoyLinea: null }));
+  assert.strictEqual(d.enviarDm, false);
+  assert.strictEqual(d.motivo, "limite_linea_no_verificable");
+});
+
+test("los tres defaults son los pedidos: 1 DM/colega/dia, 30 min de antiguedad, 150/dia la linea", () => {
+  assert.strictEqual(politica.LIMITES_DM_DEFAULT.dmsPorColegaDia, 1);
+  assert.strictEqual(politica.LIMITES_DM_DEFAULT.antiguedadMaximaMin, 30);
+  assert.strictEqual(politica.LIMITES_DM_DEFAULT.topeDiarioLinea, 150);
+});
+
+test("la traza de decidirDm tambien termina en NO: cuando se calla", () => {
+  const d = politica.decidirDm(escenarioDm({ telefono: null }));
+  assert.strictEqual(d.enviarDm, false);
+  assert.ok(d.traza.at(-1).startsWith("NO:"));
+});

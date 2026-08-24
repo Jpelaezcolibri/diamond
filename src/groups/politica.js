@@ -122,4 +122,94 @@ function decidir({
   return { publicar: true, motivo: "ok", traza };
 }
 
-module.exports = { decidir, LIMITES_DEFAULT, MODOS };
+// ── decidirDm: el freno del DM directo al colega ─────────────────────────
+//
+// Distinto de `decidir` de arriba: aquella protege el GRUPO (calidad del dato,
+// permiso del grupo, tope por grupo). Esta protege al COLEGA y a la LINEA —
+// son ejes de riesgo distintos (spam a una persona / volumen de la linea) y
+// nunca corren juntos para el mismo pedido, asi que separarlas no duplica
+// nada: cada una es el freno del CANAL que le corresponde.
+//
+// Sigue el mismo contrato que `decidir` a proposito (codigo puro, sin I/O,
+// devuelve {decision, motivo, traza}): es la forma que ya usa el radar para
+// que cualquier "no" (o "si") quede auditable, y no hay razon para inventar
+// una nueva aca. Quien llama (src/groups/vivo.js#asistir) es quien resuelve
+// el telefono y cuenta los DMs previos; esta funcion solo decide con los
+// hechos que ya le averiguaron.
+//
+// NINGUN limite de aca descarta un pedido: los tres desvian a la asesora
+// (Juan, 2026-08-24 — "no podemos dejar pasar ningun pedido"), igual que la
+// compuerta de publicables. La UNICA diferencia de fondo con `decidir` es esa:
+// alla "no publicar" puede significar "nadie se entera" (ya_respondida,
+// modo_apagado); aca un "no" SIEMPRE tiene una salida de respaldo.
+const LIMITES_DM_DEFAULT = {
+  // Dos DMs el mismo dia al mismo colega se leen como spam — es la razon de
+  // ser de este limite, no una cuota de negocio.
+  dmsPorColegaDia: Number(process.env.RADAR_DM_POR_COLEGA_DIA || 1),
+  // Un DM por un pedido de ayer es exactamente lo que un colega reporta: "me
+  // escribieron de la nada por algo que ya resolvi". Se mide contra la fecha
+  // DEL MENSAJE en el grupo, nunca contra cuando se proceso la fila (ver la
+  // nota de esAnteriorAlCorte en src/channels/whatsapp-group.js: si el bot
+  // estuvo caido y arranca con un backlog, esos pedidos son viejos aunque la
+  // fila sea de hoy).
+  antiguedadMaximaMin: Number(process.env.RADAR_DM_ANTIGUEDAD_MAX_MIN || 30),
+  // Cortacircuitos de volumen de LA LINEA, no una cuota: el volumen real
+  // medido es ~17 pedidos/dia. Si se llega a 150 en un dia, algo se rompio
+  // (un bucle, una clasificacion desbocada) y hay que frenar antes de gastar
+  // la reputacion de la linea entera, no solo la de un colega.
+  topeDiarioLinea: Number(process.env.RADAR_DM_TOPE_DIA || 150),
+};
+
+/**
+ * Decide si se le manda un DM directo al colega.
+ *
+ * @param telefono        el telefono YA RESUELTO del colega, o null/undefined
+ *                         si el directorio no lo pudo resolver.
+ * @param fechaMensajeIso  la fecha REAL del mensaje en el grupo (nunca la de
+ *                         creacion de la fila — ver la nota del limite arriba).
+ * @param ahora            reloj inyectado, para poder probarlo.
+ * @param dmsHoyColega      cuantos DMs ya salieron HOY para este colega, o
+ *                         null si no se pudo contar (falta la migracion o
+ *                         fallo la consulta).
+ * @param dmsHoyLinea       cuantos DMs mando la linea HOY en total, o null si
+ *                         no se pudo contar.
+ *
+ * Devuelve { enviarDm, motivo, traza }. Ante cualquier duda (un dato que no
+ * se pudo verificar) el resultado es NO enviar — el mismo principio que
+ * `decidir`: callar es gratis, un DM de mas no lo es.
+ */
+function decidirDm({
+  telefono = null,
+  fechaMensajeIso = null,
+  ahora = new Date(),
+  dmsHoyColega = null,
+  dmsHoyLinea = null,
+  limites = LIMITES_DM_DEFAULT,
+} = {}) {
+  const traza = [];
+  const no = (motivo) => ({ enviarDm: false, motivo, traza: [...traza, `NO:${motivo}`] });
+
+  if (!telefono) return no("sin_telefono");
+  traza.push("telefono:resuelto");
+
+  if (!fechaMensajeIso) return no("sin_fecha_mensaje");
+  const edadMs = ahora.getTime() - new Date(fechaMensajeIso).getTime();
+  const maxMs = limites.antiguedadMaximaMin * 60 * 1000;
+  if (Number.isNaN(edadMs) || edadMs > maxMs) return no("pedido_vencido");
+  traza.push(`antiguedad_min:${Math.max(0, Math.round(edadMs / 60000))}`);
+
+  // null/undefined = "no se pudo contar" (falta la migracion o fallo la
+  // consulta). No es lo mismo que cero: con un limite configurado y sin poder
+  // verificarlo, se calla — igual que el tope por grupo de `decidir`.
+  if (dmsHoyColega === null || dmsHoyColega === undefined) return no("limite_colega_no_verificable");
+  if (dmsHoyColega >= limites.dmsPorColegaDia) return no("limite_colega_alcanzado");
+  traza.push(`dms_colega_hoy:${dmsHoyColega}/${limites.dmsPorColegaDia}`);
+
+  if (dmsHoyLinea === null || dmsHoyLinea === undefined) return no("limite_linea_no_verificable");
+  if (dmsHoyLinea >= limites.topeDiarioLinea) return no("limite_linea_alcanzado");
+  traza.push(`dms_linea_hoy:${dmsHoyLinea}/${limites.topeDiarioLinea}`);
+
+  return { enviarDm: true, motivo: "ok", traza };
+}
+
+module.exports = { decidir, LIMITES_DEFAULT, MODOS, decidirDm, LIMITES_DM_DEFAULT };

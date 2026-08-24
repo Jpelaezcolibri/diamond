@@ -8,7 +8,7 @@
 
 const { test } = require("node:test");
 const assert = require("node:assert");
-const { esMarcable, linkWhatsapp, linkContactoOficial, tocarNombreEnGrupo } = require("../src/lib/contacto");
+const { esMarcable, linkWhatsapp, esCelularColombiano, linkWhatsappEstricto, linkContactoOficial, tocarNombreEnGrupo } = require("../src/lib/contacto");
 
 test("un colombiano real (12 digitos con 57) es marcable", () => {
   assert.strictEqual(esMarcable("573001234567"), true);
@@ -29,6 +29,37 @@ test("sin telefono, ninguna de las dos truena", () => {
 
 test("limpia simbolos antes de armar el link (+, espacios, guiones)", () => {
   assert.strictEqual(linkWhatsapp("+57 300 123 4567"), "https://wa.me/573001234567");
+});
+
+// esCelularColombiano / linkWhatsappEstricto (code review post-merge,
+// 2026-08-24): esMarcable solo exige <=13 digitos, un techo pensado para
+// distinguir un LID (14-17, medido en produccion) de un telefono real — pero
+// un LID de 10-13 digitos (nunca medido, pero tampoco imposible) pasaria
+// esMarcable igual y se le entregaria a la asesora como si fuera bueno para
+// escribirle. Estas dos funciones exigen la FORMA exacta de un celular
+// colombiano (3 + 9 digitos), no un rango de longitud — usadas en el camino
+// que realmente escribe a un colega (src/groups/alerta-asesor.js,
+// src/groups/directorio.js).
+test("esCelularColombiano exige la forma exacta (3 + 9 digitos), no solo un techo de longitud", () => {
+  assert.strictEqual(esCelularColombiano("573001234567"), true, "12 digitos con 57 SI es un celular real");
+  assert.strictEqual(esCelularColombiano("3001234567"), true, "10 digitos sin 57 SI es un celular real");
+  assert.strictEqual(esCelularColombiano("141746805670125"), false, "un LID de 15 digitos no pasa");
+});
+
+test("un LID de 12-13 digitos NO se acepta como celular colombiano, aunque esMarcable si lo aceptaria", () => {
+  const lidCorto12 = "601234567890"; // 12 digitos, no empieza con 3: esMarcable lo aceptaria igual
+  const lidCorto13 = "6012345678901"; // 13 digitos
+  assert.strictEqual(esMarcable(lidCorto12), true, "esMarcable solo mira longitud <=13");
+  assert.strictEqual(esMarcable(lidCorto13), true);
+  assert.strictEqual(esCelularColombiano(lidCorto12), false, "no tiene forma de celular colombiano");
+  assert.strictEqual(esCelularColombiano(lidCorto13), false);
+  assert.strictEqual(linkWhatsappEstricto(lidCorto12), null, "no se arma un link para escribirle a un LID corto");
+  assert.strictEqual(linkWhatsappEstricto(lidCorto13), null);
+});
+
+test("linkWhatsappEstricto arma el link con un celular colombiano real", () => {
+  assert.strictEqual(linkWhatsappEstricto("573001234567"), "https://wa.me/573001234567");
+  assert.strictEqual(linkWhatsappEstricto(null), null);
 });
 
 // linkContactoOficial (src/lib/contacto.js): antes solo estaba cubierta de

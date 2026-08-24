@@ -61,8 +61,19 @@ beforeEach(() => digest._reset());
 
 test("sin nada que contar NO arma digest — un digest vacío entrena a ignorarlo", () => {
   assert.strictEqual(digest.buildDigest([], NATALIA), null);
-  // Una demanda sin match tampoco cuenta: es la fatiga de alertas.
-  assert.strictEqual(digest.buildDigest([demandaSinMatch()], NATALIA), null);
+});
+
+// Code review post-merge, 2026-08-24: antes una demanda sin match NO contaba
+// (el filtro exigia matches.length > 0) y, si no habia otra señal ese dia,
+// buildDigest devolvia null: la fila quedaba "pendiente" para siempre y el
+// pedido nunca le llegaba a nadie — ni ese dia ni ningun otro, salvo que por
+// azar cayera otra señal el mismo dia. El ejemplo del propio prompt de Sofi
+// ("quiere agendar visita para su cliente en la ref 9702941") no trae zona, asi
+// que el cruce nunca encuentra nada: era EXACTAMENTE el caso que se perdia.
+test("una demanda sin match SI cuenta y SI dispara el digest — ya no se pierde", () => {
+  const d = digest.buildDigest([demandaSinMatch()], NATALIA);
+  assert.notStrictEqual(d, null);
+  assert.strictEqual(d.demandas, 1);
 });
 
 test("cuenta los pedidos con match y las ofertas por separado", () => {
