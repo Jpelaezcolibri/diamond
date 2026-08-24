@@ -68,6 +68,26 @@ test("sin pasar el cuarto parametro (llamador viejo), sigue funcionando igual qu
   assert.match(texto, /tocá el nombre/);
 });
 
+test("sin telefono resuelto por el directorio, pero con autor_telefono marcable (@c.us), lo usa como ultimo intento", () => {
+  // Revision 2026-08-24: WhatsApp a veces entrega el participante como @c.us
+  // -numero visible, no LID- y el aviso decia "no se pudo resolver el
+  // numero" TENIENDO el numero a mano en senal.autor_telefono.
+  const texto = construir(senal({ autor_telefono: "573009998877" }), VEREDICTO, [matchUtil()], null);
+  assert.match(texto, /Contacto: https:\/\/wa\.me\/573009998877/);
+  assert.doesNotMatch(texto, /tocá el nombre/);
+});
+
+test("el telefono YA RESUELTO por el directorio gana sobre autor_telefono", () => {
+  const texto = construir(
+    senal({ autor_telefono: "573000000009" }),
+    VEREDICTO,
+    [matchUtil()],
+    "573001234567"
+  );
+  assert.match(texto, /Contacto: https:\/\/wa\.me\/573001234567/);
+  assert.doesNotMatch(texto, /573000000009/);
+});
+
 test("un @lid pasado por error como telefonoColega no arma un link roto", () => {
   // linkWhatsapp ya filtra esto, pero la ruta completa (directorio -> aca)
   // tiene que degradar igual de bien si algun dia llega un LID sin resolver.

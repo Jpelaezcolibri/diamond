@@ -67,6 +67,22 @@ test("resuelve el telefono desde la lista de participantes", async () => {
   }
 });
 
+test("si lo que llega ya es un telefono marcable (@c.us, no LID), lo devuelve directo sin tocar WAHA", async () => {
+  // Revision 2026-08-24: WhatsApp casi siempre manda un LID oculto, pero
+  // alguna vez entrega el participante como @c.us -numero visible-. Tratarlo
+  // igual que un LID sin resolver perdia un numero que ya se tenia a mano.
+  preparar();
+  const contador = conParticipantes([]);
+  try {
+    const tel = await directorio.telefonoDe(ORG, "573009998877", { sesion: SESION, jid: JID });
+    assert.strictEqual(tel, "573009998877");
+    assert.strictEqual(contador.n, 0, "un telefono marcable no necesita refrescar el grupo ni preguntarle a WAHA");
+  } finally {
+    waha.participantesDeGrupo = participantesReal;
+    waha.telefonoDeLid = telefonoDelIdReal;
+  }
+});
+
 test("un participante sin telefono devuelve null, no una excepcion", async () => {
   preparar();
   conParticipantes([{ id: "999@lid", esLid: true, telefono: null, rol: "participant" }]);

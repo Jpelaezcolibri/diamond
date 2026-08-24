@@ -124,7 +124,13 @@ function mensaje() {
   return {
     id: "m1", waMessageId: "wamid.A",
     texto: "Busco apartamento en Laureles, 3 alcobas, hasta 900 millones para cliente",
-    autor: "Patricia Gomez", autorTelefono: "573001234567",
+    // @lid tipico que llega de WhatsApp (14-17 digitos, no marcable) — mismo
+    // valor que usa test/alerta-asesor.test.js. Antes esto tenia forma de
+    // telefono ("573001234567"), lo que quedo mal el 2026-08-24: alerta-asesor.js
+    // aprendio a usar autor_telefono como ultimo intento cuando el directorio
+    // no resuelve (ver ese archivo), y un default con forma de telefono se
+    // colaba como si fuera un numero real resuelto en vez de un LID crudo.
+    autor: "Patricia Gomez", autorTelefono: "141746805670125",
     instanteIso: new Date().toISOString(), esSistema: false, esMultimedia: false,
   };
 }

@@ -18,12 +18,22 @@
 // natalia todo para que ella lo responda directamente desde su numero" — el
 // gremio pide no llenar los grupos de informacion, asi que este aviso YA NO
 // puede decir "respondele en el grupo". `senal.autor_telefono` que llega de
-// WhatsApp es un @lid (14-17 digitos), no un telefono real (medido en
-// produccion el 2026-08-22: 12 de 12 eran LID) — por eso `construir` recibe
-// aparte el telefono YA RESUELTO por src/groups/directorio.js (67% de
-// resolucion medido ese mismo dia). Con telefono: link directo al privado.
-// Sin el (el 33% esperado, no un error): la salida real es tocar el nombre
-// del colega en el grupo, que WhatsApp abre el chat sin pedir el numero.
+// WhatsApp CASI SIEMPRE es un @lid (14-17 digitos), no un telefono real
+// (medido en produccion el 2026-08-22: 12 de 12 eran LID) — por eso
+// `construir` recibe aparte el telefono YA RESUELTO por
+// src/groups/directorio.js (67% de resolucion medido ese mismo dia), que es
+// el camino principal. Con telefono resuelto: link directo al privado.
+//
+// autor_telefono se usa igual, pero solo como ULTIMO intento (revision
+// 2026-08-24): WhatsApp a veces entrega el participante como @c.us —numero
+// visible, no LID— y ese numero SI es marcable de una. Descartarlo de
+// entrada porque "normalmente" es un LID dejaba el aviso diciendo "no se
+// pudo resolver el numero" con el numero ahi mismo en la señal. linkWhatsapp
+// filtra con esMarcable, asi que un LID de verdad sigue sin mostrarse.
+//
+// Sin ninguno de los dos (el 33% esperado, no un error): la salida real es
+// tocar el nombre del colega en el grupo, que WhatsApp abre el chat sin pedir
+// el numero.
 
 const formato = require("../lib/formato");
 const { normalizarTitulo } = require("../lib/formato");
@@ -58,8 +68,18 @@ function linea(match) {
 // informacion y esa frase invitaba justo a eso. tocarNombreEnGrupo vive en
 // src/lib/contacto.js (2026-08-24): esta misma instruccion se necesito en
 // otros avisos, ver la nota ahi.
-function contactoPara(telefono, quien) {
-  const link = linkWhatsapp(telefono);
+//
+// autorTelefono (revision 2026-08-24): ultimo intento antes de rendirse.
+// `telefonoColega` es el numero YA RESUELTO por src/groups/directorio.js
+// (67% de resolucion medido el 2026-08-22) y cubre el caso normal. Pero
+// cuando WhatsApp entrega el participante como @c.us — numero visible, no
+// LID — este aviso decia "no se pudo resolver el numero" TENIENDO el numero
+// a mano en senal.autor_telefono. linkWhatsapp ya valida con esMarcable, asi
+// que si autorTelefono resulta ser un LID (14-17 digitos) esto sigue
+// devolviendo null y cae al mismo mensaje de siempre — no hay riesgo de
+// mostrar un LID como si fuera un telefono.
+function contactoPara(telefonoColega, autorTelefono, quien) {
+  const link = linkWhatsapp(telefonoColega) || linkWhatsapp(autorTelefono);
   if (link) return link;
   return `no se pudo resolver el número — ${tocarNombreEnGrupo(quien)}`;
 }
@@ -83,7 +103,7 @@ function construir(senal, veredicto, matches, telefonoColega = null) {
   if (utiles.length === 0) return null;
 
   const quien = senal.autor_nombre || "un colega";
-  const contactoTexto = contactoPara(telefonoColega, quien);
+  const contactoTexto = contactoPara(telefonoColega, senal.autor_telefono, quien);
 
   const lineas = [
     `🎯 Oportunidad en un grupo`,

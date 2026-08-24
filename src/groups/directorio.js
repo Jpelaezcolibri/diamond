@@ -23,6 +23,7 @@
 
 const colegas = require("../data/colegas");
 const waha = require("../lib/waha");
+const { esMarcable } = require("../lib/contacto");
 
 // Un grupo no se refresca mas de una vez cada 10 minutos. El padron de un grupo
 // gremial cambia de a poco; lo que cambia seguido es quien publica.
@@ -80,6 +81,16 @@ async function refrescarGrupo(orgId, sesion, jid) {
 async function telefonoDe(orgId, lid, { sesion = null, jid = null } = {}) {
   const clave = soloDigitos(lid);
   if (!orgId || !clave) return null;
+
+  // WhatsApp casi siempre entrega un LID oculto (14-17 digitos) para el
+  // participante de un grupo, pero alguna vez entrega el numero visible
+  // directo (@c.us) en su lugar — ver la nota de alerta-asesor.js, revision
+  // 2026-08-24. Si lo que llego YA tiene forma de telefono real (esMarcable,
+  // igual que linkWhatsapp: <=13 digitos, y al menos los 10 de un celular
+  // colombiano local — mismo piso que usan colegas.porTelefono y
+  // advisors.mismoTelefono), no hay nada que resolver: ir al indice o a WAHA
+  // solo demoraria un numero que ya se tiene a mano.
+  if (clave.length >= 10 && esMarcable(clave)) return clave;
 
   await sembrar(orgId);
   const enIndice = indice.get(`${orgId}:${clave}`);
