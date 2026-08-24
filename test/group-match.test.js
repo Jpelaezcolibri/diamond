@@ -607,3 +607,107 @@ test("DUPLICADOS: sin la funcion de arriba, dos fuentes distintas (nuestra y de 
   ];
   assert.strictEqual(sinDuplicados(matches).length, 2);
 });
+
+// ── CASTIGO POR CUMPLIR CORTO ────────────────────────────────────────────
+//
+// Caso real (Juan, 2026-08-24 — Edwin Ramirez, grupo SOLO Envigado): para un
+// pedido de 3 alcobas, la ref 8989725 (2 alcobas, 92 m²) y la ref 10077095
+// (3 alcobas, 100 m², que SI cumplia) mostraban las dos 100% en el panel.
+// La gabela decide SI una propiedad pasa; el puntaje tiene que decir QUE TAN
+// BIEN calza, y hasta ese dia quedarse corto seguia sumando.
+
+const { CASTIGO_CORTO } = require("../src/groups/match");
+
+test("quedarse corto en alcobas cuesta puntaje, no lo suma", () => {
+  const pedido = pide({ habitaciones: 3, flexible_habitaciones: true });
+  const cumple = evaluarCandidata(apto({ habitaciones: 3 }), pedido, "diamond");
+  const corto = evaluarCandidata(apto({ habitaciones: 2 }), pedido, "diamond");
+
+  assert.ok(corto, "la gabela la sigue dejando pasar: no es una compuerta nueva");
+  assert.ok(corto.puntaje < cumple.puntaje, "la que cumple tiene que rankear por encima");
+});
+
+test("la razon dice que se quedo corta -- '2 alcobas' al lado de un 100% se leia como match perfecto", () => {
+  const m = evaluarCandidata(apto({ habitaciones: 2 }), pide({ habitaciones: 3, flexible_habitaciones: true }), "diamond");
+  assert.ok(m.razones.join(" | ").includes("2 alcobas (pediste 3)"));
+});
+
+test("cumplir de MAS no se castiga: una alcoba de sobra no es un incumplimiento", () => {
+  const pedido = pide({ habitaciones: 3 });
+  const conUnaMas = evaluarCandidata(apto({ habitaciones: 4 }), pedido, "diamond");
+  assert.ok(conUnaMas.razones.join(" | ").includes("4 alcobas"));
+  assert.ok(!conUnaMas.razones.join(" | ").includes("pediste"));
+});
+
+test("area, baños y garajes cortos tambien cuestan, cada uno lo suyo", () => {
+  const base = { habitaciones: 3, flexible_habitaciones: true, area_min: 100, banos: 3, garajes: 2 };
+  const cumpleTodo = apto({ habitaciones: 3, area: "100 m²", banos: 3, garaje: 2 });
+  const lleno = evaluarCandidata(cumpleTodo, pide(base), "diamond");
+
+  for (const [campo, corto] of [
+    ["area", { area: "95 m²" }],       // dentro del margen del 10%, pero corto
+    ["banos", { banos: 2 }],
+    ["garajes", { garaje: 1 }],
+  ]) {
+    const m = evaluarCandidata({ ...cumpleTodo, ...corto }, pide(base), "diamond");
+    assert.ok(m, `${campo} corto sigue pasando la gabela`);
+    assert.strictEqual(
+      m.puntaje, lleno.puntaje - CASTIGO_CORTO[campo],
+      `${campo}: el castigo aplicado es exactamente el declarado`
+    );
+  }
+});
+
+// EL PUNTO DE TODO ESTO: el castigo se resta DESPUES del tope de 100. Sumado
+// adentro, Math.min(100, ...) se lo volveria a tragar — que es exactamente
+// como las dos propiedades del caso Edwin terminaron empatadas en 100%.
+test("nada con un requisito incumplido puede mostrar 100%, por mas puntos que acumule", () => {
+  // Todo a favor: zona exacta, prioridad de venta, precio que aprovecha el
+  // presupuesto, y cada exigencia cumplida menos las alcobas.
+  const pedido = pide({ habitaciones: 3, flexible_habitaciones: true, area_min: 90, banos: 2, garajes: 1, estrato: 4 });
+  const m = evaluarCandidata(apto({ habitaciones: 2, prioridad_venta: true }), pedido, "diamond");
+
+  assert.ok(m.puntaje < 100, `deberia estar bajo 100 y dio ${m.puntaje}`);
+  assert.strictEqual(m.puntaje, 100 - CASTIGO_CORTO.habitaciones);
+});
+
+test("100% vuelve a significar 'cumple todo lo que se pudo verificar'", () => {
+  const pedido = pide({ habitaciones: 3, area_min: 90, banos: 2, garajes: 1, estrato: 4 });
+  const m = evaluarCandidata(apto({ prioridad_venta: true }), pedido, "diamond");
+  assert.strictEqual(m.puntaje, 100);
+  assert.ok(!m.razones.join(" | ").includes("pediste"));
+});
+
+test("pasarse del presupuesto dentro del margen tambien cuesta", () => {
+  const pedido = pide({ precio_max: 600000000 });
+  const adentro = evaluarCandidata(apto({ precio: "$550.000.000" }), pedido, "diamond");
+  const encima = evaluarCandidata(apto({ precio: "$630.000.000" }), pedido, "diamond");
+
+  assert.ok(encima, "el margen del 10% la sigue dejando pasar");
+  assert.ok(encima.puntaje < adentro.puntaje);
+  assert.ok(encima.razones.join(" | ").includes("dentro del margen"));
+});
+
+test("el estrato no lleva castigo: sin gabela no hay forma de quedarse corto", () => {
+  // ok es t >= q, asi que un estrato por debajo se descarta de plano — nunca
+  // llega a la rama del castigo.
+  assert.strictEqual(CASTIGO_CORTO.estrato, undefined);
+  assert.strictEqual(evaluarCandidata(apto({ estrato: 3 }), pide({ estrato: 5 }), "diamond"), null);
+});
+
+test("un dato que el inventario no tiene no se castiga -- lo desconocido no descalifica", () => {
+  // El principio de siempre (ver la cabecera de match.js): si el sync de Wasi
+  // no trajo el area, el hueco es nuestro, no un defecto del inmueble. No
+  // suma confianza, pero tampoco se le cobra el castigo de haberse quedado
+  // corto -- que es lo que pasaria si "sin dato" se tratara como "0 m²".
+  const sinDato = apto({ area: null });
+  const conExigencia = evaluarCandidata(sinDato, pide({ area_min: 100 }), "diamond");
+  const sinExigencia = evaluarCandidata(sinDato, pide({ area_min: 0 }), "diamond");
+
+  assert.ok(conExigencia, "sigue pasando");
+  assert.strictEqual(
+    conExigencia.puntaje, sinExigencia.puntaje,
+    "pedir un area que no tenemos registrada no cambia el puntaje en ninguna direccion"
+  );
+  assert.ok(!conExigencia.razones.join(" | ").includes("pediste"));
+});

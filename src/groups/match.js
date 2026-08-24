@@ -121,6 +121,43 @@ const PUNTAJE_BASE = 55;
 const MARGEN_PRECIO = Number(process.env.GRUPOS_MARGEN_PRECIO || 0.10);
 const MARGEN_AREA = Number(process.env.GRUPOS_MARGEN_AREA || 0.10);
 
+// CASTIGO POR CUMPLIR CORTO (Juan, 2026-08-24 — caso Edwin Ramirez, ref
+// 8989725). La gabela de arriba (MARGEN_*, flexible_habitaciones) decide SI
+// una propiedad pasa; hasta hoy no habia nada que dijera QUE TAN BIEN calza,
+// y quedarse corto seguia SUMANDO puntos, solo que menos. Medido en el panel:
+// para un pedido de 3 alcobas, la ref 8989725 (2 alcobas, 92 m²) mostraba
+// 100% — el mismo numero que una propiedad que cumplia todo. El puntaje no
+// mentia por poco: decia "calza perfecto" de algo que no cumplia el requisito
+// principal.
+//
+// Dos causas encadenadas, las dos se corrigen aca:
+//   1. Los puntos de "una de mas" y "una de MENOS" eran el mismo numero
+//      (`t === q ? 10 : 6`), y baños/garajes daban 4 puntos por NO cumplir.
+//   2. Math.min(100, puntaje) se tragaba lo que quedara de diferencia: la
+//      8989725 calculaba 106 y la 10077095 (que si cumplia) 95 — las dos se
+//      mostraban 100.
+//
+// Por eso el castigo se aplica DESPUES del tope, no antes: asi el 100% vuelve
+// a significar "cumple todo lo que se pudo verificar", y una propiedad con un
+// requisito incumplido nunca puede empatar arriba con una que si lo cumple.
+//
+// No es una compuerta nueva: la propiedad sigue pasando y sigue ofreciendose
+// con su aclaracion (ver `le_falta` en src/groups/revalidar.js). Estos son los
+// MISMOS huecos que el mensaje le declara al colega — ahora el puntaje y el
+// mensaje dicen lo mismo, en vez de contradecirse.
+const CASTIGO_CORTO = {
+  // Las alcobas definen el producto: un 2 alcobas no resuelve un pedido de 3
+  // (mismo criterio que separa "accesorio" de "de fondo" en revalidar.js).
+  habitaciones: 6,
+  area: 4,
+  banos: 4,
+  garajes: 4,
+  // Pasarse del presupuesto dentro del margen ya no recibia la bonificacion
+  // de "aprovecha el presupuesto"; ahora ademas cuesta, por la misma razon
+  // que el resto: no cumplio lo que se pidio.
+  precio: 4,
+};
+
 // Cuanto suma properties.prioridad_venta (ver comentario donde se usa, abajo).
 // 15 puntos convierte una zona vecina (60 tipico) en publicable (75>=70) sin
 // bajar el umbral general ni tocar ninguna otra propiedad.
@@ -285,6 +322,10 @@ function evaluarCandidata(p, c, fuente) {
 
   const razones = [ubicacion.razon];
   let puntaje = PUNTAJE_BASE + ubicacion.puntos;
+  // Se acumula aparte de `puntaje` porque se resta DESPUES del tope de 100
+  // (ver la nota de CASTIGO_CORTO arriba): sumado adentro, el tope se lo
+  // volveria a tragar y estariamos donde empezamos.
+  let castigos = 0;
 
   // Descuento por fuente no verificable (Juan, 2026-08-20 — auditoria del
   // veredicto de Sofi en modo asistido): distinto de "lo desconocido no
@@ -323,6 +364,7 @@ function evaluarCandidata(p, c, fuente) {
       // bonificacion de "aprovecha el presupuesto" (esa premia quedarse
       // adentro, no pasarse) y sin fingir que cupo.
       razones.push(`${millones(precio)} — ${Math.round((precio / techo - 1) * 100)}% sobre ${millones(techo)}, dentro del margen`);
+      castigos += CASTIGO_CORTO.precio;
     } else {
       razones.push(`${millones(precio)} dentro de ${millones(techo)}`);
       if (precio >= techo * 0.75) puntaje += 10; // aprovecha el presupuesto
@@ -354,23 +396,31 @@ function evaluarCandidata(p, c, fuente) {
       pide: c.habitaciones, tiene: p.habitaciones,
       ok: (t, q) => t >= q - (flexible ? 1 : 0) && t <= q + 1,
       texto: (t) => `${t} alcobas`, puntos: (t, q) => (t === q ? 10 : 6),
+      castigo: CASTIGO_CORTO.habitaciones,
     },
     // Area SI lleva margen de captura SIEMPRE (Juan, 2026-08-20): unos metros
     // menos de lo pedido casi nunca descarta un negocio real.
-    { pide: c.area_min, tiene: formato.parsearArea(p.area), ok: (t, q) => t >= q * (1 - MARGEN_AREA), texto: (t) => `${t} m²`, puntos: 8 },
+    {
+      pide: c.area_min, tiene: formato.parsearArea(p.area),
+      ok: (t, q) => t >= q * (1 - MARGEN_AREA),
+      texto: (t) => `${t} m²`, puntos: 8, castigo: CASTIGO_CORTO.area,
+    },
     {
       pide: c.banos, tiene: p.banos,
       ok: (t, q) => t >= q - (flexible ? 1 : 0),
       texto: (t) => `${t} baños`, puntos: (t, q) => (t >= q ? 6 : 4),
+      castigo: CASTIGO_CORTO.banos,
     },
     {
       pide: c.garajes, tiene: p.garaje,
       ok: (t, q) => t >= q - (flexible ? 1 : 0),
       texto: (t) => `${t} garaje${t > 1 ? "s" : ""}`, puntos: (t, q) => (t >= q ? 6 : 4),
+      castigo: CASTIGO_CORTO.garajes,
     },
     // Estrato NO entra en la flexibilidad: no es una preferencia de espacio
     // negociable como una alcoba de menos, es la clasificacion socioeconomica
     // del sector y no cambia porque el cliente compre "para inversion".
+    // Sin gabela no hay forma de quedarse corto, asi que tampoco lleva castigo.
     { pide: c.estrato, tiene: p.estrato, ok: (t, q) => t >= q, texto: (t) => `estrato ${t}`, puntos: 5 },
   ];
 
@@ -378,8 +428,13 @@ function evaluarCandidata(p, c, fuente) {
     if (!(e.pide > 0)) continue;
     if (e.tiene == null || !(e.tiene > 0)) continue; // sin dato: ni suma ni resta
     if (!e.ok(e.tiene, e.pide)) return null;
-    razones.push(e.texto(e.tiene));
+    // Paso la compuerta PERO por debajo de lo pedido: entro por la gabela. La
+    // razon lo dice —en el panel "2 alcobas" al lado de un 100% se leia como
+    // un match perfecto— y el puntaje lo cobra abajo.
+    const corto = e.tiene < e.pide;
+    razones.push(corto ? `${e.texto(e.tiene)} (pediste ${e.pide})` : e.texto(e.tiene));
     puntaje += typeof e.puntos === "function" ? e.puntos(e.tiene, e.pide) : e.puntos;
+    if (corto && e.castigo) castigos += e.castigo;
   }
 
   return {
@@ -403,7 +458,11 @@ function evaluarCandidata(p, c, fuente) {
     banos: p.banos ?? null,
     garajes: p.garaje ?? null,
     estrato: p.estrato ?? null,
-    puntaje: Math.min(100, puntaje),
+    // El castigo se resta DESPUES del tope (ver CASTIGO_CORTO arriba): es lo
+    // que hace que 100 vuelva a significar "cumple todo lo que se pudo
+    // verificar". Piso en 0 porque una zona muy castigada mas dos huecos
+    // podria dar negativo, y un puntaje negativo no significa nada.
+    puntaje: Math.max(0, Math.min(100, puntaje) - castigos),
     // Como calzo la ubicacion: exacta | vecina | otra_zona | ciudad. Sofi lo
     // usa para razonar y publicable.js para decidir si puede salir al grupo.
     ubicacion: ubicacion.grado,
@@ -520,5 +579,5 @@ async function cruzar(clasificados, { org = null } = {}) {
 module.exports = {
   cruzar, filtrosInventario, filtrosAliados, mismaOperacion, evaluarOferta,
   evaluarCandidata, zonaCoincide, ciudadCoincide, ubicacionCoincide, zonaExcluida, BANDA_INFERIOR,
-  MARGEN_PRECIO, MARGEN_AREA, BONUS_PRIORIDAD_VENTA, sinDuplicados,
+  MARGEN_PRECIO, MARGEN_AREA, BONUS_PRIORIDAD_VENTA, CASTIGO_CORTO, sinDuplicados,
 };
