@@ -308,7 +308,8 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
     },
     veredicto,
     matches,
-    telefonoColega
+    telefonoColega,
+    org
   );
   if (!texto) {
     await feedComando.registrar(org, señalParaFeed, veredicto, matches).catch((e) =>
@@ -431,7 +432,7 @@ async function avisarCercano(org, signal, mensaje, grupo, matches, { edificio = 
   const señalParaAviso = { grupo_nombre: grupo.nombre || grupo.jid, autor_nombre: mensaje.autor, texto_original: mensaje.texto };
   let texto = edificio
     ? avisoCercano.construirEdificio(señalParaAviso, candidatas, edificio)
-    : avisoCercano.construir(señalParaAviso, candidatas);
+    : avisoCercano.construir(señalParaAviso, candidatas, org);
   if (!texto) return;
   // El cuerpo de un mensaje interactivo tiene tope duro de 1024 caracteres en
   // la API de Meta (un pedido con muchas candidatas lo puede pasar); un

@@ -92,9 +92,12 @@ function contactoPara(telefonoColega, autorTelefono, quien) {
  *                        o null/undefined si no se pudo resolver. Parametro nuevo y opcional:
  *                        quien llame a `construir` sin el sigue funcionando, solo que sin link
  *                        directo al privado.
+ * @param org             el registro de organizations (para el numero de contacto oficial
+ *                        multi-tenant, ver src/lib/contacto.js#linkContactoOficial). Opcional:
+ *                        sin el, cae al env CONTACT_WHATSAPP_NUMBER, igual que antes.
  * @returns el texto del aviso, o null si no hay nada que decir
  */
-function construir(senal, veredicto, matches, telefonoColega = null) {
+function construir(senal, veredicto, matches, telefonoColega = null, org = null) {
   if (!veredicto || !Array.isArray(veredicto.refs_utiles) || veredicto.refs_utiles.length === 0) return null;
 
   const utiles = veredicto.refs_utiles
@@ -122,9 +125,10 @@ function construir(senal, veredicto, matches, telefonoColega = null) {
   ];
 
   // Renglon listo para copiar hacia la linea OFICIAL de Sofi (Juan,
-  // 2026-08-22) — solo si CONTACT_WHATSAPP_NUMBER esta definida. Nunca a
-  // medias: ver la nota en src/lib/contacto.js#linkContactoOficial.
-  const linkSofi = linkContactoOficial();
+  // 2026-08-22) — solo si hay numero configurado (org.contact_whatsapp_number
+  // o, si no, el env CONTACT_WHATSAPP_NUMBER). Nunca a medias: ver la nota en
+  // src/lib/contacto.js#linkContactoOficial.
+  const linkSofi = linkContactoOficial(org);
   if (linkSofi) {
     lineas.push(
       ``,

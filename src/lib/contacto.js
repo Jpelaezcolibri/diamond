@@ -27,18 +27,32 @@ function linkWhatsapp(telefono) {
 // Compartido entre alerta-asesor.js y aviso-cercano.js para que los dos
 // avisos al colega usen exactamente el mismo criterio.
 //
-// Se lee la variable en cada llamado, nunca se cachea: los tests la
-// prenden/apagan por caso y la ausencia/presencia tiene que reflejarse en el
-// momento exacto de construir el aviso.
+// MULTI-TENANT (revision 2026-08-24): este repo es multi-tenant por diseño
+// (todo lleva org_id) y `process.env.CONTACT_WHATSAPP_NUMBER` es UNA sola
+// variable de Railway para todo el proceso — con una organizacion B, el
+// aviso le ofreceria la linea de Diamond. `org` (el registro de
+// organizations, ya cargado por el llamador) manda si trae
+// `contact_whatsapp_number`; el env queda como default para cuando la org no
+// tiene el dato o la columna todavia no existe (migracion
+// db/migrations/2026-08-24_contact_whatsapp_number.sql sin correr) — mismo
+// patron que organizations.js#modoDeRespuesta usa para
+// grupos_respuesta_modo. `org` es opcional a proposito: quien llame a
+// linkContactoOficial() sin el (codigo viejo, o un contexto sin org a mano)
+// sigue funcionando igual que antes, solo con el env.
+//
+// Se lee la variable de entorno en cada llamado, nunca se cachea: los tests
+// la prenden/apagan por caso y la ausencia/presencia tiene que reflejarse en
+// el momento exacto de construir el aviso.
 //
 // Reusa linkWhatsapp (y no arma el link a mano) a proposito: si el numero no
 // es marcable devuelve null, nunca un link a medias. Precedente real
 // (2026-08-18, ver src/lib/validar-mensaje.js): Sofi le mando a un colega
 // "https://wa.me/message/YOUR_CONTACT_LINK", un placeholder inventado. El
-// link lo arma el codigo, nunca la IA -- sin CONTACT_WHATSAPP_NUMBER
-// definida, el aviso sale SIN esta linea, nunca con un link a medias.
-function linkContactoOficial() {
-  return linkWhatsapp(process.env.CONTACT_WHATSAPP_NUMBER);
+// link lo arma el codigo, nunca la IA -- sin ningun numero definido (ni org
+// ni env), el aviso sale SIN esta linea, nunca con un link a medias.
+function linkContactoOficial(org = null) {
+  const numero = (org && org.contact_whatsapp_number) || process.env.CONTACT_WHATSAPP_NUMBER;
+  return linkWhatsapp(numero);
 }
 
 // La instruccion real cuando no hay telefono marcable para un colega: tocar

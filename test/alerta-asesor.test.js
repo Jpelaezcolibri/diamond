@@ -103,6 +103,16 @@ test("con CONTACT_WHATSAPP_NUMBER definida, agrega el renglon listo para copiar 
   assert.match(texto, /https:\/\/wa\.me\/573000000001/);
 });
 
+test("el numero de la organizacion (multi-tenant, org.contact_whatsapp_number) gana sobre el env", () => {
+  // Revision 2026-08-24: sin esto, una organizacion B le estaria ofreciendo
+  // al colega la linea oficial de Diamond (ver db/migrations/2026-08-24_contact_whatsapp_number.sql).
+  process.env.CONTACT_WHATSAPP_NUMBER = "573000000001"; // linea de Diamond
+  const orgB = { id: "org-b", contact_whatsapp_number: "573000000009" };
+  const texto = construir(senal(), VEREDICTO, [matchUtil()], "573001234567", orgB);
+  assert.match(texto, /https:\/\/wa\.me\/573000000009/);
+  assert.doesNotMatch(texto, /573000000001/);
+});
+
 test("sin CONTACT_WHATSAPP_NUMBER, el aviso sale SIN el renglon de Sofi -- nunca un link a medias", () => {
   const texto = construir(senal(), VEREDICTO, [matchUtil()], "573001234567");
   assert.doesNotMatch(texto, /escribirle a Sofi/);

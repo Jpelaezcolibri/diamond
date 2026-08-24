@@ -44,6 +44,9 @@ function ficha(match) {
 /**
  * @param señal      { grupo_nombre, autor_nombre, texto_original }
  * @param candidatas matches con dato usable que el bot no respondio solo
+ * @param org        el registro de organizations (numero de contacto oficial
+ *                   multi-tenant, ver src/lib/contacto.js#linkContactoOficial).
+ *                   Opcional: sin el, cae al env CONTACT_WHATSAPP_NUMBER.
  * @returns el texto del aviso, o null si no hay nada que decir
  */
 // SIN "¿LO PUBLICAMOS?" (Juan, 2026-08-22): la norma del gremio es no llenar
@@ -56,7 +59,7 @@ function ficha(match) {
 // listo para copiar — la publicacion en el grupo dejo de ofrecerse como un
 // toque (aprobarManual en vivo.js sigue existiendo para publicar a proposito
 // desde el CRM, no desde este aviso).
-function construir(señal, candidatas) {
+function construir(señal, candidatas, org = null) {
   if (!Array.isArray(candidatas) || candidatas.length === 0) return null;
 
   const quien = señal.autor_nombre || "el colega";
@@ -76,7 +79,7 @@ function construir(señal, candidatas) {
     candidatas.map(ficha).join("\n"),
   ];
 
-  const link = linkContactoOficial();
+  const link = linkContactoOficial(org);
   if (link) {
     lineas.push(
       ``,

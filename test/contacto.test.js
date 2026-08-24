@@ -49,6 +49,51 @@ test("linkContactoOficial arma el link con CONTACT_WHATSAPP_NUMBER definida, y n
   }
 });
 
+// Multi-tenant (revision 2026-08-24): este repo es multi-tenant por diseño y
+// CONTACT_WHATSAPP_NUMBER es una sola variable de Railway para todo el
+// proceso — sin esto, la organizacion B le ofreceria al colega la linea de
+// Diamond. Ver db/migrations/2026-08-24_contact_whatsapp_number.sql.
+test("linkContactoOficial(org) prioriza el numero de la organizacion sobre el env", () => {
+  const anterior = process.env.CONTACT_WHATSAPP_NUMBER;
+  try {
+    process.env.CONTACT_WHATSAPP_NUMBER = "573000000001"; // linea de Diamond
+    const orgB = { id: "org-b", contact_whatsapp_number: "573000000002" }; // linea de otra org
+    assert.strictEqual(linkContactoOficial(orgB), "https://wa.me/573000000002");
+  } finally {
+    if (anterior === undefined) delete process.env.CONTACT_WHATSAPP_NUMBER;
+    else process.env.CONTACT_WHATSAPP_NUMBER = anterior;
+  }
+});
+
+test("linkContactoOficial(org) cae al env si la org no tiene numero propio (columna sin llenar o sin migrar)", () => {
+  const anterior = process.env.CONTACT_WHATSAPP_NUMBER;
+  try {
+    process.env.CONTACT_WHATSAPP_NUMBER = "573000000001";
+    // Sin la migracion corrida, organizations.select("*") simplemente no trae
+    // la columna: el objeto llega sin contact_whatsapp_number, no con null.
+    const orgSinMigrar = { id: "org-vieja", name: "Diamond" };
+    assert.strictEqual(linkContactoOficial(orgSinMigrar), "https://wa.me/573000000001");
+
+    const orgConColumnaVacia = { id: "org-nueva", contact_whatsapp_number: null };
+    assert.strictEqual(linkContactoOficial(orgConColumnaVacia), "https://wa.me/573000000001");
+  } finally {
+    if (anterior === undefined) delete process.env.CONTACT_WHATSAPP_NUMBER;
+    else process.env.CONTACT_WHATSAPP_NUMBER = anterior;
+  }
+});
+
+test("linkContactoOficial() sin org (llamador viejo) sigue funcionando igual que antes", () => {
+  const anterior = process.env.CONTACT_WHATSAPP_NUMBER;
+  try {
+    process.env.CONTACT_WHATSAPP_NUMBER = "573009998877";
+    assert.strictEqual(linkContactoOficial(), "https://wa.me/573009998877");
+    assert.strictEqual(linkContactoOficial(null), "https://wa.me/573009998877");
+  } finally {
+    if (anterior === undefined) delete process.env.CONTACT_WHATSAPP_NUMBER;
+    else process.env.CONTACT_WHATSAPP_NUMBER = anterior;
+  }
+});
+
 // tocarNombreEnGrupo (2026-08-24): la instruccion real para contactar a un
 // colega sin telefono marcable, centralizada aca para que los seis avisos
 // que la necesitan (alerta-asesor.js, aviso-cercano.js x2, resumen-equipo.js,
