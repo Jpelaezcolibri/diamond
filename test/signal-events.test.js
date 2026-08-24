@@ -12,6 +12,18 @@ const assert = require("node:assert");
 const { readFileSync } = require("node:fs");
 const path = require("node:path");
 
+// src/data/supabase.js NO crea el cliente real bajo test (guard 2026-08-24,
+// ver ese archivo). Este test SI necesita un cliente truthy para poder
+// mockear su metodo from() por tabla, asi que se inyecta un doble en el
+// cache del modulo antes de cargar signal-events.js — mismo patron que
+// test/colegas-data.test.js y test/directorio.test.js usan para forzar null.
+const supabasePath = require.resolve("../src/data/supabase");
+delete require.cache[supabasePath];
+require.cache[supabasePath] = {
+  id: supabasePath, filename: supabasePath, loaded: true,
+  exports: { from: () => { throw new Error("from() sin mockear en este test"); } },
+};
+
 const signalEvents = require("../src/data/signal-events");
 const supabase = require("../src/data/supabase");
 
@@ -86,8 +98,7 @@ test("el Learning Domain no depende de Radar — se puede apagar entero", () => 
 
 // ── P16: el orden es parte del conocimiento ──────────────────────────────
 
-// El repo tiene SUPABASE_URL en el .env, asi que el cliente es real: se mockea
-// `from` para no tocar la base.
+// Se mockea `from` del doble inyectado arriba (no hay cliente real bajo test).
 function mockDe(filas) {
   const chain = {
     select: () => chain,

@@ -34,8 +34,29 @@ function configurado() {
   return Boolean(BASE() && KEY());
 }
 
+// Guarda de red 2026-08-24 (revision final de fase1-directorio-colegas, Juan).
+// No se toca configurado(): hay tests (test/group-canal.test.js) que fijan
+// WAHA_URL/WAHA_API_KEY a proposito para probar reglas que NO llegan a la red
+// (ej. "Destino invalido" antes de llamar a pedir()), y necesitan que
+// configurado() siga viendo esos valores como validos.
+//
+// El riesgo real esta un nivel mas abajo, en pedir(): si algun test llega
+// hasta aca sin mockear fetch, sale a la red real. Los tests que SI ejercitan
+// pedir() siempre mockean fetch (test/waha-lids.test.js, el "manda reply_to"
+// de test/group-canal.test.js), asi que comparar contra el fetch original
+// capturado al cargar el modulo distingue exactamente ese caso: bajo test,
+// si fetch sigue siendo el nativo (nadie lo mockeo), se corta aca en vez de
+// confiar en que cada test futuro se acuerde de mockear.
+const fetchOriginal = globalThis.fetch;
+function bajoTestSinMock() {
+  return Boolean(process.env.NODE_TEST_CONTEXT) && globalThis.fetch === fetchOriginal;
+}
+
 async function pedir(ruta, { metodo = "GET", body = null } = {}) {
   if (!configurado()) throw new Error("Falta WAHA_URL o WAHA_API_KEY");
+  if (bajoTestSinMock()) {
+    throw new Error("WAHA deshabilitado en tests: fetch no fue mockeado (ver src/lib/waha.js)");
+  }
   const res = await fetch(`${BASE()}${ruta}`, {
     method: metodo,
     headers: { "X-Api-Key": KEY(), ...(body ? { "Content-Type": "application/json" } : {}) },
