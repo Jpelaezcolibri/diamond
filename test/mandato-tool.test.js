@@ -54,3 +54,27 @@ test("un cliente final NO puede cargar mandatos", async () => {
   assert.match(salida, /asesor/i, "esto es una herramienta interna del equipo");
   assert.strictEqual((await mandatosData.listarActivos("org-1")).length, 0);
 });
+
+// IMPORTANT: operacion vacia desactivaba entera la compuerta mas cara de
+// romper (mandato de venta que recibe arriendos). Igual que cliente_nombre,
+// tiene que preguntarse antes de guardar, no fallar en silencio mas adelante.
+test("sin operacion no guarda nada y lo dice", async () => {
+  const salida = await executeTool("registrar_mandato_compra", { cliente_nombre: "X" }, CTX);
+  assert.match(salida, /operacion|compra|arrienda/i);
+  assert.strictEqual((await mandatosData.listarActivos("org-1")).length, 0);
+});
+
+test("si mandatos.crear falla, la tool devuelve un mensaje claro y no lanza", async () => {
+  const original = mandatosData.crear;
+  mandatosData.crear = async () => {
+    throw new Error('relation "mandatos_compra" does not exist');
+  };
+  try {
+    const salida = await executeTool("registrar_mandato_compra", {
+      cliente_nombre: "X", operacion: "venta",
+    }, CTX);
+    assert.match(salida, /no pude guardar|migraci[oó]n|Juan/i);
+  } finally {
+    mandatosData.crear = original;
+  }
+});

@@ -908,12 +908,21 @@ async function registrarMandatoCompra(input, ctx) {
   if (!String(input.cliente_nombre || "").trim()) {
     return "Falta el nombre del cliente. Preguntale de quién es el mandato antes de registrarlo.";
   }
+  if (!String(input.operacion || "").trim()) {
+    return "Falta si el cliente compra o arrienda. Preguntale al asesor antes de registrar el mandato.";
+  }
 
-  const fila = await mandatos.crear(ctx.org.id, {
-    ...input,
-    operacion: input.operacion ? String(input.operacion).toLowerCase() : null,
-    advisor_id: ctx.advisor.id,
-  });
+  let fila;
+  try {
+    fila = await mandatos.crear(ctx.org.id, {
+      ...input,
+      operacion: input.operacion ? String(input.operacion).toLowerCase() : null,
+      advisor_id: ctx.advisor.id,
+    });
+  } catch (e) {
+    console.error("[radar] no se pudo guardar el mandato de compra:", e.message);
+    return "No pude guardar el mandato — avisale a Juan, puede ser que falte correr una migración en la base.";
+  }
 
   const pesos = (n) => `$${Number(n).toLocaleString("es-CO")}`;
   const lineas = [`Listo, guardé el mandato de ${fila.cliente_nombre}:`];

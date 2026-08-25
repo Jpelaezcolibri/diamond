@@ -53,6 +53,7 @@ function normalizar(fields) {
 async function crear(orgId, fields) {
   const row = { org_id: orgId, estado: "activo", ...normalizar(fields) };
   if (!row.cliente_nombre) throw new Error("Un mandato necesita cliente_nombre");
+  if (!row.operacion) throw new Error("Un mandato necesita operacion (venta o arriendo)");
 
   if (!supabase) {
     const guardado = { id: nuevoId("mandato"), created_at: new Date().toISOString(), ...row };

@@ -23,16 +23,20 @@ test("crear guarda las zonas y exigencias como arrays, no como texto", async () 
   assert.strictEqual(row.estado, "activo");
 });
 
+test("un mandato sin operacion no se guarda", async () => {
+  await assert.rejects(() => mandatos.crear(ORG, { cliente_nombre: "X" }), /operacion/);
+});
+
 test("un mandato sin precio NO queda con precio_max 0", async () => {
   // precio_max = 0 en el motor significa "sin tope" y matchearia cualquier cosa;
   // null significa "no se sabe". La diferencia decide si el filtro sirve.
-  const row = await mandatos.crear(ORG, { cliente_nombre: "Sin precio" });
+  const row = await mandatos.crear(ORG, { cliente_nombre: "Sin precio", operacion: "venta" });
   assert.strictEqual(row.precio_max, null);
 });
 
 test("listarActivos no devuelve pausados ni cerrados", async () => {
-  const a = await mandatos.crear(ORG, { cliente_nombre: "Activo" });
-  const b = await mandatos.crear(ORG, { cliente_nombre: "Cerrado" });
+  const a = await mandatos.crear(ORG, { cliente_nombre: "Activo", operacion: "venta" });
+  const b = await mandatos.crear(ORG, { cliente_nombre: "Cerrado", operacion: "venta" });
   await mandatos.actualizarEstado(ORG, b.id, "cerrado");
   const lista = await mandatos.listarActivos(ORG);
   const nombres = lista.map((m) => m.cliente_nombre);
@@ -41,13 +45,13 @@ test("listarActivos no devuelve pausados ni cerrados", async () => {
 });
 
 test("listarActivos no cruza organizaciones", async () => {
-  await mandatos.crear("org-2", { cliente_nombre: "De otra org" });
+  await mandatos.crear("org-2", { cliente_nombre: "De otra org", operacion: "venta" });
   const lista = await mandatos.listarActivos(ORG);
   assert.ok(!lista.some((m) => m.cliente_nombre === "De otra org"));
 });
 
 test("registrarAlerta es idempotente por (mandato, propiedad)", async () => {
-  const m = await mandatos.crear(ORG, { cliente_nombre: "Dedup" });
+  const m = await mandatos.crear(ORG, { cliente_nombre: "Dedup", operacion: "venta" });
   const primera = await mandatos.registrarAlerta(ORG, {
     mandatoId: m.id, allyPropertyId: "ally-1", advisorId: "adv-1", puntaje: 88,
   });
@@ -60,7 +64,7 @@ test("registrarAlerta es idempotente por (mandato, propiedad)", async () => {
 
 test("marcarEntrega aísla por org_id", async () => {
   mandatos._reset();
-  const m1 = await mandatos.crear("org-1", { cliente_nombre: "Mandato org-1" });
+  const m1 = await mandatos.crear("org-1", { cliente_nombre: "Mandato org-1", operacion: "venta" });
   const alerta1 = await mandatos.registrarAlerta("org-1", {
     mandatoId: m1.id, allyPropertyId: "ally-1", advisorId: "adv-1",
   });
