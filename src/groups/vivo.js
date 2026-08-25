@@ -837,10 +837,15 @@ async function manejarOferta(org, c, grupo = {}, { advisorId = null, sesion = nu
   });
   if (!sirveAAlguno) return { resultado: "oferta_sin_match" };
 
-  const fila = await ofertas.guardarOferta(org, { ...c, mensaje: c.mensaje || {} }).catch((e) => {
-    console.warn("[radar] no se pudo guardar la oferta que cruzo:", e.message);
-    return null;
-  });
+  const fila = await ofertas
+    .guardarOferta(org, {
+      ...c,
+      mensaje: { ...(c.mensaje || {}), groupId: (grupo && grupo.id) || null, advisorId },
+    })
+    .catch((e) => {
+      console.warn("[radar] no se pudo guardar la oferta que cruzo:", e.message);
+      return null;
+    });
   if (!fila || !fila.id) return { resultado: "oferta_sin_match" };
 
   const r = await avisarMandato.cruzarOfertaConMandatos(org, { ...tanteo, ...fila }, {

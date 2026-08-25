@@ -60,13 +60,40 @@ test("una oferta que cruza SI se persiste y se avisa", async () => {
     {
       clase: "oferta", operacion: "venta", tipo: "apartamento", zonas: ["El Poblado"],
       precio_max: 1580000000, habitaciones: 4, area_min: 246,
-      mensaje: { autor: "Glovi", autorTelefono: "129781211373754", groupId: "g-1", texto: "Dúplex Loma del Tesoro" },
+      mensaje: { autor: "Glovi", autorTelefono: "129781211373754", texto: "Dúplex Loma del Tesoro" },
     },
-    { nombre: "SOLO VIVIENDA >$1000 MLLS" }
+    { id: "grupo-123", nombre: "SOLO VIVIENDA >$1000 MLLS" },
+    { advisorId: "adv-puente-1" }
   );
   assert.strictEqual(r.resultado, "oferta_cruzada");
   assert.strictEqual(guardadas.length, 1, "una oferta que le sirve a alguien SI vale persistirla");
   assert.strictEqual(cruces.length, 1);
   assert.strictEqual(cruces[0].opts.allyPropertyId, "ally-nueva");
   assert.strictEqual(cruces[0].opts.grupo, "SOLO VIVIENDA >$1000 MLLS");
+});
+
+// IMPORTANT: manejarOferta ya recibe grupo y advisorId, pero no los cableaba
+// hacia adentro de c.mensaje — ofertas.js lee m.groupId y m.advisorId para
+// guardar group_id y puente_advisor_id en ally_properties. Sin esto, toda
+// oferta que entra por el radar en vivo pierde su grupo de origen y su
+// asesor puente.
+test("la oferta guardada trae groupId del grupo y advisorId del puente", async () => {
+  await mandatosData.crear("org-1", {
+    cliente_nombre: "Marcela", advisor_id: "adv-nat", operacion: "venta", tipo: "apartamento",
+    zonas: ["El Poblado"], precio_max: 2200000000, habitaciones: 4, area_min: 150,
+  });
+  const { manejarOferta } = require("../src/groups/vivo");
+  await manejarOferta(
+    { id: "org-1" },
+    {
+      clase: "oferta", operacion: "venta", tipo: "apartamento", zonas: ["El Poblado"],
+      precio_max: 1580000000, habitaciones: 4, area_min: 246,
+      mensaje: { autor: "Glovi", autorTelefono: "129781211373754", texto: "Dúplex Loma del Tesoro" },
+    },
+    { id: "grupo-123", nombre: "SOLO VIVIENDA >$1000 MLLS" },
+    { advisorId: "adv-puente-1" }
+  );
+  assert.strictEqual(guardadas.length, 1);
+  assert.strictEqual(guardadas[0].mensaje.groupId, "grupo-123");
+  assert.strictEqual(guardadas[0].mensaje.advisorId, "adv-puente-1");
 });
