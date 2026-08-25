@@ -13,12 +13,37 @@ import VincularLinea, { type Sesion, type Asesor } from "@/components/vincular-l
 import GruposPermisos, { type GrupoVivo } from "@/components/grupos-permisos";
 import LineaDmInbox, { type DmMensaje } from "@/components/linea-dm-inbox";
 import PosiblesVentas, { type PosibleVenta } from "@/components/posibles-ventas";
+import { MandatosPanel, MatchesPendientesPanel } from "@/components/mandatos-panel";
 
 export const dynamic = "force-dynamic";
 
 type Metricas = {
   dias: number; demandas: number; ofertas: number;
   demandasConMatch: number; demandasPorDia: number; ofertasPorDia: number; tasaMatch: number;
+};
+
+type Mandato = {
+  id: string;
+  cliente_nombre: string;
+  operacion: string | null;
+  tipo: string | null;
+  zonas: string[];
+  precio_max: number | null;
+  habitaciones: number | null;
+  area_min: number | null;
+  exigencias: string[];
+  estado: string;
+  created_at: string;
+};
+
+type MatchPendiente = {
+  id: string;
+  mandato_id: string;
+  ally_property_id: string;
+  puntaje: number | null;
+  error: string | null;
+  escalado_a: string | null;
+  created_at: string;
 };
 
 export default async function GruposPage() {
@@ -99,6 +124,28 @@ export default async function GruposPage() {
       "grupos:ofertas"
     ),
   ]);
+
+  // Mandatos de compra (Tarea 8): mismo criterio de "mias" que el resto de
+  // señales — un asesor ve solo los mandatos propios, admin los ve todos.
+  // Los matches sin entregar NO se filtran por asesor: son información de
+  // supervisión operativa del carril de compra completo, igual que
+  // `whatsapp_groups` en esta misma página.
+  const [mandatosRes, matchesPendientesRes] = await Promise.all([
+    fetchSafe<Mandato>(
+      mias(
+        supabase.from("mandatos_compra").select("*").eq("estado", "activo")
+          .order("created_at", { ascending: false })
+      ),
+      "grupos:mandatos"
+    ),
+    fetchSafe<MatchPendiente>(
+      supabase.from("mandato_match_alerts").select("*").eq("entregado", false)
+        .order("created_at", { ascending: false }).limit(50),
+      "grupos:matches_pendientes"
+    ),
+  ]);
+  const mandatos = mandatosRes.data;
+  const matchesPendientes = matchesPendientesRes.data;
 
   // Métricas del embudo: viven en memoria del bot, no en la base. Se piden
   // acá para no obligar a abrir una terminal cada vez que se quiere mirar el
@@ -386,6 +433,26 @@ export default async function GruposPage() {
         Nunca son inventario propio. Confirmá disponibilidad antes de ofrecerlas a un cliente.
       </p>
       <SenalesGrupos senales={ofertas} clase="oferta" vacio="Nada detectado todavía." />
+
+      <h2 className="mb-1 mt-8 text-lg font-semibold text-slate-900">Mis mandatos de compra</h2>
+      <p className="mb-2 text-sm text-slate-500">
+        Clientes tuyos que están buscando. Cada oferta que un colega publique y le sirva
+        a alguno se te avisa por WhatsApp — no hace falta revisar esta lista para que funcione.
+      </p>
+      {mandatosRes.hasError && <ErrorBanner message={mandatosRes.message} />}
+      <MandatosPanel mandatos={mandatos} />
+
+      {admin && (
+        <>
+          <h2 className="mb-1 mt-8 text-lg font-semibold text-slate-900">Matches sin entregar</h2>
+          <p className="mb-2 text-sm text-slate-500">
+            Avisos que no se le pudieron mandar al asesor dueño del mandato. Ninguno debería
+            quedar acá mucho tiempo — si algo se acumula, hay un problema de entrega que resolver.
+          </p>
+          {matchesPendientesRes.hasError && <ErrorBanner message={matchesPendientesRes.message} />}
+          <MatchesPendientesPanel matches={matchesPendientes} />
+        </>
+      )}
     </div>
   );
 }
