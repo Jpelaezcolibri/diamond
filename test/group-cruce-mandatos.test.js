@@ -97,3 +97,105 @@ test("criterioDeMandato traduce al shape que espera evaluarCandidata", () => {
   assert.strictEqual(c.area_min, 150);
   assert.strictEqual(c.operacion, "venta");
 });
+
+// Defecto 1 (Important): sin precio en la oferta, el corte de precio quedaba
+// mudo — ni cumple ni salvedad. Es el dato mas sensible; no puede callarse.
+test("una oferta sin precio deja salvedad explicita, no silencio", () => {
+  const r = evaluarOferta({ ...OFERTA, precio: null }, MANDATO);
+  assert.ok(r, "sin precio no se descarta — es blando como los demas datos ausentes");
+  assert.ok(
+    r.salvedades.some((s) => /precio/i.test(s) && s.includes("2.200.000.000")),
+    `debe decir explicitamente que no hay precio: ${JSON.stringify(r.salvedades)}`
+  );
+  assert.ok(!r.cumple.some((c) => /presupuesto/i.test(c)));
+});
+
+// Defecto 2 (Important): un precio muy por debajo del tope casi siempre es un
+// error de captura en El Poblado, no un hallazgo. No se descarta (filo bajo),
+// pero tampoco se afirma que "cumple" — se le pide al asesor que confirme.
+test("un precio muy por debajo del tope pide confirmar, no afirma que cumple", () => {
+  const r = evaluarOferta({ ...OFERTA, precio: "$150.000.000" }, MANDATO);
+  assert.ok(r, "filo bajo: no se descarta aunque el precio parezca un error de captura");
+  assert.ok(!r.cumple.some((c) => /presupuesto/i.test(c)), "no se afirma que cumple presupuesto sin verificar el numero");
+  assert.ok(
+    r.salvedades.some((s) => s.includes("150.000.000") && s.includes("2.200.000.000")),
+    `la salvedad debe nombrar los dos numeros para que el asesor confirme: ${JSON.stringify(r.salvedades)}`
+  );
+});
+
+// Defecto 3 (Important): el puntaje del motor de venta ya no discrimina nada
+// en este carril (criterio angosto) y no puede mostrarse como calidad de match.
+test("el JSDoc de evaluarOferta advierte que el puntaje no es calidad de match aca", () => {
+  const path = require("path");
+  const src = require("fs").readFileSync(
+    path.join(__dirname, "..", "src", "groups", "cruce-mandatos.js"),
+    "utf8"
+  );
+  const jsdocMatch = src.match(/\/\*\*[\s\S]*?evaluarOferta/);
+  assert.ok(jsdocMatch, "debe existir un JSDoc justo antes de evaluarOferta");
+  // Normalizado en una sola linea: el comentario real viene partido en varias
+  // lineas con " * " al inicio de cada una, y eso rompe cualquier regex que
+  // busque una frase literal atravesando saltos de linea.
+  const jsdoc = jsdocMatch[0];
+  const plano = jsdoc.replace(/^\s*\*\/?/gm, " ").replace(/\s+/g, " ");
+  assert.ok(/puntaje/i.test(plano), "el JSDoc debe mencionar puntaje");
+  assert.ok(
+    /no mide calidad de match|no representa calidad de match|no es (una )?medida de calidad/i.test(plano),
+    `el JSDoc debe advertir explicitamente que puntaje no mide calidad de match: ${plano}`
+  );
+  assert.ok(
+    /% de match|porcentaje de match/i.test(plano),
+    "el JSDoc debe advertir contra mostrarlo como % de match en un panel"
+  );
+});
+
+test("puntaje sigue viajando como dato diagnostico, no se elimina", () => {
+  const r = evaluarOferta(OFERTA, MANDATO);
+  assert.strictEqual(typeof r.puntaje, "number");
+});
+
+// Defecto 4 (Minor): flexible_habitaciones se calculaba y nunca se leia. Un
+// mandato flexible que se queda corto en habitaciones tiene que decirlo.
+test("le falta una habitacion y el mandato es flexible: la salvedad lo dice", () => {
+  const mandatoFlexible = { ...MANDATO, flexible_habitaciones: true };
+  const r = evaluarOferta({ ...OFERTA, habitaciones: 3 }, mandatoFlexible);
+  assert.ok(r.sirve);
+  assert.ok(
+    r.salvedades.some((s) => /estudio|servicio/i.test(s)),
+    `con flexible_habitaciones, la salvedad debe decir que acepta una menos con estudio o servicio: ${JSON.stringify(r.salvedades)}`
+  );
+});
+
+// Defecto 5 (Minor): estrato se prometia en el comentario de cabecera y no
+// existia en `blandos` — nunca generaba cumple ni salvedad.
+test("estrato pedido y ausente en la oferta: sale como salvedad, no como cumplido", () => {
+  const mandatoConEstrato = { ...MANDATO, estrato: 5 };
+  const r = evaluarOferta(OFERTA, mandatoConEstrato);
+  assert.ok(r.sirve);
+  assert.ok(
+    r.salvedades.some((s) => /estrato/i.test(s) && s.includes("5")),
+    `sin estrato en la oferta, debe salir como dato ausente: ${JSON.stringify(r.salvedades)}`
+  );
+  assert.ok(!r.cumple.some((c) => /estrato/i.test(c)));
+});
+
+test("estrato pedido y cumplido en la oferta: sale en cumple", () => {
+  const mandatoConEstrato = { ...MANDATO, estrato: 5 };
+  const r = evaluarOferta({ ...OFERTA, estrato: 5 }, mandatoConEstrato);
+  assert.ok(r.cumple.some((c) => /estrato/i.test(c) && c.includes("5")));
+});
+
+// Defecto 5 (Minor): precio_min del mandato (piso explicito del cliente) se
+// calculaba en criterioDeMandato y nunca se leia en evaluarOferta.
+test("la oferta esta por debajo del piso explicito (precio_min) del mandato", () => {
+  // precio_min alto a proposito para que quede POR ENCIMA de la banda del 60%
+  // (asi la salvedad que se dispara es la del piso explicito, no la generica
+  // de "muy por debajo del tope" del defecto 2).
+  const mandatoConPiso = { ...MANDATO, precio_min: 1650000000 };
+  const r = evaluarOferta({ ...OFERTA, precio: "$1.580.000.000" }, mandatoConPiso);
+  assert.ok(r.sirve);
+  assert.ok(
+    r.salvedades.some((s) => /piso/i.test(s) && s.includes("1.650.000.000")),
+    `debe avisar que la oferta esta por debajo del piso pedido por el cliente: ${JSON.stringify(r.salvedades)}`
+  );
+});

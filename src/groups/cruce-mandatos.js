@@ -71,6 +71,14 @@ function fmtPesos(n) {
  *
  * `cumple` y `salvedades` son frases para leer, no un puntaje. Un "87%" no le
  * dice al asesor que preguntarle al colega; "sin verificar: vista y balcon" si.
+ *
+ * OJO con `puntaje`: viene de evaluarCandidata pero aca se le pasa un criterio
+ * angosto a proposito (ver mas abajo por que). El resultado es que ya NO mide
+ * calidad de match en este carril — es practicamente constante (67 con zona
+ * exacta) para cualquier oferta que pase el piso, sin discriminar precio ni
+ * habitaciones. Se guarda como dato diagnostico (para depurar el motor), pero
+ * NO se debe mostrar como "% de match" en ningun panel: seria mostrarle al
+ * asesor un numero que no significa lo que el panel diria que significa.
  */
 function evaluarOferta(oferta, mandato, { margenPrecio = MARGEN_PRECIO_DEFAULT } = {}) {
   const c = criterioDeMandato(mandato);
@@ -106,15 +114,37 @@ function evaluarOferta(oferta, mandato, { margenPrecio = MARGEN_PRECIO_DEFAULT }
 
   // Corte 3: precio. Se evalua aca y no en el motor porque el motor castiga el
   // precio con puntaje, y aca hace falta un corte duro con un margen explicito.
-  if (c.precio_max > 0 && precio > 0) {
-    const techo = c.precio_max * (1 + margenPrecio);
-    if (precio > techo) return null;
-    if (precio > c.precio_max) {
-      salvedades.push(`Se pasa ${fmtPesos(precio - c.precio_max)} del tope de ${fmtPesos(c.precio_max)}`);
+  if (c.precio_max > 0) {
+    if (precio <= 0) {
+      // Sin precio en la oferta el corte no puede evaluarse — pero el precio
+      // es el dato mas sensible de todos, asi que no se queda callado como si
+      // no hubiera nada que decir. Mismo patron que los blandos: "no lo
+      // sabemos" explicito, nunca silencio.
+      salvedades.push(`No dice el precio (se pidió hasta ${fmtPesos(c.precio_max)})`);
     } else {
-      const holgura = c.precio_max - precio;
-      cumple.push(holgura > 0 ? `presupuesto (${fmtPesos(holgura)} por debajo del tope)` : "presupuesto");
+      const techo = c.precio_max * (1 + margenPrecio);
+      if (precio > techo) return null;
+      if (precio > c.precio_max) {
+        salvedades.push(`Se pasa ${fmtPesos(precio - c.precio_max)} del tope de ${fmtPesos(c.precio_max)}`);
+      } else if (precio < c.precio_max * match.BANDA_INFERIOR) {
+        // Filo bajo: NO se descarta (en El Poblado esto casi siempre es un
+        // precio mal capturado en la publicacion, no un hallazgo real), pero
+        // tampoco se afirma que cumple presupuesto sin que nadie lo confirme.
+        salvedades.push(
+          `El precio publicado (${fmtPesos(precio)}) esta muy por debajo del tope pedido (${fmtPesos(c.precio_max)}) — confirmá con el colega que el precio de la publicación sea correcto`
+        );
+      } else {
+        const holgura = c.precio_max - precio;
+        cumple.push(holgura > 0 ? `presupuesto (${fmtPesos(holgura)} por debajo del tope)` : "presupuesto");
+      }
     }
+  }
+
+  // Piso explicito que puso el cliente (precio_min), distinto de la banda del
+  // 60% de arriba: ese es un umbral heuristico nuestro, este es un numero que
+  // el cliente pidio literalmente. Si la oferta cae debajo, se avisa.
+  if (c.precio_min > 0 && precio > 0 && precio < c.precio_min) {
+    salvedades.push(`El precio (${fmtPesos(precio)}) está por debajo del piso pedido de ${fmtPesos(c.precio_min)}`);
   }
 
   // Ubicacion: se dice el grado, no se esconde. "vecina" no es "exacta" y el
@@ -132,6 +162,7 @@ function evaluarOferta(oferta, mandato, { margenPrecio = MARGEN_PRECIO_DEFAULT }
   const blandos = [
     {
       pedido: c.habitaciones, tiene: num(oferta.habitaciones),
+      esHabitaciones: true,
       cumple: (v) => `${v} habitaciones`,
       corto: (v, p) => `Tiene ${v} de las ${p} habitaciones pedidas`,
       sinDato: (p) => `No dice cuántas habitaciones tiene (se pidieron ${p})`,
@@ -154,12 +185,24 @@ function evaluarOferta(oferta, mandato, { margenPrecio = MARGEN_PRECIO_DEFAULT }
       corto: (v, p) => `Tiene ${v} de los ${p} garajes pedidos`,
       sinDato: (p) => `No dice cuántos garajes tiene (se pidieron ${p})`,
     },
+    {
+      pedido: c.estrato, tiene: num(oferta.estrato),
+      cumple: (v) => `estrato ${v}`,
+      corto: (v, p) => `Tiene estrato ${v}, se pidió estrato ${p}`,
+      sinDato: (p) => `No dice el estrato (se pidió estrato ${p})`,
+    },
   ];
   for (const b of blandos) {
     if (b.pedido <= 0) continue;
     if (b.tiene <= 0) salvedades.push(b.sinDato(b.pedido));
     else if (b.tiene >= b.pedido) cumple.push(b.cumple(b.tiene));
-    else salvedades.push(b.corto(b.tiene, b.pedido));
+    else if (b.esHabitaciones && c.flexible_habitaciones) {
+      // flexible_habitaciones significa exactamente esto: el pedido acepta
+      // una alcoba menos si hay estudio o servicio que la compense. Sin esto
+      // la marca se calculaba y nunca se leia — un mandato flexible y uno que
+      // no producian la misma salida.
+      salvedades.push(`Tiene ${b.tiene} de las ${b.pedido} habitaciones pedidas, pero el pedido acepta una menos con estudio o servicio`);
+    } else salvedades.push(b.corto(b.tiene, b.pedido));
   }
 
   // Exigencias de texto libre: NUNCA se pueden verificar contra la publicacion
