@@ -10,6 +10,7 @@ const assert = require("node:assert");
 const path = require("node:path");
 
 const RUTA = (m) => require.resolve(path.join("..", "src", m));
+const mandatosData = require("../src/data/mandatos");
 
 // ── Dobles de las dependencias con IO ────────────────────────────────────
 let claseDevuelta = "demanda";
@@ -19,6 +20,7 @@ let respuestasRecientes = { cantidad: 0, ultimaIso: null };
 let marcadas = [];
 let ofertasGuardadas = [];
 let crucesLeads = [];
+let crucesMandatos = [];
 let inventario = { fresco: true, iso: new Date().toISOString(), horas: 1 };
 let linksAbren = true;
 let feedRegistrado = [];
@@ -65,6 +67,11 @@ function instalarDobles() {
           ? { demandas: [], ofertas: [c], ruido: [] }
           : { demandas: [c], ofertas: [], ruido: [] };
       },
+      // evaluarCandidata real (pura, sin IO): cruce-mandatos.js#evaluarOferta la
+      // necesita para el carril de compra. Sin ella el mock deja a
+      // manejarOferta reventando con "match.evaluarCandidata is not a function"
+      // en cuanto una oferta SI cruza un mandato (Juan/coordinador, 2026-08-25).
+      evaluarCandidata: require("../src/groups/match").evaluarCandidata,
     },
   };
   require.cache[RUTA("groups/persistir.js")] = {
@@ -88,6 +95,14 @@ function instalarDobles() {
       cruzarOfertaConLeads: async (org, allyProperty) => {
         crucesLeads.push({ org, allyProperty });
         return { resultado: "sin_leads_esperando", avisados: [] };
+      },
+    },
+  };
+  require.cache[RUTA("groups/avisar-mandato.js")] = {
+    exports: {
+      cruzarOfertaConMandatos: async (org, oferta, opts) => {
+        crucesMandatos.push({ org, oferta, opts });
+        return { resultado: "enviado", avisados: [{}], matches: 1 };
       },
     },
   };
@@ -205,6 +220,8 @@ beforeEach(() => {
   politicasGuardadas = [];
   ofertasGuardadas = [];
   crucesLeads = [];
+  crucesMandatos = [];
+  mandatosData._reset();
   inventario = { fresco: true, iso: new Date().toISOString(), horas: 1 };
   linksAbren = true;
   feedRegistrado = [];
@@ -311,11 +328,27 @@ test("una oferta se ignora por completo en la escucha en vivo: no se guarda ni s
     grupo: GRUPO, modo: "auto", ahora: MEDIODIA,
     enviar: async () => { envios++; return { ok: true }; },
   });
-  assert.strictEqual(r.resultado, "oferta_ignorada");
+  assert.strictEqual(r.resultado, "oferta_sin_mandatos");
   assert.strictEqual(envios, 0);
   assert.strictEqual(ofertasGuardadas.length, 0);
   assert.strictEqual(crucesLeads.length, 0);
   assert.strictEqual(señalCreada, null, "la oferta no se persiste");
+});
+
+test("una oferta que le sirve a un mandato activo SI se guarda y se cruza", async () => {
+  await mandatosData.crear(ORG.id, {
+    cliente_nombre: "Marcela", advisor_id: "adv-nat",
+    operacion: "venta", tipo: "apartamento", zonas: ["El Poblado"], precio_max: 1200000000,
+  });
+  claseDevuelta = "oferta";
+  const r = await vivo.procesarMensaje(ORG, mensaje({ texto: "tengo apartamento en venta" }), {
+    grupo: GRUPO, modo: "auto", ahora: MEDIODIA,
+    enviar: async () => ({ ok: true }),
+  });
+  assert.strictEqual(r.resultado, "oferta_cruzada");
+  assert.strictEqual(ofertasGuardadas.length, 1, "una oferta que le sirve a un mandato SI se persiste");
+  assert.strictEqual(crucesMandatos.length, 1, "y se cruza con avisar-mandato");
+  assert.strictEqual(crucesMandatos[0].opts.allyPropertyId, "ally-1");
 });
 
 test("con el radar apagado no se gasta un token ni se escribe una fila", async () => {

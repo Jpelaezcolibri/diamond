@@ -382,7 +382,7 @@ test("el mismo numero no recibe el aviso dos veces", async () => {
 test("una oferta de un colega se ignora, tambien en modo asistido", async () => {
   claseDevuelta = "oferta";
   const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE });
-  assert.strictEqual(r.resultado, "oferta_ignorada");
+  assert.strictEqual(r.resultado, "oferta_sin_mandatos");
   assert.strictEqual(enviadosPorSofi.length, 0);
 });
 

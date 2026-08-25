@@ -41,6 +41,10 @@ const formato = require("../lib/formato");
 // referencia y deja los tests sin forma de mockear el envio.
 const canalWhatsapp = require("../channels/whatsapp");
 const mensajeAsesor = require("../lib/mensaje-asesor");
+const ofertas = require("./ofertas");
+const avisarMandato = require("./avisar-mandato");
+const mandatosData = require("../data/mandatos");
+const { evaluarOferta } = require("./cruce-mandatos");
 
 const VENTANA_LIMITE_HORAS = 24;
 
@@ -93,19 +97,30 @@ async function procesarMensaje(org, mensaje, { grupo, modo = "sombra", enviar = 
   // del Radar. La mayoria de los mensajes de un grupo gremial son ruido.
   if (c.clase === "ruido") return { resultado: "ruido" };
 
-  // Ofertas de colegas: apagadas en la escucha en vivo (Juan, 2026-08-20) —
-  // "apaguemos las ofertas no las leamos solo quiero que lea los pedidos, las
-  // ofertas nos estan saturando y no son necesarias, tenemos muchas
-  // propiedades y muchos pedidos". Ni se cruzan ni se persisten: mueren aca
-  // igual que el ruido. Antes alimentaban ally_properties y se cruzaban
-  // contra leads propios, pero en un grupo activo las ofertas superan por
-  // volumen a las demandas y eran el grueso de lo que saturaba group_signals
-  // (438 señales en 2 dias, 402 ofertas) — inflando cada consulta del radar
-  // sin aportar lo que el negocio necesita hoy. La importacion de export .txt
-  // (importar-export.js) es un camino distinto y no cambia: ahi la captura de
-  // ofertas sigue siendo una decision deliberada de carga puntual, no ruido
-  // continuo de un grupo en vivo.
-  if (c.clase === "oferta") return { resultado: "oferta_ignorada" };
+  // Ofertas de colegas: VOLVIERON a la escucha en vivo el 2026-08-25, pero no
+  // como estaban antes.
+  //
+  // HISTORIA, porque el motivo importa. Juan las apago el 2026-08-20 ("apaguemos
+  // las ofertas no las leamos solo quiero que lea los pedidos, las ofertas nos
+  // estan saturando"): se persistian TODAS y eran el grueso de group_signals
+  // (402 de 438 señales en dos dias), inflando cada consulta del radar sin
+  // aportar lo que el negocio necesitaba. El problema nunca fue leerlas: fue
+  // guardar cientos que nadie miraba.
+  //
+  // Lo que cambio es que ahora hay contra QUE cruzarlas — los mandatos de compra
+  // (db/migrations/2026-08-25_mandatos_compra.sql). Asi que se invierte el orden:
+  // se cruza en memoria y se persiste SOLO lo que le sirve a alguien. Con la tasa
+  // de cruce medida (12 matches sobre 329 ofertas, ~4%), eso es un orden de
+  // magnitud menos escritura que antes, y cada fila que queda tiene un dueño.
+  //
+  // Si algun dia hace falta el archivo completo de ofertas, el camino es el
+  // import de export .txt (importar-export.js), que sigue guardando todo a
+  // proposito: ahi es una carga puntual, no ruido continuo.
+  // OJO: `jid` NO es una variable suelta en este scope (procesarMensaje solo
+  // destructura grupo, modo, enviar, asesor, advisorId, sesion, ahora). El jid del
+  // grupo vive en `grupo.jid` — pasar un `jid` inexistente aca es un
+  // ReferenceError que revienta el primer mensaje de tipo oferta en produccion.
+  if (c.clase === "oferta") return manejarOferta(org, c, grupo, { advisorId, sesion, jid: grupo && grupo.jid });
 
   // 3. Cruce contra inventario propio y aliados.
   const { demandas } = await cruzar([c], { org });
@@ -787,6 +802,58 @@ async function responderPorDmManual(org, signalId, { sesion = null, refs = null 
   };
 }
 
+/**
+ * Una oferta de colega en vivo: se cruza contra los mandatos activos y solo se
+ * persiste si le sirve a alguno.
+ *
+ * @returns { resultado, matches? }
+ *   'oferta_sin_mandatos' | 'oferta_sin_match' | 'oferta_cruzada'
+ */
+async function manejarOferta(org, c, grupo = {}, { advisorId = null, sesion = null, jid = null } = {}) {
+  const activos = await mandatosData.listarActivos(org.id).catch((e) => {
+    console.warn("[radar] no se pudieron leer los mandatos:", e.message);
+    return [];
+  });
+  if (activos.length === 0) return { resultado: "oferta_sin_mandatos" };
+
+  // Prueba baratísima antes de escribir nada: el shape del clasificador se
+  // aproxima al de ally_properties solo para este tanteo. La evaluacion real,
+  // con la fila persistida, la hace cruzarOfertaConMandatos.
+  const tanteo = {
+    tipo: c.tipo || null,
+    operacion: c.operacion || null,
+    zona: (Array.isArray(c.zonas) && c.zonas[0]) || c.zona || null,
+    ciudad: c.ciudad || null,
+    precio: c.precio_max || c.precio_min || 0,
+    habitaciones: c.habitaciones || null,
+    area: c.area_min || null,
+    banos: c.banos || null,
+    garajes: c.garajes || null,
+    estrato: c.estrato || null,
+  };
+  const sirveAAlguno = activos.some((m) => {
+    const e = evaluarOferta(tanteo, m);
+    return Boolean(e && e.sirve);
+  });
+  if (!sirveAAlguno) return { resultado: "oferta_sin_match" };
+
+  const fila = await ofertas.guardarOferta(org, { ...c, mensaje: c.mensaje || {} }).catch((e) => {
+    console.warn("[radar] no se pudo guardar la oferta que cruzo:", e.message);
+    return null;
+  });
+  if (!fila || !fila.id) return { resultado: "oferta_sin_match" };
+
+  const r = await avisarMandato.cruzarOfertaConMandatos(org, { ...tanteo, ...fila }, {
+    allyPropertyId: fila.id,
+    colega: { lid: c.mensaje?.autorTelefono || null, nombre: c.mensaje?.autor || null },
+    grupo: grupo?.nombre || null,
+    vistoEnIso: new Date().toISOString(),
+    sesion, jid,
+  });
+  return { resultado: "oferta_cruzada", matches: r.matches, avisados: r.avisados.length };
+}
+
 module.exports = {
-  procesarMensaje, idEnVivo, asistir, destinatarios, aprobarManual, responderPorDmManual, VENTANA_LIMITE_HORAS,
+  procesarMensaje, idEnVivo, asistir, destinatarios, aprobarManual, responderPorDmManual,
+  manejarOferta, VENTANA_LIMITE_HORAS,
 };
