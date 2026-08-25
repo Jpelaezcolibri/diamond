@@ -139,7 +139,7 @@ async function marcarEntrega(orgId, alertaId, { entregado, via = null, error = n
     via, error,
   };
   if (!supabase) {
-    const a = memory.alertas.find((x) => x.id === alertaId);
+    const a = memory.alertas.find((x) => x.org_id === orgId && x.id === alertaId);
     if (a) Object.assign(a, campos);
     return;
   }
@@ -152,7 +152,7 @@ async function marcarEscalado(orgId, alertaId, telefono) {
   if (!alertaId) return;
   const campos = { escalado_a: telefono, escalado_at: new Date().toISOString() };
   if (!supabase) {
-    const a = memory.alertas.find((x) => x.id === alertaId);
+    const a = memory.alertas.find((x) => x.org_id === orgId && x.id === alertaId);
     if (a) Object.assign(a, campos);
     return;
   }
@@ -162,7 +162,11 @@ async function marcarEscalado(orgId, alertaId, telefono) {
 }
 
 async function pendientes(orgId, { limite = 50 } = {}) {
-  if (!supabase) return memory.alertas.filter((a) => a.org_id === orgId && !a.entregado);
+  if (!supabase) {
+    return memory.alertas
+      .filter((a) => a.org_id === orgId && !a.entregado)
+      .slice(0, limite);
+  }
   const { data, error } = await supabase
     .from("mandato_match_alerts")
     .select("*")

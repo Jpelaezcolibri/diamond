@@ -57,3 +57,18 @@ test("registrarAlerta es idempotente por (mandato, propiedad)", async () => {
   assert.strictEqual(primera.esNuevo, true);
   assert.strictEqual(segunda.esNuevo, false, "el repost del colega no debe generar un segundo aviso");
 });
+
+test("marcarEntrega aísla por org_id", async () => {
+  mandatos._reset();
+  const m1 = await mandatos.crear("org-1", { cliente_nombre: "Mandato org-1" });
+  const alerta1 = await mandatos.registrarAlerta("org-1", {
+    mandatoId: m1.id, allyPropertyId: "ally-1", advisorId: "adv-1",
+  });
+  // Intentar marcar la alerta con otra org — NO debe hacerlo
+  await mandatos.marcarEntrega("org-2", alerta1.id, { entregado: true, via: "whatsapp" });
+  // Verificar que la alerta de org-1 sigue intacta
+  const pendientesOrg1 = await mandatos.pendientes("org-1");
+  const alertaDespues = pendientesOrg1.find((a) => a.id === alerta1.id);
+  assert.ok(alertaDespues, "la alerta debe seguir existiendo en org-1");
+  assert.strictEqual(alertaDespues.entregado, false, "marcarEntrega con otra org NO debe modificar la alerta");
+});
