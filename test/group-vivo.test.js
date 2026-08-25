@@ -60,18 +60,19 @@ function instalarDobles() {
     },
   };
   require.cache[RUTA("groups/match.js")] = {
+    loaded: true,
     exports: {
+      // El modulo real completo, sobreescribiendo solo `cruzar` — sin esto,
+      // cualquier propiedad del modulo real no reexportada explicitamente
+      // (ej. BANDA_INFERIOR) devolvia `undefined` en silencio en vez de
+      // reventar de forma visible si algo llegara a depender de ella.
+      ...require("../src/groups/match"),
       cruzar: async (cs) => {
         const c = { ...cs[0], matches: matchesDevueltos, utilizable: true };
         return claseDevuelta === "oferta"
           ? { demandas: [], ofertas: [c], ruido: [] }
           : { demandas: [c], ofertas: [], ruido: [] };
       },
-      // evaluarCandidata real (pura, sin IO): cruce-mandatos.js#evaluarOferta la
-      // necesita para el carril de compra. Sin ella el mock deja a
-      // manejarOferta reventando con "match.evaluarCandidata is not a function"
-      // en cuanto una oferta SI cruza un mandato (Juan/coordinador, 2026-08-25).
-      evaluarCandidata: require("../src/groups/match").evaluarCandidata,
     },
   };
   require.cache[RUTA("groups/persistir.js")] = {
