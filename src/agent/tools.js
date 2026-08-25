@@ -14,6 +14,7 @@ const signalEvents = require("../data/signal-events");
 const whatsappGroups = require("../data/whatsapp-groups");
 const { cruzar: cruzarGrupos } = require("../groups/match");
 const { plano } = require("../groups/texto");
+const mandatos = require("../data/mandatos");
 
 const TOOL_DEFINITIONS = [
   {
@@ -169,6 +170,36 @@ const TOOL_DEFINITIONS = [
         detalle: { type: "string", description: "Resto del pedido en pocas palabras (area, banos, garaje, urgencia)" },
       },
       required: ["contacto_nombre"],
+    },
+  },
+  {
+    name: "registrar_mandato_compra",
+    description:
+      "Registra un MANDATO DE COMPRA: un cliente NUESTRO que está buscando algo para comprar o arrendar y que todavía no encontramos. Usala cuando un asesor de la casa te reenvíe el requerimiento de su cliente (ej. 'mi cliente busca apto hasta 600 millones con 3 habitaciones en Laureles'). A partir de ese momento, cada propiedad que un colega publique en un grupo gremial se cruza contra este mandato y, si le sirve, se le avisa al asesor. NO la uses con un cliente final que te escribe buscando para sí mismo (eso es registrar_dato_lead), ni para el pedido de un colega de otra inmobiliaria (eso es registrar_demanda_colega): esto es el cliente de un asesor de la casa. Extrae todos los datos del texto aunque venga en formato libre, y NO inventes ninguno: si el mensaje no dice el área, omití el campo.",
+    input_schema: {
+      type: "object",
+      properties: {
+        cliente_nombre: { type: "string", description: "Nombre del cliente comprador. OBLIGATORIO: si el asesor no lo dice, pregúntaselo antes de llamar esta herramienta." },
+        cliente_telefono: { type: "string", description: "Teléfono del cliente, si lo menciona" },
+        operacion: { type: "string", enum: ["Venta", "Arriendo"], description: "Venta si compra, Arriendo si va a arrendar. Omite si no queda claro" },
+        tipo: { type: "string", description: "Apartamento, Casa, Consultorio, Local, Oficina, Bodega, Lote, Finca…" },
+        zonas: { type: "array", items: { type: "string" }, description: "TODAS las zonas o barrios que acepta. 'Poblado o Envigado' son DOS. Nunca metas la ciudad acá" },
+        zonas_excluidas: { type: "array", items: { type: "string" }, description: "Zonas que descarta explícitamente" },
+        ciudad: { type: "string", description: "Municipio, ej 'Medellín', 'Envigado'" },
+        precio_min: { type: "integer", description: "Piso en pesos, sin puntos. Omite si no lo dice" },
+        precio_max: { type: "integer", description: "Tope en pesos, sin puntos. 'hasta 600 millones' -> 600000000. Omite si no lo dice" },
+        habitaciones: { type: "integer", description: "Alcobas pedidas. Omite si no las menciona" },
+        flexible_habitaciones: { type: "boolean", description: "true SOLO si acepta una alcoba menos con estudio o servicio (ej. '4 habitaciones, pueden ser 3 + estudio')" },
+        area_min: { type: "integer", description: "Metros cuadrados mínimos. Omite si no los dice" },
+        banos: { type: "integer", description: "Baños pedidos. Omite si no los dice" },
+        garajes: { type: "integer", description: "Parqueaderos pedidos. Omite si no los dice" },
+        estrato: { type: "integer", description: "Estrato pedido. Omite si no lo dice" },
+        exigencias: { type: "array", items: { type: "string" }, description: "Requisitos que no son un número: 'balcón', 'buena vista', 'moderna', 'gym', 'zonas húmedas', 'lavadora y secadora', 'unidad con zonas sociales', 'pago de contado'. Copiá las palabras del cliente." },
+        plazo: { type: "string", description: "Si es un arriendo temporal, cuánto tiempo. Ej '3 a 6 meses'" },
+        notas: { type: "string", description: "Cualquier otro detalle relevante en pocas palabras" },
+        texto_original: { type: "string", description: "El texto del requerimiento TAL COMO te lo reenviaron, completo y sin resumir. Obligatorio si el asesor te pegó un texto: es lo que permite revisar después si entendiste bien." },
+      },
+      required: ["cliente_nombre"],
     },
   },
   {
@@ -717,6 +748,10 @@ async function executeTool(name, input, ctx) {
     return registrarDemandaColega(input, ctx);
   }
 
+  if (name === "registrar_mandato_compra") {
+    return registrarMandatoCompra(input, ctx);
+  }
+
   if (name === "consultar_radar_grupos") {
     return consultarRadarGrupos(input, ctx);
   }
@@ -855,6 +890,60 @@ async function registrarDemandaColega(input, ctx) {
     .join("\n");
 
   return `Pedido de ${contacto} registrado. Calzan ${matches.length} ${matches.length === 1 ? "propiedad" : "propiedades"}:\n${lista}\n\nPasale la lista al asesor tal cual, con los links. Recordale que el le escribe al colega desde su telefono — vos no escribis en ningun grupo. Si hay propiedad propia, esa va primero: la comision completa vale mas que la compartida.`;
+}
+
+// Un cliente comprador de la casa, cargado por su asesor. A partir de acá cada
+// oferta que un colega publique en un grupo se cruza contra esto
+// (src/groups/avisar-mandato.js).
+//
+// LA CONFIRMACION NO ES CORTESIA. Un mandato mal leido filtra mal para siempre y
+// no se queja: los falsos negativos son invisibles por definicion. Repetir campo
+// por campo lo que se entendio es la unica forma de que el asesor lo cache, y es
+// la misma leccion que dejo el pedido recortado del 2026-08-24 (migracion
+// group_signals_exigencias).
+async function registrarMandatoCompra(input, ctx) {
+  if (!ctx.advisor) {
+    return "Esta herramienta es interna del equipo: solo un asesor de la casa puede registrar un mandato de compra. No la uses con un cliente.";
+  }
+  if (!String(input.cliente_nombre || "").trim()) {
+    return "Falta el nombre del cliente. Preguntale de quién es el mandato antes de registrarlo.";
+  }
+
+  const fila = await mandatos.crear(ctx.org.id, {
+    ...input,
+    operacion: input.operacion ? String(input.operacion).toLowerCase() : null,
+    advisor_id: ctx.advisor.id,
+  });
+
+  const pesos = (n) => `$${Number(n).toLocaleString("es-CO")}`;
+  const lineas = [`Listo, guardé el mandato de ${fila.cliente_nombre}:`];
+  const que = [
+    fila.operacion === "arriendo" ? "Arriendo" : fila.operacion === "venta" ? "Compra" : null,
+    fila.tipo || null,
+    fila.precio_max ? `hasta ${pesos(fila.precio_max)}` : null,
+    fila.plazo ? `por ${fila.plazo}` : null,
+  ].filter(Boolean).join(" ");
+  if (que) lineas.push(`· ${que}`);
+
+  const medidas = [
+    fila.area_min ? `mínimo ${fila.area_min} m²` : null,
+    fila.habitaciones ? `${fila.habitaciones} habitaciones${fila.flexible_habitaciones ? " (acepta una menos con estudio o servicio)" : ""}` : null,
+    fila.banos ? `${fila.banos} baños` : null,
+    fila.garajes ? `${fila.garajes} garajes` : null,
+    fila.estrato ? `estrato ${fila.estrato}` : null,
+  ].filter(Boolean);
+  if (medidas.length) lineas.push(`· ${medidas.join(", ")}`);
+
+  const zonas = Array.isArray(fila.zonas) ? fila.zonas : [];
+  if (zonas.length) lineas.push(`· Zonas: ${zonas.join(", ")}${fila.ciudad ? ` (${fila.ciudad})` : ""}`);
+  const excl = Array.isArray(fila.zonas_excluidas) ? fila.zonas_excluidas : [];
+  if (excl.length) lineas.push(`· Descarta: ${excl.join(", ")}`);
+
+  const exig = Array.isArray(fila.exigencias) ? fila.exigencias : [];
+  if (exig.length) lineas.push(`· Debe tener: ${exig.join(", ")}`);
+
+  lineas.push("", "¿Está bien así o corrijo algo? Desde ahora, cada propiedad que un colega publique en los grupos y le sirva, te la mando.");
+  return lineas.join("\n");
 }
 
 // El detalle del radar, bajo demanda.
@@ -1111,5 +1200,5 @@ async function rechazarPedidoRadar(input, ctx) {
 
 module.exports = {
   TOOL_DEFINITIONS, executeTool, maybeCaptadorAlert, registrarDemandaColega, consultarRadarGrupos,
-  registrarResultadoRadar, aprobarPedidoRadar, rechazarPedidoRadar,
+  registrarResultadoRadar, aprobarPedidoRadar, rechazarPedidoRadar, registrarMandatoCompra,
 };

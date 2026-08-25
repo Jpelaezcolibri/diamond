@@ -14,6 +14,7 @@ const mensajeAsesor = require("../lib/mensaje-asesor");
 const validarMensaje = require("../lib/validar-mensaje");
 const resumenEquipo = require("../groups/resumen-equipo");
 const vivo = require("../groups/vivo");
+const { registrarMandatoCompra } = require("./tools");
 
 const COMMAND_TOOL_DEFINITIONS = [
   {
@@ -310,6 +311,36 @@ const COMMAND_TOOL_DEFINITIONS = [
       required: ["cual"],
     },
   },
+  {
+    name: "registrar_mandato_compra",
+    description:
+      "Registra un MANDATO DE COMPRA: un cliente NUESTRO que está buscando algo para comprar o arrendar y que todavía no encontramos. Usala cuando un asesor de la casa te reenvíe el requerimiento de su cliente (ej. 'mi cliente busca apto hasta 600 millones con 3 habitaciones en Laureles'). A partir de ese momento, cada propiedad que un colega publique en un grupo gremial se cruza contra este mandato y, si le sirve, se le avisa al asesor. NO la uses con un cliente final que te escribe buscando para sí mismo (eso es registrar_dato_lead), ni para el pedido de un colega de otra inmobiliaria (eso es registrar_demanda_colega): esto es el cliente de un asesor de la casa. Extrae todos los datos del texto aunque venga en formato libre, y NO inventes ninguno: si el mensaje no dice el área, omití el campo.",
+    input_schema: {
+      type: "object",
+      properties: {
+        cliente_nombre: { type: "string", description: "Nombre del cliente comprador. OBLIGATORIO: si el asesor no lo dice, pregúntaselo antes de llamar esta herramienta." },
+        cliente_telefono: { type: "string", description: "Teléfono del cliente, si lo menciona" },
+        operacion: { type: "string", enum: ["Venta", "Arriendo"], description: "Venta si compra, Arriendo si va a arrendar. Omite si no queda claro" },
+        tipo: { type: "string", description: "Apartamento, Casa, Consultorio, Local, Oficina, Bodega, Lote, Finca…" },
+        zonas: { type: "array", items: { type: "string" }, description: "TODAS las zonas o barrios que acepta. 'Poblado o Envigado' son DOS. Nunca metas la ciudad acá" },
+        zonas_excluidas: { type: "array", items: { type: "string" }, description: "Zonas que descarta explícitamente" },
+        ciudad: { type: "string", description: "Municipio, ej 'Medellín', 'Envigado'" },
+        precio_min: { type: "integer", description: "Piso en pesos, sin puntos. Omite si no lo dice" },
+        precio_max: { type: "integer", description: "Tope en pesos, sin puntos. 'hasta 600 millones' -> 600000000. Omite si no lo dice" },
+        habitaciones: { type: "integer", description: "Alcobas pedidas. Omite si no las menciona" },
+        flexible_habitaciones: { type: "boolean", description: "true SOLO si acepta una alcoba menos con estudio o servicio (ej. '4 habitaciones, pueden ser 3 + estudio')" },
+        area_min: { type: "integer", description: "Metros cuadrados mínimos. Omite si no los dice" },
+        banos: { type: "integer", description: "Baños pedidos. Omite si no los dice" },
+        garajes: { type: "integer", description: "Parqueaderos pedidos. Omite si no los dice" },
+        estrato: { type: "integer", description: "Estrato pedido. Omite si no lo dice" },
+        exigencias: { type: "array", items: { type: "string" }, description: "Requisitos que no son un número: 'balcón', 'buena vista', 'moderna', 'gym', 'zonas húmedas', 'lavadora y secadora', 'unidad con zonas sociales', 'pago de contado'. Copiá las palabras del cliente." },
+        plazo: { type: "string", description: "Si es un arriendo temporal, cuánto tiempo. Ej '3 a 6 meses'" },
+        notas: { type: "string", description: "Cualquier otro detalle relevante en pocas palabras" },
+        texto_original: { type: "string", description: "El texto del requerimiento TAL COMO te lo reenviaron, completo y sin resumir. Obligatorio si el asesor te pegó un texto: es lo que permite revisar después si entendiste bien." },
+      },
+      required: ["cliente_nombre"],
+    },
+  },
 ];
 
 // Tools que solo el admin puede usar — actuan sobre OTRA persona del equipo
@@ -361,6 +392,12 @@ async function executeCommandTool(name, input, ctx) {
   if (ADMIN_ONLY_TOOLS.has(name) && !(scope && scope.isAdmin)) {
     return "Esto solo lo puede usar un admin.";
   }
+
+  if (name === "registrar_mandato_compra") {
+    const advisor = await advisors.findByAuthUserId(scope.orgId, scope.viewerUid);
+    return registrarMandatoCompra(input, { org: { id: scope.orgId }, advisor });
+  }
+
   switch (name) {
     case "consultar_seguimientos": {
       const data = await command.seguimientos(scope, { dias: input?.dias || 3 });
