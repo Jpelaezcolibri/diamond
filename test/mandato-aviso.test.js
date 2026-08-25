@@ -72,3 +72,56 @@ test("paramsPlantilla devuelve exactamente 3 strings no vacios", () => {
 test("paramsPlantilla no manda saltos de linea (Meta los rechaza)", () => {
   for (const v of paramsPlantilla(BASE)) assert.ok(!/\n/.test(v));
 });
+
+test("con un LID de 15 digitos en vez de telefono, NO se muestra el numero crudo — se pide tocar el nombre", () => {
+  const t = buildMandatoMatchAlert({
+    ...BASE,
+    colega: { nombre: "Glovi l Propiedad raíz", telefono: "573201234567890" },
+  });
+  assert.ok(!t.includes("573201234567890"), "un LID no es un telefono marcable, no se debe mostrar crudo");
+  assert.ok(!/\+573201234567890/.test(t));
+  assert.ok(/Glovi l Propiedad ra[íi]z/.test(t));
+  assert.ok(/toc/i.test(t), "debe explicar como abrir el chat sin el numero, igual que sin telefono");
+});
+
+test("sin telefono y sin grupo, no da a entender que hay un grupo especifico mas abajo", () => {
+  const t = buildMandatoMatchAlert({
+    ...BASE,
+    colega: { nombre: "Patricia Vivares", telefono: null },
+    grupo: null,
+  });
+  assert.ok(!/\+null|undefined/.test(t));
+  assert.ok(/Patricia Vivares/.test(t));
+  assert.ok(!/Visto en:/.test(t), "sin grupo no hay linea Visto en");
+  assert.ok(
+    /grupo donde public/i.test(t),
+    "debe decir que hay que ubicarlo en el grupo donde publico, no asumir uno especifico"
+  );
+});
+
+test("si la oferta no trae ningun dato numerico, no deja una linea en blanco antes de Ficha:", () => {
+  const ofertaSinDatos = {
+    tipo: "Apartamento", operacion: "Venta", zona: "Loma del Tesoro",
+    link: "https://glovi.co/inmueble/1",
+  };
+  const t = buildMandatoMatchAlert({ ...BASE, oferta: ofertaSinDatos });
+  assert.ok(!t.includes("\n\nFicha:"), "fichaDe vacio no debe empujar una linea en blanco antes de Ficha:");
+  assert.ok(t.includes("Ficha: https://glovi.co/inmueble/1"));
+});
+
+test("una salvedad que ya viene con 'Sin verificar:' no queda redundante con 'Ojo:'", () => {
+  const t = buildMandatoMatchAlert({
+    ...BASE,
+    evaluacion: { ...BASE.evaluacion, salvedades: ["Sin verificar: balcón, vista"] },
+  });
+  assert.ok(!/Ojo:\s*Sin verificar/i.test(t), "no debe repetir Ojo: pegado a Sin verificar:");
+  assert.ok(/Sin verificar: balc[óo]n, vista/.test(t));
+});
+
+test("una salvedad sin el prefijo 'Sin verificar:' si mantiene la etiqueta Ojo:", () => {
+  const t = buildMandatoMatchAlert({
+    ...BASE,
+    evaluacion: { ...BASE.evaluacion, salvedades: ["no tiene garaje propio"] },
+  });
+  assert.ok(/Ojo: no tiene garaje propio/.test(t));
+});

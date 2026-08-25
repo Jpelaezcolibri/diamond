@@ -17,7 +17,7 @@
 //    desde el celular: tocar el nombre del colega en el grupo. Es la politica de
 //    Juan del 2026-08-22, que nacio de links muertos y avisos que decian "no hay
 //    telefono" cuando el numero nunca se habia intentado resolver.
-const { tocarNombreEnGrupo } = require("../lib/contacto");
+const { tocarNombreEnGrupo, esCelularColombiano } = require("../lib/contacto");
 
 function fichaDe(oferta) {
   const partes = [
@@ -29,6 +29,15 @@ function fichaDe(oferta) {
     oferta.estrato ? `estrato ${oferta.estrato}` : null,
   ].filter(Boolean);
   return partes.join(" · ");
+}
+
+// Una salvedad de cruce-mandatos.js ya viene prefijada con "Sin verificar:"
+// (ver la nota de "NUNCA se manda un puntaje" arriba). Ponerle "Ojo:" adelante
+// de todos modos lee repetido ("Ojo: Sin verificar: balcón."). Las salvedades
+// que NO traen ese prefijo (poco comun, pero el contrato no lo garantiza)
+// si necesitan la etiqueta para que el asesor sepa que es una alerta.
+function conEtiquetaOjo(salvedad) {
+  return /^Sin verificar:/i.test(salvedad) ? salvedad : `Ojo: ${salvedad}`;
 }
 
 function horaBogota(iso) {
@@ -50,29 +59,46 @@ function buildMandatoMatchAlert({ mandato, oferta, evaluacion, colega = {}, grup
   const zona = oferta.zona ? ` — ${oferta.zona}` : "";
 
   const quien = colega.nombre || "Un colega";
-  const contacto = colega.telefono
+  // Regla 3 del encabezado: sin telefono MARCABLE no se inventa un numero ni
+  // se muestra el LID crudo. colega.telefono llega tal cual lo dejo el radar
+  // de grupos -- puede ser un LID de WhatsApp (14-17 digitos) que PARECE un
+  // telefono pero no lo es (medido en produccion, ver src/lib/contacto.js).
+  // esCelularColombiano exige la forma exacta (3 + 9 digitos), no solo un
+  // techo de longitud -- mismo criterio que ya usa alerta-asesor.js.
+  const telefonoValido = esCelularColombiano(colega.telefono);
+  const contacto = telefonoValido
     ? `Teléfono: +${colega.telefono}`
-    // tocarNombreEnGrupo ya devuelve la frase completa y YA dice "en el grupo"
-    // (src/lib/contacto.js). Concatenarle " en el grupo X" produce "...en el grupo
-    // para abrirle el chat directo ... en el grupo SOLO POBLADO". El nombre del
-    // grupo lo da la linea "Visto en:" de mas abajo, que ya existe.
-    : `El colega no dejó número visible — ${tocarNombreEnGrupo(quien)}.`;
+    : grupo
+      // tocarNombreEnGrupo ya devuelve la frase completa y YA dice "en el grupo"
+      // (src/lib/contacto.js). Concatenarle " en el grupo X" produce "...en el grupo
+      // para abrirle el chat directo ... en el grupo SOLO POBLADO". El nombre del
+      // grupo lo da la linea "Visto en:" de mas abajo, que ya existe.
+      ? `El colega no dejó número visible — ${tocarNombreEnGrupo(quien)}.`
+      // Sin grupo tampoco: no hay ningun nombre que la linea "Visto en:" pueda
+      // dar mas abajo (esa linea ni aparece), asi que la instruccion no puede
+      // sonar como si hubiera un grupo especifico esperando mas abajo. Se dice
+      // lo que si es cierto: hay que ubicarlo en el grupo donde publico.
+      : `El colega no dejó número visible — ubicá a ${quien} en el grupo donde publicó y tocá su nombre para abrirle el chat directo, no hace falta tenerlo guardado.`;
 
   const visto = [grupo ? `Visto en: ${grupo}` : null, horaBogota(vistoEnIso) || null]
     .filter(Boolean).join(" · ");
 
+  const ficha = fichaDe(oferta);
   const lineas = [
     `🎯 Oferta nueva que le sirve a ${cliente}`,
     "",
     `${tipo}${operacion}${zona}`,
-    fichaDe(oferta),
   ];
+  // fichaDe puede devolver "" cuando la oferta no trae ningun dato numerico
+  // (sin precio, sin area, sin habitaciones...). Empujarla igual deja una
+  // linea en blanco antes de "Ficha:" (o de "Colega:" si no hay link).
+  if (ficha) lineas.push(ficha);
   if (oferta.link) lineas.push(`Ficha: ${oferta.link}`);
   lineas.push("", `Colega: ${quien}`, contacto);
   if (visto) lineas.push(visto);
   lineas.push("");
   if (evaluacion.cumple.length) lineas.push(`Cumple: ${evaluacion.cumple.join(", ")}.`);
-  if (evaluacion.salvedades.length) lineas.push(`Ojo: ${evaluacion.salvedades.join(". ")}.`);
+  if (evaluacion.salvedades.length) lineas.push(`${evaluacion.salvedades.map(conEtiquetaOjo).join(". ")}.`);
   lineas.push(
     "",
     "Confirmá disponibilidad y precio con el colega antes de mostrárselo al cliente.",
