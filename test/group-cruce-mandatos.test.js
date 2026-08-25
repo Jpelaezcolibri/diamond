@@ -187,6 +187,17 @@ test("estrato pedido y cumplido en la oferta: sale en cumple", () => {
 
 // Defecto 5 (Minor): precio_min del mandato (piso explicito del cliente) se
 // calculaba en criterioDeMandato y nunca se leia en evaluarOferta.
+// Bug CRITICAL (Juan, 2026-08-25): evaluarCandidata deja pasar "otra_zona"
+// (misma ciudad, otro barrio) con un castigo de puntaje que en este carril no
+// tiene ningun efecto (no hay umbral). Un mandato con `ciudad` puesta (el
+// schema de la tool invita a llenarla) recibia avisos de cualquier barrio de
+// la misma ciudad.
+test("misma ciudad pero otro barrio (ni exacto ni vecino) NO sirve", () => {
+  const mandato = { ...MANDATO, ciudad: "Medellín" };
+  const r = evaluarOferta({ ...OFERTA, zona: "Robledo", ciudad: "Medellín" }, mandato);
+  assert.strictEqual(r, null, "otra_zona dentro de la misma ciudad no es un corte que este carril pueda saltarse");
+});
+
 test("la oferta esta por debajo del piso explicito (precio_min) del mandato", () => {
   // precio_min alto a proposito para que quede POR ENCIMA de la banda del 60%
   // (asi la salvedad que se dispara es la del piso explicito, no la generica

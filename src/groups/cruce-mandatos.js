@@ -108,6 +108,12 @@ function evaluarOferta(oferta, mandato, { margenPrecio = MARGEN_PRECIO_DEFAULT }
   const m = match.evaluarCandidata({ ...oferta, area: oferta.area, garaje: oferta.garajes }, criterioCompuertas, "aliado");
   if (!m) return null;
 
+  // Corte 2: zona. evaluarCandidata deja pasar "otra_zona" (misma ciudad, otro
+  // barrio) con un castigo de puntaje que en este carril no tiene efecto — acá
+  // no hay umbral. Sin este corte, un mandato con `ciudad` puesta (el schema de
+  // la tool invita a llenarla) recibe avisos de cualquier barrio de la ciudad.
+  if (m.ubicacion !== "exacta" && m.ubicacion !== "vecina") return null;
+
   const precio = precioDe(oferta);
   const cumple = [];
   const salvedades = [];
