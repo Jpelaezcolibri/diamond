@@ -73,6 +73,10 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
   pedido recortado y el efecto del castigo por cumplir corto no se podía
   medir sobre histórico. El código degrada limpio sin ella: el insert
   reintenta sacando solo la columna que falte, y el CRM lee con `select("*")`).
+  `db/migrations/2026-08-25_mandatos_compra.sql` (carril de compra que cruza
+  mandatos de compradores registrados por Natalia contra ofertas de colegas;
+  sin ella el carril queda inerte: `listarActivos` devuelve vacío y no se
+  avisa nada en vez de romper).
 - **Pendientes de negocio:** teléfonos reales de asesores de arriendo/
   vehículos en `advisors` · corregir precio de la ref `9921388` en Wasi ·
   verificación de empresa en Meta · confirmar las 3 propiedades exclusivas

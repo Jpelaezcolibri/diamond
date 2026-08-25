@@ -5,6 +5,52 @@ dentro del grupo. Este documento es para operarlo, no para entenderlo: el
 diseño y el porqué están en los comentarios de cada módulo y en
 [diamond-os/deep-dive-group-gateway-2026-08.md](../diamond-os/deep-dive-group-gateway-2026-08.md).
 
+## Los dos carriles
+
+El radar tiene dos modos de cruce: venta de lo que Diamond tiene (respuesta
+automática en el grupo) y compra de mandatos registrados (aviso privado al asesor).
+
+```
+VENDEMOS — un colega PIDE algo que Diamond tiene
+  ¿tengo su teléfono + es su primer pedido del día + hay cupo de ritmo?
+    SÍ → DM automático AL COLEGA por la línea del radar
+         un solo mensaje con todos los matches + link a Sofi
+    NO → pasa a CATHERINE, con el mensaje redactado para pegar
+  sin match publicable → CATHERINE
+  en el grupo → NADA, nunca
+
+COMPRAMOS — un colega OFRECE algo que cruza un mandato
+  → DM directo a NUESTRO ASESOR (dueño del mandato)
+     Sofi NO le escribe al colega; el asesor lo contacta.
+  si el aviso no se pudo entregar → pasa a CATHERINE
+  en el grupo → NADA, nunca
+```
+
+### Operación del carril de compra
+
+Natalia (asesora cliente) le reenvía a Sofi por WhatsApp el pedido de su
+cliente comprador textual — por ejemplo, "*Apto Laureles, 80-120m², 2-3
+alcobas, máximo $550M, con parqueadero, piso 15+*".
+
+Sofi lo guarda con la tool `registrar_mandato_compra` y responde confirmando
+campo por campo: operación, tipo, rango de precio, área, habitaciones, zonas
+preferidas, exigencias. Natalia puede corregir en el mismo chat; Sofi revalida
+en cada mensaje.
+
+Desde ese momento, **cada oferta de un colega que se ajuste al mandato genera
+un WhatsApp automático directo a Natalia**. El aviso incluye:
+
+- Teléfono del colega (cuando WhatsApp lo deja ver desde el grupo)
+- Ficha completa de la propiedad
+- El grupo de dónde vino el aviso
+- Qué del mandato cumple y qué falta verificar
+
+Si el aviso no se puede entregar a Natalia (ventana de 24h cerrada y la
+plantilla de Meta también falla, o el mandato no tiene asesor con teléfono),
+se escala automáticamente a Catherine. Ese match queda visible en el panel del
+CRM, en `/grupos`, sección "Matches sin entregar" (solo para administrador), y
+Catherine puede contactar al asesor por otros medios.
+
 ## Lo que hay que saber antes de encenderlo
 
 **WAHA es un cliente NO oficial de WhatsApp.** El 2026-07-30 WhatsApp baneó la
