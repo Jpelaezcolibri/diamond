@@ -178,6 +178,35 @@ async function pendientes(orgId, { limite = 50 } = {}) {
   return data || [];
 }
 
+// Cuantos avisos se generaron HOY para un mandato. Alimenta el tope diario
+// (RADAR_MANDATO_MAX_DIA). Se cuenta sobre las alertas creadas, no sobre las
+// entregadas: el tope existe para no ahogar al asesor, y un aviso que salio y
+// fallo igual le llego el intento.
+async function avisosHoy(orgId, mandatoId) {
+  const desde = new Date();
+  desde.setHours(0, 0, 0, 0);
+  if (!supabase) {
+    return memory.alertas.filter(
+      (a) => a.org_id === orgId && a.mandato_id === mandatoId && a.created_at >= desde.toISOString()
+    ).length;
+  }
+  const { count, error } = await supabase
+    .from("mandato_match_alerts")
+    .select("id", { count: "exact", head: true })
+    .eq("org_id", orgId)
+    .eq("mandato_id", mandatoId)
+    .gte("created_at", desde.toISOString());
+  // Ante la duda NO se frena: este tope nace apagado (default 0 = sin limite) y
+  // su proposito es aliviar, no descartar oportunidades. Si no se pudo contar,
+  // se deja pasar — al contrario del criterio de politica.js, donde callar es
+  // gratis porque el riesgo es publicar ante 80 competidores.
+  if (error) {
+    console.warn("[mandatos] no se pudo contar los avisos de hoy:", error.message);
+    return 0;
+  }
+  return count || 0;
+}
+
 function _reset() {
   memory.mandatos = [];
   memory.alertas = [];
@@ -186,5 +215,5 @@ function _reset() {
 
 module.exports = {
   crear, listarActivos, findById, actualizarEstado,
-  registrarAlerta, marcarEntrega, marcarEscalado, pendientes, CAMPOS, _reset,
+  registrarAlerta, marcarEntrega, marcarEscalado, pendientes, avisosHoy, CAMPOS, _reset,
 };

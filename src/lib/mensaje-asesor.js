@@ -79,4 +79,7 @@ async function enviarYRegistrar(org, telefono, texto, opts = {}) {
   return envio || { ok: false, wamid: null, error: "sin_respuesta" };
 }
 
-module.exports = { enviarYRegistrar };
+// Se exporta VENTANA_CERRADA porque el carril de compra necesita distinguir
+// "Meta rechazo por ventana cerrada" (donde la plantilla SI sirve) de cualquier
+// otro fallo (donde no sirve de nada reintentar con plantilla).
+module.exports = { enviarYRegistrar, VENTANA_CERRADA };
