@@ -137,3 +137,36 @@ test("sin tope configurado no se limita nada (default de producto)", async () =>
   await cruzarOfertaConMandatos(ORG, OFERTA, { allyPropertyId: "ally-2" });
   assert.strictEqual(enviados.length, 2);
 });
+
+// IMPORTANT: la ventana de 24h cerrada es el caso ESPERADO en este carril (se
+// resuelve con la plantilla acto seguido) — enviarYRegistrar por defecto
+// alerta al watchdog en cualquier fallo, y eso entrena a ignorarlo. El primer
+// intento (texto libre) tiene que pedir que se silencie esa alerta porque, si
+// falla, se reintenta con plantilla enseguida.
+test("el intento de texto libre silencia la alerta al watchdog", async () => {
+  const optsCapturados = [];
+  mensajeAsesor.enviarYRegistrar = async (org, tel, texto, opts) => {
+    optsCapturados.push(opts);
+    return { ok: true, wamid: "wamid-1" };
+  };
+  await unMandato();
+  await cruzarOfertaConMandatos(ORG, OFERTA, { allyPropertyId: "ally-1" });
+  assert.strictEqual(optsCapturados.length, 1);
+  assert.strictEqual(optsCapturados[0] && optsCapturados[0].silenciarAlertaWatchdog, true);
+});
+
+// El escalado a Catherine SI amerita la alerta: si eso tambien falla, no hay
+// un cuarto canal, y el watchdog tiene que enterarse.
+test("el escalado a Catherine NO silencia la alerta al watchdog", async () => {
+  const optsCapturados = [];
+  mensajeAsesor.enviarYRegistrar = async (org, tel, texto, opts) => {
+    optsCapturados.push({ tel, opts });
+    return tel === "573028536489" ? { ok: false, error: "sin respuesta" } : { ok: false, error: "131047 more than 24 hours" };
+  };
+  canalWhatsapp.sendWhatsAppTemplate = async () => ({ ok: false, error: "template not approved" });
+  await unMandato();
+  await cruzarOfertaConMandatos(ORG, OFERTA, { allyPropertyId: "ally-1" });
+  const llamadaEscalado = optsCapturados.find((c) => c.tel === "573028536489");
+  assert.ok(llamadaEscalado, "Catherine tiene que recibir el intento de escalado");
+  assert.ok(!llamadaEscalado.opts || !llamadaEscalado.opts.silenciarAlertaWatchdog);
+});

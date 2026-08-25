@@ -123,7 +123,13 @@ async function cruzarOfertaConMandatos(org, oferta, opts = {}) {
 // la plantilla. La plantilla no arregla ningun otro tipo de fallo, asi que no se
 // gasta una en un numero invalido o en un error de credenciales.
 async function entregar(org, telefono, texto, { mandato, oferta }) {
-  const libre = await mensajeAsesor.enviarYRegistrar(org, telefono, texto).catch((e) => ({ ok: false, error: e.message }));
+  // Ventana de 24h cerrada es el caso ESPERADO en este carril (se reintenta
+  // con plantilla acto seguido) — se silencia la alerta al watchdog para no
+  // entrenar a ignorarlo con una falsa alarma en cada match. Si la plantilla
+  // TAMBIEN falla, escalar() abajo no lleva esta opcion.
+  const libre = await mensajeAsesor
+    .enviarYRegistrar(org, telefono, texto, { silenciarAlertaWatchdog: true })
+    .catch((e) => ({ ok: false, error: e.message }));
   if (libre && libre.ok) return { ok: true, via: "texto_libre", error: null };
 
   const error = (libre && libre.error) || "sin_respuesta";

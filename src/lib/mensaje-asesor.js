@@ -75,7 +75,9 @@ async function enviarYRegistrar(org, telefono, texto, opts = {}) {
     await conversations.setDelivery(msg.id, envio && envio.ok ? "sent" : "failed", envio && envio.error);
     if (envio && envio.wamid) await conversations.setWaMessageId(msg.id, envio.wamid);
   }
-  if (!envio || !envio.ok) await avisarFalloEnvio(org, telefono, texto, envio && envio.error);
+  if (!envio || !envio.ok) {
+    if (!opts.silenciarAlertaWatchdog) await avisarFalloEnvio(org, telefono, texto, envio && envio.error);
+  }
   return envio || { ok: false, wamid: null, error: "sin_respuesta" };
 }
 
