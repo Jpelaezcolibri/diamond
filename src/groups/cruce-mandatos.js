@@ -131,7 +131,7 @@ function evaluarOferta(oferta, mandato, { margenPrecio = MARGEN_PRECIO_DEFAULT }
         // precio mal capturado en la publicacion, no un hallazgo real), pero
         // tampoco se afirma que cumple presupuesto sin que nadie lo confirme.
         salvedades.push(
-          `El precio publicado (${fmtPesos(precio)}) esta muy por debajo del tope pedido (${fmtPesos(c.precio_max)}) — confirmá con el colega que el precio de la publicación sea correcto`
+          `El precio publicado (${fmtPesos(precio)}) está muy por debajo del tope pedido (${fmtPesos(c.precio_max)}) — confirmá con el colega que el precio de la publicación sea correcto`
         );
       } else {
         const holgura = c.precio_max - precio;
