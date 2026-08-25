@@ -59,6 +59,7 @@ function instalar() {
     exports: { persistirSenal: async () => ({ signal: { id: "sig-1", respondida_at: null }, duplicado: false }) },
   };
   require.cache[RUTA("groups/ofertas.js")] = { exports: { guardarOferta: async () => {} } };
+  require.cache[RUTA("data/command.js")] = { exports: { leadsParaPropiedad: async () => [] } };
   require.cache[RUTA("groups/revalidar.js")] = {
     exports: {
       revalidar: async (c, matches) => {
@@ -379,10 +380,13 @@ test("el mismo numero no recibe el aviso dos veces", async () => {
 // Juan, 2026-08-20: las ofertas ya no se leen en la escucha en vivo (ver
 // group-vivo.test.js) — se ignoran ANTES del modo asistido, asi que esto
 // aplica igual con modo:"asistido".
-test("una oferta de un colega se ignora, tambien en modo asistido", async () => {
+//
+// Reconectado 2026-08-25 (Juan): sin mandatos NI leads esperando (el mock de
+// data/command.js arriba devuelve siempre []), la oferta sigue sin persistirse.
+test("una oferta de un colega sin mandatos ni leads esperando se ignora, tambien en modo asistido", async () => {
   claseDevuelta = "oferta";
   const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE });
-  assert.strictEqual(r.resultado, "oferta_sin_mandatos");
+  assert.strictEqual(r.resultado, "oferta_sin_match");
   assert.strictEqual(enviadosPorSofi.length, 0);
 });
 

@@ -18,6 +18,7 @@ const whatsappGroups = require("../src/data/whatsapp-groups");
 const allyProperties = require("../src/data/ally-properties");
 const properties = require("../src/data/properties");
 const organizations = require("../src/data/organizations");
+const cruceLeads = require("../src/groups/cruce-leads");
 
 const ORG = { id: "org-1", name: "Diamond" };
 
@@ -32,10 +33,11 @@ function fecha(diasAtras) {
 }
 
 // Reemplaza todo lo que toca Supabase y devuelve los almacenes para inspección.
-function mockDatos(t, { propiedades = [], radarActivo = true } = {}) {
+function mockDatos(t, { propiedades = [], radarActivo = true, leadsAvisados = [] } = {}) {
   const señales = [];
   const aliadas = [];
   const grupos = new Map();
+  const crucesLeads = [];
 
   // El interruptor del motor. Sin este mock cada import saldría a consultar la
   // base real solo para preguntar si Radar está prendido.
@@ -76,7 +78,15 @@ function mockDatos(t, { propiedades = [], radarActivo = true } = {}) {
   t.mock.method(properties, "search", async () => propiedades);
   t.mock.method(allyProperties, "search", async () => []);
 
-  return { señales, aliadas, grupos };
+  // Reconectado 2026-08-25: cada oferta archivada se cruza contra los leads
+  // propios. Por defecto no hay leads esperando; los tests que lo necesiten
+  // pasan `leadsAvisados` con la lista de avisos que se deben simular.
+  t.mock.method(cruceLeads, "cruzarOfertaConLeads", async (org, fila) => {
+    crucesLeads.push({ org, fila });
+    return { resultado: leadsAvisados.length > 0 ? "avisados" : "sin_leads_esperando", avisados: leadsAvisados };
+  });
+
+  return { señales, aliadas, grupos, crucesLeads };
 }
 
 // Clasificador falso: decide por el texto para que los tests se lean solos.
@@ -340,6 +350,29 @@ test("una oferta utilizable entra a la red de aliados con la fecha del mensaje, 
   assert.strictEqual(aliadas[0].contacto_telefono, null, "un .txt nunca trae teléfono");
   const antiguedadDias = (Date.now() - new Date(aliadas[0].visto_en_grupo_at)) / 86400000;
   assert.ok(antiguedadDias > 4, `debe conservar su antigüedad real, dio ${antiguedadDias.toFixed(1)} días`);
+  _setClientForTests(null);
+});
+
+// Reconectado 2026-08-25 (Juan): src/groups/cruce-leads.js corrio en
+// produccion del 2026-08-18 al 2026-08-20 (278 alertas en ally_property_alerts)
+// y quedo huerfano cuando se apago el procesamiento de ofertas en vivo por
+// saturacion — esa desconexion nunca debio incluir el import de exports .txt,
+// que persiste todo a proposito y no tiene el problema de volumen que motivo
+// el apagado.
+test("una oferta importada que le sirve a un lead activo avisa al asesor", async (t) => {
+  const { señales } = mockDatos(t, {
+    leadsAvisados: [{ leadId: "lead-1", advisorPhone: "573001112233" }],
+  });
+  mockClasificador();
+  const contenido = exportCon([
+    `${fecha(1)}, 10:00 a. m. - Carlos Ruiz: Se vende apartamento en Laureles, 380 millones`,
+  ]);
+
+  const stats = await importar(ORG, [{ nombre: "Chat de WhatsApp con Gremio.txt", contenido }], { dias: 30 });
+
+  assert.strictEqual(stats.ofertasArchivadas, 1);
+  assert.strictEqual(stats.leadsAvisados, 1);
+  assert.strictEqual(señales.length, 1);
   _setClientForTests(null);
 });
 

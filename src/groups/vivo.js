@@ -45,6 +45,8 @@ const ofertas = require("./ofertas");
 const avisarMandato = require("./avisar-mandato");
 const mandatosData = require("../data/mandatos");
 const { evaluarOferta } = require("./cruce-mandatos");
+const command = require("../data/command");
+const cruceLeads = require("./cruce-leads");
 
 const VENTANA_LIMITE_HORAS = 24;
 
@@ -803,18 +805,18 @@ async function responderPorDmManual(org, signalId, { sesion = null, refs = null 
 }
 
 /**
- * Una oferta de colega en vivo: se cruza contra los mandatos activos y solo se
- * persiste si le sirve a alguno.
+ * Una oferta de colega en vivo: se cruza contra los mandatos activos Y contra
+ * los leads propios que la estan esperando, y solo se persiste si le sirve a
+ * alguna de las dos poblaciones.
  *
  * @returns { resultado, matches? }
- *   'oferta_sin_mandatos' | 'oferta_sin_match' | 'oferta_cruzada'
+ *   'oferta_sin_match' | 'oferta_cruzada'
  */
 async function manejarOferta(org, c, grupo = {}, { advisorId = null, sesion = null, jid = null } = {}) {
   const activos = await mandatosData.listarActivos(org.id).catch((e) => {
     console.warn("[radar] no se pudieron leer los mandatos:", e.message);
     return [];
   });
-  if (activos.length === 0) return { resultado: "oferta_sin_mandatos" };
 
   // Prueba baratísima antes de escribir nada: el shape del clasificador se
   // aproxima al de ally_properties solo para este tanteo. La evaluacion real,
@@ -835,7 +837,26 @@ async function manejarOferta(org, c, grupo = {}, { advisorId = null, sesion = nu
     const e = evaluarOferta(tanteo, m);
     return Boolean(e && e.sirve);
   });
-  if (!sirveAAlguno) return { resultado: "oferta_sin_match" };
+
+  // Segunda poblacion a la que le puede servir esta oferta, ademas de los
+  // mandatos curados: los leads propios del embudo esperando exactamente esto.
+  // Reconectado 2026-08-25 (Juan): este cruce (cruce-leads.js) corrio en
+  // produccion del 2026-08-18 al 2026-08-20 y quedo huerfano cuando se apago
+  // el procesamiento de ofertas por saturacion -- la saturacion la causaba
+  // GUARDAR todo, no cruzarlo, asi que restaurar el cruce (con el mismo gate
+  // de persistencia que ya protege del volumen) no reintroduce el problema.
+  // Sondeo barato (limit 1): solo interesa saber si hay AL MENOS un candidato,
+  // no la lista completa -- eso lo resuelve cruzarOfertaConLeads mas abajo,
+  // ya con la fila persistida y su id real para el dedup.
+  const leadsCandidatos = await command
+    .leadsParaPropiedad({ orgId: org.id, viewerUid: null, isAdmin: true }, tanteo, 1)
+    .catch((e) => {
+      console.warn("[radar] no se pudieron leer los leads para el tanteo:", e.message);
+      return [];
+    });
+  const sirveAUnLead = leadsCandidatos.length > 0;
+
+  if (!sirveAAlguno && !sirveAUnLead) return { resultado: "oferta_sin_match" };
 
   const fila = await ofertas
     .guardarOferta(org, {
@@ -848,14 +869,24 @@ async function manejarOferta(org, c, grupo = {}, { advisorId = null, sesion = nu
     });
   if (!fila || !fila.id) return { resultado: "oferta_sin_match" };
 
-  const r = await avisarMandato.cruzarOfertaConMandatos(org, { ...tanteo, ...fila }, {
-    allyPropertyId: fila.id,
-    colega: { lid: c.mensaje?.autorTelefono || null, nombre: c.mensaje?.autor || null },
-    grupo: grupo?.nombre || null,
-    vistoEnIso: new Date().toISOString(),
-    sesion, jid,
-  });
-  return { resultado: "oferta_cruzada", matches: r.matches, avisados: r.avisados.length };
+  const rMandatos = sirveAAlguno
+    ? await avisarMandato.cruzarOfertaConMandatos(org, { ...tanteo, ...fila }, {
+        allyPropertyId: fila.id,
+        colega: { lid: c.mensaje?.autorTelefono || null, nombre: c.mensaje?.autor || null },
+        grupo: grupo?.nombre || null,
+        vistoEnIso: new Date().toISOString(),
+        sesion, jid,
+      })
+    : { matches: 0, avisados: [] };
+
+  const rLeads = await cruceLeads.cruzarOfertaConLeads(org, fila);
+
+  return {
+    resultado: "oferta_cruzada",
+    matches: rMandatos.matches,
+    avisados: rMandatos.avisados.length,
+    leadsAvisados: rLeads.avisados.length,
+  };
 }
 
 module.exports = {

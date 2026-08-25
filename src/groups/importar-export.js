@@ -32,6 +32,7 @@ const { classify } = require("./classify");
 const { cruzar } = require("./match");
 const { guardarOferta } = require("./ofertas");
 const { persistirSenal } = require("./persistir");
+const cruceLeads = require("./cruce-leads");
 const groupSignals = require("../data/group-signals");
 const whatsappGroups = require("../data/whatsapp-groups");
 const organizations = require("../data/organizations");
@@ -83,7 +84,7 @@ async function importar(org, archivos, { dias = DIAS_DEFAULT, incremental = true
     crudos: 0, fueraDeCorte: 0, repetidos: 0,
     prefiltrados: 0, aClasificar: 0,
     demandas: 0, ofertas: 0, ruido: 0,
-    señales: 0, duplicadas: 0, ofertasArchivadas: 0,
+    señales: 0, duplicadas: 0, ofertasArchivadas: 0, leadsAvisados: 0,
     demandasConMatch: 0,
     lotesFallidos: 0, reintentos: 0, costoUsd: 0,
     grupos: [], rango: null,
@@ -209,8 +210,16 @@ async function importar(org, archivos, { dias = DIAS_DEFAULT, incremental = true
   for (const o of ofertas) {
     if (!o.utilizable) continue;
     try {
-      await guardarOferta(org, o, { vistoEn: o.mensaje?.instanteIso || null });
+      const fila = await guardarOferta(org, o, { vistoEn: o.mensaje?.instanteIso || null });
       stats.ofertasArchivadas++;
+      // Reconectado 2026-08-25: este cruce corrio en produccion del 2026-08-18
+      // al 2026-08-20 (278 alertas en ally_property_alerts dan fe) y quedo
+      // huerfano cuando se apago el procesamiento de ofertas en vivo por
+      // saturacion -- esa desconexion nunca debio incluir este camino, que
+      // persiste todo a proposito y no tiene el problema de volumen que
+      // motivo el apagado. Sin gasto de tokens: es un cruce de base de datos.
+      const r = await cruceLeads.cruzarOfertaConLeads(org, fila);
+      stats.leadsAvisados += r.avisados.length;
     } catch (e) {
       console.error("[radar] No se pudo archivar una oferta:", e.message);
     }

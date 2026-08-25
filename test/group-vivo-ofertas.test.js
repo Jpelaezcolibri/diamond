@@ -9,13 +9,17 @@ const assert = require("node:assert");
 const mandatosData = require("../src/data/mandatos");
 const ofertas = require("../src/groups/ofertas");
 const avisar = require("../src/groups/avisar-mandato");
+const command = require("../src/data/command");
+const cruceLeads = require("../src/groups/cruce-leads");
 
-let guardadas, cruces;
+let guardadas, cruces, crucesLeads, leadsCandidatos;
 
 beforeEach(() => {
   mandatosData._reset();
   guardadas = [];
   cruces = [];
+  crucesLeads = [];
+  leadsCandidatos = [];
   ofertas.guardarOferta = async (org, o) => {
     guardadas.push(o);
     return { id: "ally-nueva" };
@@ -24,14 +28,21 @@ beforeEach(() => {
     cruces.push({ o, opts });
     return { resultado: "enviado", avisados: [{}], matches: 1 };
   };
+  command.leadsParaPropiedad = async () => leadsCandidatos;
+  cruceLeads.cruzarOfertaConLeads = async (org, allyProperty) => {
+    crucesLeads.push({ org, allyProperty });
+    const avisados = leadsCandidatos.map((l) => ({ leadId: l.lead_id, advisorPhone: "573000000000" }));
+    return { resultado: avisados.length > 0 ? "avisados" : "sin_leads_esperando", avisados };
+  };
 });
 
-test("sin mandatos activos, una oferta no se persiste ni se cruza", async () => {
+test("sin mandatos activos ni leads esperando, una oferta no se persiste ni se cruza", async () => {
   const { manejarOferta } = require("../src/groups/vivo");
   const r = await manejarOferta({ id: "org-1" }, { clase: "oferta", tipo: "apartamento", zonas: ["El Poblado"], precio_max: 900000000 }, {});
-  assert.strictEqual(r.resultado, "oferta_sin_mandatos");
+  assert.strictEqual(r.resultado, "oferta_sin_match");
   assert.strictEqual(guardadas.length, 0, "sin nadie esperando, guardarla es la saturacion que Juan apago");
   assert.strictEqual(cruces.length, 0);
+  assert.strictEqual(crucesLeads.length, 0);
 });
 
 test("una oferta que no le sirve a ningun mandato no se persiste", async () => {
@@ -96,4 +107,48 @@ test("la oferta guardada trae groupId del grupo y advisorId del puente", async (
   assert.strictEqual(guardadas.length, 1);
   assert.strictEqual(guardadas[0].mensaje.groupId, "grupo-123");
   assert.strictEqual(guardadas[0].mensaje.advisorId, "adv-puente-1");
+});
+
+// Reconectado 2026-08-25 (Juan): el cruce contra los leads propios del embudo
+// es una poblacion distinta de los mandatos curados por un asesor -- una
+// oferta puede no servirle a ningun mandato y SI servirle a un lead que ya
+// esta en el CRM esperando exactamente eso.
+test("una oferta que NO sirve a ningun mandato pero SI a un lead propio se persiste y se cruza", async () => {
+  // Sin mandatos activos en este caso.
+  leadsCandidatos = [{ lead_id: "lead-1", owner_id: null }];
+  const { manejarOferta } = require("../src/groups/vivo");
+  const r = await manejarOferta(
+    { id: "org-1" },
+    { clase: "oferta", operacion: "arriendo", tipo: "apartamento", zonas: ["Bello"], precio_max: 3000000 },
+    {}
+  );
+  assert.strictEqual(r.resultado, "oferta_cruzada");
+  assert.strictEqual(guardadas.length, 1);
+  assert.strictEqual(crucesLeads.length, 1, "se debe cruzar contra los leads");
+  assert.strictEqual(crucesLeads[0].allyProperty.id, "ally-nueva", "se cruza con la fila ya persistida");
+  assert.strictEqual(cruces.length, 0, "sin mandatos activos, no hay nada que avisarle a un mandato");
+});
+
+test("una oferta que sirve a un mandato Y a un lead cruza las dos cosas", async () => {
+  await mandatosData.crear("org-1", {
+    cliente_nombre: "Marcela", advisor_id: "adv-nat", operacion: "venta", tipo: "apartamento",
+    zonas: ["El Poblado"], precio_max: 2200000000, habitaciones: 4, area_min: 150,
+  });
+  leadsCandidatos = [{ lead_id: "lead-1", owner_id: null }];
+  const { manejarOferta } = require("../src/groups/vivo");
+  const r = await manejarOferta(
+    { id: "org-1" },
+    {
+      clase: "oferta", operacion: "venta", tipo: "apartamento", zonas: ["El Poblado"],
+      precio_max: 1580000000, habitaciones: 4, area_min: 246,
+      mensaje: { autor: "Glovi", autorTelefono: "129781211373754", texto: "Dúplex Loma del Tesoro" },
+    },
+    { id: "grupo-123", nombre: "SOLO VIVIENDA >$1000 MLLS" },
+    { advisorId: "adv-puente-1" }
+  );
+  assert.strictEqual(r.resultado, "oferta_cruzada");
+  assert.strictEqual(cruces.length, 1, "se cruzo contra los mandatos");
+  assert.strictEqual(crucesLeads.length, 1, "se cruzo contra los leads");
+  assert.ok(r.matches > 0, "matches del cruce con mandatos");
+  assert.ok(r.leadsAvisados > 0, "leadsAvisados del cruce con leads");
 });

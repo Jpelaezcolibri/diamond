@@ -21,6 +21,7 @@ let marcadas = [];
 let ofertasGuardadas = [];
 let crucesLeads = [];
 let crucesMandatos = [];
+let leadsCandidatosVivo = [];
 let inventario = { fresco: true, iso: new Date().toISOString(), horas: 1 };
 let linksAbren = true;
 let feedRegistrado = [];
@@ -97,6 +98,11 @@ function instalarDobles() {
         crucesLeads.push({ org, allyProperty });
         return { resultado: "sin_leads_esperando", avisados: [] };
       },
+    },
+  };
+  require.cache[RUTA("data/command.js")] = {
+    exports: {
+      leadsParaPropiedad: async () => leadsCandidatosVivo,
     },
   };
   require.cache[RUTA("groups/avisar-mandato.js")] = {
@@ -222,6 +228,7 @@ beforeEach(() => {
   ofertasGuardadas = [];
   crucesLeads = [];
   crucesMandatos = [];
+  leadsCandidatosVivo = [];
   mandatosData._reset();
   inventario = { fresco: true, iso: new Date().toISOString(), horas: 1 };
   linksAbren = true;
@@ -322,14 +329,19 @@ test("lo que la IA declara ruido no toca disco ni se responde", async () => {
 // camino sigue vivo solo en la importacion de export .txt
 // (importar-export.js), que es una carga puntual y deliberada, no ruido
 // continuo de la escucha en vivo.
-test("una oferta se ignora por completo en la escucha en vivo: no se guarda ni se cruza contra leads", async () => {
+//
+// Reconectado 2026-08-25 (Juan): ademas de los mandatos, ahora se tantea
+// contra los leads propios del embudo. Sin mandatos NI leads esperando, la
+// oferta sigue sin persistirse ni cruzarse — esa es la garantia que evita la
+// saturacion, no el hecho de que solo existan mandatos.
+test("sin mandatos activos ni leads esperando, una oferta no se persiste ni se cruza", async () => {
   claseDevuelta = "oferta";
   let envios = 0;
   const r = await vivo.procesarMensaje(ORG, mensaje({ texto: "tengo apartamento en venta" }), {
     grupo: GRUPO, modo: "auto", ahora: MEDIODIA,
     enviar: async () => { envios++; return { ok: true }; },
   });
-  assert.strictEqual(r.resultado, "oferta_sin_mandatos");
+  assert.strictEqual(r.resultado, "oferta_sin_match");
   assert.strictEqual(envios, 0);
   assert.strictEqual(ofertasGuardadas.length, 0);
   assert.strictEqual(crucesLeads.length, 0);
