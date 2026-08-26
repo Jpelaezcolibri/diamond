@@ -27,7 +27,7 @@ beforeEach(() => {
     plantillas.push({ tel, opts });
     return { ok: true, wamid: "wamid-tpl" };
   };
-  advisors.findById = async () => ({ id: "adv-nat", name: "Natalia Velez", phone: "573001878024" });
+  advisors.findAsesorPrincipalRadar = async () => ({ id: "adv-nat", name: "Natalia Velez", phone: "573001878024" });
   directorio.telefonoDe = async () => "573244151819";
   process.env.RADAR_ESCALADO_PHONE = "573028536489"; // Catherine
 });
@@ -41,8 +41,8 @@ async function unMandato(extra = {}) {
   });
 }
 
-test("el aviso va al advisor_id del mandato, no a un asesor cualquiera", async () => {
-  await unMandato();
+test("el aviso va SIEMPRE al asesor PRINCIPAL del radar (Natalia), sin importar quien cargo el mandato", async () => {
+  await unMandato({ advisor_id: "otro-asesor-cualquiera" });
   const r = await cruzarOfertaConMandatos(ORG, OFERTA, { allyPropertyId: "ally-1" });
   assert.strictEqual(r.avisados.length, 1);
   assert.strictEqual(enviados.length, 1);
@@ -115,8 +115,8 @@ test("un fallo que NO es de ventana cerrada escala sin gastar una plantilla", as
   assert.strictEqual(r.resultado, "escalado");
 });
 
-test("un mandato sin advisor_id no revienta: escala", async () => {
-  advisors.findById = async () => null;
+test("sin asesor principal resuelto, no revienta: escala", async () => {
+  advisors.findAsesorPrincipalRadar = async () => null;
   await unMandato({ advisor_id: null });
   const r = await cruzarOfertaConMandatos(ORG, OFERTA, { allyPropertyId: "ally-1" });
   assert.strictEqual(r.resultado, "escalado");
@@ -157,6 +157,26 @@ test("el intento de texto libre silencia la alerta al watchdog", async () => {
 
 // El escalado a Catherine SI amerita la alerta: si eso tambien falla, no hay
 // un cuarto canal, y el watchdog tiene que enterarse.
+// Guardar el texto exacto del aviso (Juan, 2026-08-26): para poder
+// reenviarlo IDENTICO a Catherine si hay que escalar por silencio, en vez de
+// reconstruirlo.
+test("marcarEntrega guarda el texto exacto del aviso que se le mando al asesor", async () => {
+  const marcados = [];
+  const original = mandatosData.marcarEntrega;
+  mandatosData.marcarEntrega = async (orgId, alertaId, datos) => {
+    marcados.push(datos);
+    return original(orgId, alertaId, datos);
+  };
+  try {
+    await unMandato();
+    await cruzarOfertaConMandatos(ORG, OFERTA, { allyPropertyId: "ally-1" });
+    assert.strictEqual(marcados.length, 1);
+    assert.strictEqual(marcados[0].texto, enviados[0].texto);
+  } finally {
+    mandatosData.marcarEntrega = original;
+  }
+});
+
 test("el escalado a Catherine NO silencia la alerta al watchdog", async () => {
   const optsCapturados = [];
   mensajeAsesor.enviarYRegistrar = async (org, tel, texto, opts) => {

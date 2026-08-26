@@ -476,6 +476,48 @@ async function claimRecordatorio(orgId, signalId) {
   return Boolean(data && data.length);
 }
 
+// Avisos SALIDOS hace mas de `minutos` al asesor PRINCIPAL, sin escalar
+// todavia por silencio -- candidatos para src/scheduler/radar-silencio.js
+// (carril de venta). Mismo criterio de dependencia que candidatosRecordatorio:
+// el cruce contra signal_events (¿ya hay resultado?) lo hace el scheduler, no
+// este archivo.
+async function candidatosEscaladoSilencio(orgId, { antesDeIso, limite = 100 } = {}) {
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("group_signals")
+    .select("id, aviso_advisor_id, aviso_wamid, texto_original, enviado_at")
+    .eq("org_id", orgId)
+    .not("aviso_advisor_id", "is", null)
+    .not("enviado_at", "is", null)
+    .is("escalado_silencio_at", null)
+    .lte("enviado_at", antesDeIso)
+    .limit(limite);
+  if (error) {
+    if (esColumnaFaltante(error)) return [];
+    console.error("[grupos] No se pudieron leer los candidatos a escalado por silencio:", error.message);
+    return [];
+  }
+  return data || [];
+}
+
+// Claim atomico ANTES de escalar por silencio (mismo patron que
+// claimRecordatorio): si dos ticks corrieran a la vez, solo uno gana.
+async function claimEscaladoSilencio(orgId, signalId) {
+  if (!supabase) return true;
+  const { data, error } = await supabase
+    .from("group_signals")
+    .update({ escalado_silencio_at: new Date().toISOString() })
+    .eq("org_id", orgId)
+    .eq("id", signalId)
+    .is("escalado_silencio_at", null)
+    .select("id");
+  if (error) {
+    console.error("[grupos] No se pudo reclamar el escalado por silencio:", error.message);
+    return false;
+  }
+  return Boolean(data && data.length);
+}
+
 const MODOS_RESPUESTA = ["sombra", "auto", "humano"];
 
 // Deja constancia de una respuesta publicada en el grupo (o redactada en modo
@@ -732,6 +774,7 @@ module.exports = {
   marcarRespondida, respuestasDesde, guardarRevalidacion, marcarAvisoEnviado,
   guardarPolitica, obtenerPorId, calladosPendientes, buscarPorTelefono,
   findByWamid, pendientesDeAviso, candidatosRecordatorio, claimRecordatorio,
+  candidatosEscaladoSilencio, claimEscaladoSilencio,
   dmsHoyPorColega, dmsHoyLinea,
   CLASES, ORIGENES, MODOS_RESPUESTA, _resetBlindaje,
 };

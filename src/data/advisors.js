@@ -215,6 +215,20 @@ async function findByPhone(orgId, phone) {
   return buscarEnLista(lista, phone);
 }
 
+// El asesor PRINCIPAL del radar de grupos: siempre Natalia (linea RADA-NATALIA,
+// la unica dentro de los grupos gremiales — puede copiar el aviso directo al
+// grupo del que se esta hablando). Si RADAR_REVISOR_PHONE no esta configurada
+// o no resuelve a nadie, cae a la rotacion de siempre (findForTransfer) para
+// que el sistema nunca se quede sin nadie a quien avisar.
+async function findAsesorPrincipalRadar(org) {
+  const telefono = process.env.RADAR_REVISOR_PHONE || "";
+  if (telefono) {
+    const porTelefono = await findByPhone(org.id, telefono).catch(() => null);
+    if (porTelefono) return porTelefono;
+  }
+  return findForTransfer(org, "venta");
+}
+
 // Asesores activos cuyo nombre matchea (para "a nombre de Natalia" en
 // Sofi-Comando). Devuelve todos los matches: el consumidor decide si con 0
 // vuelve a preguntar y con >1 pide precisar.
@@ -236,4 +250,4 @@ async function searchByName(orgId, q) {
   return data || [];
 }
 
-module.exports = { findForTransfer, findByAuthUserId, findById, findByPhone, mismoTelefono, buscarEnLista, searchByName, rotationCandidates, nextInRotation, listElegibles, elegiblesEnLista };
+module.exports = { findForTransfer, findAsesorPrincipalRadar, findByAuthUserId, findById, findByPhone, mismoTelefono, buscarEnLista, searchByName, rotationCandidates, nextInRotation, listElegibles, elegiblesEnLista };

@@ -606,6 +606,39 @@ test("el DM lleva la aclaracion cuando Sofi reporta que una propiedad no cumple 
   assert.match(enviosDm[0].texto, /Aclaración: tiene 1 garaje y pediste 2/);
 });
 
+// ── Escalado INMEDIATO a Catherine si a Natalia no le llega (Juan, 2026-08-26) ──
+test("si el envio a la asesora principal (Natalia) falla, se intenta un envio extra a RADAR_ESCALADO_PHONE", async () => {
+  process.env.RADAR_ESCALADO_PHONE = "573028536489";
+  const intentos = [];
+  require.cache[RUTA("lib/mensaje-asesor.js")].exports.enviarYRegistrar = async (org, to, texto) => {
+    intentos.push(to);
+    if (to === "573001878024") return { ok: false, error: "fuera de ventana" };
+    return { ok: true, wamid: `w-${to}` };
+  };
+  const NATALIA = { id: "adv-natalia", name: "Natalia Velez", phone: "573001878024" };
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: NATALIA });
+
+  assert.deepStrictEqual(intentos, ["573001878024", "573028536489"]);
+  assert.strictEqual(r.escaladoInmediato, true);
+  assert.strictEqual(r.resultado, "avisada", "el escalado si logro entregarse cuenta como avisada");
+  delete process.env.RADAR_ESCALADO_PHONE;
+});
+
+test("si el envio a la asesora principal (Natalia) SI funciona, no se intenta ningun envio extra a Catherine", async () => {
+  process.env.RADAR_ESCALADO_PHONE = "573028536489";
+  const intentos = [];
+  require.cache[RUTA("lib/mensaje-asesor.js")].exports.enviarYRegistrar = async (org, to) => {
+    intentos.push(to);
+    return { ok: true, wamid: `w-${to}` };
+  };
+  const NATALIA = { id: "adv-natalia", name: "Natalia Velez", phone: "573001878024" };
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: NATALIA });
+
+  assert.deepStrictEqual(intentos, ["573001878024"]);
+  assert.strictEqual(r.escaladoInmediato, false);
+  delete process.env.RADAR_ESCALADO_PHONE;
+});
+
 test("un veredicto VIEJO sin el campo 'le_falta' no rompe el DM -- se degrada a sin aclaracion", async () => {
   telefonoColegaResuelto = "573001234567";
   veredictoDeSofi = { ...APRUEBA };

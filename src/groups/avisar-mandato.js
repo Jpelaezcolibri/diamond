@@ -90,13 +90,18 @@ async function cruzarOfertaConMandatos(org, oferta, opts = {}) {
       grupo, vistoEnIso,
     });
 
-    const advisor = mandato.advisor_id ? await advisors.findById(org.id, mandato.advisor_id).catch(() => null) : null;
+    // El destinatario del WhatsApp es SIEMPRE el asesor PRINCIPAL del radar
+    // (Natalia — Juan, 2026-08-26), no quien cargo el mandato. `mandato.advisor_id`
+    // sigue guardandose en registrarAlerta tal cual (es el registro de quien
+    // registro el mandato, no cambia); lo unico que cambia es a quien se le
+    // manda el aviso.
+    const advisor = await advisors.findAsesorPrincipalRadar(org).catch(() => null);
     const entrega = advisor && advisor.phone
       ? await entregar(org, advisor.phone, texto, { mandato, oferta })
       : { ok: false, via: null, error: "mandato sin asesor con telefono" };
 
     await mandatosData.marcarEntrega(org.id, alertaId, {
-      entregado: entrega.ok, via: entrega.via, error: entrega.error,
+      entregado: entrega.ok, via: entrega.via, error: entrega.error, texto,
     });
 
     if (entrega.ok) {
@@ -162,4 +167,4 @@ async function escalar(org, { texto, mandato, motivo, alertaId }) {
   return Boolean(r && r.ok);
 }
 
-module.exports = { cruzarOfertaConMandatos, PLANTILLA };
+module.exports = { cruzarOfertaConMandatos, escalar, PLANTILLA };

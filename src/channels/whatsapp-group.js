@@ -240,7 +240,7 @@ async function procesar(org, ev, grupo, sesion) {
 
   contar("recibidos");
 
-  const asesor = await advisors.findForTransfer(org, "venta").catch(() => null);
+  const asesor = await advisors.findAsesorPrincipalRadar(org).catch(() => null);
 
   const r = await vivo.procesarMensaje(org, mensaje, {
     grupo,

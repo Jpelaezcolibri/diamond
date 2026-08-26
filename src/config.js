@@ -128,6 +128,14 @@ const config = {
       intervalMin: parseInt(process.env.RADAR_RECORDATORIO_INTERVAL_MIN || "20", 10),
     },
 
+    // Escalado por silencio a Catherine si Natalia (asesor PRINCIPAL del
+    // radar) no responde el aviso a tiempo (Juan, 2026-08-26): cubre los dos
+    // carriles, venta y compra. Ver src/scheduler/radar-silencio.js.
+    silencio: {
+      min: parseInt(process.env.RADAR_SILENCIO_MIN || "30", 10),
+      intervalMin: parseInt(process.env.RADAR_SILENCIO_INTERVAL_MIN || "5", 10),
+    },
+
     // Feed en vivo para el admin (Juan, 2026-08-18): cada pedido que Sofi
     // revisa —lo apruebe o lo rechace— le queda en su propia sesion de
     // Sofi-Comando. adminUserId es el auth user id (no el email) del admin

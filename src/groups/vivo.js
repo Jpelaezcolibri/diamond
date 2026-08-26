@@ -56,6 +56,12 @@ const VENTANA_LIMITE_HORAS = 24;
 // tocar codigo.
 const RADAR_REVISOR_PHONE = process.env.RADAR_REVISOR_PHONE || "";
 
+// A quien se escala de inmediato si el envio al asesor PRINCIPAL (Natalia)
+// falla — Catherine (Juan, 2026-08-26): "si a Natalia no le llega, se escala".
+// Se lee en cada llamado (no como constante de modulo) para que los tests
+// puedan setear/cambiar la env var entre corridas sin recargar el modulo.
+const radarEscaladoPhone = () => process.env.RADAR_ESCALADO_PHONE || "";
+
 // El id de la senal en vivo NO se calcula con el hash del EPE: WhatsApp ya trae
 // un id unico y estable por mensaje. Se prefija para que convivan las tres vias
 // (export:, reenvio:, vivo:) en la misma columna sin colisionar, y para no tocar
@@ -456,15 +462,37 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
   const telefonoPrincipal = asesor && asesor.phone ? String(asesor.phone).replace(/\D/g, "") : null;
   let alguno = false;
   let wamidPrincipal = null;
+  let entregadoATelefonoPrincipal = false;
   for (const to of destinos) {
     const r = to === telefonoPrincipal
       ? await mensajeAsesor.enviarYRegistrar(org, to, texto).catch((e) => ({ ok: false, error: e.message }))
       : await canalWhatsapp.sendWhatsApp(org, to, texto).catch((e) => ({ ok: false, error: e.message }));
     if (r && r.ok) {
       alguno = true;
-      if (to === telefonoPrincipal) wamidPrincipal = r.wamid || null;
+      if (to === telefonoPrincipal) {
+        wamidPrincipal = r.wamid || null;
+        entregadoATelefonoPrincipal = true;
+      }
     } else {
       console.warn(`[radar] No se pudo avisar a ${to}: ${r && r.error}`);
+    }
+  }
+
+  // Escalado INMEDIATO a Catherine si especificamente a Natalia (el asesor
+  // PRINCIPAL) no le llego el aviso (Juan, 2026-08-26) — sin importar si algun
+  // destino extra de RADAR_ALERTA_TO si lo recibio: la condicion de Juan es
+  // "si a Natalia no le llega", no "si a nadie le llega". Es un intento EXTRA,
+  // no reemplaza los destinos existentes.
+  let escaladoInmediato = false;
+  const RADAR_ESCALADO_PHONE = radarEscaladoPhone();
+  if (telefonoPrincipal && !entregadoATelefonoPrincipal && RADAR_ESCALADO_PHONE && RADAR_ESCALADO_PHONE !== telefonoPrincipal) {
+    const rEscalado = await mensajeAsesor.enviarYRegistrar(org, RADAR_ESCALADO_PHONE, texto).catch((e) => ({ ok: false, error: e.message }));
+    if (rEscalado && rEscalado.ok) {
+      escaladoInmediato = true;
+      alguno = true;
+      console.log(`[radar] el aviso a ${telefonoPrincipal} no se pudo entregar, se escalo a ${RADAR_ESCALADO_PHONE}`);
+    } else {
+      console.warn(`[radar] tampoco se pudo escalar a ${RADAR_ESCALADO_PHONE}: ${rEscalado && rEscalado.error}`);
     }
   }
 
@@ -492,6 +520,7 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
     veredicto,
     texto,
     destinos,
+    escaladoInmediato,
     signalId: signal.id,
   };
 }
