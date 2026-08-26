@@ -114,7 +114,7 @@ test("compra: un match entregado hace mas de 30 min, sin mensaje de Natalia desp
   t.mock.method(mandatosData, "findById", async () => MANDATO);
   t.mock.method(leads, "findOrCreate", async () => ({ id: "lead-natalia" }));
   t.mock.method(conversations, "findOrCreate", async () => ({ id: "conv-natalia" }));
-  t.mock.method(conversations, "lastMessage", async () => null); // Natalia nunca respondio
+  t.mock.method(conversations, "hayMensajeEntranteDespues", async () => false); // Natalia nunca respondio
   const escalados = [];
   t.mock.method(avisarMandato, "escalar", async (org, datos) => { escalados.push(datos); return true; });
 
@@ -137,7 +137,7 @@ test("compra: un mensaje de Natalia DESPUES de entregado_at cuenta como respuest
   t.mock.method(mandatosData, "findById", async () => MANDATO);
   t.mock.method(leads, "findOrCreate", async () => ({ id: "lead-natalia" }));
   t.mock.method(conversations, "findOrCreate", async () => ({ id: "conv-natalia" }));
-  t.mock.method(conversations, "lastMessage", async () => ({ role: "user", content: "ya le escribi", created_at: conFecha(5 * 60 * 1000) }));
+  t.mock.method(conversations, "hayMensajeEntranteDespues", async () => true);
   let escalado = false;
   t.mock.method(avisarMandato, "escalar", async () => { escalado = true; return true; });
 
@@ -158,7 +158,34 @@ test("compra: un mensaje de Natalia ANTES de entregado_at (conversacion vieja, n
   t.mock.method(leads, "findOrCreate", async () => ({ id: "lead-natalia" }));
   t.mock.method(conversations, "findOrCreate", async () => ({ id: "conv-natalia" }));
   // Mensaje viejo, de ANTES de que este aviso saliera -- no es una respuesta a este match.
-  t.mock.method(conversations, "lastMessage", async () => ({ role: "user", content: "hola", created_at: conFecha(90 * 60 * 1000) }));
+  t.mock.method(conversations, "hayMensajeEntranteDespues", async () => false);
+  let escalado = false;
+  t.mock.method(avisarMandato, "escalar", async () => { escalado = true; return true; });
+
+  const r = await silencio.runOnce();
+
+  assert.strictEqual(r.sent, 1);
+  assert.strictEqual(escalado, true);
+});
+
+// Bug de falso positivo (Juan, review sobre c41d1b4): antes se miraba solo el
+// ULTIMO mensaje de TODA la conversacion. Si ese ultimo mensaje es de ANTES de
+// entregado_at pero hay otro mas viejo TODAVIA que tambien es de antes (orden
+// normal, sin nada despues), el chequeo tiene que seguir sin escalar por un
+// mensaje que no existe -- no puede depender de "cual es el ultimo mensaje de
+// TODA la conversacion", sino de si hay AL MENOS UNO despues de entregado_at.
+test("compra: dos mensajes viejos (ninguno despues de entregado_at) -- SI escala, sin importar cual es el 'ultimo' de la conversacion", async (t) => {
+  t.mock.method(organizations, "listActive", async () => [ORG]);
+  t.mock.method(groupSignals, "candidatosEscaladoSilencio", async () => []);
+  const entregadoAt = conFecha(40 * 60 * 1000);
+  t.mock.method(mandatosData, "pendientesDeSilencio", async () => [
+    { id: "alerta-1", mandato_id: "mandato-1", texto: "texto original", entregado_at: entregadoAt },
+  ]);
+  t.mock.method(mandatosData, "findById", async () => MANDATO);
+  t.mock.method(leads, "findOrCreate", async () => ({ id: "lead-natalia" }));
+  t.mock.method(conversations, "findOrCreate", async () => ({ id: "conv-natalia" }));
+  // Ninguno de los dos mensajes es posterior a entregado_at.
+  t.mock.method(conversations, "hayMensajeEntranteDespues", async () => false);
   let escalado = false;
   t.mock.method(avisarMandato, "escalar", async () => { escalado = true; return true; });
 
@@ -178,7 +205,7 @@ test("compra: dos corridas seguidas sobre el mismo match solo escalan una vez (p
   t.mock.method(mandatosData, "findById", async () => MANDATO);
   t.mock.method(leads, "findOrCreate", async () => ({ id: "lead-natalia" }));
   t.mock.method(conversations, "findOrCreate", async () => ({ id: "conv-natalia" }));
-  t.mock.method(conversations, "lastMessage", async () => null);
+  t.mock.method(conversations, "hayMensajeEntranteDespues", async () => false);
   let escalos = 0;
   t.mock.method(avisarMandato, "escalar", async () => { escalos++; yaEscalado = true; return true; });
 

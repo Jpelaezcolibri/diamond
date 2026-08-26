@@ -494,6 +494,14 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
     } else {
       console.warn(`[radar] tampoco se pudo escalar a ${RADAR_ESCALADO_PHONE}: ${rEscalado && rEscalado.error}`);
     }
+    // Se marca la señal como escalada YA se intento el escalado, sin importar
+    // si salio o no (Juan, review sobre c41d1b4): si no se marca, el scheduler
+    // radar-silencio.js la vuelve a agarrar como "sin escalar" pasados los 30
+    // min y le manda el MISMO aviso a Catherine por segunda vez. Que esto
+    // falle no puede tumbar la funcion — a lo sumo el scheduler reintenta.
+    await groupSignals
+      .claimEscaladoSilencio(org.id, signal.id)
+      .catch((e) => console.warn("[radar] No se pudo marcar el escalado inmediato como escalado por silencio:", e.message));
   }
 
   // Solo se marca enviado si SALIO. Si no, queda pendiente: fuera de la ventana

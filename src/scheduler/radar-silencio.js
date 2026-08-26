@@ -56,6 +56,11 @@ async function candidatosVentaDeOrg(org, cutoffIso) {
 // ¿Natalia respondio ESTE aviso? Un mensaje de ella posterior a `entregadoAt`
 // cuenta como respuesta; uno anterior es una conversacion vieja que no tiene
 // nada que ver con este match puntual.
+//
+// Se mira si hay ALGUN mensaje entrante posterior a `entregadoAt`, no solo el
+// ULTIMO mensaje de TODA la conversacion (Juan, review sobre c41d1b4): si
+// Natalia responde un match B mas nuevo, ese mensaje no puede silenciar el
+// escalado de un match A mas viejo que sigue pendiente.
 async function nataliaRespondio(org, entregadoAt) {
   const telefono = RADAR_REVISOR_PHONE();
   if (!telefono) return false;
@@ -63,9 +68,7 @@ async function nataliaRespondio(org, entregadoAt) {
   if (!lead) return false;
   const conv = await conversations.findOrCreate(org.id, lead.id, null).catch(() => null);
   if (!conv) return false;
-  const ultimo = await conversations.lastMessage(conv.id).catch(() => null);
-  if (!ultimo || ultimo.role !== "user") return false;
-  return new Date(ultimo.created_at).getTime() > new Date(entregadoAt).getTime();
+  return conversations.hayMensajeEntranteDespues(conv.id, entregadoAt).catch(() => false);
 }
 
 async function runVenta(org, cutoffIso) {

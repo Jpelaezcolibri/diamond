@@ -30,6 +30,8 @@ let dmsHoyColegaMock = 0; // cupo libre por defecto
 let dmsHoyLineaMock = 0;
 let enviosDm = [];
 let envioDmResultado = { ok: true, wamid: "wm-dm-1" };
+// ── Escalado inmediato marca la señal, para que radar-silencio no la reintente ──
+let claimsEscaladoSilencio = [];
 
 function instalar() {
   require.cache[RUTA("groups/classify.js")] = {
@@ -78,6 +80,10 @@ function instalar() {
       guardarPolitica: async (orgId, id, datos) => { politicasGuardadas.push({ id, ...datos }); return true; },
       dmsHoyPorColega: async () => dmsHoyColegaMock,
       dmsHoyLinea: async () => dmsHoyLineaMock,
+      claimEscaladoSilencio: async (orgId, signalId) => {
+        claimsEscaladoSilencio.push({ orgId, signalId });
+        return true;
+      },
     },
   };
   require.cache[RUTA("data/organizations.js")] = {
@@ -194,6 +200,7 @@ beforeEach(() => {
   dmsHoyLineaMock = 0;
   enviosDm = [];
   envioDmResultado = { ok: true, wamid: "wm-dm-1" };
+  claimsEscaladoSilencio = [];
   delete process.env.RADAR_ALERTA_TO;
   delete process.env.CONTACT_WHATSAPP_NUMBER;
   vivo = instalar();
@@ -621,6 +628,35 @@ test("si el envio a la asesora principal (Natalia) falla, se intenta un envio ex
   assert.deepStrictEqual(intentos, ["573001878024", "573028536489"]);
   assert.strictEqual(r.escaladoInmediato, true);
   assert.strictEqual(r.resultado, "avisada", "el escalado si logro entregarse cuenta como avisada");
+  delete process.env.RADAR_ESCALADO_PHONE;
+});
+
+// Bug CRITICAL (Juan, review sobre c41d1b4): el escalado inmediato no marcaba
+// la señal, asi que radar-silencio.js la volvia a agarrar como "sin escalar"
+// pasados los 30 minutos y le mandaba el mismo aviso a Catherine DOS VECES.
+test("el escalado INMEDIATO marca la señal como escalada por silencio, para que el scheduler no la reintente", async () => {
+  process.env.RADAR_ESCALADO_PHONE = "573028536489";
+  require.cache[RUTA("lib/mensaje-asesor.js")].exports.enviarYRegistrar = async (org, to) => {
+    if (to === "573001878024") return { ok: false, error: "fuera de ventana" };
+    return { ok: true, wamid: `w-${to}` };
+  };
+  const NATALIA = { id: "adv-natalia", name: "Natalia Velez", phone: "573001878024" };
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: NATALIA });
+
+  assert.strictEqual(r.escaladoInmediato, true);
+  assert.strictEqual(claimsEscaladoSilencio.length, 1);
+  assert.deepStrictEqual(claimsEscaladoSilencio[0], { orgId: ORG.id, signalId: "sig-1" });
+  delete process.env.RADAR_ESCALADO_PHONE;
+});
+
+test("el escalado INMEDIATO marca la señal como escalada por silencio aunque el envio a Catherine tambien falle", async () => {
+  process.env.RADAR_ESCALADO_PHONE = "573028536489";
+  require.cache[RUTA("lib/mensaje-asesor.js")].exports.enviarYRegistrar = async () => ({ ok: false, error: "fuera de ventana" });
+  const NATALIA = { id: "adv-natalia", name: "Natalia Velez", phone: "573001878024" };
+  await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: NATALIA });
+
+  assert.strictEqual(claimsEscaladoSilencio.length, 1);
+  assert.deepStrictEqual(claimsEscaladoSilencio[0], { orgId: ORG.id, signalId: "sig-1" });
   delete process.env.RADAR_ESCALADO_PHONE;
 });
 

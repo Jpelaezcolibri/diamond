@@ -175,6 +175,28 @@ async function lastMessage(conversationId) {
   return data;
 }
 
+// ¿Hay algun mensaje ENTRANTE (role: "user") despues de `desdeIso`? A diferencia
+// de lastMessage (que solo mira el ULTIMO mensaje de TODA la conversacion), esto
+// no se deja engañar por una respuesta a un pedido MAS NUEVO: si Natalia contesta
+// el match B, ese mensaje no puede silenciar el escalado del match A, mas viejo,
+// que sigue pendiente (Juan, review sobre c41d1b4).
+async function hayMensajeEntranteDespues(conversationId, desdeIso) {
+  if (!supabase) {
+    return memory.messages.some(
+      (m) => m.conversation_id === conversationId && m.role === "user" && new Date(m.created_at).getTime() > new Date(desdeIso).getTime()
+    );
+  }
+  const { data, error } = await supabase
+    .from("messages")
+    .select("id")
+    .eq("conversation_id", conversationId)
+    .eq("role", "user")
+    .gt("created_at", desdeIso)
+    .limit(1);
+  if (error) throw error;
+  return Boolean(data && data.length);
+}
+
 // Cambia el modo de atencion de una conversacion: 'bot' (Sofi) | 'humano' (asesor via CRM)
 async function setModo(conversationId, modo) {
   if (!supabase) {
@@ -199,4 +221,5 @@ module.exports = {
   findByWaMessageId,
   followupCandidates,
   lastMessage,
+  hayMensajeEntranteDespues,
 };
