@@ -48,6 +48,20 @@ const DIAS_DEFAULT = Number(process.env.GROUPS_IMPORT_DIAS_DEFAULT || 30);
 // dolares en una sola tarde.
 const MAX_MENSAJES = Number(process.env.GROUPS_IMPORT_MAX_MENSAJES || 20000);
 
+// Tope de avisos a leads POR CORRIDA de import, no por oferta (LIMITE_LEADS en
+// cruce-leads.js ya limita eso). Un export de 30 dias con cientos de ofertas
+// podria disparar cientos de WhatsApps reales de golpe -- el mismo problema
+// que este repo ya evito para las demandas mandandolas al digest diario (ver
+// src/groups/ofertas.js). Acá se opta por un tope simple en vez de mover esto
+// a un digest: el import es una accion puntual y deliberada de un asesor, no
+// ruido continuo, así que un tope generoso alcanza sin cambiar la arquitectura.
+// Se lee del entorno EN CADA CORRIDA (no como constante de modulo) para que
+// pueda ajustarse sin reiniciar el proceso, igual que el resto de las
+// perillas de este archivo se comportarian si hiciera falta calibrarlas.
+function maxAvisosLeadsPorImport() {
+  return Number(process.env.GROUPS_IMPORT_MAX_AVISOS_LEADS || 20);
+}
+
 // WhatsApp nombra los exports "Chat de WhatsApp con <grupo>.txt".
 function nombreDeArchivo(nombre) {
   return String(nombre || "")
@@ -207,6 +221,7 @@ async function importar(org, archivos, { dias = DIAS_DEFAULT, incremental = true
   }
 
   // ── Ofertas utilizables → red de aliados, con la fecha REAL del mensaje
+  const topeAvisosLeads = maxAvisosLeadsPorImport();
   for (const o of ofertas) {
     if (!o.utilizable) continue;
     try {
@@ -218,8 +233,20 @@ async function importar(org, archivos, { dias = DIAS_DEFAULT, incremental = true
       // saturacion -- esa desconexion nunca debio incluir este camino, que
       // persiste todo a proposito y no tiene el problema de volumen que
       // motivo el apagado. Sin gasto de tokens: es un cruce de base de datos.
-      const r = await cruceLeads.cruzarOfertaConLeads(org, fila);
-      stats.leadsAvisados += r.avisados.length;
+      //
+      // TOPE POR CORRIDA (Important, review sobre f78b9b6): LIMITE_LEADS en
+      // cruce-leads.js limita cuantos leads se avisan POR OFERTA, no cuantas
+      // ofertas de la corrida terminan avisando. Un import de cientos de
+      // ofertas sin este tope podria disparar cientos de WhatsApps reales de
+      // golpe. La oferta SIGUE archivandose igual una vez alcanzado el tope;
+      // lo unico que se salta es el aviso a mas leads.
+      if (stats.leadsAvisados < topeAvisosLeads) {
+        const r = await cruceLeads.cruzarOfertaConLeads(org, fila).catch((e) => {
+          console.warn("[radar] no se pudo cruzar la oferta importada contra los leads:", e.message);
+          return { avisados: [] };
+        });
+        stats.leadsAvisados += r.avisados.length;
+      }
     } catch (e) {
       console.error("[radar] No se pudo archivar una oferta:", e.message);
     }

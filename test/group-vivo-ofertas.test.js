@@ -129,6 +129,33 @@ test("una oferta que NO sirve a ningun mandato pero SI a un lead propio se persi
   assert.strictEqual(cruces.length, 0, "sin mandatos activos, no hay nada que avisarle a un mandato");
 });
 
+// Important (review sobre f78b9b6): cruzarOfertaConLeads es la unica llamada
+// de manejarOferta sin proteccion -- listarActivos, leadsParaPropiedad y
+// guardarOferta ya degradan solos. Si esta rechaza (RLS, red, problema en
+// ally_property_alerts), toda la funcion no puede reventar: el cruce de
+// mandatos que ya corrio bien se perderia con ella.
+test("si el cruce contra leads falla, manejarOferta no revienta y el cruce de mandatos se conserva", async () => {
+  await mandatosData.crear("org-1", {
+    cliente_nombre: "Marcela", advisor_id: "adv-nat", operacion: "venta", tipo: "apartamento",
+    zonas: ["El Poblado"], precio_max: 2200000000, habitaciones: 4, area_min: 150,
+  });
+  cruceLeads.cruzarOfertaConLeads = () => Promise.reject(new Error("boom"));
+  const { manejarOferta } = require("../src/groups/vivo");
+  const r = await manejarOferta(
+    { id: "org-1" },
+    {
+      clase: "oferta", operacion: "venta", tipo: "apartamento", zonas: ["El Poblado"],
+      precio_max: 1580000000, habitaciones: 4, area_min: 246,
+      mensaje: { autor: "Glovi", autorTelefono: "129781211373754", texto: "Dúplex Loma del Tesoro" },
+    },
+    { id: "grupo-123", nombre: "SOLO VIVIENDA >$1000 MLLS" },
+    { advisorId: "adv-puente-1" }
+  );
+  assert.strictEqual(r.resultado, "oferta_cruzada");
+  assert.strictEqual(r.leadsAvisados, 0);
+  assert.ok(r.matches > 0, "el cruce de mandatos se conserva aunque el de leads reviente");
+});
+
 test("una oferta que sirve a un mandato Y a un lead cruza las dos cosas", async () => {
   await mandatosData.crear("org-1", {
     cliente_nombre: "Marcela", advisor_id: "adv-nat", operacion: "venta", tipo: "apartamento",

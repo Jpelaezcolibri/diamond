@@ -360,7 +360,7 @@ test("una oferta utilizable entra a la red de aliados con la fecha del mensaje, 
 // que persiste todo a proposito y no tiene el problema de volumen que motivo
 // el apagado.
 test("una oferta importada que le sirve a un lead activo avisa al asesor", async (t) => {
-  const { señales } = mockDatos(t, {
+  const { señales, crucesLeads } = mockDatos(t, {
     leadsAvisados: [{ leadId: "lead-1", advisorPhone: "573001112233" }],
   });
   mockClasificador();
@@ -373,6 +373,52 @@ test("una oferta importada que le sirve a un lead activo avisa al asesor", async
   assert.strictEqual(stats.ofertasArchivadas, 1);
   assert.strictEqual(stats.leadsAvisados, 1);
   assert.strictEqual(señales.length, 1);
+  // Minor (review sobre f78b9b6): sin esta aserción, pasar el objeto `o`
+  // original en vez de la fila PERSISTIDA (bug real posible: guardarOferta
+  // devuelve la fila con `.id`, distinta del objeto de entrada) pasaría
+  // desapercibido.
+  assert.ok(crucesLeads[0].fila.id, "tiene que pasar la fila PERSISTIDA, con id, no el objeto original de la oferta");
+  _setClientForTests(null);
+});
+
+// Important (review sobre f78b9b6): LIMITE_LEADS (cruce-leads.js) es por
+// OFERTA, no por corrida -- un import de cientos de ofertas podria disparar
+// cientos de WhatsApps reales de golpe, el mismo problema que este repo ya
+// evito para las demandas mandandolas al digest diario (ver la nota en
+// src/groups/ofertas.js). Aca se opta por un tope simple en vez de mover el
+// import a un digest.
+test("GROUPS_IMPORT_MAX_AVISOS_LEADS pone un tope a los avisos por corrida, sin frenar el archivado", async (t) => {
+  const antes = process.env.GROUPS_IMPORT_MAX_AVISOS_LEADS;
+  process.env.GROUPS_IMPORT_MAX_AVISOS_LEADS = "2";
+  // Cada vuelta del bucle "avisa" a un lead nuevo (mock por-oferta, ver mas
+  // abajo): asi las primeras dos ofertas suman al tope y la tercera en
+  // adelante deben saltar el cruce sin dejar de archivarse.
+  const { señales, crucesLeads } = mockDatos(t);
+  mockClasificador(() => "oferta");
+  let contador = 0;
+  const cruceLeads = require("../src/groups/cruce-leads");
+  t.mock.method(cruceLeads, "cruzarOfertaConLeads", async (org, fila) => {
+    contador++;
+    crucesLeads.push({ org, fila });
+    return { resultado: "avisados", avisados: [{ leadId: `lead-${contador}`, advisorPhone: "573001112233" }] };
+  });
+  const contenido = exportCon([
+    `${fecha(1)}, 10:00 a. m. - Carlos Ruiz: Se vende apartamento en Laureles, 380 millones`,
+    `${fecha(1)}, 10:01 a. m. - Marcela Ruiz: Se vende apartamento en Envigado, 390 millones`,
+    `${fecha(1)}, 10:02 a. m. - Andrés Ruiz: Se vende apartamento en Belén, 370 millones`,
+    `${fecha(1)}, 10:03 a. m. - Julia Ruiz: Se vende apartamento en Bello, 360 millones`,
+  ]);
+
+  const stats = await importar(ORG, [{ nombre: "Chat de WhatsApp con Gremio.txt", contenido }], { dias: 30 });
+
+  try {
+    assert.strictEqual(stats.ofertasArchivadas, 4, "el tope frena los avisos, no el archivado");
+    assert.strictEqual(stats.leadsAvisados, 2, "no pasa del tope configurado");
+    assert.strictEqual(crucesLeads.length, 2, "el cruce contra leads no se llama mas alla del tope");
+  } finally {
+    if (antes === undefined) delete process.env.GROUPS_IMPORT_MAX_AVISOS_LEADS;
+    else process.env.GROUPS_IMPORT_MAX_AVISOS_LEADS = antes;
+  }
   _setClientForTests(null);
 });
 

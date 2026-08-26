@@ -879,7 +879,15 @@ async function manejarOferta(org, c, grupo = {}, { advisorId = null, sesion = nu
       })
     : { matches: 0, avisados: [] };
 
-  const rLeads = await cruceLeads.cruzarOfertaConLeads(org, fila);
+  // Igual que las demas llamadas de I/O de esta funcion (listarActivos,
+  // leadsParaPropiedad, guardarOferta): degrada en vez de reventar. Sin este
+  // .catch, un problema en el cruce contra leads (RLS, red, algo en
+  // ally_property_alerts) tumbaba toda la funcion y se perdia el cruce contra
+  // mandatos que ya habia corrido bien.
+  const rLeads = await cruceLeads.cruzarOfertaConLeads(org, fila).catch((e) => {
+    console.warn("[radar] no se pudo cruzar la oferta contra los leads propios:", e.message);
+    return { avisados: [] };
+  });
 
   return {
     resultado: "oferta_cruzada",
