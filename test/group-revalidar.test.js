@@ -221,3 +221,19 @@ test("el prompt nombra la situacion DUDOSA y dice que se manda al asesor, no se 
   assert.ok(s.includes("DUDOSA"), "el prompt nombra la cuarta situacion");
   assert.ok(/refs_dudosas/.test(s), "el prompt dice explicitamente el nombre del campo");
 });
+
+test("apruebaAviso: SOLO refs_dudosas (refs_utiles vacio) SI aprueba el aviso -- este era el bug", () => {
+  const veredicto = {
+    es_pedido_real: true, sirve_alguna: false, refs_utiles: [],
+    refs_dudosas: ["REF1"], por_que: "x", confianza: 0.6,
+  };
+  assert.strictEqual(revalidar.apruebaAviso(veredicto), true);
+});
+
+test("apruebaAviso: ni utiles ni dudosas -- no aprueba", () => {
+  const veredicto = {
+    es_pedido_real: true, sirve_alguna: false, refs_utiles: [],
+    refs_dudosas: [], por_que: "x", confianza: 0.6,
+  };
+  assert.strictEqual(revalidar.apruebaAviso(veredicto), false);
+});

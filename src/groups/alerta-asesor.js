@@ -138,20 +138,24 @@ function mensajeListoParaReenviar(senal, veredicto, utiles, org) {
  * @returns el texto del aviso, o null si no hay nada que decir
  */
 function construir(senal, veredicto, matches, telefonoColega = null, org = null) {
-  if (!veredicto || !Array.isArray(veredicto.refs_utiles) || veredicto.refs_utiles.length === 0) return null;
+  const refsUtiles = veredicto && Array.isArray(veredicto.refs_utiles) ? veredicto.refs_utiles : [];
+  const refsDudosas = veredicto && Array.isArray(veredicto.refs_dudosas) ? veredicto.refs_dudosas : [];
+  if (!veredicto || (refsUtiles.length === 0 && refsDudosas.length === 0)) return null;
 
-  const utiles = veredicto.refs_utiles
+  const utiles = refsUtiles
     .map((ref) => (matches || []).find((m) => String(m.ref) === String(ref)))
     .filter(Boolean);
-  if (utiles.length === 0) return null;
-
   // Para revisar (Juan, 2026-09-01): refs_dudosas de revalidar.js -- Sofi no
   // las aprueba para el envio normal, pero tampoco las descarta del todo.
   // Van SOLO al asesor, nunca al colega (a diferencia de `utiles`, que
   // alimenta tambien el DM/mensaje blanqueado mas abajo en este archivo).
-  const dudosas = (veredicto.refs_dudosas || [])
+  // Se calculan las dos ANTES de decidir si hay algo que avisar: un veredicto
+  // solo-dudosas (nada en refs_utiles) tiene que seguir avisando -- perderlo
+  // es exactamente el bug que refs_dudosas existe para evitar.
+  const dudosas = refsDudosas
     .map((ref) => (matches || []).find((m) => String(m.ref) === String(ref)))
     .filter(Boolean);
+  if (utiles.length === 0 && dudosas.length === 0) return null;
 
   const quien = senal.autor_nombre || "un colega";
   const contactoTexto = contactoPara(telefonoColega, senal.autor_telefono, quien);
@@ -165,15 +169,22 @@ function construir(senal, veredicto, matches, telefonoColega = null, org = null)
     ``,
     `Pidió:`,
     `"${(senal.texto_original || "").trim()}"`,
-    ``,
-    utiles.length === 1 ? `Le puede servir:` : `Le pueden servir:`,
-    utiles.map(linea).join("\n"),
   ];
+
+  if (utiles.length) {
+    lineas.push(
+      ``,
+      utiles.length === 1 ? `Le puede servir:` : `Le pueden servir:`,
+      utiles.map(linea).join("\n")
+    );
+  }
 
   if (dudosas.length) {
     lineas.push(
       ``,
-      `🔎 Para revisar (no confirmadas — decidí vos si vale la pena llamar al colega):`,
+      utiles.length
+        ? `🔎 Para revisar (no confirmadas — decidí vos si vale la pena llamar al colega):`
+        : `🔎 Para revisar (nada confirmado del todo — decidí vos si vale la pena llamar al colega):`,
       dudosas.map(linea).join("\n")
     );
   }
@@ -185,7 +196,7 @@ function construir(senal, veredicto, matches, telefonoColega = null, org = null)
   // texto YA armado, con urgencia, para que copiar/pegar sea lo unico que
   // haga falta. Con telefono resuelto no hace falta: la asesora ya tiene el
   // link directo al privado arriba, en `Contacto:`.
-  if (!telefonoResuelto(telefonoColega, senal.autor_telefono)) {
+  if (utiles.length && !telefonoResuelto(telefonoColega, senal.autor_telefono)) {
     const mensajeListo = mensajeListoParaReenviar(senal, veredicto, utiles, org);
     if (mensajeListo) {
       lineas.push(

@@ -68,7 +68,13 @@ function instalar() {
         loQueVioSofi = matches;
         return { veredicto: veredictoDeSofi, uso: {} };
       },
-      apruebaAviso: (v) => Boolean(v && v.es_pedido_real && v.sirve_alguna && (v.refs_utiles || []).length),
+      // FIX (Juan, 2026-09-01): este mock reimplementa apruebaAviso a mano en
+      // vez de llamar al modulo real (que esta mockeado arriba) -- tiene que
+      // seguir la misma logica que src/groups/revalidar.js#apruebaAviso o el
+      // mock queda desincronizado del bug que se corrigio ahi: ahora aprueba
+      // por refs_utiles O por refs_dudosas, no solo por refs_utiles.
+      apruebaAviso: (v) =>
+        Boolean(v && v.es_pedido_real && ((v.refs_utiles || []).length || (v.refs_dudosas || []).length)),
     },
   };
   require.cache[RUTA("data/group-signals.js")] = {
@@ -220,6 +226,21 @@ test("Sofi aprueba y la asesora recibe el aviso completo", async () => {
   // Y el porque, que es lo que lo vuelve accionable.
   assert.match(t, /Sofi dice:/);
   assert.match(t, /Contame en qué quedó/, "pide respuesta: dato de calibracion y renueva la ventana");
+});
+
+// FIX (Juan, 2026-09-01) -- un veredicto con SOLO refs_dudosas (refs_utiles
+// vacio) se estaba descartando ANTES de llegar a alertaAsesor.construir,
+// exactamente el bug que refs_dudosas existe para evitar. Prueba de punta a
+// punta sobre asistir(), no solo sobre las dos funciones por separado.
+test("Sofi solo marca refs_dudosas (ninguna utiles) -- la asesora IGUAL recibe el aviso, con la seccion Para revisar", async () => {
+  veredictoDeSofi = { ...APRUEBA, refs_utiles: [], refs_dudosas: ["9780079"] };
+
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE });
+
+  assert.strictEqual(r.resultado, "avisada");
+  assert.strictEqual(enviadosPorSofi.length, 1);
+  assert.match(enviadosPorSofi[0].texto, /Para revisar/i);
+  assert.match(enviadosPorSofi[0].texto, /9780079/);
 });
 
 test("en asistido NO se publica nada en el grupo", async () => {

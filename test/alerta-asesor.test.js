@@ -202,6 +202,33 @@ test("un veredicto VIEJO sin refs_dudosas no revienta -- se trata como vacio", (
   assert.match(texto, /Ref AP004/, "el resto del aviso sigue funcionando igual");
 });
 
+// FIX (Juan, 2026-09-01) -- un veredicto con SOLO refs_dudosas (refs_utiles
+// vacio) se estaba perdiendo por completo: exactamente el bug que
+// refs_dudosas existe para evitar.
+test("con SOLO refs_dudosas (refs_utiles vacio), el aviso SI se arma -- no se pierde", () => {
+  const veredictoSoloDudosas = { ...VEREDICTO, refs_utiles: [], refs_dudosas: ["AP004"] };
+  const texto = construir(senal(), veredictoSoloDudosas, [matchUtil()], "573001234567");
+  assert.notStrictEqual(texto, null, "un veredicto solo-dudosas no puede devolver null");
+  assert.match(texto, /Para revisar/i);
+  assert.match(texto, /Ref AP004/);
+});
+
+test("con SOLO refs_dudosas, NO ofrece un mensaje listo para reenviar al colega (no hay nada confirmado que reenviar)", () => {
+  const veredictoSoloDudosas = { ...VEREDICTO, refs_utiles: [], refs_dudosas: ["AP004"] };
+  const texto = construir(
+    senal(),
+    veredictoSoloDudosas,
+    [matchUtil({ linkWasi: "https://info.wasi.co/apartamento-venta-ap004/9744456" })],
+    null // sin telefono resuelto -- el caso donde normalmente SI se arma el mensaje listo
+  );
+  assert.doesNotMatch(texto, /mandale ESTO YA/i);
+});
+
+test("sin ninguna ref (ni utiles ni dudosas), sigue devolviendo null", () => {
+  const texto = construir(senal(), { ...VEREDICTO, refs_utiles: [], refs_dudosas: [] }, [matchUtil()], "573001234567");
+  assert.strictEqual(texto, null);
+});
+
 test("las propiedades de 'Para revisar' NO llegan al mensaje listo para reenviar al colega", () => {
   // Cubre el constraint global: refs_dudosas nunca sale hacia el colega,
   // solo el asesor las ve. mensajeListoParaReenviar se arma con `utiles`

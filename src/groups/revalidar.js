@@ -310,15 +310,14 @@ async function revalidar(clasificado, matches) {
   }
 }
 
-/** ¿El veredicto habilita avisarle a la asesora? */
+/** ¿El veredicto habilita avisarle a la asesora? -- por refs_utiles O por
+ * refs_dudosas (Juan, 2026-09-01): antes solo lo confirmado avisaba; ahora lo
+ * dudoso tambien llega al asesor, nunca al colega -- ver alerta-asesor.js. */
 function apruebaAviso(veredicto) {
-  return Boolean(
-    veredicto &&
-      veredicto.es_pedido_real &&
-      veredicto.sirve_alguna &&
-      Array.isArray(veredicto.refs_utiles) &&
-      veredicto.refs_utiles.length > 0
-  );
+  if (!veredicto || !veredicto.es_pedido_real) return false;
+  const utiles = Array.isArray(veredicto.refs_utiles) ? veredicto.refs_utiles : [];
+  const dudosas = Array.isArray(veredicto.refs_dudosas) ? veredicto.refs_dudosas : [];
+  return utiles.length > 0 || dudosas.length > 0;
 }
 
 module.exports = { revalidar, apruebaAviso, formatearCandidatas, MODELO, ESQUEMA, SISTEMA };
