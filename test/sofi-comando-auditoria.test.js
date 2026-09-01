@@ -26,6 +26,13 @@ test("pareceConfirmacion: un texto que no confirma nada da false", () => {
   assert.strictEqual(pareceConfirmacion("Hoy no tenés pendientes urgentes."), false);
 });
 
+test("pareceConfirmacion: no confunde una sugerencia ('guardemos') ni una palabra no relacionada ('guardería') con una confirmacion", () => {
+  assert.strictEqual(pareceConfirmacion("¿Guardemos el mandato de Sara?"), false);
+  assert.strictEqual(pareceConfirmacion("Enviemos el resumen mañana"), false);
+  assert.strictEqual(pareceConfirmacion("Registremos el resultado despues"), false);
+  assert.strictEqual(pareceConfirmacion("hay una guarderia cerca"), false);
+});
+
 test("esFalloDeHerramienta: 'No pude...' es un fallo real", () => {
   assert.strictEqual(esFalloDeHerramienta("No pude guardar el mandato — avisale a Juan, puede ser que falte correr una migración."), true);
 });

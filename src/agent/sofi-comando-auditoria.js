@@ -7,12 +7,20 @@
 // src/groups/vivo.js (colegas) NUNCA importan este archivo -- ver
 // docs/superpowers/specs/2026-09-01-sofi-comando-auditoria-honestidad-design.md.
 
+// Nota sobre (?!\w): en ECMAScript \b y \w son ASCII-only (identico en
+// cualquier SO/version de Node, no es un tema de plataforma). Eso rompe
+// \b justo despues de una vocal acentuada (e/i) -- "guard[eé]\b" nunca
+// matchea "guarde"/"guardé" porque \b no ve la e/é como "letra". Sacar el
+// \b final sin mas soluciona eso pero abre la puerta a falsos positivos por
+// substring ("Enviemos", "guarderia"). (?!\w) evita ambos problemas: exige
+// que lo que sigue a la vocal NO sea un caracter de palabra ASCII, sin
+// depender de que \b reconozca la vocal acentuada como limite.
 const PATRONES_CONFIRMACION = [
   /✅/,
-  /\bguard[eé]/i,
+  /\bguard[eé](?!\w)/i,
   /\bguardado\b/i,
-  /\benvi[eé]/i,
-  /\bregistr[eé]/i,
+  /\benvi[eé](?!\w)/i,
+  /\bregistr[eé](?!\w)/i,
   /\bregistrado\b/i,
   /listo,?\s+le\s+mand[eé]/i,
   /ya\s+le\s+escrib[ií]/i,
