@@ -174,3 +174,48 @@ test("con telefono resuelto, NO agrega el bloque de mensaje listo para copiar --
   );
   assert.doesNotMatch(texto, /mandale ESTO YA/i);
 });
+
+// "Para revisar" (Juan, 2026-09-01): refs_dudosas del veredicto (ver
+// src/groups/revalidar.js) aparecen en el aviso al asesor, nunca en el DM
+// al colega -- esa sigue siendo exclusiva de refs_utiles.
+
+test("con refs_dudosas, el aviso agrega una seccion 'Para revisar' con esas propiedades", () => {
+  const veredictoConDudosas = { ...VEREDICTO, refs_dudosas: ["AP009"] };
+  const otraPropiedad = matchUtil({ ref: "AP009", titulo: "Apartamento en Sabaneta", zona: "Sabaneta" });
+  const texto = construir(senal(), veredictoConDudosas, [matchUtil(), otraPropiedad], "573001234567");
+
+  assert.match(texto, /Para revisar/i);
+  assert.match(texto, /Ref AP009/);
+  assert.match(texto, /Sabaneta/);
+});
+
+test("sin refs_dudosas (o vacio), no hay seccion 'Para revisar'", () => {
+  const texto = construir(senal(), VEREDICTO, [matchUtil()], "573001234567");
+  assert.doesNotMatch(texto, /Para revisar/i);
+});
+
+test("un veredicto VIEJO sin refs_dudosas no revienta -- se trata como vacio", () => {
+  const veredictoViejo = { ...VEREDICTO };
+  delete veredictoViejo.refs_dudosas;
+  const texto = construir(senal(), veredictoViejo, [matchUtil()], "573001234567");
+  assert.doesNotMatch(texto, /Para revisar/i);
+  assert.match(texto, /Ref AP004/, "el resto del aviso sigue funcionando igual");
+});
+
+test("las propiedades de 'Para revisar' NO llegan al mensaje listo para reenviar al colega", () => {
+  // Cubre el constraint global: refs_dudosas nunca sale hacia el colega,
+  // solo el asesor las ve. mensajeListoParaReenviar se arma con `utiles`
+  // (refs_utiles), nunca con las dudosas -- esto lo confirma end-to-end
+  // sobre el texto final, sin telefono resuelto (el caso donde SI se arma
+  // ese mensaje).
+  const veredictoConDudosas = { ...VEREDICTO, refs_dudosas: ["AP009"], sin_confirmar: [] };
+  const dudosa = matchUtil({ ref: "AP009", titulo: "Apartamento en Sabaneta", linkWasi: "https://info.wasi.co/ap009" });
+  const util = matchUtil({ linkWasi: "https://info.wasi.co/apartamento-venta-ap004/9744456" });
+  const texto = construir(senal(), veredictoConDudosas, [util, dudosa], null);
+
+  // El bloque "mandale ESTO YA" es el mensaje blanqueado para el colega.
+  const inicioMensajeListo = texto.indexOf("mandale ESTO YA");
+  assert.notStrictEqual(inicioMensajeListo, -1);
+  const mensajeListo = texto.slice(inicioMensajeListo);
+  assert.doesNotMatch(mensajeListo, /AP009|Sabaneta/, "la dudosa no puede aparecer en el texto que se reenvia al colega");
+});

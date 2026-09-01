@@ -145,6 +145,14 @@ function construir(senal, veredicto, matches, telefonoColega = null, org = null)
     .filter(Boolean);
   if (utiles.length === 0) return null;
 
+  // Para revisar (Juan, 2026-09-01): refs_dudosas de revalidar.js -- Sofi no
+  // las aprueba para el envio normal, pero tampoco las descarta del todo.
+  // Van SOLO al asesor, nunca al colega (a diferencia de `utiles`, que
+  // alimenta tambien el DM/mensaje blanqueado mas abajo en este archivo).
+  const dudosas = (veredicto.refs_dudosas || [])
+    .map((ref) => (matches || []).find((m) => String(m.ref) === String(ref)))
+    .filter(Boolean);
+
   const quien = senal.autor_nombre || "un colega";
   const contactoTexto = contactoPara(telefonoColega, senal.autor_telefono, quien);
 
@@ -160,9 +168,17 @@ function construir(senal, veredicto, matches, telefonoColega = null, org = null)
     ``,
     utiles.length === 1 ? `Le puede servir:` : `Le pueden servir:`,
     utiles.map(linea).join("\n"),
-    ``,
-    `Sofi dice: ${veredicto.por_que}`,
   ];
+
+  if (dudosas.length) {
+    lineas.push(
+      ``,
+      `🔎 Para revisar (no confirmadas — decidí vos si vale la pena llamar al colega):`,
+      dudosas.map(linea).join("\n")
+    );
+  }
+
+  lineas.push(``, `Sofi dice: ${veredicto.por_que}`);
 
   // Mensaje listo para reenviar (Juan, 2026-09-01): sin telefono resuelto,
   // nadie mas que un humano puede escribirle al colega -- se le entrega el
