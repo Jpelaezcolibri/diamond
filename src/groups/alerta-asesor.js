@@ -235,4 +235,35 @@ function construir(senal, veredicto, matches, telefonoColega = null, org = null)
   return completo;
 }
 
-module.exports = { construir, linea };
+// Aviso liviano post-DM (Juan, 2026-09-01): el DM directo al colega SI salio,
+// pero el mismo pedido tenia propiedades dudosas que no se mandaron -- antes
+// esto se perdia en silencio ("no tiene nada que hacer" solo es cierto si no
+// queda nada pendiente). Deliberadamente separada de construir(): la forma es
+// distinta, no hace falta Contacto (la asesora no tiene que contactar a
+// nadie, el DM ya salio) ni el texto completo del pedido.
+//
+// @param senal          solo necesita autor_nombre
+// @param veredicto      lo que devolvio revalidar.js
+// @param matches        las candidatas (para resolver las refs a fichas completas)
+// @param refsEnviadas   array de refs que SI se mandaron por DM (utiles.map(m => m.ref))
+// @returns el texto del aviso, o null si no hay refs_dudosas
+function construirAvisoPostDm(senal, veredicto, matches, refsEnviadas) {
+  const dudosas = (veredicto && Array.isArray(veredicto.refs_dudosas) ? veredicto.refs_dudosas : [])
+    .map((ref) => (matches || []).find((m) => String(m.ref) === String(ref)))
+    .filter(Boolean);
+  if (dudosas.length === 0) return null;
+
+  const quien = senal.autor_nombre || "un colega";
+  const enviadas = (refsEnviadas || []).filter(Boolean);
+  const detalleEnviadas = enviadas.length ? `: ${enviadas.map((r) => `Ref ${r}`).join(", ")}` : ".";
+
+  const lineas = [
+    `✅ Ya le mandé por privado a ${quien}${detalleEnviadas}`,
+    ``,
+    `🔎 Esto otro quedó sin mandar (no confirmado) — decidí vos si vale la pena:`,
+    dudosas.map(linea).join("\n"),
+  ];
+  return lineas.join("\n");
+}
+
+module.exports = { construir, construirAvisoPostDm, linea };

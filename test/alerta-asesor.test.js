@@ -311,3 +311,35 @@ test("con pocas propiedades (mensaje corto), el listado 'Le puede(n) servir' sig
   );
   assert.match(texto, /Le puede servir:\n▸ Ref AP004/, "con un mensaje corto, no hace falta comprimir nada");
 });
+
+// construirAvisoPostDm (Juan, 2026-09-01): cuando el DM directo al colega
+// SI sale, pero el pedido tenia propiedades dudosas, la asesora se entera
+// igual -- antes esto se perdia en silencio.
+
+test("construirAvisoPostDm: sin refs_dudosas, devuelve null -- no hay nada pendiente que avisar", () => {
+  const { construirAvisoPostDm } = require("../src/groups/alerta-asesor");
+  const texto = construirAvisoPostDm({ autor_nombre: "Patricia Gomez" }, VEREDICTO, [matchUtil()], ["AP004"]);
+  assert.strictEqual(texto, null);
+});
+
+test("construirAvisoPostDm: con refs_dudosas, dice que ya se mando y que queda pendiente", () => {
+  const { construirAvisoPostDm } = require("../src/groups/alerta-asesor");
+  const veredictoConDudosas = { ...VEREDICTO, refs_dudosas: ["AP009"] };
+  const dudosa = matchUtil({ ref: "AP009", titulo: "Apartamento en Sabaneta", zona: "Sabaneta" });
+  const texto = construirAvisoPostDm({ autor_nombre: "Patricia Gomez" }, veredictoConDudosas, [matchUtil(), dudosa], ["AP004"]);
+
+  assert.notStrictEqual(texto, null);
+  assert.match(texto, /Ya le mandé por privado a Patricia Gomez/i);
+  assert.match(texto, /AP004/, "menciona lo que ya se envio");
+  assert.match(texto, /Ref AP009/, "lista la dudosa con el mismo formato que 'Para revisar'");
+  assert.match(texto, /Sabaneta/);
+});
+
+test("construirAvisoPostDm: sin refsEnviadas (undefined), no revienta -- solo no menciona nada enviado", () => {
+  const { construirAvisoPostDm } = require("../src/groups/alerta-asesor");
+  const veredictoConDudosas = { ...VEREDICTO, refs_dudosas: ["AP009"] };
+  const dudosa = matchUtil({ ref: "AP009" });
+  const texto = construirAvisoPostDm({ autor_nombre: "Patricia Gomez" }, veredictoConDudosas, [dudosa], undefined);
+  assert.notStrictEqual(texto, null);
+  assert.match(texto, /Ya le mandé por privado a Patricia Gomez/i);
+});
