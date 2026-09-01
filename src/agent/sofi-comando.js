@@ -10,7 +10,9 @@
 const config = require("../config");
 const command = require("../data/command");
 const { buildCommandSystemPrompt } = require("./sofi-comando-prompts");
-const { executeCommandTool, toolsForScope } = require("./sofi-comando-tools");
+const { executeCommandTool, toolsForScope, MUTATING_TOOLS } = require("./sofi-comando-tools");
+const { auditar } = require("./sofi-comando-auditoria");
+const { notificarFalloComando } = require("./notificar-fallo-comando");
 const { getClient } = require("../lib/anthropic");
 
 // 8, no 5: encontrado en produccion 2026-08-18 — Juan le pidio a Sofi mandarle
@@ -243,6 +245,7 @@ async function processMessage(scope, sessionId, text, { userName } = {}) {
   });
 
   const textParts = [];
+  const llamadasMutantes = [];
   let iterations = 0;
   while (response.stop_reason === "tool_use" && iterations < MAX_TOOL_ITERATIONS) {
     iterations++;
@@ -261,6 +264,7 @@ async function processMessage(scope, sessionId, text, { userName } = {}) {
         console.error(`[sofi-comando] Error en tool ${block.name}:`, e.message);
         result = `Error ejecutando la herramienta: ${e.message}`;
       }
+      if (MUTATING_TOOLS.has(block.name)) llamadasMutantes.push({ nombre: block.name, resultado: result });
       toolResults.push({ type: "tool_result", tool_use_id: block.id, content: result });
     }
     messages.push({ role: "user", content: toolResults });
@@ -290,6 +294,16 @@ async function processMessage(scope, sessionId, text, { userName } = {}) {
     reply = agotoIteraciones
       ? 'Ya hice varias de las acciones que me pediste, pero llegue al limite de pasos para un solo mensaje. Decime "segui" y continuo con el resto.'
       : "No pude procesar eso. ¿Lo intentamos de otra forma?";
+  }
+
+  const auditoria = auditar({ textoFinal: reply, llamadasMutantes });
+  if (auditoria.sinConfirmar) {
+    reply += "\n\n⚠️ No pude confirmar que esto se haya ejecutado de verdad — no llamé ninguna herramienta real en este turno. Volvé a pedírmelo así lo intento de nuevo.";
+  }
+  if (auditoria.notificar) {
+    notificarFalloComando(scope, { userName, textoUsuario: text, reply, auditoria }).catch((e) =>
+      console.warn("[sofi-comando] no se pudo notificar el fallo:", e.message)
+    );
   }
 
   await command.appendCommandMessage(sessionId, "assistant", reply);
