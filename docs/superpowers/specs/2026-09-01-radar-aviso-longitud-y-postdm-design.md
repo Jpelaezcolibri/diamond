@@ -54,10 +54,9 @@ En `src/groups/alerta-asesor.js#construir`:
 
 ## 3. Diseño — Parte B: aviso cuando el DM sale bien pero quedan dudosas
 
-Nueva función, `construirAvisoPostDm(senal, veredicto, matches, refsEnviadas)`
+Nueva función, `construirAvisoPostDm(senal, veredicto, matches, refsEnviadas, telefonoColega)`
 en `src/groups/alerta-asesor.js` — deliberadamente separada de `construir`
-(la forma del mensaje es distinta: no hace falta `Contacto:` porque la
-asesora no tiene que contactar a nadie, el DM ya salió):
+(la forma del mensaje es distinta, no incluye el texto completo del pedido):
 
 - Recibe `refsEnviadas` (las refs que SÍ se mandaron por DM — ya se sabe en
   `vivo.js#asistir`, es `utiles.map(m => m.ref)`) y `veredicto.refs_dudosas`.
@@ -68,9 +67,22 @@ asesora no tiene que contactar a nadie, el DM ya salió):
 ```
 ✅ Ya le mandé por privado a {colega}: Ref X, Ref Y...
 
+Grupo: {grupo}
+Contacto: {link directo al WhatsApp del colega, o el fallback "tocá el nombre en el grupo"}
+
 🔎 Esto otro quedó sin mandar (no confirmado) — decidí vos si vale la pena:
 {listado con linea(), igual formato que "Para revisar" en construir}
 ```
+
+**REVISIÓN (Juan, 2026-09-01, post-implementación):** el diseño original NO
+incluía `Contacto:` en este mensaje ("la asesora no tiene que contactar a
+nadie, el DM ya salió") — pero si la asesora decide que una dudosa SÍ vale
+la pena mandarla, necesitaba el grupo y un link directo al colega para poder
+hacerlo sin volver al grupo a buscarlo. Se agregó `Grupo:` y `Contacto:`,
+reusando `contactoPara()` (la misma función de `construir`, con el mismo
+fallback cuando no hay teléfono resuelto) y un quinto parámetro
+`telefonoColega` — el mismo teléfono ya resuelto por el directorio que
+recibió el DM, disponible en `vivo.js#asistir` en ese mismo punto.
 
 En `src/groups/vivo.js#asistir`, en la rama donde el DM sale bien
 (`envioDm && envioDm.ok`), ANTES del `return { resultado: "dm_enviado", ... }`:
