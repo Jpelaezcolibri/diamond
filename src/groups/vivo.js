@@ -422,7 +422,11 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
             refsDm
           );
           if (avisoPostDm) {
-            await mensajeAsesor.enviarYRegistrar(org, asesor.phone, avisoPostDm).catch((e) =>
+            // Mismo criterio que telefonoPrincipal mas abajo en esta funcion: la
+            // tabla advisors guarda el numero en formatos distintos segun quien lo
+            // cargo (ver src/data/advisors.js) y enviarYRegistrar espera solo digitos.
+            const telefonoAsesor = String(asesor.phone).replace(/\D/g, "");
+            await mensajeAsesor.enviarYRegistrar(org, telefonoAsesor, avisoPostDm).catch((e) =>
               console.warn("[radar] No se pudo mandar el aviso post-DM:", e.message)
             );
           }
