@@ -357,6 +357,19 @@ const ADMIN_ONLY_TOOLS = new Set([
   "aprobar_pedido_radar",
 ]);
 
+// Herramientas que escriben en base o mandan un WhatsApp -- las que Sofi
+// puede "mentir" sobre haber ejecutado. El resto (consultar_*, buscar_*,
+// metricas_leads, resumen_lead, trazabilidad_radar, etc.) son de solo lectura
+// y quedan fuera: no hay nada que puedan fingir haber hecho.
+// Usado por src/agent/sofi-comando.js#processMessage junto con
+// src/agent/sofi-comando-auditoria.js -- ver el spec del 2026-09-01.
+const MUTATING_TOOLS = new Set([
+  "registrar_mandato_compra", "enviar_whatsapp_equipo", "crear_recordatorio_equipo",
+  "registrar_resultado_radar", "aprobar_pedido_radar", "enviar_matches_pendientes_equipo",
+  "cerrar_lead", "registrar_propiedad_colega", "marcar_propiedad",
+  "marcar_prioridad_venta", "crear_recordatorio", "completar_recordatorio",
+]);
+
 function toolsForScope(scope) {
   if (scope && scope.isAdmin) return COMMAND_TOOL_DEFINITIONS;
   return COMMAND_TOOL_DEFINITIONS.filter((t) => !ADMIN_ONLY_TOOLS.has(t.name));
@@ -933,4 +946,4 @@ async function aprobarPedidoRadarComando(input, ctx) {
   }
 }
 
-module.exports = { COMMAND_TOOL_DEFINITIONS, executeCommandTool, toolsForScope };
+module.exports = { COMMAND_TOOL_DEFINITIONS, executeCommandTool, toolsForScope, MUTATING_TOOLS };
