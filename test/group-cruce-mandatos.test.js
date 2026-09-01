@@ -210,3 +210,46 @@ test("la oferta esta por debajo del piso explicito (precio_min) del mandato", ()
     `debe avisar que la oferta esta por debajo del piso pedido por el cliente: ${JSON.stringify(r.salvedades)}`
   );
 });
+
+// Nivel de confianza (Juan, 2026-09-01): "sirve" ya no alcanza para decidir
+// que tan fuerte encabezar el aviso -- el portón se queda igual (filo bajo,
+// nada nuevo se descarta), pero "fuerte" vs "revisar" le dice al asesor si
+// esto es un match limpio o uno que hay que confirmar con calma.
+
+test("zona exacta + dentro del tope + habitaciones cumplidas -> nivel fuerte", () => {
+  const r = evaluarOferta(OFERTA, MANDATO);
+  assert.strictEqual(r.nivel, "fuerte");
+});
+
+test("zona vecina -> nivel revisar, aunque el resto cumpla", () => {
+  const mandatoConCiudad = { ...MANDATO, zonas: ["Envigado"], ciudad: "Medellín" };
+  const r = evaluarOferta({ ...OFERTA, zona: "El Poblado", ciudad: "Medellín", precio: "$1.900.000.000" }, mandatoConCiudad);
+  assert.ok(r, "El Poblado es vecina de Envigado en el motor de zonas");
+  assert.strictEqual(r.ubicacion, "vecina");
+  assert.strictEqual(r.nivel, "revisar");
+});
+
+test("precio dentro del margen del 15% pero por encima del tope exacto -> nivel revisar", () => {
+  const r = evaluarOferta({ ...OFERTA, precio: "$2.508.000.000" }, MANDATO); // 14% arriba
+  assert.ok(r.sirve);
+  assert.strictEqual(r.nivel, "revisar");
+});
+
+test("le falta una habitacion pedida -> nivel revisar", () => {
+  const r = evaluarOferta({ ...OFERTA, habitaciones: 3 }, MANDATO); // pide 4
+  assert.ok(r.sirve);
+  assert.strictEqual(r.nivel, "revisar");
+});
+
+test("habitaciones de menos pero el mandato es flexible_habitaciones -> sigue siendo fuerte", () => {
+  const mandatoFlexible = { ...MANDATO, flexible_habitaciones: true };
+  const r = evaluarOferta({ ...OFERTA, habitaciones: 3 }, mandatoFlexible);
+  assert.ok(r.sirve);
+  assert.strictEqual(r.nivel, "fuerte", "el cliente ya dijo que una menos con estudio/servicio le sirve");
+});
+
+test("area/garajes/estrato/exigencias de menos NO bajan el nivel -- siguen siendo blandos incluso en fuerte", () => {
+  const r = evaluarOferta({ ...OFERTA, area: 145 }, MANDATO); // area_min es 150
+  assert.ok(r.sirve);
+  assert.strictEqual(r.nivel, "fuerte", "area es blando en los dos niveles, solo zona/precio/habitaciones/baños definen el nivel");
+});

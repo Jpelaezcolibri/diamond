@@ -217,7 +217,24 @@ function evaluarOferta(oferta, mandato, { margenPrecio = MARGEN_PRECIO_DEFAULT }
   const exigencias = lista(mandato.exigencias);
   if (exigencias.length) salvedades.push(`Sin verificar: ${exigencias.join(", ")}`);
 
-  return { sirve: true, puntaje: m.puntaje, ubicacion: m.ubicacion, cumple, salvedades };
+  // Nivel de confianza (Juan, 2026-09-01): el portón de arriba no cambia --
+  // esto es una clasificación ENCIMA de lo que ya pasó el filtro, para que el
+  // encabezado del aviso sea honesto sobre que tan solido es el match.
+  // "fuerte" exige lo mismo que hoy se muestra como "cumple" sin salvedad en
+  // los tres ejes de fondo (zona, precio, habitaciones/baños); cualquier otra
+  // cosa que paso el portón (zona vecina, margen de precio, falta una
+  // habitacion o un baño pedido) es "revisar". flexible_habitaciones cuenta
+  // como cumplido: el cliente ya dijo que una menos con estudio/servicio le
+  // sirve, no es un motivo para bajarlo de nivel.
+  const habitacionesFuerte = c.habitaciones <= 0
+    || num(oferta.habitaciones) >= c.habitaciones
+    || (c.flexible_habitaciones && num(oferta.habitaciones) === c.habitaciones - 1);
+  const banosFuerte = c.banos <= 0 || num(oferta.banos) >= c.banos;
+  const nivel = (m.ubicacion === "exacta" && precio > 0 && precio <= c.precio_max && habitacionesFuerte && banosFuerte)
+    ? "fuerte"
+    : "revisar";
+
+  return { sirve: true, puntaje: m.puntaje, ubicacion: m.ubicacion, cumple, salvedades, nivel };
 }
 
 module.exports = { evaluarOferta, criterioDeMandato, MARGEN_PRECIO_DEFAULT };
