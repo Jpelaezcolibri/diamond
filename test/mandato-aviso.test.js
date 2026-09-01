@@ -125,3 +125,21 @@ test("una salvedad sin el prefijo 'Sin verificar:' si mantiene la etiqueta Ojo:"
   });
   assert.ok(/Ojo: no tiene garaje propio/.test(t));
 });
+
+test("nivel 'fuerte' (o ausente, por compatibilidad) usa el encabezado de siempre", () => {
+  const t = buildMandatoMatchAlert(BASE); // BASE.evaluacion no trae 'nivel'
+  assert.match(t, /^🎯 Oferta nueva que le sirve a Marcela Restrepo/);
+});
+
+test("nivel 'revisar' usa un encabezado distinto, sin prometer que sirve", () => {
+  const t = buildMandatoMatchAlert({ ...BASE, evaluacion: { ...BASE.evaluacion, nivel: "revisar" } });
+  assert.match(t, /^🔎 Revisar con el colega — match parcial para Marcela Restrepo/);
+  assert.doesNotMatch(t, /Oferta nueva que le sirve/);
+});
+
+test("el cuerpo del mensaje (Cumple/Ojo/ficha) no cambia entre niveles", () => {
+  const fuerte = buildMandatoMatchAlert({ ...BASE, evaluacion: { ...BASE.evaluacion, nivel: "fuerte" } });
+  const revisar = buildMandatoMatchAlert({ ...BASE, evaluacion: { ...BASE.evaluacion, nivel: "revisar" } });
+  const sinEncabezado = (t) => t.split("\n").slice(1).join("\n");
+  assert.strictEqual(sinEncabezado(fuerte), sinEncabezado(revisar));
+});

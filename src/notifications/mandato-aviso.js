@@ -83,9 +83,17 @@ function buildMandatoMatchAlert({ mandato, oferta, evaluacion, colega = {}, grup
   const visto = [grupo ? `Visto en: ${grupo}` : null, horaBogota(vistoEnIso) || null]
     .filter(Boolean).join(" · ");
 
+  // Encabezado segun nivel (Juan, 2026-09-01): "fuerte" es el mensaje de
+  // siempre; "revisar" es el mismo cuerpo (Cumple/Ojo no cambian) pero sin
+  // prometerle al asesor una confianza que el match no tiene. Sin 'nivel'
+  // (fixtures viejos, o codigo que arma evaluacion a mano) se trata como
+  // fuerte -- es el comportamiento que ya existia antes de este cambio.
+  const encabezado = evaluacion.nivel === "revisar"
+    ? `🔎 Revisar con el colega — match parcial para ${cliente}`
+    : `🎯 Oferta nueva que le sirve a ${cliente}`;
   const ficha = fichaDe(oferta);
   const lineas = [
-    `🎯 Oferta nueva que le sirve a ${cliente}`,
+    encabezado,
     "",
     `${tipo}${operacion}${zona}`,
   ];
