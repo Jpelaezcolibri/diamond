@@ -253,26 +253,37 @@ function clamp(texto) {
 // pero el mismo pedido tenia propiedades dudosas que no se mandaron -- antes
 // esto se perdia en silencio ("no tiene nada que hacer" solo es cierto si no
 // queda nada pendiente). Deliberadamente separada de construir(): la forma es
-// distinta, no hace falta Contacto (la asesora no tiene que contactar a
-// nadie, el DM ya salio) ni el texto completo del pedido.
+// distinta, no hace falta el texto completo del pedido.
 //
-// @param senal          solo necesita autor_nombre
+// CON CONTACTO (Juan, 2026-09-01): si la asesora decide que SI vale la pena
+// mandar una dudosa, tiene que poder hacerlo sin volver al grupo a buscar
+// quien la pidio -- mismo contactoPara() que usa construir(), con el mismo
+// fallback (tocar el nombre en el grupo) cuando no hay telefono resuelto:
+// nunca se pierde el lead por falta de un link.
+//
+// @param senal          autor_nombre, grupo_nombre y autor_telefono (los dos ultimos opcionales)
 // @param veredicto      lo que devolvio revalidar.js
 // @param matches        las candidatas (para resolver las refs a fichas completas)
 // @param refsEnviadas   array de refs que SI se mandaron por DM (utiles.map(m => m.ref))
+// @param telefonoColega telefono ya resuelto por el directorio (mismo que recibio el DM), o null
 // @returns el texto del aviso, o null si no hay refs_dudosas
-function construirAvisoPostDm(senal, veredicto, matches, refsEnviadas) {
+function construirAvisoPostDm(senal, veredicto, matches, refsEnviadas, telefonoColega = null) {
   const dudosas = (veredicto && Array.isArray(veredicto.refs_dudosas) ? veredicto.refs_dudosas : [])
     .map((ref) => (matches || []).find((m) => String(m.ref) === String(ref)))
     .filter(Boolean);
   if (dudosas.length === 0) return null;
 
   const quien = (senal && senal.autor_nombre) || "un colega";
+  const grupo = (senal && senal.grupo_nombre) || "sin nombre";
+  const contactoTexto = contactoPara(telefonoColega, senal && senal.autor_telefono, quien);
   const enviadas = (refsEnviadas || []).filter(Boolean);
   const detalleEnviadas = enviadas.length ? `: ${enviadas.map((r) => `Ref ${r}`).join(", ")}` : ".";
 
   const lineas = [
     `✅ Ya le mandé por privado a ${quien}${detalleEnviadas}`,
+    ``,
+    `Grupo: ${grupo}`,
+    `Contacto: ${contactoTexto}`,
     ``,
     `🔎 Esto otro quedó sin mandar (no confirmado) — decidí vos si vale la pena:`,
     dudosas.map(linea).join("\n"),

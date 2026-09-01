@@ -504,6 +504,11 @@ test("con telefono resuelto Y refs_dudosas, el DM sale Y la asesora recibe el av
   assert.match(enviadosPorSofi[0].texto, /9780079/, "menciona la ref que ya se envio por DM");
   assert.match(enviadosPorSofi[0].texto, /9800000/, "lista la dudosa pendiente");
   assert.match(enviadosPorSofi[0].texto, /Sabaneta/);
+  // AGREGADO (Juan, 2026-09-01): si decide mandar la dudosa, no puede tener
+  // que volver al grupo a buscar quien la pidio -- grupo + link directo al
+  // colega (el mismo telefono que ya recibio el DM).
+  assert.match(enviadosPorSofi[0].texto, /Grupo: Inmobiliarias Medellin/);
+  assert.match(enviadosPorSofi[0].texto, /Contacto: https:\/\/wa\.me\/573001234567/, "link directo al DM del colega");
 });
 
 test("el DM al colega usa el mismo texto que antes iba al grupo (redactar.mensajeGrupo)", async () => {

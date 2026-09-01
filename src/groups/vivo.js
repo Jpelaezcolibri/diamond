@@ -426,11 +426,16 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
         // en el commit 5db7e74. No "arreglar" esto conectando el tracking.
         let avisoPostDm = null;
         if (asesor && asesor.phone) {
+          // Grupo + telefono ya resuelto (Juan, 2026-09-01): si la asesora
+          // decide que SI vale la pena mandar una dudosa, no puede tener que
+          // volver al grupo a buscar quien la pidio -- telefonoColega ya esta
+          // resuelto aca mismo (es el que acaba de recibir el DM).
           avisoPostDm = alertaAsesor.construirAvisoPostDm(
-            { autor_nombre: mensaje.autor },
+            { autor_nombre: mensaje.autor, grupo_nombre: grupo.nombre || grupo.jid, autor_telefono: mensaje.autorTelefono },
             veredicto,
             matches,
-            refsDm
+            refsDm,
+            telefonoColega
           );
           if (avisoPostDm) {
             // Mismo criterio que telefonoPrincipal mas abajo en esta funcion: la

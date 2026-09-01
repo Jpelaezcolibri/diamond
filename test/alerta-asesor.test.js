@@ -431,3 +431,40 @@ test("construirAvisoPostDm: sin refsEnviadas (undefined), no revienta -- solo no
   assert.notStrictEqual(texto, null);
   assert.match(texto, /Ya le mandé por privado a Patricia Gomez/i);
 });
+
+// AGREGADO (Juan, 2026-09-01): "si la asesora ve que esa propiedad tambien
+// se puede mandar, tiene que tener el nombre del colega, el usuario y el
+// nombre del grupo con un link que lleve directo al DM del colega, si no se
+// puede el link entonces con la mayor cantidad de informacion posible" -- sin
+// esto, si decide que SI vale la pena mandar una dudosa, no tenia con que.
+
+test("construirAvisoPostDm: con telefono resuelto, incluye el grupo y un link directo al DM del colega", () => {
+  const { construirAvisoPostDm } = require("../src/groups/alerta-asesor");
+  const veredictoConDudosas = { ...VEREDICTO, refs_dudosas: ["AP009"] };
+  const dudosa = matchUtil({ ref: "AP009", titulo: "Apartamento en Sabaneta", zona: "Sabaneta" });
+  const senalConGrupo = { autor_nombre: "Patricia Gomez", grupo_nombre: "Inmobiliarias Medellin", autor_telefono: "573009998877" };
+  const texto = construirAvisoPostDm(senalConGrupo, veredictoConDudosas, [matchUtil(), dudosa], ["AP004"], "573001234567");
+
+  assert.match(texto, /Grupo: Inmobiliarias Medellin/);
+  assert.match(texto, /Contacto: https:\/\/wa\.me\/573001234567/, "link directo al DM del colega, no al grupo");
+});
+
+test("construirAvisoPostDm: sin telefono resuelto, cae al mismo fallback que construir() -- tocar el nombre en el grupo", () => {
+  const { construirAvisoPostDm } = require("../src/groups/alerta-asesor");
+  const veredictoConDudosas = { ...VEREDICTO, refs_dudosas: ["AP009"] };
+  const dudosa = matchUtil({ ref: "AP009" });
+  const senalSinTelefono = { autor_nombre: "Patricia Gomez", grupo_nombre: "Inmobiliarias Medellin" };
+  const texto = construirAvisoPostDm(senalSinTelefono, veredictoConDudosas, [dudosa], ["AP004"], null);
+
+  // Sin link no se pierde el lead: queda toda la info para ubicar al colega a mano.
+  assert.match(texto, /Contacto: no se pudo resolver el número/);
+  assert.match(texto, /tocá el nombre de Patricia Gomez en el grupo/);
+});
+
+test("construirAvisoPostDm: sin grupo_nombre, no revienta -- dice 'sin nombre' en vez de fallar", () => {
+  const { construirAvisoPostDm } = require("../src/groups/alerta-asesor");
+  const veredictoConDudosas = { ...VEREDICTO, refs_dudosas: ["AP009"] };
+  const dudosa = matchUtil({ ref: "AP009" });
+  const texto = construirAvisoPostDm({ autor_nombre: "Patricia Gomez" }, veredictoConDudosas, [dudosa], ["AP004"]);
+  assert.match(texto, /Grupo: sin nombre/);
+});
