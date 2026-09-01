@@ -485,6 +485,27 @@ test("con telefono, pedido reciente, cupo libre y sesion, se manda el DM y NO se
   ]);
 });
 
+// FIX (Juan, 2026-09-01): "no tiene nada que hacer" solo es cierto si no queda
+// nada pendiente -- si el mismo pedido tenia refs_dudosas, el DM sale igual
+// pero la asesora tiene que enterarse de lo que quedo sin mandar.
+test("con telefono resuelto Y refs_dudosas, el DM sale Y la asesora recibe el aviso de lo pendiente", async () => {
+  telefonoColegaResuelto = "573001234567";
+  matchesDevueltos = [match(), match({ ref: "9800000", titulo: "Apartamento en Sabaneta", zona: "Sabaneta" })];
+  veredictoDeSofi = { ...APRUEBA, refs_dudosas: ["9800000"] };
+
+  const r = await vivo.procesarMensaje(ORG, mensaje(), {
+    grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA",
+  });
+
+  assert.strictEqual(r.resultado, "dm_enviado", "el DM sigue saliendo igual");
+  assert.strictEqual(enviosDm.length, 1, "el colega sigue recibiendo su DM normal");
+  assert.strictEqual(enviadosPorSofi.length, 1, "la asesora SI recibe algo ahora -- quedo una dudosa pendiente");
+  assert.match(enviadosPorSofi[0].texto, /Ya le mandé por privado/i);
+  assert.match(enviadosPorSofi[0].texto, /9780079/, "menciona la ref que ya se envio por DM");
+  assert.match(enviadosPorSofi[0].texto, /9800000/, "lista la dudosa pendiente");
+  assert.match(enviadosPorSofi[0].texto, /Sabaneta/);
+});
+
 test("el DM al colega usa el mismo texto que antes iba al grupo (redactar.mensajeGrupo)", async () => {
   telefonoColegaResuelto = "573001234567";
   await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });

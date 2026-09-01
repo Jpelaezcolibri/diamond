@@ -408,10 +408,28 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
         // "el sistema lo mando solo por DM", nunca "lo publico en el grupo".
         const refsDm = utiles.map((m) => m.ref).filter(Boolean);
         await groupSignals.marcarRespondida(org.id, signal.id, { texto: textoDm, wamid: envioDm.wamid, modo: "auto", refs: refsDm });
-        // No se avisa a la asesora: no tiene nada que hacer con un pedido que
-        // el bot ya resolvio, y avisarle igual seria ruido. El feed del admin
-        // SI se entera — es la trazabilidad que ya usa el resto de este
-        // archivo, solo que con quien realmente se avisó.
+
+        // Aviso post-DM (Juan, 2026-09-01): "no tiene nada que hacer" solo es
+        // cierto si no queda nada pendiente -- si el pedido tenia dudosas,
+        // esas se le avisan igual, aparte del DM que ya salio. Best-effort:
+        // un fallo aca no puede tumbar el resultado "dm_enviado", que ya es
+        // verdad sin importar si este aviso extra sale o no.
+        if (asesor && asesor.phone) {
+          const avisoPostDm = alertaAsesor.construirAvisoPostDm(
+            { autor_nombre: mensaje.autor },
+            veredicto,
+            matches,
+            refsDm
+          );
+          if (avisoPostDm) {
+            await mensajeAsesor.enviarYRegistrar(org, asesor.phone, avisoPostDm).catch((e) =>
+              console.warn("[radar] No se pudo mandar el aviso post-DM:", e.message)
+            );
+          }
+        }
+
+        // El feed del admin SI se entera siempre — es la trazabilidad que ya
+        // usa el resto de este archivo, con quien realmente se avisó.
         await feedComando
           .registrar(org, señalParaFeed, veredicto, matches, {
             avisada: true,
