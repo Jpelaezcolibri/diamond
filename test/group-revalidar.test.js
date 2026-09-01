@@ -164,3 +164,60 @@ test("el prompt distingue las tres situaciones y nombra los innegociables", () =
   }
   assert.ok(/DOS O MAS incumplimientos/.test(s), "dos huecos conocidos siguen siendo un NO");
 });
+
+// DUDOSA (Juan, 2026-09-01) — hasta ahora Sofi decidia siempre en binario
+// (entra a refs_utiles o no entra a nada); esto le da una tercera salida
+// para el caso genuinamente incierto, en vez de forzarlo a INCOMPATIBLE.
+
+test("el esquema exige 'refs_dudosas' -- no es un campo opcional que Sofi pueda omitir", () => {
+  assert.ok(revalidar.ESQUEMA.required.includes("refs_dudosas"));
+  assert.strictEqual(revalidar.ESQUEMA.properties.refs_dudosas.type, "array");
+});
+
+test("una candidata DUDOSA no entra a refs_utiles pero si a refs_dudosas", async (t) => {
+  mockRespuesta(t, {
+    es_pedido_real: true, sirve_alguna: true, refs_utiles: [],
+    por_que: "Ninguna calza del todo, pero REF1 esta cerca: zona vecina y le falta un baño.",
+    confianza: 0.6, desacuerdo_con_puntaje: "",
+    sin_confirmar: [], le_falta: [],
+    refs_dudosas: ["REF1"],
+  });
+
+  const { veredicto } = await revalidar.revalidar(clasificado(), [match()]);
+
+  assert.deepStrictEqual(veredicto.refs_utiles, []);
+  assert.deepStrictEqual(veredicto.refs_dudosas, ["REF1"]);
+});
+
+test("una ref nunca aparece en refs_utiles y refs_dudosas a la vez -- son mutuamente excluyentes por contrato del prompt", async (t) => {
+  // Esto documenta el contrato (el prompt se lo pide a Sofi); no hay
+  // validacion de codigo que lo fuerce, asi que el test deja constancia
+  // explicita de la regla para quien lea el esquema despues.
+  mockRespuesta(t, {
+    es_pedido_real: true, sirve_alguna: true, refs_utiles: ["REF1"],
+    por_que: "Calza en todo.", confianza: 0.9, desacuerdo_con_puntaje: "",
+    sin_confirmar: [], le_falta: [], refs_dudosas: [],
+  });
+
+  const { veredicto } = await revalidar.revalidar(clasificado(), [match()]);
+  const interseccion = veredicto.refs_utiles.filter((r) => veredicto.refs_dudosas.includes(r));
+  assert.deepStrictEqual(interseccion, []);
+});
+
+test("un veredicto VIEJO sin 'refs_dudosas' no rompe apruebaAviso", async (t) => {
+  mockRespuesta(t, {
+    es_pedido_real: true, sirve_alguna: true, refs_utiles: ["REF1"],
+    por_que: "Calza en zona, alcobas y precio.", confianza: 0.9, desacuerdo_con_puntaje: "",
+    // sin 'refs_dudosas' a proposito: lo que ya esta guardado antes de este cambio
+  });
+
+  const { veredicto } = await revalidar.revalidar(clasificado(), [match()]);
+  assert.strictEqual(veredicto.refs_dudosas, undefined);
+  assert.strictEqual(revalidar.apruebaAviso(veredicto), true);
+});
+
+test("el prompt nombra la situacion DUDOSA y dice que se manda al asesor, no se pierde", () => {
+  const s = revalidar.SISTEMA || "";
+  assert.ok(s.includes("DUDOSA"), "el prompt nombra la cuarta situacion");
+  assert.ok(/refs_dudosas/.test(s), "el prompt dice explicitamente el nombre del campo");
+});

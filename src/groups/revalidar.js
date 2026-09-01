@@ -65,6 +65,7 @@ const ESQUEMA = {
     "desacuerdo_con_puntaje",
     "sin_confirmar",
     "le_falta",
+    "refs_dudosas",
   ],
   properties: {
     es_pedido_real: {
@@ -83,6 +84,18 @@ const ESQUEMA = {
         "INCOMPLETAS (calzan en lo verificable pero falta un dato que el inventario no registra -> 'sin_confirmar') " +
         "y las CASI (cumplen todo salvo una sola cosa accesoria, que si conocemos -> 'le_falta'). Ninguno de esos " +
         "dos huecos descarta la propiedad: se declaran.",
+    },
+    // DUDOSA (Juan, 2026-09-01): antes de este campo, una candidata que no
+    // era un descarte limpio (INCOMPATIBLE) pero tampoco calzaba lo
+    // suficiente para refs_utiles se perdia sin que nadie la viera -- Sofi
+    // tenia que forzar un SI o un NO. Este campo es la tercera salida.
+    refs_dudosas: {
+      type: "array",
+      items: { type: "string" },
+      description:
+        "Refs que NO van en refs_utiles (no se le mandan al colega ni se auto-publican) pero tampoco son un " +
+        "descarte limpio -- vale la pena que la asesora decida si llamar al colega igual. Vacio si no hay ninguna. " +
+        "Una ref nunca va en refs_utiles y refs_dudosas a la vez.",
     },
     por_que: {
       type: "string",
@@ -154,7 +167,7 @@ Como juzgar:
   y una propiedad para vivir no es lo mismo que una para inversion. Pero que
   falte un dato que el inventario no registra (terraza, piso, antiguedad), o
   que falte UNA cosa accesoria del pedido (el segundo garaje, el cuarto util),
-  NO es motivo de pena si se lo decis con honestidad -- ver las TRES
+  NO es motivo de pena si se lo decis con honestidad -- ver las CUATRO
   situaciones mas abajo.
 - El puntaje que ves va de 55 a 100 y premia cuanto del pedido se pudo
   VERIFICAR, no que tan buena es la propiedad. Un puntaje bajo puede ser una
@@ -167,7 +180,7 @@ Como juzgar:
   nunca sirve, pero si todo lo demas calza muy bien y el cliente no fue
   tajante, evaluala en vez de descartarla de plano.
 - Si el pedido nombra varias zonas, cualquiera de ellas cuenta como pedida.
-- Hay TRES situaciones distintas y confundirlas es el error mas caro que
+- Hay CUATRO situaciones distintas y confundirlas es el error mas caro que
   podes cometer aca:
     · INCOMPATIBLE (no sirve, no entra a refs_utiles): otra zona no vecina,
       otro municipio, otro tipo de propiedad (finca por apartamento, local por
@@ -195,6 +208,16 @@ Como juzgar:
       pediste 2". En el MISMO pedido, la ref 8989725 tenia 2 alcobas de las 3
       pedidas y 92 m² de los 98: falla en DOS cosas y una es de fondo (las
       alcobas definen el producto), asi que esa NO se manda. Ahi esta la linea.
+    · DUDOSA (no entra a refs_utiles, entra a refs_dudosas): no es un
+      INCOMPATIBLE limpio (no es otra zona no vecina, ni otro tipo, ni fuera
+      de presupuesto, ni algo innegociable incumplido) pero tampoco calza lo
+      suficiente para mandarla con la confianza de las anteriores -- por
+      ejemplo, DOS O MAS incumplimientos accesorios a la vez (que por si
+      solos serian CASI, pero juntos ya no), o una zona vecina lejana que te
+      genera dudas reales. Antes esto se resolvia forzando un NO y la
+      oportunidad se perdia sin que nadie la viera; ahora se lo llevás al
+      asesor para que decida si vale la pena, en vez de perderla en
+      silencio.
 
 - Como decidir si un incumplimiento es ACCESORIO o de FONDO:
     · De FONDO, nunca pasa: zona, municipio, tipo de propiedad, operacion,
@@ -210,11 +233,14 @@ Como juzgar:
     · Si dudas si algo es accesorio o de fondo, tratalo como de fondo.
 - Si el motor se equivoco —aprobo algo que no sirve, o dejo abajo algo que si—
   decilo en 'desacuerdo_con_puntaje'. Eso es lo que nos permite mejorarlo.
-- Ante la duda sobre si INCOMPATIBLE, decidi que NO sirve. Escribirle a una
-  asesora (o a un colega) por algo que no era le cuesta tiempo y le quita
-  credibilidad al sistema. Pero un dato que el pedido pide y el inventario
-  simplemente no tiene no es motivo de duda sobre si sirve -- es motivo para
-  usar 'sin_confirmar', no para descartar.
+- Ante la duda sobre si algo es INCOMPATIBLE o DUDOSA, preferí DUDOSA: nunca
+  la mandes con la confianza de refs_utiles, pero tampoco la pierdas sin que
+  nadie la vea -- eso es exactamente lo que refs_dudosas existe para evitar.
+  Ante la duda entre DUDOSA e INCOMPLETO/CASI (¿esto de verdad sirve, o solo
+  se acerca?), seguí el criterio de ACCESORIO/DE FONDO de más arriba. Un dato
+  que el pedido pide y el inventario simplemente no tiene no es motivo de
+  duda sobre si sirve -- es motivo para usar 'sin_confirmar', no para
+  descartar ni para DUDOSA.
 
 'por_que' lo va a leer Catherine, la asesora que va a llamar al colega: escribilo
 para ella, corto y concreto.`;
