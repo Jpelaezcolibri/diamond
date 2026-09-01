@@ -41,6 +41,7 @@
 const formato = require("../lib/formato");
 const { normalizarTitulo } = require("../lib/formato");
 const { linkWhatsappEstricto, linkContactoOficial, tocarNombreEnGrupo } = require("../lib/contacto");
+const redactar = require("./redactar");
 
 // Una propiedad, corta: la asesora ya conoce el inventario, no necesita la
 // ficha entera. Necesita reconocerla y tener el link a mano.
@@ -95,6 +96,34 @@ function contactoPara(telefonoColega, autorTelefono, quien) {
   return `no se pudo resolver el número — ${tocarNombreEnGrupo(quien)}`;
 }
 
+function telefonoResuelto(telefonoColega, autorTelefono) {
+  return Boolean(linkWhatsappEstricto(telefonoColega) || linkWhatsappEstricto(autorTelefono));
+}
+
+// Mensaje ya armado para reenviar (Juan, 2026-09-01): sin telefono resuelto, la
+// asesora no tiene forma de que el bot le escriba solo al colega -- alguna
+// persona tiene que hacerlo a mano, tocando su nombre en el grupo. Sin este
+// bloque, el aviso solo describia las propiedades y la asesora tenia que
+// redactar el mensaje ella misma. Reusa el MISMO texto "blanqueado" que ya usa
+// el DM automatico (src/groups/vivo.js#textoParaColega) -- el que el colega
+// reenvia tal cual a su cliente -- para que copiar y pegar sea lo unico que
+// haga falta.
+//
+// Filtra por linkWasi (Juan, 2026-09-01): ese campo solo lo tienen las
+// propiedades DE DIAMOND (ver src/groups/match.js) -- una de un colega
+// (fuente "aliado") sale con linkWasi null, y redactar.js#ficha imprimiria un
+// link vacio. Sin ninguna propiedad propia entre las utiles, no hay mensaje
+// que armar: se omite el bloque entero, nunca a medias.
+function mensajeListoParaReenviar(senal, veredicto, utiles, org) {
+  const propias = utiles.filter((m) => m.linkWasi);
+  if (propias.length === 0) return null;
+  return redactar.mensajeGrupo(senal, propias, {
+    org,
+    sinConfirmar: veredicto.sin_confirmar || [],
+    leFalta: veredicto.le_falta || [],
+  });
+}
+
 /**
  * @param senal           { grupo_nombre, autor_nombre, autor_telefono, texto_original }
  * @param veredicto       lo que devolvio src/groups/revalidar.js
@@ -134,6 +163,23 @@ function construir(senal, veredicto, matches, telefonoColega = null, org = null)
     ``,
     `Sofi dice: ${veredicto.por_que}`,
   ];
+
+  // Mensaje listo para reenviar (Juan, 2026-09-01): sin telefono resuelto,
+  // nadie mas que un humano puede escribirle al colega -- se le entrega el
+  // texto YA armado, con urgencia, para que copiar/pegar sea lo unico que
+  // haga falta. Con telefono resuelto no hace falta: la asesora ya tiene el
+  // link directo al privado arriba, en `Contacto:`.
+  if (!telefonoResuelto(telefonoColega, senal.autor_telefono)) {
+    const mensajeListo = mensajeListoParaReenviar(senal, veredicto, utiles, org);
+    if (mensajeListo) {
+      lineas.push(
+        ``,
+        `⚡ No se pudo resolver su número — mandale ESTO YA por su privado (tocá su nombre arriba para abrirle el chat):`,
+        ``,
+        mensajeListo
+      );
+    }
+  }
 
   // Renglon listo para copiar hacia la linea OFICIAL de Sofi (Juan,
   // 2026-08-22) — solo si hay numero configurado (org.contact_whatsapp_number

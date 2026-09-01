@@ -132,3 +132,45 @@ test("conserva lo que ya funcionaba: grupo, colega, pedido, refs, Sofi dice y el
 test("sin refs utiles, no hay nada que avisar", () => {
   assert.strictEqual(construir(senal(), { ...VEREDICTO, refs_utiles: [] }, [matchUtil()], "573001234567"), null);
 });
+
+// AGREGADO (Juan, 2026-09-01) — "cuando no se puede responder al colega y la
+// propiedad cumple, mandar el mensaje a Natalia/Catherine con una alerta que
+// lo manden al colega inmediatamente, con la info del colega del grupo y de
+// la propiedad": sin telefono resuelto, el aviso a la asesora hoy solo
+// describe las propiedades -- no le entrega el texto ya armado (con nombre del
+// colega y salvedades) para reenviar. Reusa src/groups/redactar.js#mensajeGrupo,
+// el mismo texto "blanqueado" que ya se manda por DM cuando SI hay telefono.
+test("sin telefono resuelto, el aviso incluye el mensaje listo para reenviar al colega, con urgencia", () => {
+  const veredictoConSalvedad = { ...VEREDICTO, sin_confirmar: ["vista", "balcón"] };
+  const texto = construir(
+    senal(),
+    veredictoConSalvedad,
+    [matchUtil({ linkWasi: "https://info.wasi.co/apartamento-venta-ap004/9744456" })],
+    null
+  );
+  assert.match(texto, /mandale ESTO YA/i);
+  // El mensaje listo saluda por el nombre del colega (redactar.js#primerNombre)
+  // y trae la salvedad de lo que no se pudo confirmar -- es el mismo contrato
+  // que ya prueba redactar.test.js, aca solo se verifica que llegue armado.
+  assert.match(texto, /Hola Patricia, vi tu solicitud/);
+  assert.match(texto, /No tengo confirmado si tiene vista ni balcón/);
+  assert.match(texto, /https:\/\/info\.wasi\.co\/apartamento-venta-ap004\/9744456/);
+});
+
+test("sin telefono resuelto pero sin ninguna propiedad con linkWasi (todas de un aliado), no agrega el bloque listo para copiar", () => {
+  // El mensaje "blanqueado" depende de linkWasi (ver la nota de diseño en
+  // redactar.js): una propiedad de un colega (fuente "aliado") no lo tiene, y
+  // armar el bloque igual imprimiria un link vacio. Se omite entero, no a medias.
+  const texto = construir(senal(), VEREDICTO, [matchUtil({ linkWasi: null })], null);
+  assert.doesNotMatch(texto, /mandale ESTO YA/i);
+});
+
+test("con telefono resuelto, NO agrega el bloque de mensaje listo para copiar -- la asesora ya tiene el link directo", () => {
+  const texto = construir(
+    senal(),
+    VEREDICTO,
+    [matchUtil({ linkWasi: "https://info.wasi.co/apartamento-venta-ap004/9744456" })],
+    "573001234567"
+  );
+  assert.doesNotMatch(texto, /mandale ESTO YA/i);
+});
