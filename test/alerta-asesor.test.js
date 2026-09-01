@@ -264,7 +264,7 @@ test("con mensaje para reenviar presente, NO se duplica la invitacion a escribir
   // Sin duplication: solo debe haber 1 bloque de invitacion a Sofi, dentro del mensaje
   // para reenviar. La invitacion separada NO se agrega cuando ya hay mensajeListo.
   const invitacionesAlSofi = (texto.match(/escribirle.*a Sofi/gi) || []).length;
-  assert.ok(invitacionesAlSofi >= 1, `debe haber al menos 1 invitacion a Sofi`);
+  assert.strictEqual(invitacionesAlSofi, 1, `deberia aparecer una sola vez, aparecio ${invitacionesAlSofi} veces`);
   // No debe haber un segundo bloque "Para que la conversación quede" fuera del reenvio:
   assert.match(texto, /mandale ESTO YA/, "debe estar el bloque para reenviar");
   // Pero NO debe haber otro bloque "Para que la conversación" separado que duplique la invitacion
