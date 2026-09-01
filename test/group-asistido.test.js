@@ -361,7 +361,7 @@ test("con CONTACT_WHATSAPP_NUMBER definida, el aviso agrega el link a la linea o
 
 test("sin CONTACT_WHATSAPP_NUMBER, el aviso sale sin el renglon de Sofi -- nunca un link a medias", async () => {
   await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE });
-  assert.doesNotMatch(enviadosPorSofi[0].texto, /escribirle a Sofi/);
+  assert.doesNotMatch(enviadosPorSofi[0].texto, /escribirle.*a Sofi/);
   assert.doesNotMatch(enviadosPorSofi[0].texto, /YOUR_CONTACT_LINK/);
 });
 

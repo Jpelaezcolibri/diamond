@@ -197,7 +197,7 @@ function construir(senal, veredicto, matches, telefonoColega = null, org = null)
   // nadie mas que un humano puede escribirle al colega -- se le entrega el
   // texto YA armado. Con telefono resuelto no hace falta: la asesora ya
   // tiene el link directo al privado arriba, en `Contacto:`.
-  const mensajeListo = utiles.length && !telefonoResuelto(telefonoColega, senal.autor_telefono)
+  const mensajeListo = utiles.length > 0 && !telefonoResuelto(telefonoColega, senal.autor_telefono)
     ? mensajeListoParaReenviar(senal, veredicto, utiles, org)
     : null;
   const bloqueReenviar = mensajeListo
@@ -231,8 +231,22 @@ function construir(senal, veredicto, matches, telefonoColega = null, org = null)
   // Margen de seguridad bajo el limite real de Meta (4096). Solo tiene
   // sentido comprimir si el mensaje para reenviar esta presente -- es la
   // unica fuente de la duplicacion de datos que este tope existe para evitar.
-  if (completo.length > 4000 && mensajeListo) return armar(true);
-  return completo;
+  if (completo.length > 4000 && mensajeListo) return clamp(armar(true));
+  return clamp(completo);
+}
+
+// Ultimo cinturon de seguridad (Juan, 2026-09-01, revision post-review): la
+// compresion de arriba (`armar(true)`) solo reduce el listado repetido de
+// propiedades -- no toca `texto_original` (lo que escribio el colega, texto
+// libre sin tope) ni `veredicto.por_que` (salida de la IA, tampoco acotada).
+// En el peor caso ambos son largos y el mensaje YA comprimido sigue pasando
+// los 4096 caracteres que exige Meta. Mismo patron que el tope de 1024 del
+// mensaje interactivo en src/groups/vivo.js (avisoCercano): un recorte
+// silencioso es preferible a que Meta rechace el envio entero.
+function clamp(texto) {
+  if (texto.length <= 4096) return texto;
+  const sufijo = `\n\n(recortado — ver el pedido completo en el CRM)`;
+  return `${texto.slice(0, 4096 - sufijo.length)}${sufijo}`;
 }
 
 // Aviso liviano post-DM (Juan, 2026-09-01): el DM directo al colega SI salio,
@@ -253,7 +267,7 @@ function construirAvisoPostDm(senal, veredicto, matches, refsEnviadas) {
     .filter(Boolean);
   if (dudosas.length === 0) return null;
 
-  const quien = senal.autor_nombre || "un colega";
+  const quien = (senal && senal.autor_nombre) || "un colega";
   const enviadas = (refsEnviadas || []).filter(Boolean);
   const detalleEnviadas = enviadas.length ? `: ${enviadas.map((r) => `Ref ${r}`).join(", ")}` : ".";
 

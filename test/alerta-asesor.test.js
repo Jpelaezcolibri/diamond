@@ -281,9 +281,14 @@ test("sin mensaje para reenviar (telefono resuelto), la invitacion a Sofi si apa
 });
 
 test("un pedido con muchas propiedades y mensaje para reenviar no pasa de 4096 caracteres, y no pierde ninguna ref", () => {
-  // 8 propiedades, cada una con datos completos -- suficiente para reproducir
-  // el caso real (6 propiedades ya alcanzaba a pasarse del limite).
-  const muchasRefs = Array.from({ length: 8 }, (_, i) => `AP0${i}`);
+  // 12 propiedades -- medido empiricamente (node -e reproduciendo este mismo
+  // fixture): con 11 el mensaje SIN comprimir da 3968 caracteres (no dispara
+  // la compresion, la prueba pasaria sin ejercer el branch); con 12 da 4274
+  // (> 4000, SI dispara `armar(true)`) y el resultado final comprimido queda
+  // en 2613. Sin este numero de propiedades, `assert.ok(texto.length <= 4096)`
+  // pasa trivialmente sin haber corrido nunca la compresion -- que era
+  // justo el hueco que encontro la revision de codigo.
+  const muchasRefs = Array.from({ length: 12 }, (_, i) => `AP0${i}`);
   const muchasProps = muchasRefs.map((ref) =>
     matchUtil({
       ref,
@@ -296,10 +301,93 @@ test("un pedido con muchas propiedades y mensaje para reenviar no pasa de 4096 c
   const veredictoConTodas = { ...VEREDICTO, refs_utiles: muchasRefs, por_que: "Todas calzan en zona, precio y alcobas." };
   const texto = construir(senal(), veredictoConTodas, muchasProps, null);
 
+  // Prueba positiva de que SI se comprimio (no solo que el resultado quedo
+  // corto por casualidad): el renglon compacto de conteo esta presente...
+  assert.match(texto, /Le pueden? servir \d+ propiedades? — el detalle completo/);
+  // ...y el listado completo "Le pueden servir:\n▸ Ref ..." (la version SIN
+  // comprimir de bloqueUtiles) no aparece en ningun lado.
+  assert.doesNotMatch(texto, /Le pueden servir:\n▸/);
   assert.ok(texto.length <= 4096, `el texto tiene ${texto.length} caracteres, se paso del limite de Meta`);
   // Ninguna ref se pierde -- sigue estando, aunque sea solo dentro del
   // mensaje para reenviar (que siempre lista todas completas).
   for (const ref of muchasRefs) assert.match(texto, new RegExp(ref), `falta ${ref} en el aviso`);
+});
+
+// Caso real (Juan / revision post-review, 2026-09-01): la incidencia que
+// origino todo este arreglo fue un aviso de 6 propiedades con datos de
+// produccion (titulos completos, operacion, zona completa, banos/garajes/
+// estrato, links largos de info.wasi.co) rechazado por Meta. Medido con este
+// mismo fixture: sin comprimir da 4202 caracteres (> 4000, dispara
+// `armar(true)`), comprimido queda en 3194. La suite de arriba usa
+// propiedades "cortas" (matchUtil basico) que con 6 no alcanzan a pasar el
+// tope -- por eso hace falta esta prueba aparte con la forma real de los
+// datos, no solo con mas cantidad.
+test("6 propiedades con datos de produccion (el caso real que motivo el fix) no pasan de 4096 caracteres", () => {
+  function matchUtilProduccion(ref) {
+    return {
+      ref,
+      titulo: "Apartamento en Venta Laureles Segunda Etapa",
+      operacion: "Venta",
+      zona: "Laureles, Medellin, cerca al Estadio",
+      precio: "$450.000.000",
+      habitaciones: 3,
+      area: "85m2",
+      banos: 3,
+      garajes: 2,
+      estrato: 5,
+      link: `https://diamondinmobiliaria.com/propiedades/${ref}`,
+      linkWasi: `https://info.wasi.co/apartamento-venta-laureles-segunda-etapa-${ref}/9744456`,
+    };
+  }
+  const refs = Array.from({ length: 6 }, (_, i) => `AP0${i}`);
+  const props = refs.map((ref) => matchUtilProduccion(ref));
+  const leFalta = refs.map((ref) => ({
+    ref,
+    detalle: "no tiene balcón ni vista despejada, pero cumple el resto del pedido de zona y presupuesto",
+  }));
+  const veredictoRealista = {
+    ...VEREDICTO,
+    refs_utiles: refs,
+    por_que:
+      "Todas calzan en zona, alcobas y presupuesto; ninguna tiene el balcón exacto que pidió pero son la mejor opción disponible en el sector ahora mismo.",
+    sin_confirmar: ["terraza", "antigüedad del edificio"],
+    le_falta: leFalta,
+  };
+  // Sin telefono resuelto -- el camino que arma el mensaje para reenviar,
+  // que es la fuente de la duplicacion que este tope existe para evitar.
+  const texto = construir(senal(), veredictoRealista, props, null);
+  assert.ok(texto.length <= 4096, `el texto tiene ${texto.length} caracteres, se paso del limite de Meta`);
+  for (const ref of refs) assert.match(texto, new RegExp(ref), `falta ${ref} en el aviso`);
+});
+
+// Segundo cinturon de seguridad (Important #2, revision post-review,
+// 2026-09-01): `armar(true)` solo comprime el listado repetido de
+// propiedades -- no toca `texto_original` (lo que escribio el colega, texto
+// libre) ni `veredicto.por_que` (salida de la IA), ninguno de los dos con
+// tope de longitud. Este caso fuerza ambos: un `texto_original` de 2200
+// caracteres mas 12 propiedades (que ya dispara la compresion por si sola,
+// ver la prueba de arriba) da un resultado comprimido que TODAVIA se pasa de
+// 4096 -- exactamente el escenario que el clamp final existe para atajar.
+test("con un texto_original larguisimo, el clamp final garantiza <= 4096 aunque la compresion no alcance", () => {
+  const muchasRefs = Array.from({ length: 12 }, (_, i) => `AP0${i}`);
+  const muchasProps = muchasRefs.map((ref) =>
+    matchUtil({
+      ref,
+      titulo: `Apartamento en Venta Laureles ${ref}`,
+      zona: "Laureles",
+      linkWasi: `https://info.wasi.co/apartamento-venta-laureles-${ref}`,
+      link: `https://diamondinmobiliaria.com/propiedades/${ref}`,
+    })
+  );
+  const veredictoConTodas = { ...VEREDICTO, refs_utiles: muchasRefs, por_que: "Todas calzan en zona, precio y alcobas." };
+  const textoOriginalLarguisimo = "x".repeat(2200);
+  const texto = construir(senal({ texto_original: textoOriginalLarguisimo }), veredictoConTodas, muchasProps, null);
+
+  assert.ok(texto.length <= 4096, `el texto tiene ${texto.length} caracteres, el clamp no funciono`);
+  assert.ok(
+    texto.endsWith("(recortado — ver el pedido completo en el CRM)"),
+    "el clamp deberia dejar el sufijo de recorte al final"
+  );
 });
 
 test("con pocas propiedades (mensaje corto), el listado 'Le puede(n) servir' sigue completo, no se comprime", () => {

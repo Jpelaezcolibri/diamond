@@ -414,8 +414,19 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
         // esas se le avisan igual, aparte del DM que ya salio. Best-effort:
         // un fallo aca no puede tumbar el resultado "dm_enviado", que ya es
         // verdad sin importar si este aviso extra sale o no.
+        //
+        // Deliberadamente NO pasa por marcarAvisoEnviado/tracking de avisos al
+        // asesor (revision post-review, 2026-09-01): esta señal YA quedo
+        // resuelta por el DM (marcarRespondida, arriba). Si este aviso extra
+        // quedara registrado con ese mismo mecanismo, candidatosRecordatorio y
+        // candidatosEscaladoSilencio (src/data/group-signals.js) la tomarian
+        // como candidata a recordatorio/escalado a Catherine -- filtran solo
+        // por `aviso_advisor_id` + `enviado_at`, no por si el pedido ya se
+        // resolvio. Es exactamente el bug de doble escalado que ya se corrigio
+        // en el commit 5db7e74. No "arreglar" esto conectando el tracking.
+        let avisoPostDm = null;
         if (asesor && asesor.phone) {
-          const avisoPostDm = alertaAsesor.construirAvisoPostDm(
+          avisoPostDm = alertaAsesor.construirAvisoPostDm(
             { autor_nombre: mensaje.autor },
             veredicto,
             matches,
@@ -433,11 +444,15 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
         }
 
         // El feed del admin SI se entera siempre — es la trazabilidad que ya
-        // usa el resto de este archivo, con quien realmente se avisó.
+        // usa el resto de este archivo, con quien realmente se avisó. Si
+        // ademas salio el aviso post-DM de pendientes, se suma a la misma
+        // linea -- de lo contrario el feed reportaria solo la mitad de a
+        // quien realmente se le avisó (este radar ya tuvo un caso de un
+        // reporte de avisos inventado, ver 2026-08-18 en el historial).
         await feedComando
           .registrar(org, señalParaFeed, veredicto, matches, {
             avisada: true,
-            destinatarioNombre: `DM directo a ${mensaje.autor || "el colega"}`,
+            destinatarioNombre: `DM directo a ${mensaje.autor || "el colega"}${avisoPostDm ? ` + aviso de pendientes a ${asesor.name || "la asesora"}` : ""}`,
           })
           .catch((e) => console.warn("[radar] No se pudo escribir en el feed del admin:", e.message));
         return { resultado: "dm_enviado", veredicto, texto: textoDm, telefono: telefonoColega, signalId: signal.id };
