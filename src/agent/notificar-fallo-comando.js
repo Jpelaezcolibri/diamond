@@ -9,7 +9,9 @@ const organizations = require("../data/organizations");
 const canalWhatsapp = require("../channels/whatsapp");
 
 function destinos() {
-  return (process.env.RADAR_WATCHDOG_TO || "").split(",").map((t) => t.trim()).filter(Boolean);
+  return (process.env.RADAR_WATCHDOG_TO || "")
+    .split(",").map((t) => t.trim()).filter(Boolean)
+    .slice(0, 5); // tope defensivo: un CSV mal pegado no debe abrir un spam masivo
 }
 
 function recorte(s, n) {
@@ -54,7 +56,7 @@ async function notificarFalloComando(scope, { userName, textoUsuario, reply, aud
   for (const texto of mensajes) {
     for (const destino of to) {
       await canalWhatsapp.sendWhatsApp(org, destino, texto).catch((e) =>
-        console.warn(`[sofi-comando] no se pudo notificar a ${destino}:`, e.message)
+        console.warn(`[sofi-comando] no se pudo notificar a ${destino}:`, e?.message || e)
       );
     }
   }

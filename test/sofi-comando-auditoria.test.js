@@ -98,3 +98,57 @@ test("auditar: sin ninguna tool mutante y sin lenguaje de confirmacion -> todo t
   assert.strictEqual(r.fallos.length, 0);
   assert.strictEqual(r.notificar, false);
 });
+
+test("pareceConfirmacion: no confunde el subjuntivo/imperativo sin tilde ('guarde', 'envie', 'registre', 'mande') con una confirmacion", () => {
+  assert.strictEqual(pareceConfirmacion("¿Querés que lo guarde ahora?"), false);
+});
+
+test("pareceConfirmacion: sigue detectando 'guardé' acentuado (regression guard)", () => {
+  assert.strictEqual(pareceConfirmacion("Listo, guardé el mandato de Sara A"), true);
+});
+
+test("pareceConfirmacion: no confunde una negacion ('aun no lo he guardado') con una confirmacion", () => {
+  assert.strictEqual(pareceConfirmacion("Aún no lo he guardado, falta el nombre del cliente."), false);
+});
+
+test("pareceConfirmacion: no confunde una negacion con pronombre clitico ('no se lo envié todavía') con una confirmacion", () => {
+  assert.strictEqual(pareceConfirmacion("No se lo envié todavía"), false);
+});
+
+test("esFalloDeHerramienta: 'No se pudo...' tambien es un fallo real (sinonimo de 'No pude...')", () => {
+  assert.strictEqual(esFalloDeHerramienta("No se pudo aprobar (sesion_ambigua)."), true);
+  assert.strictEqual(esFalloDeHerramienta("No se pudo enviar el mensaje."), true);
+});
+
+test("auditar: recuerdo honesto (solo lectura, cero mutantes, texto confirma) -> disclaimer si, WhatsApp no", () => {
+  const r = auditar({
+    textoFinal: "Ya le escribí a Catherine ayer sobre eso.",
+    llamadasMutantes: [],
+    huboLlamadaDeLectura: true,
+  });
+  assert.strictEqual(r.sinConfirmar, true);
+  assert.strictEqual(r.notificar, false);
+});
+
+test("auditar: el mismo texto SIN ninguna llamada a herramienta -> sigue siendo el bug original (disclaimer y WhatsApp)", () => {
+  const r = auditar({
+    textoFinal: "Ya le escribí a Catherine ayer sobre eso.",
+    llamadasMutantes: [],
+    huboLlamadaDeLectura: false,
+  });
+  assert.strictEqual(r.sinConfirmar, true);
+  assert.strictEqual(r.notificar, true);
+});
+
+test("auditar: exito mutante + fallo mutante en el mismo turno, texto confirma de mas -> sospecha, 1 fallo, notificar", () => {
+  const r = auditar({
+    textoFinal: "Listo, les envié a las tres ✅",
+    llamadasMutantes: [
+      { nombre: "enviar_whatsapp_equipo", resultado: "Mensaje enviado a Catherine." },
+      { nombre: "enviar_whatsapp_equipo", resultado: "No pude enviar el mensaje a Natalia." },
+    ],
+  });
+  assert.strictEqual(r.sinConfirmar, true);
+  assert.strictEqual(r.fallos.length, 1);
+  assert.strictEqual(r.notificar, true);
+});

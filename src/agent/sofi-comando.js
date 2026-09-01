@@ -11,6 +11,9 @@ const config = require("../config");
 const command = require("../data/command");
 const { buildCommandSystemPrompt } = require("./sofi-comando-prompts");
 const { executeCommandTool, toolsForScope, MUTATING_TOOLS } = require("./sofi-comando-tools");
+// SOLO Centro de Comando: nunca levantar esta auditoria/notificacion desde
+// src/agent/engine.js (clientes) ni src/groups/vivo.js (colegas) -- ver
+// docs/superpowers/specs/2026-09-01-sofi-comando-auditoria-honestidad-design.md#5.
 const { auditar } = require("./sofi-comando-auditoria");
 const { notificarFalloComando } = require("./notificar-fallo-comando");
 const { getClient } = require("../lib/anthropic");
@@ -246,6 +249,7 @@ async function processMessage(scope, sessionId, text, { userName } = {}) {
 
   const textParts = [];
   const llamadasMutantes = [];
+  let huboLlamadaDeLectura = false;
   let iterations = 0;
   while (response.stop_reason === "tool_use" && iterations < MAX_TOOL_ITERATIONS) {
     iterations++;
@@ -264,7 +268,11 @@ async function processMessage(scope, sessionId, text, { userName } = {}) {
         console.error(`[sofi-comando] Error en tool ${block.name}:`, e.message);
         result = `Error ejecutando la herramienta: ${e.message}`;
       }
-      if (MUTATING_TOOLS.has(block.name)) llamadasMutantes.push({ nombre: block.name, resultado: result });
+      if (MUTATING_TOOLS.has(block.name)) {
+        llamadasMutantes.push({ nombre: block.name, resultado: result });
+      } else {
+        huboLlamadaDeLectura = true;
+      }
       toolResults.push({ type: "tool_result", tool_use_id: block.id, content: result });
     }
     messages.push({ role: "user", content: toolResults });
@@ -296,13 +304,14 @@ async function processMessage(scope, sessionId, text, { userName } = {}) {
       : "No pude procesar eso. ¿Lo intentamos de otra forma?";
   }
 
-  const auditoria = auditar({ textoFinal: reply, llamadasMutantes });
+  const auditoria = auditar({ textoFinal: reply, llamadasMutantes, huboLlamadaDeLectura });
+  const replySinDisclaimer = reply;
   if (auditoria.sinConfirmar) {
     reply += "\n\n⚠️ No pude confirmar que esto se haya ejecutado de verdad — no llamé ninguna herramienta real en este turno. Volvé a pedírmelo así lo intento de nuevo.";
   }
   if (auditoria.notificar) {
-    notificarFalloComando(scope, { userName, textoUsuario: text, reply, auditoria }).catch((e) =>
-      console.warn("[sofi-comando] no se pudo notificar el fallo:", e.message)
+    notificarFalloComando(scope, { userName, textoUsuario: text, reply: replySinDisclaimer, auditoria }).catch((e) =>
+      console.warn("[sofi-comando] no se pudo notificar el fallo:", e?.message || e)
     );
   }
 
