@@ -33,6 +33,12 @@ test("pareceConfirmacion: no confunde una sugerencia ('guardemos') ni una palabr
   assert.strictEqual(pareceConfirmacion("hay una guarderia cerca"), false);
 });
 
+test("pareceConfirmacion: no confunde una sugerencia ('mandemos') ni un futuro ('escribiré'/'escribiremos') con una confirmacion", () => {
+  assert.strictEqual(pareceConfirmacion("Listo, le mandemos el resumen a Natalia"), false);
+  assert.strictEqual(pareceConfirmacion("Ya le escribiré en un momento"), false);
+  assert.strictEqual(pareceConfirmacion("Ya le escribiremos mañana"), false);
+});
+
 test("esFalloDeHerramienta: 'No pude...' es un fallo real", () => {
   assert.strictEqual(esFalloDeHerramienta("No pude guardar el mandato — avisale a Juan, puede ser que falte correr una migración."), true);
 });

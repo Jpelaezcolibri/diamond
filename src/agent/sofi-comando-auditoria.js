@@ -14,7 +14,10 @@
 // \b final sin mas soluciona eso pero abre la puerta a falsos positivos por
 // substring ("Enviemos", "guarderia"). (?!\w) evita ambos problemas: exige
 // que lo que sigue a la vocal NO sea un caracter de palabra ASCII, sin
-// depender de que \b reconozca la vocal acentuada como limite.
+// depender de que \b reconozca la vocal acentuada como limite. Los cinco
+// patrones que terminan en una vocal acentuada (guard[eé], envi[eé],
+// registr[eé], mand[eé], escrib[ií]) usan este guard de forma consistente;
+// si se agrega un patron nuevo con esa misma forma, debe llevarlo tambien.
 const PATRONES_CONFIRMACION = [
   /✅/,
   /\bguard[eé](?!\w)/i,
@@ -22,8 +25,8 @@ const PATRONES_CONFIRMACION = [
   /\benvi[eé](?!\w)/i,
   /\bregistr[eé](?!\w)/i,
   /\bregistrado\b/i,
-  /listo,?\s+le\s+mand[eé]/i,
-  /ya\s+le\s+escrib[ií]/i,
+  /listo,?\s+le\s+mand[eé](?!\w)/i,
+  /ya\s+le\s+escrib[ií](?!\w)/i,
 ];
 
 function pareceConfirmacion(texto) {
