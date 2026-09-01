@@ -147,11 +147,7 @@ function construir(senal, veredicto, matches, telefonoColega = null, org = null)
     .filter(Boolean);
   // Para revisar (Juan, 2026-09-01): refs_dudosas de revalidar.js -- Sofi no
   // las aprueba para el envio normal, pero tampoco las descarta del todo.
-  // Van SOLO al asesor, nunca al colega (a diferencia de `utiles`, que
-  // alimenta tambien el DM/mensaje blanqueado mas abajo en este archivo).
-  // Se calculan las dos ANTES de decidir si hay algo que avisar: un veredicto
-  // solo-dudosas (nada en refs_utiles) tiene que seguir avisando -- perderlo
-  // es exactamente el bug que refs_dudosas existe para evitar.
+  // Van SOLO al asesor, nunca al colega.
   const dudosas = refsDudosas
     .map((ref) => (matches || []).find((m) => String(m.ref) === String(ref)))
     .filter(Boolean);
@@ -160,7 +156,7 @@ function construir(senal, veredicto, matches, telefonoColega = null, org = null)
   const quien = senal.autor_nombre || "un colega";
   const contactoTexto = contactoPara(telefonoColega, senal.autor_telefono, quien);
 
-  const lineas = [
+  const cabecera = [
     `🎯 Oportunidad en un grupo`,
     ``,
     `Grupo: ${senal.grupo_nombre || "sin nombre"}`,
@@ -171,62 +167,72 @@ function construir(senal, veredicto, matches, telefonoColega = null, org = null)
     `"${(senal.texto_original || "").trim()}"`,
   ];
 
-  if (utiles.length) {
-    lineas.push(
-      ``,
-      utiles.length === 1 ? `Le puede servir:` : `Le pueden servir:`,
-      utiles.map(linea).join("\n")
-    );
+  // Tope de longitud (Juan, 2026-09-01): con `compacto=true` se reemplaza el
+  // listado completo por una linea de conteo -- las mismas propiedades ya
+  // van completas mas abajo, en el mensaje para reenviar. Nunca se pierde
+  // informacion, solo se deja de repetirla dos veces.
+  function bloqueUtiles(compacto) {
+    if (!utiles.length) return [];
+    if (compacto) {
+      const plural = utiles.length === 1 ? "" : "es";
+      const verbo = utiles.length === 1 ? "puede" : "pueden";
+      return [``, `Le ${verbo} servir ${utiles.length} propiedad${plural} — el detalle completo va más abajo, en el mensaje listo para reenviar.`];
+    }
+    return [``, utiles.length === 1 ? `Le puede servir:` : `Le pueden servir:`, utiles.map(linea).join("\n")];
   }
 
-  if (dudosas.length) {
-    lineas.push(
-      ``,
-      utiles.length
-        ? `🔎 Para revisar (no confirmadas — decidí vos si vale la pena llamar al colega):`
-        : `🔎 Para revisar (nada confirmado del todo — decidí vos si vale la pena llamar al colega):`,
-      dudosas.map(linea).join("\n")
-    );
-  }
+  const bloqueDudosas = dudosas.length
+    ? [
+        ``,
+        utiles.length
+          ? `🔎 Para revisar (no confirmadas — decidí vos si vale la pena llamar al colega):`
+          : `🔎 Para revisar (nada confirmado del todo — decidí vos si vale la pena llamar al colega):`,
+        dudosas.map(linea).join("\n"),
+      ]
+    : [];
 
-  lineas.push(``, `Sofi dice: ${veredicto.por_que}`);
+  const sofiDice = [``, `Sofi dice: ${veredicto.por_que}`];
 
   // Mensaje listo para reenviar (Juan, 2026-09-01): sin telefono resuelto,
   // nadie mas que un humano puede escribirle al colega -- se le entrega el
-  // texto YA armado, con urgencia, para que copiar/pegar sea lo unico que
-  // haga falta. Con telefono resuelto no hace falta: la asesora ya tiene el
-  // link directo al privado arriba, en `Contacto:`.
-  if (utiles.length && !telefonoResuelto(telefonoColega, senal.autor_telefono)) {
-    const mensajeListo = mensajeListoParaReenviar(senal, veredicto, utiles, org);
-    if (mensajeListo) {
-      lineas.push(
+  // texto YA armado. Con telefono resuelto no hace falta: la asesora ya
+  // tiene el link directo al privado arriba, en `Contacto:`.
+  const mensajeListo = utiles.length && !telefonoResuelto(telefonoColega, senal.autor_telefono)
+    ? mensajeListoParaReenviar(senal, veredicto, utiles, org)
+    : null;
+  const bloqueReenviar = mensajeListo
+    ? [
         ``,
         `⚡ No se pudo resolver su número — mandale ESTO YA por su privado (tocá su nombre arriba para abrirle el chat):`,
         ``,
-        mensajeListo
-      );
-    }
-  }
+        mensajeListo,
+      ]
+    : [];
 
-  // Renglon listo para copiar hacia la linea OFICIAL de Sofi (Juan,
-  // 2026-08-22) — solo si hay numero configurado (org.contact_whatsapp_number
-  // o, si no, el env CONTACT_WHATSAPP_NUMBER). Nunca a medias: ver la nota en
-  // src/lib/contacto.js#linkContactoOficial.
-  const linkSofi = linkContactoOficial(org);
-  if (linkSofi) {
-    lineas.push(
-      ``,
-      `Para que la conversación quede en nuestro sistema, cerrale invitándolo a escribirle a Sofi (nuestra línea oficial):`,
-      linkSofi
-    );
-  }
+  // Sin invitacion duplicada (Juan, 2026-09-01): el mensaje para reenviar YA
+  // trae su propia invitacion a escribirle a Sofi (viene de
+  // redactar.js#mensajeGrupo). Agregarla aparte fue justo lo que hizo que un
+  // aviso de 6 propiedades pasara el limite de 4096 caracteres de Meta.
+  const linkSofi = mensajeListo ? null : linkContactoOficial(org);
+  const bloqueSofi = linkSofi
+    ? [
+        ``,
+        `Para que la conversación quede en nuestro sistema, cerrale invitándolo a escribirle a Sofi (nuestra línea oficial):`,
+        linkSofi,
+      ]
+    : [];
 
-  lineas.push(
-    ``,
-    `Contame en qué quedó (la llamaste, no servía, ya se vendió). Con eso el radar aprende.`
-  );
+  const cierre = [``, `Contame en qué quedó (la llamaste, no servía, ya se vendió). Con eso el radar aprende.`];
 
-  return lineas.join("\n");
+  const armar = (compacto) =>
+    [...cabecera, ...bloqueUtiles(compacto), ...bloqueDudosas, ...sofiDice, ...bloqueReenviar, ...bloqueSofi, ...cierre].join("\n");
+
+  const completo = armar(false);
+  // Margen de seguridad bajo el limite real de Meta (4096). Solo tiene
+  // sentido comprimir si el mensaje para reenviar esta presente -- es la
+  // unica fuente de la duplicacion de datos que este tope existe para evitar.
+  if (completo.length > 4000 && mensajeListo) return armar(true);
+  return completo;
 }
 
 module.exports = { construir, linea };

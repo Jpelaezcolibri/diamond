@@ -351,7 +351,11 @@ test("si el directorio falla al resolver, el aviso sale igual (con la variante s
 test("con CONTACT_WHATSAPP_NUMBER definida, el aviso agrega el link a la linea oficial de Sofi", async () => {
   process.env.CONTACT_WHATSAPP_NUMBER = "573000000001";
   await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE });
-  assert.match(enviadosPorSofi[0].texto, /escribirle a Sofi/);
+  // Con el fix de duplicacion (2026-09-01): cuando el directorio no resuelve el
+  // telefono del colega, hay un "mensaje listo para reenviar" que YA trae la
+  // invitacion a Sofi. No se agrega un segundo link separado que duplicaria la
+  // invitacion. Verificamos que el link sigue estando ahi (dentro del reenvio):
+  assert.match(enviadosPorSofi[0].texto, /escribirle.*a Sofi/);
   assert.match(enviadosPorSofi[0].texto, /https:\/\/wa\.me\/573000000001/);
 });
 

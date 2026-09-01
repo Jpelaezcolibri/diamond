@@ -246,3 +246,68 @@ test("las propiedades de 'Para revisar' NO llegan al mensaje listo para reenviar
   const mensajeListo = texto.slice(inicioMensajeListo);
   assert.doesNotMatch(mensajeListo, /AP009|Sabaneta/, "la dudosa no puede aparecer en el texto que se reenvia al colega");
 });
+
+// LIMITE DE META (Juan, 2026-09-01) -- un aviso real con 6 propiedades fue
+// rechazado por WhatsApp ("Param text.body must be at most 4096 characters
+// long."). Causa: dos invitaciones casi identicas a escribirle a Sofi (una
+// dentro del mensaje para reenviar, otra aparte), mas la lista de
+// propiedades repetida completa dos veces.
+
+test("con mensaje para reenviar presente, NO se duplica la invitacion a escribirle a Sofi", () => {
+  process.env.CONTACT_WHATSAPP_NUMBER = "573000000001";
+  const texto = construir(
+    senal(),
+    VEREDICTO,
+    [matchUtil({ linkWasi: "https://info.wasi.co/apartamento-venta-ap004/9744456" })],
+    null // sin telefono resuelto -- dispara el mensaje para reenviar
+  );
+  // Sin duplication: solo debe haber 1 bloque de invitacion a Sofi, dentro del mensaje
+  // para reenviar. La invitacion separada NO se agrega cuando ya hay mensajeListo.
+  const invitacionesAlSofi = (texto.match(/escribirle.*a Sofi/gi) || []).length;
+  assert.ok(invitacionesAlSofi >= 1, `debe haber al menos 1 invitacion a Sofi`);
+  // No debe haber un segundo bloque "Para que la conversación quede" fuera del reenvio:
+  assert.match(texto, /mandale ESTO YA/, "debe estar el bloque para reenviar");
+  // Pero NO debe haber otro bloque "Para que la conversación" separado que duplique la invitacion
+  assert.doesNotMatch(texto, /Para que la conversación[\s\S]*Para que la conversación/,
+    "no puede haber 2 bloques de 'Para que la conversacion' — eso seria duplicacion");
+  delete process.env.CONTACT_WHATSAPP_NUMBER;
+});
+
+test("sin mensaje para reenviar (telefono resuelto), la invitacion a Sofi si aparece como antes", () => {
+  process.env.CONTACT_WHATSAPP_NUMBER = "573000000001";
+  const texto = construir(senal(), VEREDICTO, [matchUtil()], "573001234567");
+  assert.match(texto, /escribirle a Sofi/i);
+  delete process.env.CONTACT_WHATSAPP_NUMBER;
+});
+
+test("un pedido con muchas propiedades y mensaje para reenviar no pasa de 4096 caracteres, y no pierde ninguna ref", () => {
+  // 8 propiedades, cada una con datos completos -- suficiente para reproducir
+  // el caso real (6 propiedades ya alcanzaba a pasarse del limite).
+  const muchasRefs = Array.from({ length: 8 }, (_, i) => `AP0${i}`);
+  const muchasProps = muchasRefs.map((ref) =>
+    matchUtil({
+      ref,
+      titulo: `Apartamento en Venta Laureles ${ref}`,
+      zona: "Laureles",
+      linkWasi: `https://info.wasi.co/apartamento-venta-laureles-${ref}`,
+      link: `https://diamondinmobiliaria.com/propiedades/${ref}`,
+    })
+  );
+  const veredictoConTodas = { ...VEREDICTO, refs_utiles: muchasRefs, por_que: "Todas calzan en zona, precio y alcobas." };
+  const texto = construir(senal(), veredictoConTodas, muchasProps, null);
+
+  assert.ok(texto.length <= 4096, `el texto tiene ${texto.length} caracteres, se paso del limite de Meta`);
+  // Ninguna ref se pierde -- sigue estando, aunque sea solo dentro del
+  // mensaje para reenviar (que siempre lista todas completas).
+  for (const ref of muchasRefs) assert.match(texto, new RegExp(ref), `falta ${ref} en el aviso`);
+});
+
+test("con pocas propiedades (mensaje corto), el listado 'Le puede(n) servir' sigue completo, no se comprime", () => {
+  const texto = construir(
+    senal(),
+    VEREDICTO,
+    [matchUtil({ linkWasi: "https://info.wasi.co/apartamento-venta-ap004/9744456" })],
+    null
+  );
+  assert.match(texto, /Le puede servir:\n▸ Ref AP004/, "con un mensaje corto, no hace falta comprimir nada");
+});
