@@ -178,19 +178,22 @@ export default async function GruposPage() {
   // colega, sin que ninguna asesora tenga que intervenir) contra cuanto le
   // toca reenviar a mano a la asesora (sin telefono resuelto -- el aviso le
   // llega con el texto ya armado para que ella misma se lo mande al colega).
-  // No filtramos por asesor: son métricas de toda la organización, no de
-  // un advisor individual — igual que matchesPendientes (linea 153).
+  // Mismo filtro "mias" que el resto de la pagina -- un asesor ve solo sus
+  // propias senales, admin las ve todas (ver test/crm-grupos-aislamiento.test.js).
+  // select("*") y no una lista de columnas: con una lista angosta el helper
+  // generico de mias() dispara TS2589 (mismo caso ya documentado mas abajo
+  // en este archivo, en la consulta de idsSeñalDm).
   const [autoDmRes, reenvioManualRes] = await Promise.all([
     fetchSafe<Signal>(
-      supabase.from("group_signals").select("*").eq("respuesta_modo", "auto"),
+      mias(supabase.from("group_signals").select("*").eq("respuesta_modo", "auto")),
       "grupos:auto_dm"
     ),
     fetchSafe<Signal>(
-      supabase
-        .from("group_signals")
-        .select("*")
-        .eq("politica_motivo", "sin_telefono")
-        .not("aviso_advisor_id", "is", null),
+      mias(supabase.from("group_signals").select("*").eq("politica_motivo", "sin_telefono")).not(
+        "aviso_advisor_id",
+        "is",
+        null
+      ),
       "grupos:reenvio_manual"
     ),
   ]);
