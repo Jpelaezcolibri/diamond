@@ -120,6 +120,32 @@ async function getRecentMessages(conversationId, limit = 12) {
   return data.reverse();
 }
 
+// Los ultimos mensajes SALIENTES con su hora, para el candado anti-duplicado
+// de src/lib/mensaje-asesor.js.
+//
+// Existe aparte de getRecentMessages a proposito: esa alimenta el historial que
+// se le manda al modelo y devuelve solo {role, content}. Sumarle created_at
+// ahi le agregaria ruido a cada prompt; y sin created_at el candado no puede
+// distinguir "identico hace 20 segundos" de "identico ayer", que es justo lo
+// unico que necesita saber.
+async function ultimosSalientes(conversationId, limit = 15) {
+  if (!supabase) {
+    return memory.messages
+      .filter((m) => m.conversation_id === conversationId && m.role === "assistant")
+      .slice(-limit)
+      .map((m) => ({ role: m.role, content: m.content, created_at: m.created_at }));
+  }
+  const { data, error } = await supabase
+    .from("messages")
+    .select("role, content, created_at")
+    .eq("conversation_id", conversationId)
+    .eq("role", "assistant")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return data;
+}
+
 async function resetForLead(leadId) {
   if (!supabase) {
     const conv = memory.conversations.find((c) => c.lead_id === leadId);
@@ -214,6 +240,7 @@ module.exports = {
   findOrCreate,
   appendMessage,
   getRecentMessages,
+  ultimosSalientes,
   resetForLead,
   setModo,
   setWaMessageId,

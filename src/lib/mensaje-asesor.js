@@ -18,6 +18,7 @@ const conversations = require("../data/conversations");
 // Modulo y no funcion suelta: destructurar congela la referencia y deja los
 // tests sin forma de mockear el envio (mismo criterio que src/groups/vivo.js).
 const canalWhatsapp = require("../channels/whatsapp");
+const advisors = require("../data/advisors");
 
 // ALERTA DE ENVIO FALLIDO (Juan, 2026-08-21 — caso Natalia/radar: 7 avisos
 // seguidos quedaron en `delivery: sent` porque Meta acepta el POST y nosotros
@@ -60,9 +61,79 @@ async function avisarFalloEnvio(org, telefono, texto, error) {
  *   mensaje, para que el Inbox del CRM muestre lo mismo que via en el chat.
  * @returns { ok, wamid, error } — mismo shape que canalWhatsapp.sendWhatsApp
  */
+// NUNCA DESTINATARIO (Juan, 2026-09-02): "mi numero 3016981200 retiralo de
+// cualquier bug que este por que me estan llegando mensajes y eso hace que la
+// linea se vuelva mas vulnerable".
+//
+// El criterio no es una lista negra con su numero adentro —eso seria justo el
+// hardcodeo de datos de Diamond que este repo no permite— sino una regla:
+// un asesor DADO DE BAJA no recibe mensajes. El numero de Juan esta en
+// `advisors` con activo=false desde julio, igual que "Asesor Prueba QA" y las
+// dos filas viejas de Catherine y Claudia. Cualquiera de esos numeros podia
+// recibir un aviso si alguien lo ponia en un env var de copia
+// (RADAR_ALERTA_TO, RADAR_WATCHDOG_TO) o si un bug lo elegia como destino.
+//
+// Se resuelve por organizacion, se mantiene solo (quien se va del equipo deja
+// de recibir sin tocar codigo) y degrada abierto: si la consulta falla, se
+// manda igual, porque perder un aviso es peor que mandarlo de mas.
+async function estaDadoDeBaja(org, telefono) {
+  const a = await advisors.findByPhone(org.id, telefono).catch(() => null);
+  return Boolean(a && a.activo === false);
+}
+
+// CANDADO ANTI-DUPLICADO (Juan, 2026-09-02): "quiero que me quites los
+// mensajes repetidos".
+//
+// EL CASO REAL. El 2 de septiembre a las 12:30 pm Natalia recibio DOS veces
+// identico el mismo aviso del radar (David Holguin, grupo PEDIDOS 7:00A.M.),
+// con 0,26 segundos de diferencia. Ocho duplicados asi en 13 dias.
+//
+// La deduplicacion por señal YA existe y funciona (indice unico
+// idx_group_signals_dedup): el segundo insert recibe 23505 y el flujo corta.
+// Aun asi salieron dos mensajes, o sea que el envio repetido no viene del
+// camino que esa dedup cubre —queda un proceso viejo escribiendo contra la
+// misma base (ver diamond-os/), un webhook reintentado, o un camino que no
+// pasa por la señal.
+//
+// Por eso el candado NO va en el radar sino aca, en el unico punto por el que
+// pasan todos los mensajes a un asesor: si ese mismo texto ya salio a ese
+// mismo numero hace menos de MINUTOS_ANTIDUPLICADO, no se manda de nuevo.
+// Cubre cualquier causa, presente o futura, incluida una que todavia no
+// diagnosticamos.
+//
+// Por que es seguro: por aca solo pasan avisos del radar y mensajes de
+// Sofi-Comando, que son textos largos y unicos. Las respuestas conversacionales
+// de Sofi —donde repetir "Decime, Natalia." a los dos minutos SI es legitimo—
+// no usan esta funcion: salen por src/agent/engine.js.
+const MINUTOS_ANTIDUPLICADO = Number(process.env.AVISOS_ANTIDUPLICADO_MIN || 10);
+
+async function yaSalioIgual(convId, texto) {
+  if (!(MINUTOS_ANTIDUPLICADO > 0)) return false;
+  const recientes = await conversations.ultimosSalientes(convId, 15).catch(() => []);
+  const corte = Date.now() - MINUTOS_ANTIDUPLICADO * 60 * 1000;
+  return (recientes || []).some(
+    (m) =>
+      m.role === "assistant" &&
+      m.content === texto &&
+      new Date(m.created_at).getTime() >= corte
+  );
+}
+
 async function enviarYRegistrar(org, telefono, texto, opts = {}) {
+  if (await estaDadoDeBaja(org, telefono)) {
+    console.warn(`[mensaje-asesor] ${telefono} es un asesor dado de baja — no se le manda nada.`);
+    return { ok: false, wamid: null, error: "asesor_inactivo", bloqueado: true };
+  }
+
   const lead = await leads.findOrCreate(org.id, telefono, "asesor");
   const conv = await conversations.findOrCreate(org.id, lead.id, null);
+
+  // Antes de escribir el mensaje: si ya salio identico hace un momento, este
+  // es el duplicado y no debe existir ni siquiera como fila.
+  if (!opts.permitirRepetido && (await yaSalioIgual(conv.id, texto))) {
+    console.warn(`[mensaje-asesor] mensaje identico a ${telefono} hace menos de ${MINUTOS_ANTIDUPLICADO} min — no se repite.`);
+    return { ok: true, wamid: null, duplicado: true };
+  }
   // Se guarda ANTES de mandar: si el envio revienta antes de responder (timeout,
   // red caida), el mensaje que se INTENTO mandar sigue siendo mas util que nada
   // — es lo mismo que ya hace src/agent/engine.js con la respuesta del cliente.

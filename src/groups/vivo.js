@@ -604,14 +604,30 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
   // no reemplaza los destinos existentes.
   let escaladoInmediato = false;
   const RADAR_ESCALADO_PHONE = radarEscaladoPhone();
-  if (telefonoPrincipal && !entregadoATelefonoPrincipal && RADAR_ESCALADO_PHONE && RADAR_ESCALADO_PHONE !== telefonoPrincipal) {
-    const rEscalado = await mensajeAsesor.enviarYRegistrar(org, RADAR_ESCALADO_PHONE, texto).catch((e) => ({ ok: false, error: e.message }));
-    if (rEscalado && rEscalado.ok) {
-      escaladoInmediato = true;
-      alguno = true;
-      console.log(`[radar] el aviso a ${telefonoPrincipal} no se pudo entregar, se escalo a ${RADAR_ESCALADO_PHONE}`);
-    } else {
-      console.warn(`[radar] tampoco se pudo escalar a ${RADAR_ESCALADO_PHONE}: ${rEscalado && rEscalado.error}`);
+  if (telefonoPrincipal && !entregadoATelefonoPrincipal) {
+    // A quien se escala. Antes esto dependia SOLO de RADAR_ESCALADO_PHONE: sin
+    // esa variable puesta en Railway el respaldo no existia y el aviso se
+    // perdia en silencio, que es justo lo contrario de lo que pidio Juan
+    // (2026-09-02: "los mensajes deben de llegar a natalia, y si no se puede a
+    // natalia a catherine"). Ahora la variable es un OVERRIDE, y sin ella el
+    // suplente se resuelve del equipo en `advisors` — la misma via que ya usa
+    // src/lib/entrega-asesor.js, resuelta por organizacion y no hardcodeada.
+    const suplentes = RADAR_ESCALADO_PHONE
+      ? [{ name: null, phone: RADAR_ESCALADO_PHONE }]
+      : (await advisors.listElegibles(org.id, { especialidades: ["venta"] }).catch(() => []))
+          .filter((a) => a.id !== (asesor && asesor.id));
+
+    for (const s of suplentes) {
+      const tel = String(s.phone || "").replace(/\D/g, "");
+      if (!tel || tel === telefonoPrincipal) continue;
+      const rEscalado = await mensajeAsesor.enviarYRegistrar(org, tel, texto).catch((e) => ({ ok: false, error: e.message }));
+      if (rEscalado && rEscalado.ok) {
+        escaladoInmediato = true;
+        alguno = true;
+        console.log(`[radar] el aviso a ${telefonoPrincipal} no se pudo entregar, se escalo a ${s.name || tel}`);
+        break;
+      }
+      console.warn(`[radar] tampoco se pudo escalar a ${s.name || tel}: ${rEscalado && rEscalado.error}`);
     }
     // Se marca la señal como escalada YA se intento el escalado, sin importar
     // si salio o no (Juan, review sobre c41d1b4): si no se marca, el scheduler
