@@ -173,6 +173,30 @@ export default async function GruposPage() {
   const matchesPendientes = matchesPendientesRes.data;
   const matchesEncontrados = matchesEncontradosRes.data;
 
+  // Dashboard de matches (Juan, 2026-09-02): "de esto depende la viabilidad
+  // del sistema" -- cuanto resuelve el bot completamente solo (DM directo al
+  // colega, sin que ninguna asesora tenga que intervenir) contra cuanto le
+  // toca reenviar a mano a la asesora (sin telefono resuelto -- el aviso le
+  // llega con el texto ya armado para que ella misma se lo mande al colega).
+  // No filtramos por asesor: son métricas de toda la organización, no de
+  // un advisor individual — igual que matchesPendientes (linea 153).
+  const [autoDmRes, reenvioManualRes] = await Promise.all([
+    fetchSafe<Signal>(
+      supabase.from("group_signals").select("*").eq("respuesta_modo", "auto"),
+      "grupos:auto_dm"
+    ),
+    fetchSafe<Signal>(
+      supabase
+        .from("group_signals")
+        .select("*")
+        .eq("politica_motivo", "sin_telefono")
+        .not("aviso_advisor_id", "is", null),
+      "grupos:reenvio_manual"
+    ),
+  ]);
+  const autoDm = autoDmRes.data.length;
+  const reenvioManual = reenvioManualRes.data.length;
+
   // Métricas del embudo: viven en memoria del bot, no en la base. Se piden
   // acá para no obligar a abrir una terminal cada vez que se quiere mirar el
   // volumen o el costo. Si el bot no responde, la página igual carga.
@@ -399,11 +423,13 @@ export default async function GruposPage() {
         De un vistazo: qué estamos buscando y qué ya calzó, en los dos carriles (pedidos de colegas
         contra nuestro inventario, y ofertas de colegas contra los mandatos de compra).
       </p>
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="mb-2 grid grid-cols-2 gap-3 sm:grid-cols-5">
         {[
           { n: mandatos.length, t: "mandatos activos", d: "clientes propios buscando" },
           { n: conMatch, t: "pedidos con match", d: `${pendientes} por revisar` },
           { n: matchesEncontrados.length, t: "propiedades con match", d: "ofertas que sirven a un mandato" },
+          { n: autoDm, t: "bot resolvió solo", d: "DM directo al colega, sin asesora" },
+          { n: reenvioManual, t: "asesora reenvió a mano", d: "sin teléfono resuelto" },
           ...(admin ? [{ n: matchesPendientes.length, t: "sin entregar", d: "matches que no llegaron a la asesora" }] : []),
         ].map((c) => (
           <div key={c.t} className="rounded-lg border border-slate-200 bg-white p-3">
@@ -413,6 +439,12 @@ export default async function GruposPage() {
           </div>
         ))}
       </div>
+      {autoDm + reenvioManual > 0 && (
+        <p className="mb-6 text-xs text-slate-400">
+          {autoDm} de {autoDm + reenvioManual} pedidos con teléfono ubicable los resolvió el bot
+          solo, sin que nadie tuviera que escribirle a un colega.
+        </p>
+      )}
 
       {m && (
         <div className="mb-6 rounded-lg border border-slate-200 bg-white p-4">
