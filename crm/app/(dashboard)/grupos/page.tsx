@@ -13,7 +13,7 @@ import VincularLinea, { type Sesion, type Asesor } from "@/components/vincular-l
 import GruposPermisos, { type GrupoVivo } from "@/components/grupos-permisos";
 import LineaDmInbox, { type DmMensaje } from "@/components/linea-dm-inbox";
 import PosiblesVentas, { type PosibleVenta } from "@/components/posibles-ventas";
-import { MandatosPanel, MatchesPendientesPanel } from "@/components/mandatos-panel";
+import { MandatosPanel, MatchesPendientesPanel, MatchesEncontradosPanel } from "@/components/mandatos-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -43,6 +43,17 @@ type MatchPendiente = {
   puntaje: number | null;
   error: string | null;
   escalado_a: string | null;
+  created_at: string;
+};
+
+type MatchEncontrado = {
+  id: string;
+  mandato_id: string;
+  ally_property_id: string;
+  puntaje: number | null;
+  entregado_at: string | null;
+  escalado_a: string | null;
+  texto: string | null;
   created_at: string;
 };
 
@@ -130,7 +141,7 @@ export default async function GruposPage() {
   // Los matches sin entregar NO se filtran por asesor: son información de
   // supervisión operativa del carril de compra completo, igual que
   // `whatsapp_groups` en esta misma página.
-  const [mandatosRes, matchesPendientesRes] = await Promise.all([
+  const [mandatosRes, matchesPendientesRes, matchesEncontradosRes] = await Promise.all([
     fetchSafe<Mandato>(
       mias(
         supabase.from("mandatos_compra").select("*").eq("estado", "activo")
@@ -143,9 +154,24 @@ export default async function GruposPage() {
         .order("created_at", { ascending: false }).limit(50),
       "grupos:matches_pendientes"
     ),
+    // Ofertas de colegas que SI hicieron match con un mandato activo (Juan,
+    // 2026-09-02): reemplaza la lista vieja de "Propiedades de colegas", que
+    // leia group_signals y quedo congelada el 2026-08-20 cuando se apago la
+    // persistencia de ofertas sin match -- esta consulta lee mandato_match_alerts,
+    // que SI sigue recibiendo filas (solo para lo que efectivamente cruzo).
+    // Mismo criterio "mias" que mandatosRes: un asesor ve los matches de sus
+    // propios mandatos, admin los ve todos.
+    fetchSafe<MatchEncontrado>(
+      mias(
+        supabase.from("mandato_match_alerts").select("*").eq("entregado", true)
+          .order("created_at", { ascending: false }).limit(100)
+      ),
+      "grupos:matches_encontrados"
+    ),
   ]);
   const mandatos = mandatosRes.data;
   const matchesPendientes = matchesPendientesRes.data;
+  const matchesEncontrados = matchesEncontradosRes.data;
 
   // Métricas del embudo: viven en memoria del bot, no en la base. Se piden
   // acá para no obligar a abrir una terminal cada vez que se quiere mirar el
@@ -288,7 +314,6 @@ export default async function GruposPage() {
     ...conMatchLista,
     ...(demandasRes.data || []).filter((s) => !yaEstan.has(s.id)).map(conGrupo),
   ];
-  const ofertas = (ofertasRes.data || []).map(conGrupo);
 
   const conMatch = conMatchLista.length;
   // Lo que falta por mirar. Es el número que importa: los otros sólo crecen.
@@ -374,7 +399,7 @@ export default async function GruposPage() {
           { n: grupos.length, t: "grupos cargados", d: "de exports y reenvíos" },
           { n: demandas.length, t: "demandas", d: "colegas buscando" },
           { n: pendientes, t: "por revisar", d: `de ${conMatch} con match` },
-          { n: ofertas.length, t: "ofertas", d: "propiedades de colegas" },
+          { n: matchesEncontrados.length, t: "matches", d: "propiedades de colegas que sirven" },
         ].map((c) => (
           <div key={c.t} className="rounded-lg border border-slate-200 bg-white p-3">
             <p className="text-2xl font-bold tabular-nums text-slate-900">{c.n}</p>
@@ -428,11 +453,14 @@ export default async function GruposPage() {
       {demandasRes.hasError && <ErrorBanner message={demandasRes.message} />}
       <SenalesGrupos senales={demandas} clase="demanda" vacio="Nada detectado todavía." />
 
-      <h2 className="mb-1 mt-8 text-lg font-semibold text-slate-900">Propiedades de colegas</h2>
+      <h2 className="mb-1 mt-8 text-lg font-semibold text-slate-900">Propiedades de colegas que hicieron match</h2>
       <p className="mb-2 text-sm text-slate-500">
-        Nunca son inventario propio. Confirmá disponibilidad antes de ofrecerlas a un cliente.
+        Solo lo que un colega publicó y le sirve a alguno de tus mandatos de compra — nunca son
+        inventario propio, confirmá disponibilidad antes de ofrecerlas a un cliente. Lo que no hace
+        match con nada no se guarda.
       </p>
-      <SenalesGrupos senales={ofertas} clase="oferta" vacio="Nada detectado todavía." />
+      {matchesEncontradosRes.hasError && <ErrorBanner message={matchesEncontradosRes.message} />}
+      <MatchesEncontradosPanel matches={matchesEncontrados} />
 
       <h2 className="mb-1 mt-8 text-lg font-semibold text-slate-900">Mis mandatos de compra</h2>
       <p className="mb-2 text-sm text-slate-500">

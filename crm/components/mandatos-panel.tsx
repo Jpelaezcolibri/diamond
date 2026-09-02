@@ -1,3 +1,5 @@
+import { absoluteDateTime } from "@/lib/types";
+
 export type Mandato = {
   id: string;
   cliente_nombre: string;
@@ -19,6 +21,17 @@ export type MatchPendiente = {
   puntaje: number | null;
   error: string | null;
   escalado_a: string | null;
+  created_at: string;
+};
+
+export type MatchEncontrado = {
+  id: string;
+  mandato_id: string;
+  ally_property_id: string;
+  puntaje: number | null;
+  entregado_at: string | null;
+  escalado_a: string | null;
+  texto: string | null;
   created_at: string;
 };
 
@@ -86,6 +99,33 @@ export function MatchesPendientesPanel({ matches }: { matches: MatchPendiente[] 
                 ? "Sin entregar: " + m.error
                 : "Sin entregar todavía"}
           </p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function MatchesEncontradosPanel({ matches }: { matches: MatchEncontrado[] }) {
+  if (matches.length === 0) {
+    return (
+      <div className="rounded-lg border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">
+        Todavía ningún colega publicó algo que le sirva a un mandato activo. En cuanto pase, la
+        asesora dueña del mandato ya lo recibe por WhatsApp — acá queda el registro.
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-3">
+      {matches.map((m) => (
+        <div key={m.id} className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-3 text-sm">
+          <div className="mb-1.5 flex flex-wrap items-baseline justify-between gap-2">
+            <span className="text-xs font-medium text-emerald-800">
+              {m.entregado_at ? "Entregado a la asesora" : "Match encontrado"}
+              {m.escalado_a && " · escalado por silencio"}
+            </span>
+            <span className="text-xs text-slate-400">{absoluteDateTime(m.created_at)}</span>
+          </div>
+          <p className="whitespace-pre-wrap text-slate-800">{m.texto || "(sin texto guardado)"}</p>
         </div>
       ))}
     </div>
