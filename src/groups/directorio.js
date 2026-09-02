@@ -56,6 +56,7 @@ async function refrescarGrupo(orgId, sesion, jid) {
   ultimoRefresco.set(cacheKey, ahora);
 
   let participantes = [];
+  const t0 = Date.now();
   try {
     participantes = await waha.participantesDeGrupo(sesion, jid);
   } catch (e) {
@@ -65,11 +66,21 @@ async function refrescarGrupo(orgId, sesion, jid) {
     return;
   }
 
+  let conTelefono = 0;
   for (const p of participantes) {
     const lid = soloDigitos(p.id);
     const tel = soloDigitos(p.telefono);
-    if (lid && tel) indice.set(`${orgId}:${lid}`, tel);
+    if (lid && tel) {
+      indice.set(`${orgId}:${lid}`, tel);
+      conTelefono++;
+    }
   }
+  // Una linea por refresco (como maximo una cada MS_ENTRE_REFRESCOS por
+  // grupo): es lo que faltaba para saber, desde los logs, si la lista llega
+  // vacia, llega sin `pn`, o tarda mas que el timeout de waha.js.
+  console.log(
+    `[directorio] refresco ${jid}: ${participantes.length} participantes, ${conTelefono} con telefono, ${Date.now() - t0} ms`
+  );
 }
 
 /**

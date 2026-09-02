@@ -488,7 +488,10 @@ async function telefonoDeLid(sesion, lid) {
 //
 // Devuelve [] si no se pudo listar: es un diagnostico, no puede tumbar nada.
 async function participantesDeGrupo(sesion, jid) {
-  if (!sesion || !jid) return [];
+  if (!sesion || !jid) {
+    console.warn(`[waha] participantesDeGrupo sin ${!sesion ? "sesion" : "jid"}: se devuelve lista vacia`);
+    return [];
+  }
   // v2 normaliza la respuesta entre engines; si la version desplegada no la
   // tiene, se cae al endpoint viejo.
   for (const ruta of [

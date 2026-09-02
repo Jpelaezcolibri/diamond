@@ -24,6 +24,7 @@ router.use("/api", (req, res, next) => {
 const organizations = require("../data/organizations");
 const whatsappGroups = require("../data/whatsapp-groups");
 const waha = require("../lib/waha");
+const directorio = require("../groups/directorio");
 
 // GROUPS_ENABLED tiene que ser un interruptor de verdad.
 //
@@ -396,6 +397,101 @@ router.post("/api/grupos/probar-dm", async (req, res) => {
 
     const envio = await waha.enviarDm(sesiones[0].nombre, destino, texto);
     res.json({ destino: `***${destino.slice(-4)}`, sesion: sesiones[0].nombre, ...envio });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Diagnostico del CAMINO REAL (2026-09-02). El diagnostico-lids de abajo
+// resolvio el 80% de los colegas (74 de 93) el mismo dia en que el directorio
+// en vivo llevaba 0 telefonos guardados desde el 25-ago (6 de 85 en total).
+// Mismo WAHA, misma sesion, mismo codigo de participantes: la diferencia
+// tiene que estar en el camino que corre en vivo -- src/groups/directorio.js
+// con su indice en memoria, su siembra y su throttle de un refresco por
+// grupo cada RADAR_DIRECTORIO_REFRESCO_MIN. Este endpoint corre ESE modulo
+// tal cual sobre los ultimos lids que quedaron en `sin_telefono`, y mide
+// aparte cuanto tarda la lista de participantes de cada grupo (el timeout de
+// waha.js es de 20 s; un grupo de 900 personas bajo una sesion inestable
+// puede pasarse, y el throttle convierte un timeout en 10 min de silencio).
+// Solo lectura: no escribe en colegas_grupos ni manda nada.
+router.get("/api/grupos/diagnostico-directorio", async (req, res) => {
+  if (!waha.configurado()) return res.status(501).json({ error: "WAHA no configurado" });
+  const limite = Math.min(Number(req.query.limite) || 20, 60);
+  try {
+    const org = await organizations.getDefault();
+    const sesiones = await whatsappGroups.listSessions(org.id);
+    if (!sesiones.length) return res.status(404).json({ error: "No hay sesion vinculada" });
+    const sesion = sesiones[0].nombre;
+
+    const { data, error } = await supabase
+      .from("group_signals")
+      .select("autor_nombre, autor_telefono, group_id, created_at")
+      .eq("org_id", org.id)
+      .eq("origen", "vivo")
+      .eq("politica_motivo", "sin_telefono")
+      .order("created_at", { ascending: false })
+      .limit(limite * 3);
+    if (error) throw error;
+
+    const grupos = await whatsappGroups.listGroups(org.id).catch(() => []);
+    const porId = new Map(grupos.map((g) => [g.id, g]));
+
+    const vistos = new Set();
+    const casos = [];
+    for (const s of data) {
+      if (!s.autor_telefono || vistos.has(s.autor_telefono)) continue;
+      if (casos.length >= limite) break;
+      vistos.add(s.autor_telefono);
+      const g = porId.get(s.group_id) || null;
+      const t0 = Date.now();
+      let telefono = null;
+      let fallo = null;
+      try {
+        telefono = await directorio.telefonoDe(org.id, s.autor_telefono, { sesion, jid: g ? g.jid : null });
+      } catch (e) {
+        fallo = e.message;
+      }
+      casos.push({
+        autor: s.autor_nombre,
+        lid: `...${String(s.autor_telefono).slice(-5)}`,
+        grupo: g ? g.nombre || g.jid : null,
+        senal: s.created_at,
+        ms: Date.now() - t0,
+        resuelto: Boolean(telefono),
+        telefono: telefono ? `***${String(telefono).slice(-4)}` : null,
+        error: fallo,
+      });
+    }
+
+    // La lista de participantes de cada grupo involucrado, medida aparte y
+    // directo contra WAHA: cuanto tarda y cuantos traen `pn`.
+    const jids = [...new Set(casos.map((c) => c.grupo).filter(Boolean))]
+      .map((nombre) => grupos.find((g) => (g.nombre || g.jid) === nombre))
+      .filter(Boolean);
+    const participantes = [];
+    for (const g of jids) {
+      const t0 = Date.now();
+      try {
+        const lista = await waha.participantesDeGrupo(sesion, g.jid);
+        participantes.push({
+          grupo: g.nombre || g.jid,
+          ms: Date.now() - t0,
+          participantes: lista.length,
+          con_telefono: lista.filter((p) => p.telefono).length,
+        });
+      } catch (e) {
+        participantes.push({ grupo: g.nombre || g.jid, ms: Date.now() - t0, error: e.message });
+      }
+    }
+
+    res.json({
+      sesion,
+      refresco_min: directorio.MS_ENTRE_REFRESCOS / 60000,
+      casos: casos.length,
+      resueltos: casos.filter((c) => c.resuelto).length,
+      detalle: casos,
+      participantes,
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
