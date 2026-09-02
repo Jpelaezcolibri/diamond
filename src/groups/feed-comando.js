@@ -27,9 +27,17 @@ function linea(m) {
  * @param matches    las candidatas que vio Sofi
  * @param resultado  { avisada, destinatarioNombre, enCola } — solo aplica si aprobo
  */
-function construir(mensaje, veredicto, matches, { avisada = false, destinatarioNombre = null, enCola = false } = {}) {
+function construir(mensaje, veredicto, matches, { avisada = false, destinatarioNombre = null, enCola = false, motivoDm = null } = {}) {
   if (!veredicto) return null;
   const aprobo = Boolean(veredicto.sirve_alguna);
+  // POR QUE no le llego al colega (Juan, 2026-09-02): este feed decia "en
+  // cola" y "aviso enviado" pero nunca la razon por la que el bot no
+  // escribio solo — la de Fontanar/Julieth era sin_telefono y Juan penso que
+  // Sofi la habia negado. Misma redaccion que el aviso a la asesora, para
+  // que los dos cuenten la misma historia.
+  const noSalioAlColega = aprobo && motivoDm && motivoDm !== "ok"
+    ? require("./alerta-asesor").porqueNoSalioSolo(motivoDm, true)
+    : null;
   const utiles = aprobo
     ? (veredicto.refs_utiles || []).map((ref) => (matches || []).find((m) => String(m.ref) === String(ref))).filter(Boolean)
     : [];
@@ -49,7 +57,11 @@ function construir(mensaje, veredicto, matches, { avisada = false, destinatarioN
   }
 
   return [
-    aprobo ? "✅ Sofi APROBO un pedido del radar" : "❌ Sofi DESCARTO un pedido del radar",
+    aprobo
+      ? noSalioAlColega
+        ? "🚨🚨 Sofi APROBO un pedido del radar — el bot NO pudo escribirle al colega"
+        : "✅ Sofi APROBO un pedido del radar"
+      : "❌ Sofi DESCARTO un pedido del radar",
     "",
     `Grupo: ${mensaje.grupo_nombre || "sin nombre"}`,
     `Colega: ${mensaje.autor_nombre || "un colega"}`,
@@ -58,6 +70,7 @@ function construir(mensaje, veredicto, matches, { avisada = false, destinatarioN
     utiles.length ? `Le sirve:\n${utiles.map(linea).join("\n")}` : null,
     `Sofi dice: ${veredicto.por_que || "sin explicacion"}`,
     veredicto.desacuerdo_con_puntaje ? `Desacuerdo con el puntaje del motor: ${veredicto.desacuerdo_con_puntaje}` : null,
+    noSalioAlColega ? `\nNo salio al colega: ${noSalioAlColega}` : null,
     estadoAviso,
   ].filter((l) => l !== null).join("\n");
 }

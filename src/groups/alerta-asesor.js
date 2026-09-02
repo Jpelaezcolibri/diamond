@@ -149,11 +149,18 @@ const PORQUE = {
   dm_fallido: "El bot intentó escribirle y WhatsApp rechazó el envío.",
 };
 
+// Cuando Sofi APROBO y aun asi el bot no pudo escribirle al colega, el aviso
+// tiene que gritar (Juan, 2026-09-02): "envialo con urgencia que es una gran
+// oportunidad, con emojis de alerta o algo asi, para que yo pueda saber que
+// es lo que se queda y por que". Una oportunidad aprobada que se queda en la
+// bandeja es la unica perdida real de todo el radar.
+const URGENCIA = "Es una oportunidad YA APROBADA por Sofi: escribile vos con urgencia.";
+
 function porqueNoSalioSolo(motivo, hayUtiles) {
   if (!hayUtiles) {
     return "Sofi no aprobó ninguna del todo, así que no le escribió nada al colega. Estas quedan para que decidas vos.";
   }
-  return PORQUE[motivo] || null;
+  return PORQUE[motivo] ? `🚨 ${PORQUE[motivo]} ${URGENCIA}` : null;
 }
 
 // Lo que busca el colega, en una linea (Juan, 2026-09-02): "que entienda que
@@ -220,8 +227,11 @@ function construir(senal, veredicto, matches, telefonoColega = null, org = null,
   const busca = queBusca(senal);
   const porque = porqueNoSalioSolo(motivoDm, utiles.length > 0);
 
+  // Aprobada y sin salir es otra categoria de mensaje, y se tiene que ver
+  // desde la primera linea sin leer el resto.
+  const aprobadaSinSalir = utiles.length > 0 && Boolean(porque);
   const cabecera = [
-    `🎯 Oportunidad en un grupo`,
+    aprobadaSinSalir ? `🚨🚨 OPORTUNIDAD APROBADA — el bot NO pudo escribirle al colega` : `🎯 Oportunidad en un grupo`,
     ``,
     `Grupo: ${senal.grupo_nombre || "sin nombre"}`,
     `Colega: ${quien}`,
@@ -357,4 +367,4 @@ function construirAvisoPostDm(senal, veredicto, matches, refsEnviadas, telefonoC
   return lineas.join("\n");
 }
 
-module.exports = { construir, construirAvisoPostDm, linea };
+module.exports = { construir, construirAvisoPostDm, linea, porqueNoSalioSolo };

@@ -195,7 +195,10 @@ ACCESORIO vs DE FONDO — es la linea que decide CASI contra INCOMPATIBLE
   descartes ni la mandes a dudosas por eso. Quien pide 2 alcobas casi siempre
   acepta 3 si el precio le cuadra, y el precio ya lo verificamos aparte.
   Mencionalo en 'por_que' ("tiene 3 alcobas, una mas de las que pediste") y
-  seguí. Lo unico que descalifica es quedarse corto.
+  seguí. Lo unico que descalifica es quedarse corto. Y escribi lo que SOBRA
+  como ventaja ("cumple, y ademas tiene 4 alcobas y 212 m²"), nunca como
+  comparacion ("supera alcobas 4 vs 3"): la asesora lo lee como una objecion
+  y cree que la propiedad se nego por tener mas.
 - De FONDO, nunca pasa: zona, municipio, tipo de propiedad, operacion,
   presupuesto, y la cantidad de alcobas cuando el FALTANTE cambia el producto
   (un 2 alcobas no resuelve un pedido de 3 o 4).
