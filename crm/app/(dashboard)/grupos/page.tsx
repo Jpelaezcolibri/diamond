@@ -394,12 +394,17 @@ export default async function GruposPage() {
         </div>
       )}
 
+      <h2 className="mb-1 text-lg font-semibold text-slate-900">Dashboard de matches</h2>
+      <p className="mb-2 text-sm text-slate-500">
+        De un vistazo: qué estamos buscando y qué ya calzó, en los dos carriles (pedidos de colegas
+        contra nuestro inventario, y ofertas de colegas contra los mandatos de compra).
+      </p>
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
-          { n: grupos.length, t: "grupos cargados", d: "de exports y reenvíos" },
-          { n: demandas.length, t: "demandas", d: "colegas buscando" },
-          { n: pendientes, t: "por revisar", d: `de ${conMatch} con match` },
-          { n: matchesEncontrados.length, t: "matches", d: "propiedades de colegas que sirven" },
+          { n: mandatos.length, t: "mandatos activos", d: "clientes propios buscando" },
+          { n: conMatch, t: "pedidos con match", d: `${pendientes} por revisar` },
+          { n: matchesEncontrados.length, t: "propiedades con match", d: "ofertas que sirven a un mandato" },
+          ...(admin ? [{ n: matchesPendientes.length, t: "sin entregar", d: "matches que no llegaron a la asesora" }] : []),
         ].map((c) => (
           <div key={c.t} className="rounded-lg border border-slate-200 bg-white p-3">
             <p className="text-2xl font-bold tabular-nums text-slate-900">{c.n}</p>
@@ -438,13 +443,14 @@ export default async function GruposPage() {
         </div>
       )}
 
-      <h2 className="mb-1 text-lg font-semibold text-slate-900">Grupos cargados</h2>
+      <h2 className="mb-1 text-lg font-semibold text-slate-900">Grupos</h2>
       <p className="mb-2 text-sm text-slate-500">
-        Cada archivo que subís aparece acá como un grupo.
+        {grupos.length} grupo{grupos.length === 1 ? "" : "s"} cargado{grupos.length === 1 ? "" : "s"}, de
+        exports y reenvíos.
       </p>
       <GruposPanel grupos={grupos} />
 
-      <h2 className="mb-1 mt-8 text-lg font-semibold text-slate-900">Pedidos de colegas</h2>
+      <h2 className="mb-1 mt-8 text-lg font-semibold text-slate-900">Match: pedidos de colegas</h2>
       <p className="mb-2 text-sm text-slate-500">
         Clientes de <em>otras</em> inmobiliarias, no de Diamond — no van al embudo propio. Tocá el
         botón de matches para ver qué ofrecerle y con qué mensaje.
@@ -453,7 +459,7 @@ export default async function GruposPage() {
       {demandasRes.hasError && <ErrorBanner message={demandasRes.message} />}
       <SenalesGrupos senales={demandas} clase="demanda" vacio="Nada detectado todavía." />
 
-      <h2 className="mb-1 mt-8 text-lg font-semibold text-slate-900">Propiedades de colegas que hicieron match</h2>
+      <h2 className="mb-1 mt-8 text-lg font-semibold text-slate-900">Match: propiedades de colegas</h2>
       <p className="mb-2 text-sm text-slate-500">
         Solo lo que un colega publicó y le sirve a alguno de tus mandatos de compra — nunca son
         inventario propio, confirmá disponibilidad antes de ofrecerlas a un cliente. Lo que no hace
