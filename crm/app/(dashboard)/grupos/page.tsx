@@ -15,6 +15,7 @@ import LineaDmInbox, { type DmMensaje } from "@/components/linea-dm-inbox";
 import PosiblesVentas, { type PosibleVenta } from "@/components/posibles-ventas";
 import { MandatosPanel, MatchesPendientesPanel, MatchesEncontradosPanel } from "@/components/mandatos-panel";
 import { MensajesPorAsesoraPanel, type MensajesPorAsesora } from "@/components/mensajes-por-asesora-panel";
+import GruposLiveWatcher from "@/components/grupos-live-watcher";
 
 export const dynamic = "force-dynamic";
 
@@ -471,7 +472,10 @@ export default async function GruposPage() {
         </div>
       )}
 
-      <h2 className="mb-1 text-lg font-semibold text-slate-900">Dashboard de matches</h2>
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-lg font-semibold text-slate-900">Dashboard de matches</h2>
+        <GruposLiveWatcher />
+      </div>
       <p className="mb-2 text-sm text-slate-500">
         De un vistazo: qué estamos buscando y qué ya calzó, en los dos carriles (pedidos de colegas
         contra nuestro inventario, y ofertas de colegas contra los mandatos de compra).
