@@ -169,9 +169,20 @@ function tamanoIndice(orgId) {
  * Con `jid` intenta refrescar ese grupo si no lo tiene (resolucion perezosa);
  * sin `jid` solo consulta lo que ya sabe.
  */
-async function telefonoDe(orgId, lid, { sesion = null, jid = null } = {}) {
+async function telefonoDe(orgId, lid, { sesion = null, jid = null, pista = null } = {}) {
   const clave = soloDigitos(lid);
   if (!orgId || !clave) return null;
+
+  // PISTA: el numero que a veces viaja en el propio mensaje del grupo
+  // (whatsapp-group.js#telefonoVisible). Es la fuente mas barata que hay —
+  // cero HTTP — y la unica que funciona para un colega que no aparece con
+  // `pn` en la lista de participantes. Se exige la misma validacion estricta
+  // que el resto: un lid disfrazado de numero nunca puede entrar aca.
+  const sugerido = soloDigitos(pista);
+  if (sugerido && esCelularColombiano(sugerido)) {
+    indice.set(`${orgId}:${clave}`, sugerido);
+    return sugerido;
+  }
 
   // WhatsApp casi siempre entrega un LID oculto (14-17 digitos) para el
   // participante de un grupo, pero alguna vez entrega el numero visible
@@ -221,11 +232,11 @@ async function telefonoDe(orgId, lid, { sesion = null, jid = null } = {}) {
  * se devolvia el telefono igual, como si "registrar" hubiera funcionado aunque
  * la fila nunca se hubiera escrito. No prometas una constancia que no quedo.
  */
-async function registrar(orgId, { lid, nombre = null, grupo = null, sesion = null, jid = null } = {}) {
+async function registrar(orgId, { lid, nombre = null, grupo = null, sesion = null, jid = null, pista = null } = {}) {
   const clave = soloDigitos(lid);
   if (!orgId || !clave) return null;
 
-  const telefono = await telefonoDe(orgId, clave, { sesion, jid });
+  const telefono = await telefonoDe(orgId, clave, { sesion, jid, pista });
   const guardado = await colegas.upsert(orgId, { lid: clave, telefono, nombre, grupo });
   return guardado ? telefono : null;
 }

@@ -341,3 +341,37 @@ test("calentar recorre todos los grupos saltando el throttle, y rellenar complet
   waha.participantesDeGrupo = participantesReal;
   waha.telefonoDeLid = telefonoDelIdReal;
 });
+
+// ── PISTA: el numero que a veces viaja en el propio mensaje del grupo
+// (whatsapp-group.js#telefonoVisible). Es la fuente mas barata que hay y la
+// unica que sirve para un colega que la lista de participantes no expone.
+
+test("con una pista valida resuelve sin tocar WAHA, y deja el numero en el indice", async () => {
+  preparar();
+  const contador = conParticipantes([]);
+
+  const tel = await directorio.telefonoDe(ORG, "198161251463188", {
+    sesion: SESION, jid: JID, pista: "573001234567",
+  });
+  assert.strictEqual(tel, "573001234567");
+  assert.strictEqual(contador.n, 0, "una pista valida ahorra la lista de participantes entera");
+
+  // Queda sembrado: el siguiente pedido del mismo colega ya no necesita pista.
+  assert.strictEqual(await directorio.telefonoDe(ORG, "198161251463188", {}), "573001234567");
+});
+
+test("una pista que NO es un celular colombiano se ignora — un lid disfrazado nunca entra", async () => {
+  preparar();
+  conParticipantes([]);
+
+  for (const basura of ["198161251463188", "12345", "5712345678", ""]) {
+    assert.strictEqual(
+      await directorio.telefonoDe(ORG, "777", { sesion: SESION, jid: JID, pista: basura }),
+      null,
+      `la pista ${basura} no puede pasar por telefono`
+    );
+  }
+
+  waha.participantesDeGrupo = participantesReal;
+  waha.telefonoDeLid = telefonoDelIdReal;
+});

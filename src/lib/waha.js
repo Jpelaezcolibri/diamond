@@ -438,7 +438,18 @@ async function enviarDm(sesion, telefono, texto) {
     return { ok: true, wamid };
   } catch (e) {
     console.error(`[waha] No se pudo mandar el DM a ${completo}: ${e.message}`);
-    return { ok: false, error: e.message };
+    // `previoAlEnvio` distingue los dos fallos que arriba se tratan igual, y
+    // la diferencia es exactamente la que permite (o prohibe) reintentar sin
+    // duplicarle el mensaje al colega:
+    //   · WAHA respondio un error HTTP (e.status): lo RECHAZO, no salio nada.
+    //     Tambien la falla de red antes de establecer la conexion.
+    //     -> previoAlEnvio true, quien llama puede reintentar UNA vez.
+    //   · Timeout / abort: el estado es DESCONOCIDO — pudo haber salido y
+    //     perderse la respuesta. -> previoAlEnvio false, NUNCA se reintenta.
+    // La regla de la cabecera de este archivo ("nunca reintentar") se
+    // mantiene intacta para ese segundo caso, que es el que la motivo.
+    const abortado = e.name === "TimeoutError" || e.name === "AbortError";
+    return { ok: false, error: e.message, previoAlEnvio: !abortado };
   }
 }
 

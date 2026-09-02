@@ -51,6 +51,7 @@ const whatsappGroups = require("../data/whatsapp-groups");
 const { motivoDescarte } = require("../groups/prefilter");
 const { huella } = require("../../epe/core/hash");
 const { enqueue } = require("../lib/user-queue");
+const { esCelularColombiano } = require("../lib/contacto");
 const vivo = require("../groups/vivo");
 const waha = require("../lib/waha");
 const dm = require("../groups/dm");
@@ -146,6 +147,31 @@ function nombreDelAutor(p) {
   );
 }
 
+// El telefono REAL del autor, cuando WhatsApp lo manda (2026-09-02).
+//
+// El `participant` de un grupo casi siempre es un @lid oculto, y resolverlo
+// cuesta traer cientos de participantes por HTTP (src/groups/directorio.js).
+// Pero segun el motor y la version, el payload a veces trae ADEMAS el numero
+// real en alguna clave alterna. Cuando pasa es la fuente mas barata que hay.
+//
+// Se acepta SOLO lo que tenga forma de celular colombiano real
+// (esCelularColombiano): un @lid tiene 13-17 digitos y no pasa el filtro, asi
+// que no hay forma de que un identificador oculto se cuele como si fuera un
+// telefono. Si ninguna clave sirve, se devuelve null y todo sigue como antes.
+const CLAVES_TELEFONO = ["participantPn", "authorPn", "senderPn", "participantAlt", "authorAlt", "pn", "phoneNumber"];
+
+function telefonoVisible(p) {
+  const fuentes = [p, p?._data];
+  for (const fuente of fuentes) {
+    if (!fuente) continue;
+    for (const clave of CLAVES_TELEFONO) {
+      const crudo = String(fuente[clave] || "").replace(/\D/g, "");
+      if (crudo && esCelularColombiano(crudo)) return crudo;
+    }
+  }
+  return null;
+}
+
 // Se registra UNA vez por proceso: si el nombre no aparece, deja las CLAVES del
 // payload en el log. Nunca los valores — el contenido es de terceros.
 let avisadoSinAutor = false;
@@ -166,6 +192,7 @@ function normalizar(body) {
     waMessageId: p.id || null,
     chatId: p.from || null,
     autorId: p.participant || p.author || null,
+    autorTelefonoVisible: telefonoVisible(p),
     autorNombre,
     texto: typeof p.body === "string" ? p.body : "",
     fromMe: Boolean(p.fromMe),
@@ -211,6 +238,7 @@ async function procesar(org, ev, grupo, sesion) {
     groupId: grupo.id,
     autor: ev.autorNombre,
     autorTelefono: soloDigitos(ev.autorId),
+    autorTelefonoVisible: ev.autorTelefonoVisible || null,
     texto: ev.texto,
     waMessageId: ev.waMessageId,
     // CUANDO se escribio el mensaje EN EL GRUPO, no cuando lo procesamos.
@@ -383,3 +411,4 @@ module.exports._esDM = esDM;
 module.exports._yaVisto = yaVisto;
 module.exports._esAnteriorAlCorte = esAnteriorAlCorte;
 module.exports._metricas = metricas;
+module.exports._telefonoVisible = telefonoVisible;

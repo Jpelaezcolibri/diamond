@@ -82,6 +82,11 @@ export default function VincularLinea({ sesiones, asesores }: { sesiones: Sesion
     const rapido = estado?.status === "SCAN_QR_CODE" || estado === null;
     const cada = rapido ? 5000 : 20000;
     let intentos = 0;
+    // Tres fallos seguidos y se corta (auditoría 2026-09-02): si el bot no
+    // responde (caído, o WAHA devolviendo 502) no lo va a hacer en el
+    // siguiente sondeo, y seguir cinco minutos es carga inútil sobre la
+    // misma línea que ya reconecta sola varias veces al día.
+    let fallosSeguidos = 0;
 
     const tick = async () => {
       // Tope de ~5 minutos: si en ese rato no se resolvió, no lo va a resolver el
@@ -94,10 +99,20 @@ export default function VincularLinea({ sesiones, asesores }: { sesiones: Sesion
       }
       try {
         const r = await llamar("estado", nombre);
+        fallosSeguidos = 0;
         setEstado({ status: r.status, qr: r.qr, error: r.error });
         if (r.status === "WORKING") startTransition(() => router.refresh());
       } catch {
-        /* transitorio: el siguiente tick reintenta */
+        // Transitorio: el siguiente tick reintenta. Pero tres seguidos ya no
+        // son transitorios.
+        if (++fallosSeguidos >= 3) {
+          if (poll.current) clearInterval(poll.current);
+          setEstado((e) => ({
+            status: e?.status ?? null,
+            qr: e?.qr ?? null,
+            error: "El bot no responde. Dejé de consultar — recargá la página para volver a intentar.",
+          }));
+        }
       }
     };
 

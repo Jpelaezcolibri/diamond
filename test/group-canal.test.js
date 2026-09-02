@@ -375,3 +375,31 @@ test("el canal solo se monta con las dos variables puestas", () => {
   // el canal apagado en vez de encenderlo por accidente.
   assert.ok(soloCodigo(leer("src/config.js")).includes('process.env.GROUPS_ENABLED === "true"'));
 });
+
+// ── El telefono real del autor cuando WhatsApp lo manda (2026-09-02).
+//
+// Resolver un @lid cuesta traer cientos de participantes por HTTP; si el
+// payload ya trae el numero, es gratis. Lo que NO puede pasar es que un
+// identificador oculto se cuele como si fuera un telefono: por eso el filtro
+// es esCelularColombiano y no "tiene pinta de numero".
+
+const canal = require("../src/channels/whatsapp-group");
+
+test("saca el telefono del payload cuando viene, en la clave que sea", () => {
+  assert.strictEqual(canal._telefonoVisible({ participantPn: "573001234567" }), "573001234567");
+  assert.strictEqual(canal._telefonoVisible({ _data: { senderPn: "57 300 123 4567" } }), "573001234567");
+  assert.strictEqual(canal._telefonoVisible({ authorAlt: "3001234567@c.us" }), "3001234567");
+});
+
+test("NUNCA acepta un lid ni basura como telefono", () => {
+  for (const p of [
+    { participantPn: "198161251463188" },        // lid de 15 digitos
+    { _data: { senderPn: "141746805670125" } },  // lid de 15
+    { authorPn: "12345" },
+    { pn: "5712345678" },                        // 10 digitos que no empiezan en 3
+    {},
+    null,
+  ]) {
+    assert.strictEqual(canal._telefonoVisible(p), null, `no puede aceptar ${JSON.stringify(p)}`);
+  }
+});

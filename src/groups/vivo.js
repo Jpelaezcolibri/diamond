@@ -159,12 +159,17 @@ async function procesarMensaje(org, mensaje, { grupo, modo = "sombra", enviar = 
   // hasta 878 participantes — esperarlo pagaria esa latencia ANTES de que el
   // radar decida si publica, y como el procesamiento va en cola por grupo, el
   // pedido siguiente esperaria detras.
+  // `pista` es el numero que WhatsApp a veces manda en el payload del propio
+  // mensaje, ya validado como celular colombiano
+  // (whatsapp-group.js#telefonoVisible): cuando viene, ahorra la unica fuente
+  // que teniamos y ademas siembra el indice para el resto del grupo.
   directorio.registrar(org.id, {
     lid: mensaje.autorTelefono,
     nombre: mensaje.autor,
     grupo: mensaje.grupo,
     sesion,
     jid: grupo.jid,
+    pista: mensaje.autorTelefonoVisible || null,
   }).catch((e) => console.warn("[radar] No se pudo registrar al colega en el directorio:", e.message));
 
   // MODO ASISTIDO: no se publica NADA en el grupo. Sofi revalida las candidatas
@@ -345,7 +350,7 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
   // de tocar el nombre en el grupo en vez de un link directo — un fallo aca
   // nunca puede tumbar el aviso.
   const telefonoColega = await directorio
-    .telefonoDe(org.id, mensaje.autorTelefono, { sesion, jid: grupo.jid })
+    .telefonoDe(org.id, mensaje.autorTelefono, { sesion, jid: grupo.jid, pista: mensaje.autorTelefonoVisible || null })
     .catch((e) => {
       console.warn("[radar] No se pudo resolver el telefono del colega para el aviso:", e.message);
       return null;
@@ -421,7 +426,19 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
       veredicto.le_falta || []
     );
     if (textoDm) {
-      const envioDm = await waha.enviarDm(sesion, telefonoColega, textoDm).catch((e) => ({ ok: false, error: e.message }));
+      let envioDm = await waha.enviarDm(sesion, telefonoColega, textoDm).catch((e) => ({ ok: false, error: e.message }));
+      // UN solo reintento, y solo si el fallo fue ANTES de que el mensaje
+      // saliera (WAHA lo rechazo, o la conexion ni se establecio -- ver
+      // `previoAlEnvio` en waha.js#enviarDm). Un timeout NO se reintenta: el
+      // estado es desconocido y duplicarle el DM a un colega es justo la
+      // conducta que hace que a uno lo reporten. La linea reconecta ~10 veces
+      // al dia (medido 2026-09-02), asi que este caso es real y hoy tiraba el
+      // pedido al camino manual sin necesidad.
+      if (envioDm && !envioDm.ok && envioDm.previoAlEnvio) {
+        console.warn(`[radar] El DM no llego a salir (${envioDm.error}); un reintento en 3 s.`);
+        await new Promise((r) => setTimeout(r, 3000));
+        envioDm = await waha.enviarDm(sesion, telefonoColega, textoDm).catch((e) => ({ ok: false, error: e.message }));
+      }
       if (envioDm && envioDm.ok) {
         // Se registra con modo 'auto' — igual que el camino que publica DENTRO
         // del grupo (ver la nota en group-signals.js#dmsHoyPorColega sobre por
