@@ -189,10 +189,15 @@ test("un pedido mas viejo que el limite de antiguedad no se manda por DM", () =>
   assert.strictEqual(politica.decidirDm(justo).enviarDm, true);
 });
 
-test("un colega ya contactado hoy (tope 1) no recibe un segundo DM", () => {
-  const d = politica.decidirDm(escenarioDm({ dmsHoyColega: 1 }));
+test("un colega ya contactado dos veces hoy (tope 2) no recibe un tercer DM; con uno, si", () => {
+  const d = politica.decidirDm(escenarioDm({ dmsHoyColega: 2 }));
   assert.strictEqual(d.enviarDm, false);
   assert.strictEqual(d.motivo, "limite_colega_alcanzado");
+
+  // Juan, 2026-09-02: dos pedidos distintos del mismo colega en la manana
+  // merecen dos respuestas; el dedup por contenido ya evita el pedido repetido.
+  const conCupo = politica.decidirDm(escenarioDm({ dmsHoyColega: 1 }));
+  assert.strictEqual(conCupo.enviarDm, true);
 });
 
 test("si no se puede contar cuantos DMs recibio el colega hoy, se calla -- ante la duda, no", () => {
@@ -217,8 +222,8 @@ test("si no se puede contar el volumen de la linea, se calla", () => {
   assert.strictEqual(d.motivo, "limite_linea_no_verificable");
 });
 
-test("los tres defaults son los pedidos: 1 DM/colega/dia, 30 min de antiguedad, 150/dia la linea", () => {
-  assert.strictEqual(politica.LIMITES_DM_DEFAULT.dmsPorColegaDia, 1);
+test("los tres defaults son los pedidos: 2 DM/colega/dia, 30 min de antiguedad, 150/dia la linea", () => {
+  assert.strictEqual(politica.LIMITES_DM_DEFAULT.dmsPorColegaDia, 2);
   assert.strictEqual(politica.LIMITES_DM_DEFAULT.antiguedadMaximaMin, 30);
   assert.strictEqual(politica.LIMITES_DM_DEFAULT.topeDiarioLinea, 150);
 });

@@ -712,11 +712,11 @@ test("responderPorDmManual: sin sesion de WAHA, no se puede intentar el envio", 
   assert.strictEqual(enviosDmManual.length, 0);
 });
 
-test("responderPorDmManual: un colega ya contactado hoy (tope 1) no recibe un segundo DM manual", async () => {
+test("responderPorDmManual: un colega ya contactado dos veces hoy (tope 2) no recibe un tercer DM manual", async () => {
   señalParaAprobar = señalCallada({ autor_telefono: "141746805670125" });
   grupoParaAprobar = grupoHabilitado();
   telefonoColegaManual = "573001234567";
-  dmsHoyColegaManualMock = 1;
+  dmsHoyColegaManualMock = 2;
 
   const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
 

@@ -218,4 +218,44 @@ async function listarConTelefono(orgId) {
   }
 }
 
-module.exports = { upsert, porTelefono, listarConTelefono };
+// Los colegas registrados que todavia NO tienen telefono: es la lista que el
+// calentamiento del directorio (src/scheduler/radar-directorio.js) intenta
+// rellenar cada vez que refresca los grupos. Mismo paginado que
+// listarConTelefono.
+async function listarSinTelefono(orgId) {
+  if (!orgId) return [];
+
+  if (!supabase) {
+    return memory.colegasGrupos
+      .filter((c) => c.org_id === orgId && !c.telefono)
+      .map((c) => ({ lid: c.lid, nombre: c.nombre }));
+  }
+
+  try {
+    const filas = [];
+    let desde = 0;
+    for (;;) {
+      const { data, error } = await supabase
+        .from("colegas_grupos")
+        .select("lid, nombre")
+        .eq("org_id", orgId)
+        .is("telefono", null)
+        .order("id", { ascending: true })
+        .range(desde, desde + PAGINA_LISTADO - 1);
+      if (error) throw error;
+      filas.push(...(data || []));
+      if (!data || data.length < PAGINA_LISTADO) break;
+      desde += PAGINA_LISTADO;
+    }
+    return filas;
+  } catch (e) {
+    if (esTablaFaltante(e)) {
+      avisarFaltaTabla();
+      return [];
+    }
+    console.warn("[colegas] No se pudo listar los colegas sin telefono:", e.message);
+    return [];
+  }
+}
+
+module.exports = { upsert, porTelefono, listarConTelefono, listarSinTelefono };

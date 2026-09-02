@@ -107,6 +107,11 @@ app.listen(config.port, () => {
   // hueco en una tabla. Avisa por la linea OFICIAL de Sofi, nunca por la
   // vinculada — si lo que se cayo es esa linea, avisar por ahi no serviria.
   if (config.supabaseUrl) require("./scheduler/radar-watchdog").start();
+  // Calienta el directorio de colegas (lid -> telefono) al arrancar y cada
+  // hora, para que el DM automatico no dependa de una llamada a WAHA en el
+  // momento del pedido (Juan, 2026-09-02: 0 telefonos guardados en una semana
+  // con el mismo codigo que resolvia el 80% en frio).
+  if (config.supabaseUrl) require("./scheduler/radar-directorio").start();
   // Empuja a la asesora a responder el aviso de un pedido del radar: sirve
   // para calibrar (signal_events) y renueva la ventana de 24h de los avisos
   // siguientes.

@@ -364,9 +364,31 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
   // recalcula mas abajo para el aviso a la asesora, pero hace falta ACA
   // tambien para poder armar el DM con redactar.mensajeGrupo antes de saber
   // si el DM va a poder salir.
-  const utiles = (veredicto.refs_utiles || [])
+  const utilesSegunSofi = (veredicto.refs_utiles || [])
     .map((ref) => matches.find((m) => String(m.ref) === String(ref)))
     .filter(Boolean);
+
+  // COMPUERTA DE CALIDAD DEL DATO, tambien en el DM automatico (auditoria
+  // 2026-09-02): responderPorDmManual y aprobarManual ya recalculaban
+  // publicable.filtrar + verificarLink, pero este camino mandaba lo que Sofi
+  // aprobara tal cual -- una ref con precio corrupto, sin link de Wasi, de un
+  // aliado, o con el sync de Wasi detenido salia igual al privado del colega.
+  // umbral: 0 porque el veredicto de Sofi reemplaza al puntaje (mismo criterio
+  // que el DM manual); las barreras de dato y de seguridad siguen duras. Lo
+  // que no pasa NO se pierde: cae al aviso a la asesora de siempre.
+  const inventarioDm = await syncEstado.estadoDelInventario(org.id, { ahora: ahora || new Date() });
+  const { publicables: utilesLimpias, descartados: descartadosDm } = publicable.filtrar(utilesSegunSofi, {
+    syncFresco: inventarioDm.fresco,
+    umbral: 0,
+  });
+  const { verificadas: utiles, rotas: rotasDm } = await verificarLink.verificar(utilesLimpias);
+  for (const r of rotasDm) descartadosDm.push({ ref: r.ref, motivos: ["link_no_abre"] });
+  if (utilesSegunSofi.length > 0 && utiles.length === 0) {
+    console.warn(
+      `[radar] Sofi aprobo ${utilesSegunSofi.length} ref(s) pero ninguna pasa la compuerta de calidad para el DM: ` +
+        descartadosDm.map((d) => `${d.ref}:${d.motivos.join("|")}`).join(", ")
+    );
+  }
 
   const desdeIso = new Date((ahora || new Date()).getTime() - VENTANA_LIMITE_HORAS * 3600 * 1000).toISOString();
   const [dmsColegaHoy, dmsLineaHoy] = telefonoColega
@@ -463,8 +485,12 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
         return { resultado: "dm_enviado", veredicto, texto: textoDm, telefono: telefonoColega, signalId: signal.id };
       }
       // Si el envio falla, se cae al aviso a la asesora de siempre: ningun
-      // pedido puede quedar sin que alguien lo atienda.
+      // pedido puede quedar sin que alguien lo atienda. Y la señal deja de
+      // decir "ok": el motivo real es que el transporte fallo.
       console.warn(`[radar] Fallo el DM al colega, se avisa a la asesora en su lugar: ${envioDm && envioDm.error}`);
+      await groupSignals
+        .guardarPolitica(org.id, signal.id, { motivo: "dm_fallido", traza: [...decisionDm.traza, `NO:dm_fallido:${envioDm && envioDm.error}`] })
+        .catch(() => {});
     }
   }
 
@@ -872,6 +898,14 @@ async function responderPorDmManual(org, signalId, { sesion = null, refs = null 
   // compuerta (ver `descartados` mas abajo).
   const refsEnviadas = publicables.map((m) => m.ref).filter(Boolean);
   await groupSignals.marcarRespondida(org.id, signal.id, { texto, wamid: envioDm.wamid, modo: "auto", refs: refsEnviadas });
+  // Distingue en la señal misma que esto lo mando una PERSONA desde el CRM
+  // (auditoria 2026-09-02): respuesta_modo='auto' lo comparten el DM
+  // automatico, este DM manual y la publicacion en el grupo de agosto, y el
+  // dashboard los sumaba como "bot resolvio solo". El DM automatico deja
+  // motivo 'ok'; este deja 'dm_manual'.
+  await groupSignals
+    .guardarPolitica(org.id, signal.id, { motivo: "dm_manual", traza: ["dm_manual", `refs:${refsEnviadas.join(",")}`] })
+    .catch(() => {});
 
   return {
     resultado: "dm_enviado",

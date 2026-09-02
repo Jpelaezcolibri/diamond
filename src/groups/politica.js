@@ -143,9 +143,12 @@ function decidir({
 // alla "no publicar" puede significar "nadie se entera" (ya_respondida,
 // modo_apagado); aca un "no" SIEMPRE tiene una salida de respaldo.
 const LIMITES_DM_DEFAULT = {
-  // Dos DMs el mismo dia al mismo colega se leen como spam — es la razon de
-  // ser de este limite, no una cuota de negocio.
-  dmsPorColegaDia: Number(process.env.RADAR_DM_POR_COLEGA_DIA || 1),
+  // Tope de DMs al MISMO colega el mismo dia. Arranco en 1 (2026-08-24) por
+  // miedo al spam; Juan lo subio a 2 el 2026-09-02: un colega que publica dos
+  // pedidos distintos en la manana merece dos respuestas, y el dedup por
+  // contenido (GROUPS_DEDUP_HORAS) ya evita que el MISMO pedido difundido a
+  // varios grupos dispare dos DMs. Mas de 2 si se lee como insistencia.
+  dmsPorColegaDia: Number(process.env.RADAR_DM_POR_COLEGA_DIA || 2),
   // Un DM por un pedido de ayer es exactamente lo que un colega reporta: "me
   // escribieron de la nada por algo que ya resolvi". Se mide contra la fecha
   // DEL MENSAJE en el grupo, nunca contra cuando se proceso la fila (ver la

@@ -256,3 +256,88 @@ test("dos organizaciones con el mismo LID no se pisan", async () => {
     waha.telefonoDeLid = telefonoDelIdReal;
   }
 });
+
+// ── Auditoria 2026-09-02: el directorio en vivo llevaba 0 telefonos guardados
+// en una semana mientras la misma lista resolvia el 80% en frio. Tres causas
+// probables y las tres quedan fijadas aca: el refresco en vuelo que la segunda
+// pregunta se saltaba, el fallo que compraba 10 min de silencio, y el indice
+// vacio despues de cada despliegue (calentar + rellenar).
+
+test("dos preguntas simultaneas por el mismo grupo comparten UN solo refresco y las dos resuelven", async () => {
+  preparar();
+  let resolver;
+  const contador = { n: 0 };
+  waha.participantesDeGrupo = async () => {
+    contador.n += 1;
+    await new Promise((r) => { resolver = r; });
+    return [{ id: "198161251463188@lid", esLid: true, telefono: "573001234567", rol: "participant" }];
+  };
+  waha.telefonoDeLid = async () => null;
+
+  // Lo que hace vivo.js: registrar sin await y, enseguida, telefonoDe otra vez.
+  const primera = directorio.telefonoDe(ORG, "198161251463188", { sesion: SESION, jid: JID });
+  const segunda = directorio.telefonoDe(ORG, "198161251463188", { sesion: SESION, jid: JID });
+  await new Promise((r) => setTimeout(r, 5));
+  resolver();
+
+  assert.deepStrictEqual(await Promise.all([primera, segunda]), ["573001234567", "573001234567"]);
+  assert.strictEqual(contador.n, 1, "la segunda pregunta espera el refresco en vuelo, no lo duplica ni lo salta");
+});
+
+test("si WAHA falla, el grupo se vuelve a poder consultar a los 30 s, no a los 10 min", async () => {
+  preparar();
+  let falla = true;
+  const contador = { n: 0 };
+  waha.participantesDeGrupo = async () => {
+    contador.n += 1;
+    if (falla) throw new Error("timeout");
+    return [{ id: "198161251463188@lid", esLid: true, telefono: "573001234567", rol: "participant" }];
+  };
+  waha.telefonoDeLid = async () => null;
+
+  assert.strictEqual(await directorio.telefonoDe(ORG, "198161251463188", { sesion: SESION, jid: JID }), null);
+  assert.strictEqual(contador.n, 1);
+
+  // Enseguida sigue bloqueado (30 s), igual que antes.
+  assert.strictEqual(await directorio.telefonoDe(ORG, "198161251463188", { sesion: SESION, jid: JID }), null);
+  assert.strictEqual(contador.n, 1, "dentro de los 30 s no se martilla a WAHA");
+
+  // Pasados los 30 s (simulados adelantando el reloj del throttle), reintenta.
+  const realNow = Date.now;
+  Date.now = () => realNow() + directorio.MS_REINTENTO_TRAS_FALLO + 1000;
+  try {
+    falla = false;
+    assert.strictEqual(await directorio.telefonoDe(ORG, "198161251463188", { sesion: SESION, jid: JID }), "573001234567");
+    assert.strictEqual(contador.n, 2, "a los 30 s vuelve a preguntar; antes eran 10 min de ceguera");
+  } finally {
+    Date.now = realNow;
+  }
+});
+
+test("calentar recorre todos los grupos saltando el throttle, y rellenar completa a los colegas sin telefono", async () => {
+  preparar();
+  const contador = conParticipantes([
+    { id: "198161251463188@lid", esLid: true, telefono: "573001234567", rol: "participant" },
+    { id: "777@lid", esLid: true, telefono: "573009998877", rol: "participant" },
+  ]);
+
+  // Un colega registrado antes, sin telefono (el caso real: 79 de 85).
+  await colegas.upsert(ORG, { lid: "777", telefono: null, nombre: "Colega Sin Tel" });
+  // Un refresco reciente del mismo grupo: calentar lo ignora (forzar).
+  await directorio.telefonoDe(ORG, "555", { sesion: SESION, jid: JID });
+  assert.strictEqual(contador.n, 1);
+
+  const r = await directorio.calentar(ORG, SESION, [JID, "456@g.us"]);
+  assert.strictEqual(contador.n, 3, "calentar refresca los dos grupos aunque uno se haya consultado recien");
+  assert.strictEqual(r.grupos, 2);
+  assert.strictEqual(r.refrescados, 2);
+  assert.strictEqual(r.indice, 2, "dos lids distintos con telefono en el indice de esta org");
+
+  const completados = await directorio.rellenarColegas(ORG);
+  assert.strictEqual(completados, 1);
+  const fila = memory.colegasGrupos.find((c) => c.org_id === ORG && c.lid === "777");
+  assert.strictEqual(fila.telefono, "573009998877");
+
+  waha.participantesDeGrupo = participantesReal;
+  waha.telefonoDeLid = telefonoDelIdReal;
+});

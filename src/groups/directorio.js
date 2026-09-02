@@ -29,12 +29,25 @@ const { esCelularColombiano } = require("../lib/contacto");
 // gremial cambia de a poco; lo que cambia seguido es quien publica.
 const MS_ENTRE_REFRESCOS = Number(process.env.RADAR_DIRECTORIO_REFRESCO_MIN || 10) * 60 * 1000;
 
+// Si el refresco FALLA (WAHA caido, timeout de 20 s en un grupo de 900 en
+// hora pico), el grupo vuelve a ser consultable a los 30 s, no a los 10 min.
+// Medido el 2026-09-02: el directorio en vivo llevaba 0 telefonos guardados
+// en una semana mientras la misma lista resolvia el 80% en frio -- un fallo
+// convertia el throttle en 10 minutos de ceguera para todo el grupo.
+const MS_REINTENTO_TRAS_FALLO = 30 * 1000;
+
 const soloDigitos = (t) => String(t || "").replace(/\D/g, "") || null;
 
 // lid (digitos) -> telefono. Se siembra de la base al primer uso por org.
 const indice = new Map();
 const sembrado = new Set(); // orgIds ya sembrados
 const ultimoRefresco = new Map(); // orgId:jid -> ms
+// Refrescos EN VUELO por grupo. vivo.js dispara directorio.registrar sin
+// await y, segundos despues, asistir() vuelve a preguntar por el mismo lid:
+// antes la segunda pregunta veia el throttle recien puesto por la primera y
+// devolvia null aunque la lista ya estuviera llegando. Ahora espera la misma
+// promesa en vez de saltarsela.
+const enVuelo = new Map(); // orgId:jid -> Promise
 
 async function sembrar(orgId) {
   if (sembrado.has(orgId)) return;
@@ -48,39 +61,106 @@ async function sembrar(orgId) {
 // Trae los participantes de un grupo y mete en el indice todos los que traigan
 // telefono. Se aprovecha la pasada completa: si ya se pago la llamada, se
 // guarda todo lo que vino, no solo el lid que se estaba buscando.
-async function refrescarGrupo(orgId, sesion, jid) {
-  const ahora = Date.now();
+// Devuelve cuantos pares lid->telefono dejo en el indice, o null si no
+// refresco (throttle) o fallo.
+async function refrescarGrupo(orgId, sesion, jid, { forzar = false } = {}) {
   const cacheKey = `${orgId}:${jid}`;
+  if (enVuelo.has(cacheKey)) return enVuelo.get(cacheKey);
+
+  const ahora = Date.now();
   const previo = ultimoRefresco.get(cacheKey) || 0;
-  if (ahora - previo < MS_ENTRE_REFRESCOS) return;
+  if (!forzar && ahora - previo < MS_ENTRE_REFRESCOS) return null;
   ultimoRefresco.set(cacheKey, ahora);
 
-  let participantes = [];
-  const t0 = Date.now();
-  try {
-    participantes = await waha.participantesDeGrupo(sesion, jid);
-  } catch (e) {
-    // WAHA caido no puede tumbar el pipeline del radar: sin telefono el pedido
-    // sale por el camino manual, que es una degradacion prevista.
-    console.warn(`[directorio] No se pudieron traer los participantes de ${jid}: ${e.message}`);
-    return;
-  }
+  const tarea = (async () => {
+    let participantes = [];
+    const t0 = Date.now();
+    try {
+      participantes = await waha.participantesDeGrupo(sesion, jid);
+    } catch (e) {
+      // WAHA caido no puede tumbar el pipeline del radar: sin telefono el pedido
+      // sale por el camino manual, que es una degradacion prevista. Pero el
+      // fallo no compra 10 minutos de silencio: se vuelve a poder preguntar a
+      // los 30 s.
+      console.warn(`[directorio] No se pudieron traer los participantes de ${jid}: ${e.message}`);
+      ultimoRefresco.set(cacheKey, ahora - MS_ENTRE_REFRESCOS + MS_REINTENTO_TRAS_FALLO);
+      return null;
+    }
 
-  let conTelefono = 0;
-  for (const p of participantes) {
-    const lid = soloDigitos(p.id);
-    const tel = soloDigitos(p.telefono);
-    if (lid && tel) {
-      indice.set(`${orgId}:${lid}`, tel);
-      conTelefono++;
+    let conTelefono = 0;
+    for (const p of participantes) {
+      const lid = soloDigitos(p.id);
+      const tel = soloDigitos(p.telefono);
+      if (lid && tel) {
+        indice.set(`${orgId}:${lid}`, tel);
+        conTelefono++;
+      }
+    }
+    // Una lista vacia tampoco se cree por 10 min: un grupo gremial nunca esta
+    // vacio, asi que es un fallo silencioso de WAHA (ver participantesDeGrupo).
+    if (participantes.length === 0) {
+      ultimoRefresco.set(cacheKey, ahora - MS_ENTRE_REFRESCOS + MS_REINTENTO_TRAS_FALLO);
+    }
+    // Una linea por refresco (como maximo una cada MS_ENTRE_REFRESCOS por
+    // grupo): es lo que faltaba para saber, desde los logs, si la lista llega
+    // vacia, llega sin `pn`, o tarda mas que el timeout de waha.js.
+    console.log(
+      `[directorio] refresco ${jid}: ${participantes.length} participantes, ${conTelefono} con telefono, ${Date.now() - t0} ms`
+    );
+    return conTelefono;
+  })();
+
+  enVuelo.set(cacheKey, tarea);
+  try {
+    return await tarea;
+  } finally {
+    enVuelo.delete(cacheKey);
+  }
+}
+
+/**
+ * Calienta el indice con TODOS los grupos escuchados, uno por uno, para que
+ * la busqueda en vivo sea un acierto en memoria y nunca dependa de una
+ * llamada a WAHA en el momento del pedido (src/scheduler/radar-directorio.js).
+ * `forzar` salta el throttle: es el calentamiento programado, no un pedido.
+ */
+async function calentar(orgId, sesion, jids, { forzar = true } = {}) {
+  let refrescados = 0;
+  let pares = 0;
+  for (const jid of jids || []) {
+    const n = await refrescarGrupo(orgId, sesion, jid, { forzar });
+    if (n !== null && n !== undefined) {
+      refrescados++;
+      pares += n;
     }
   }
-  // Una linea por refresco (como maximo una cada MS_ENTRE_REFRESCOS por
-  // grupo): es lo que faltaba para saber, desde los logs, si la lista llega
-  // vacia, llega sin `pn`, o tarda mas que el timeout de waha.js.
-  console.log(
-    `[directorio] refresco ${jid}: ${participantes.length} participantes, ${conTelefono} con telefono, ${Date.now() - t0} ms`
-  );
+  return { grupos: (jids || []).length, refrescados, pares, indice: tamanoIndice(orgId) };
+}
+
+/**
+ * Rellena el telefono de los colegas ya registrados que no lo tienen, con lo
+ * que el indice sepa ahora. Devuelve cuantos se completaron. Se guarda solo
+ * quien YA publico un pedido: la lista completa de participantes sigue
+ * viviendo solo en memoria (ver db/migrations/2026-08-22_colegas_grupos.sql).
+ */
+async function rellenarColegas(orgId) {
+  await sembrar(orgId);
+  let completados = 0;
+  for (const c of await colegas.listarSinTelefono(orgId)) {
+    const lid = soloDigitos(c.lid);
+    const tel = lid ? indice.get(`${orgId}:${lid}`) : null;
+    if (!tel) continue;
+    const ok = await colegas.upsert(orgId, { lid, telefono: tel });
+    if (ok) completados++;
+  }
+  return completados;
+}
+
+function tamanoIndice(orgId) {
+  let n = 0;
+  const prefijo = `${orgId}:`;
+  for (const k of indice.keys()) if (k.startsWith(prefijo)) n++;
+  return n;
 }
 
 /**
@@ -165,6 +245,10 @@ function _resetCache() {
   indice.clear();
   sembrado.clear();
   ultimoRefresco.clear();
+  enVuelo.clear();
 }
 
-module.exports = { telefonoDe, registrar, esColega, MS_ENTRE_REFRESCOS, _resetCache };
+module.exports = {
+  telefonoDe, registrar, esColega, calentar, rellenarColegas, tamanoIndice,
+  MS_ENTRE_REFRESCOS, MS_REINTENTO_TRAS_FALLO, _resetCache,
+};

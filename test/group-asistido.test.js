@@ -620,7 +620,7 @@ test("un pedido fuera de ventana (mas de 30 min desde el mensaje del grupo) se a
 
 test("un colega ya contactado hoy (tope 1) no recibe un segundo DM -- se avisa a la asesora", async () => {
   telefonoColegaResuelto = "573001234567";
-  dmsHoyColegaMock = 1;
+  dmsHoyColegaMock = 2;
   const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
 
   assert.strictEqual(r.resultado, "avisada");
