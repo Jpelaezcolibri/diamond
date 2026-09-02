@@ -72,6 +72,22 @@ usar de verdad y medir la tasa de respuesta de Natalia a los botones antes de
 construir la pantalla. Si en dos semanas el botón se toca en más del 60% de
 los avisos, vale la pena B encima. Si no, el problema no es la herramienta.
 
+## También para mañana: Natalia como punto único de falla (hallazgo #3)
+
+72 de 133 mensajes del 2 de septiembre fueron para ella. Es la única línea
+vinculada, la única que recibe avisos y la única que aprueba. Cuando su
+ventana se cerró el 25 de agosto, 45 mensajes se aceptaron y no llegaron a
+nadie. El respaldo a Catherine existe desde hoy, pero solo salta por ventana
+cerrada — no por "Natalia lleva cuatro horas en una visita".
+
+Preguntas para ella:
+
+5. ¿Cuántos avisos por día podés atender de verdad sin que se te vuelvan ruido?
+6. Si estás en visita, ¿preferís que se acumulen y te lleguen agrupados
+   después, o que los reciba Catherine mientras tanto?
+7. ¿Hay pedidos que preferís que vayan directo a otra persona (por zona, por
+   tipo, por monto)?
+
 ## Preguntas para Natalia (mañana)
 
 1. Cuando te llega un aviso y le escribís al colega, ¿te costaría tocar un
