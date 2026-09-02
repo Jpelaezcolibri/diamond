@@ -4,6 +4,7 @@ const conversations = require("../data/conversations");
 const properties = require("../data/properties");
 const advisors = require("../data/advisors");
 const directorio = require("../groups/directorio");
+const groupSignals = require("../data/group-signals");
 const { buildSystemPrompt } = require("./prompts");
 const { TOOL_DEFINITIONS, executeTool, maybeCaptadorAlert } = require("./tools");
 const { isQualified } = require("./qualification");
@@ -228,7 +229,19 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
     }
   }
 
-  const system = buildSystemPrompt({ org, lead, qualified: isQualified(lead), now: nowInBogota(), advisor, colega });
+  // Que le respondimos la ultima vez a este colega (auditoria 2026-09-02):
+  // solo si ES un colega, y best-effort — si la consulta falla, Sofi lo
+  // atiende igual, solo que sin el contexto.
+  const ultimoPedido = colega
+    ? await groupSignals.buscarPorTelefono(org.id, phone).catch((e) => {
+        console.warn("[engine] No se pudo traer el ultimo pedido del colega:", e.message);
+        return null;
+      })
+    : null;
+
+  const system = buildSystemPrompt({
+    org, lead, qualified: isQualified(lead), now: nowInBogota(), advisor, colega, ultimoPedido,
+  });
 
   const extractText = (r) =>
     r.content.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();

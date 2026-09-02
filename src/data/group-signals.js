@@ -754,7 +754,7 @@ async function buscarPorTelefono(orgId, telefono) {
   }
   const { data, error } = await supabase
     .from("group_signals")
-    .select("id, texto_original, zona, tipo, operacion, created_at, matches")
+    .select("id, texto_original, zona, tipo, operacion, created_at, matches, respuesta_refs, respondida_at")
     .eq("org_id", orgId)
     .eq("autor_telefono", telefono)
     .eq("clase", "demanda")

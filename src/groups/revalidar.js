@@ -9,7 +9,7 @@
 // Este modulo agrega una segunda opinion sobre las MISMAS candidatas, con dos
 // propositos:
 //
-//   1. FILTRAR. A Catherine solo le llega lo que Sofi aprueba. El puntaje deja
+//   1. FILTRAR. A la asesora solo le llega lo que Sofi aprueba. El puntaje deja
 //      de ser quien decide a quien se le escribe.
 //   2. CALIBRAR. Sofi ve TODAS las candidatas, tambien las de puntaje bajo, y
 //      se le pide explicitamente que marque cuando el puntaje se equivoco. Sin
@@ -17,7 +17,7 @@
 //      pedido bueno que el umbral descarto— son invisibles y son los caros.
 //
 // Se guarda el veredicto entero en `group_signals.revalidacion`. Comparado
-// contra el puntaje y contra lo que Catherine termina haciendo, eso es el dato
+// contra el puntaje y contra lo que la asesora termina haciendo, eso es el dato
 // con el que se ajusta el umbral con evidencia en vez de intuicion.
 //
 // NO decide si se publica en el grupo. En modo asistido no se publica nada.
@@ -159,95 +159,100 @@ encontro algunas propiedades nuestras que podrian servirle.
 
 Tu trabajo es dar el veredicto: ¿el pedido es real y alguna propiedad sirve?
 
-Como juzgar:
+COMO PENSAR
 - Pensa como una asesora con experiencia, no como un filtro. El motor ya
-  comparo zona, precio, area y alcobas; vos aportas el criterio que el no tiene.
+  comparo zona, precio, area, alcobas, baños, garajes y estrato; vos aportas
+  el criterio que el no tiene.
 - Una propiedad "sirve" si se la mostrarias a ese cliente sin que te de pena.
   Que calce en los numeros no alcanza: una finca no reemplaza un apartamento,
-  y una propiedad para vivir no es lo mismo que una para inversion. Pero que
-  falte un dato que el inventario no registra (terraza, piso, antiguedad), o
-  que falte UNA cosa accesoria del pedido (el segundo garaje, el cuarto util),
-  NO es motivo de pena si se lo decis con honestidad -- ver las CUATRO
-  situaciones mas abajo.
-- El puntaje que ves va de 55 a 100 y premia cuanto del pedido se pudo
-  VERIFICAR, no que tan buena es la propiedad. Un puntaje bajo puede ser una
-  gran opcion sobre la que sabemos poco. No lo tomes como verdad.
-- LA ZONA NO ES UN SI O NO, es tu criterio. Quien pide El Poblado muchas veces
-  compra en Envigado: son contiguos y el mismo cliente se mueve entre los dos.
-  Cada candidata te dice como calza su ubicacion. Una "zona VECINA" puede servir
-  perfectamente — decilo en 'por_que' para que la asesora lo sepa de entrada
-  ("queda en Envigado, pegado al Poblado"). Una "FUERA de la zona pedida" casi
-  nunca sirve, pero si todo lo demas calza muy bien y el cliente no fue
-  tajante, evaluala en vez de descartarla de plano.
-- Si el pedido nombra varias zonas, cualquiera de ellas cuenta como pedida.
-- Hay CUATRO situaciones distintas y confundirlas es el error mas caro que
-  podes cometer aca:
-    · INCOMPATIBLE (no sirve, no entra a refs_utiles): otra zona no vecina,
-      otro municipio, otro tipo de propiedad (finca por apartamento, local por
-      vivienda), fuera de presupuesto, o algo que el cliente pidio como
-      innegociable y la propiedad no cumple.
-    · INCOMPLETO (SI sirve, entra a refs_utiles): calza en todo lo que se
-      puede verificar (zona, tipo, precio, alcobas) pero el pedido menciona
-      algo que el inventario no registra -- terraza, piso, antiguedad, vista,
-      lo que sea. Eso NO descarta la propiedad: se lista en 'sin_confirmar' y
-      el mensaje lo va a decir honestamente ("no tengo confirmado si tiene
-      terraza"), en vez de perder una oportunidad real por un dato que ni
-      siquiera sabemos si tiene o no. Caso real: colega pidio apto en Envigado
-      con terraza y max 6 años de antiguedad; habia 3 propiedades con match
-      del 100% en zona/alcobas/precio que se descartaron solo porque el
-      inventario no registra terraza ni antiguedad -- el colega nunca supo que
-      existian. Eso es exactamente lo que 'sin_confirmar' existe para evitar.
-    · CASI (SI sirve, entra a refs_utiles, y ademas se anota en 'le_falta'):
-      SABEMOS el dato y la propiedad NO cumple, pero es UNA SOLA cosa y es
-      accesoria frente a todo lo que si cumple. Esa decision es del colega, no
-      tuya: lo unico que no podes hacer es ocultarle el hueco. Caso real —
-      colega pidio Envigado o Poblado, hasta $980M, 3 alcobas mas estudio o 4,
-      98 m² minimo, 2 baños, 2 garajes y cuarto util. La ref 10077095 (El
-      Portal) cumplia zona, precio, alcobas, area y baños, y solo tenia 1
-      garaje en vez de 2: se manda, con 'le_falta' diciendo "tiene 1 garaje y
-      pediste 2". En el MISMO pedido, la ref 8989725 tenia 2 alcobas de las 3
-      pedidas y 92 m² de los 98: falla en DOS cosas y una es de fondo (las
-      alcobas definen el producto), asi que esa NO se manda. Ahi esta la linea.
-    · DUDOSA (no entra a refs_utiles, entra a refs_dudosas): no es un
-      INCOMPATIBLE limpio (no es otra zona no vecina, ni otro tipo, ni fuera
-      de presupuesto, ni algo innegociable incumplido) pero tampoco calza lo
-      suficiente para mandarla con la confianza de las anteriores -- por
-      ejemplo, DOS O MAS incumplimientos accesorios a la vez (que por si
-      solos serian CASI, pero juntos ya no), o una zona vecina lejana que te
-      genera dudas reales. Antes esto se resolvia forzando un NO y la
-      oportunidad se perdia sin que nadie la viera; ahora se lo llevás al
-      asesor para que decida si vale la pena, en vez de perderla en
-      silencio.
+  y una propiedad para vivir no es lo mismo que una para inversion.
+- El puntaje va de 55 a 100 y premia cuanto del pedido se pudo VERIFICAR, no
+  que tan buena es la propiedad. Un puntaje bajo puede ser una gran opcion
+  sobre la que sabemos poco. No lo tomes como verdad.
+- Cada candidata te dice su UBICACION respecto de lo pedido. "exacta" y
+  "vecina" sirven —quien pide El Poblado muchas veces compra en Envigado,
+  son contiguos—; decilo en 'por_que' para que la asesora lo sepa de entrada
+  ("queda en Envigado, pegado al Poblado"). "fuera" casi nunca sirve, pero si
+  todo lo demas calza muy bien y el cliente no fue tajante, evaluala en vez
+  de descartarla de plano. Si el pedido nombra varias zonas, cualquiera cuenta.
+- Un dato del pedido que aparece como "no dice" NO es una exigencia: no
+  descartes por algo que el colega nunca pidio.
+- Si el pedido acepta una alcoba menos (te lo decimos como "alcobas: 3 (acepta
+  una menos si tiene estudio)"), 2 alcobas con estudio cumple el pedido de 3.
 
-- Como decidir si un incumplimiento es ACCESORIO o de FONDO:
-    · De FONDO, nunca pasa: zona, municipio, tipo de propiedad, operacion,
-      presupuesto, y la cantidad de alcobas cuando el faltante cambia el
-      producto (un 2 alcobas no resuelve un pedido de 3 o 4).
-    · ACCESORIO, puede pasar con su aclaracion: un garaje de menos, el cuarto
-      util, un baño de menos, unos pocos m² por debajo del minimo, un detalle
-      de acabados o de piso.
-    · DOS O MAS incumplimientos conocidos: NO pasa, aunque cada uno por
-      separado fuera accesorio. "Le falta un parqueadero" se le ofrece a un
-      colega; "le falta un parqueadero, un baño y 6 m²" es hacerle perder el
-      tiempo.
-    · Si dudas si algo es accesorio o de fondo, tratalo como de fondo.
-- Si el motor se equivoco —aprobo algo que no sirve, o dejo abajo algo que si—
-  decilo en 'desacuerdo_con_puntaje'. Eso es lo que nos permite mejorarlo.
-- Ante la duda sobre si algo es INCOMPATIBLE o DUDOSA, preferí DUDOSA: nunca
-  la mandes con la confianza de refs_utiles, pero tampoco la pierdas sin que
-  nadie la vea -- eso es exactamente lo que refs_dudosas existe para evitar.
-  Ante la duda entre DUDOSA e INCOMPLETO/CASI (¿esto de verdad sirve, o solo
-  se acerca?), seguí el criterio de ACCESORIO/DE FONDO de más arriba. Un dato
-  que el pedido pide y el inventario simplemente no tiene no es motivo de
-  duda sobre si sirve -- es motivo para usar 'sin_confirmar', no para
-  descartar ni para DUDOSA.
+LAS CUATRO SITUACIONES — confundirlas es el error mas caro que podes cometer
 
-'por_que' lo va a leer Catherine, la asesora que va a llamar al colega: escribilo
-para ella, corto y concreto.`;
+| Situacion | ¿Entra a refs_utiles? | Cuando | Que ademas hacer |
+|---|---|---|---|
+| INCOMPATIBLE | NO, y tampoco a refs_dudosas | otra zona no vecina, otro municipio, otro tipo de propiedad, otra operacion, fuera de presupuesto, o algo innegociable que no cumple | nada: se descarta |
+| INCOMPLETO | SI | calza en todo lo verificable, pero el pedido menciona algo que el inventario NO REGISTRA (terraza, piso, antiguedad, vista) | listar ese dato en 'sin_confirmar' |
+| CASI | SI | SABEMOS el dato y NO cumple, pero es UNA SOLA cosa y es ACCESORIA | anotarlo en 'le_falta' con {ref, detalle} |
+| DUDOSA | NO, pero SI a 'refs_dudosas' | no es un descarte limpio y tampoco calza con confianza: DOS O MAS incumplimientos accesorios a la vez, o una zona vecina lejana que te genera dudas reales | nada mas: la asesora decide si llamar al colega |
+
+ACCESORIO vs DE FONDO — es la linea que decide CASI contra INCOMPATIBLE
+- De FONDO, nunca pasa: zona, municipio, tipo de propiedad, operacion,
+  presupuesto, y la cantidad de alcobas cuando el faltante cambia el producto
+  (un 2 alcobas no resuelve un pedido de 3 o 4).
+- ACCESORIO, puede pasar con su aclaracion: un garaje de menos, el cuarto
+  util, un baño de menos, unos pocos m² por debajo del minimo, un detalle de
+  acabados o de piso.
+- DOS O MAS incumplimientos conocidos: NO pasa como CASI, aunque cada uno por
+  separado fuera accesorio. "Le falta un parqueadero" se le ofrece a un
+  colega; "le falta un parqueadero, un baño y 6 m²" es hacerle perder el
+  tiempo — eso es DUDOSA.
+- Si dudas si algo es accesorio o de fondo, tratalo como de FONDO.
+
+ANTE LA DUDA
+- Entre INCOMPATIBLE y DUDOSA: preferi DUDOSA. Nunca la mandes con la
+  confianza de refs_utiles, pero tampoco la pierdas sin que nadie la vea.
+- Entre DUDOSA e INCOMPLETO/CASI: segui el criterio de ACCESORIO / de FONDO.
+- Un dato que el pedido pide y el inventario simplemente no tiene NO es motivo
+  de duda ni de descarte: es 'sin_confirmar'.
+- Si el motor se equivoco (aprobo algo que no sirve, o dejo abajo algo que si),
+  decilo en 'desacuerdo_con_puntaje'. Es lo que nos permite calibrarlo.
+
+'por_que' lo va a leer la asesora que va a llamar al colega: escribilo para
+ella, corto y concreto.
+
+DOS EJEMPLOS REALES (casos de produccion, con la salida esperada)
+
+1) Colega pide apto en Envigado CON TERRAZA y maximo 6 años de antiguedad.
+   Tenemos 3 propiedades con match del 100% en zona, alcobas y precio, pero el
+   inventario no registra terraza ni antiguedad. Antes se descartaban y el
+   colega nunca supo que existian. Es INCOMPLETO:
+{"es_pedido_real":true,"sirve_alguna":true,"refs_utiles":["10012345","10012346","10012347"],
+ "refs_dudosas":[],"sin_confirmar":["terraza","antigüedad"],"le_falta":[],
+ "por_que":"Las tres calzan en Envigado, alcobas y presupuesto. No tenemos registrado si tienen terraza ni la antigüedad.",
+ "confianza":0.8,"desacuerdo_con_puntaje":""}
+
+2) Colega pide Envigado o Poblado, hasta $980M, 3 alcobas mas estudio o 4,
+   98 m² minimo, 2 baños, 2 garajes y cuarto util. La ref 10077095 cumple todo
+   salvo el segundo garaje (CASI, se manda diciendolo). La ref 8989725 tiene 2
+   alcobas de las 3 y 92 m² de los 98: falla en DOS cosas y una es de fondo,
+   asi que NO se manda:
+{"es_pedido_real":true,"sirve_alguna":true,"refs_utiles":["10077095"],
+ "refs_dudosas":[],"sin_confirmar":[],
+ "le_falta":[{"ref":"10077095","detalle":"tiene 1 garaje y pediste 2"}],
+ "por_que":"El Portal cumple zona, precio, alcobas, área y baños; solo tiene un garaje. La 8989725 se queda corta en alcobas y área.",
+ "confianza":0.85,"desacuerdo_con_puntaje":""}`;
+
+// Como calza la ubicacion, dicho con todas las letras (auditoria 2026-09-02):
+// `ubicacion` decide la mitad del veredicto (una vecina sirve, una fuera casi
+// nunca) y hasta hoy viajaba escondida entre las razones del motor, donde el
+// modelo la podia pasar por alto.
+const UBICACION = {
+  exacta: "ubicacion: EXACTA (la zona que pidio)",
+  vecina: "ubicacion: VECINA (barrio contiguo al pedido)",
+  ciudad: "ubicacion: misma CIUDAD, otro barrio",
+  otra_zona: "ubicacion: FUERA de la zona pedida",
+};
 
 function formatearCandidatas(matches) {
   return (matches || [])
     .map((m, i) => {
+      // Baños, garajes y estrato SI se le muestran ahora: el criterio de
+      // ACCESORIO vs de FONDO ("tiene 1 garaje y pediste 2") depende de esos
+      // datos, y hasta hoy Sofi tenia que adivinarlos del texto crudo.
       const datos = [
         `ref ${m.ref}`,
         m.operacion,
@@ -255,11 +260,22 @@ function formatearCandidatas(matches) {
         m.precio,
         m.area,
         m.habitaciones ? `${m.habitaciones} alcobas` : null,
+        m.banos ? `${m.banos} baños` : null,
+        m.garajes ? `${m.garajes} garajes` : null,
+        m.estrato > 0 ? `estrato ${m.estrato}` : null,
       ]
         .filter(Boolean)
         .join(" · ");
+      const ubicacion = UBICACION[m.ubicacion] || null;
       const razones = (m.razones || []).join("; ");
-      return `${i + 1}. [puntaje ${m.puntaje}] ${m.titulo || "Sin titulo"}\n   ${datos}\n   el motor dice: ${razones}`;
+      return [
+        `${i + 1}. [puntaje ${m.puntaje}] ${m.titulo || "Sin titulo"}`,
+        `   ${datos}`,
+        ubicacion ? `   ${ubicacion}` : null,
+        `   el motor dice: ${razones}`,
+      ]
+        .filter(Boolean)
+        .join("\n");
     })
     .join("\n");
 }
@@ -282,8 +298,18 @@ async function revalidar(clasificado, matches) {
     `- tipo: ${clasificado.tipo || "no dice"}`,
     `- zona: ${clasificado.zona || "no dice"}${clasificado.ciudad ? ` (${clasificado.ciudad})` : ""}`,
     `- presupuesto: ${clasificado.precio_max ? `hasta $${Number(clasificado.precio_max).toLocaleString("es-CO")}` : "no dice"}`,
-    `- alcobas: ${clasificado.habitaciones || "no dice"}`,
+    // Las exigencias COMPLETAS (auditoria 2026-09-02): el clasificador ya
+    // extrae baños, garajes, estrato y la flexibilidad de alcobas, y el motor
+    // de cruce ya puntua con ellas -- pero no se le mostraban a Sofi, que
+    // tenia que juzgar "le falta un garaje" sin saber cuantos se pidieron.
+    `- alcobas: ${clasificado.habitaciones || "no dice"}${
+      clasificado.habitaciones && clasificado.flexible_habitaciones ? " (acepta una menos si tiene estudio)" : ""
+    }`,
     `- area minima: ${clasificado.area_min ? `${clasificado.area_min} m²` : "no dice"}`,
+    `- baños: ${clasificado.banos || "no dice"}`,
+    `- garajes: ${clasificado.garajes || "no dice"}`,
+    `- estrato: ${clasificado.estrato || "no dice"}`,
+    clasificado.edificio ? `- edificio puntual: ${clasificado.edificio}` : null,
     clasificado.notas ? `- notas: ${clasificado.notas}` : null,
     ``,
     `Nuestras propiedades candidatas:`,
@@ -320,4 +346,4 @@ function apruebaAviso(veredicto) {
   return utiles.length > 0 || dudosas.length > 0;
 }
 
-module.exports = { revalidar, apruebaAviso, formatearCandidatas, MODELO, ESQUEMA, SISTEMA };
+module.exports = { revalidar, apruebaAviso, formatearCandidatas, UBICACION, MODELO, ESQUEMA, SISTEMA };
