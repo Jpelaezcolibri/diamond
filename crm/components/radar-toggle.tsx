@@ -18,11 +18,15 @@ import { useRouter } from "next/navigation";
 export default function RadarToggle({
   activo,
   puedeCambiar = true,
+  compacto = false,
 }: {
   activo: boolean;
   /** Solo un admin lo prende o apaga: deja sin digest a todo el equipo. Un
    *  asesor igual ve el estado, porque explica por qué su carga no procesa. */
   puedeCambiar?: boolean;
+  /** Versión chip para la cabecera de /grupos (rediseño 2026-09-02): mismo
+   *  estado, misma acción y misma confirmación, en una sola línea. */
+  compacto?: boolean;
 }) {
   const router = useRouter();
   const [guardando, setGuardando] = useState(false);
@@ -48,6 +52,37 @@ export default function RadarToggle({
       const body = await res.json().catch(() => ({}));
       setError(body.error || "No se pudo cambiar");
     }
+  }
+
+  if (compacto) {
+    return (
+      <span
+        className={`inline-flex items-center gap-2 rounded-full border bg-white py-1 pl-3 pr-1 text-xs font-semibold ${
+          activo ? "border-emerald-200 text-emerald-800" : "border-amber-300 text-amber-800"
+        }`}
+        title={
+          activo
+            ? "Los exports que subas se procesan y el digest sale a las 7am."
+            : "No se procesa ningún export ni sale el digest — no se gasta nada. Lo ya detectado se sigue viendo."
+        }
+      >
+        <span className={`inline-block h-2 w-2 rounded-full ${activo ? "bg-emerald-500" : "bg-amber-500"}`} />
+        Radar {activo ? "encendido" : "apagado"}
+        {puedeCambiar ? (
+          <button
+            onClick={alternar}
+            disabled={guardando}
+            aria-pressed={activo}
+            className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-200 disabled:opacity-50"
+          >
+            {guardando ? "…" : activo ? "Apagar" : "Encender"}
+          </button>
+        ) : (
+          <span className="pr-2" />
+        )}
+        {error && <span className="pr-2 text-red-700">{error}</span>}
+      </span>
+    );
   }
 
   return (

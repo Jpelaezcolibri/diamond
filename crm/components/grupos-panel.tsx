@@ -37,18 +37,38 @@ export default function GruposPanel({ grupos }: { grupos: Grupo[] }) {
     );
   }
 
+  // Cuántos de cada origen, visibles aun plegado: es lo único del listado
+  // que cambia con alguna frecuencia.
+  const porOrigen = new Map<string, { etiqueta: string; clase: string; n: number }>();
+  for (const g of grupos) {
+    const o = origen(g.jid);
+    const ya = porOrigen.get(o.etiqueta);
+    if (ya) ya.n++;
+    else porOrigen.set(o.etiqueta, { ...o, n: 1 });
+  }
+
   return (
-    <div className="rounded-lg border border-slate-200 bg-white">
+    <div className="rounded-2xl border border-slate-200 bg-white">
       <button
         type="button"
         onClick={() => setAbierto((v) => !v)}
-        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+        className="flex w-full flex-wrap items-center justify-between gap-3 px-4 py-3 text-left"
       >
-        <span className="text-sm font-medium text-slate-900">
-          <span className="mr-1 text-slate-400">{abierto ? "▾" : "▸"}</span>
-          Grupos — {grupos.length} cargado{grupos.length === 1 ? "" : "s"}
+        <span className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+          <span className={`inline-block text-slate-400 transition-transform ${abierto ? "rotate-90" : ""}`}>▸</span>
+          Grupos
+          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-600">
+            {grupos.length} cargado{grupos.length === 1 ? "" : "s"}
+          </span>
         </span>
-        <span className="text-xs text-slate-400">clic para {abierto ? "ocultar" : "ver"}</span>
+        <span className="flex flex-wrap items-center gap-1.5">
+          {[...porOrigen.values()].map((o) => (
+            <span key={o.etiqueta} className={`rounded px-2 py-0.5 text-xs font-medium ${o.clase}`}>
+              {o.n} {o.etiqueta}
+            </span>
+          ))}
+          <span className="ml-1 text-xs text-slate-400">clic para {abierto ? "ocultar" : "ver"}</span>
+        </span>
       </button>
       {abierto && (
         <div className="flex gap-2 overflow-x-auto border-t border-slate-100 px-4 py-3">

@@ -106,17 +106,24 @@ function Fila({ venta }: { venta: PosibleVenta }) {
   );
 }
 
-export default function PosiblesVentas({ ventas }: { ventas: PosibleVenta[] }) {
+export default function PosiblesVentas({
+  ventas,
+  embebido = false,
+}: {
+  ventas: PosibleVenta[];
+  /** Sin borde propio: vive dentro de una tarjeta que ya lo tiene. */
+  embebido?: boolean;
+}) {
   if (ventas.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">
+      <div className={`p-6 text-center text-sm text-slate-500 ${embebido ? "" : "rounded-lg border border-dashed border-slate-300"}`}>
         Todavía no hay ninguna propiedad con visita agendada que haya dejado de estar disponible.
       </div>
     );
   }
 
   return (
-    <div className="divide-y divide-slate-100 rounded-lg border border-slate-200 bg-white">
+    <div className={`divide-y divide-slate-100 bg-white ${embebido ? "" : "rounded-lg border border-slate-200"}`}>
       {ventas.map((v) => (
         <Fila key={v.id} venta={v} />
       ))}

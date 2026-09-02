@@ -66,6 +66,11 @@ export type Signal = {
    *  subconjunto de `matches`: el resto se descartó por la compuerta de
    *  calidad. Null en señales de antes del 2026-08-19. */
   respuesta_refs?: string[] | null;
+  /** Por qué no salió DM automático ("sin_telefono" = le tocó a la asesora
+   *  reenviarlo a mano) y a quién se le mandó el aviso. Vienen del
+   *  select("*"); se usan solo para la franja de estado de la tarjeta. */
+  politica_motivo?: string | null;
+  aviso_advisor_id?: string | null;
 };
 
 /** El recorrido natural de una oportunidad. El orden es el del embudo, no
@@ -387,8 +392,22 @@ function Ficha({ s, copias, grupos }: { s: Signal; copias: number; grupos: numbe
     }
   }
 
+  // Franja izquierda por estado (rediseño 2026-09-02): teal = el bot lo
+  // resolvió solo, ámbar = le tocó a la asesora reenviarlo a mano, índigo =
+  // pedido con match todavía sin revisar. Mismo código de color que los KPIs
+  // del dashboard, para que el número de arriba y la tarjeta de abajo se
+  // reconozcan como la misma cosa.
+  const franja =
+    s.respondida_at && s.respuesta_modo === "auto"
+      ? "border-l-teal-500"
+      : s.politica_motivo === "sin_telefono" && s.aviso_advisor_id
+        ? "border-l-amber-500"
+        : estado === "nuevo" && matches.length > 0
+          ? "border-l-indigo-500"
+          : "border-l-transparent";
+
   return (
-    <li className="border-b border-slate-100 py-3 last:border-0">
+    <li className={`-ml-4 border-b border-l-4 border-slate-100 py-3 pl-3 last:border-b-0 ${franja}`}>
       <div className="flex flex-wrap items-baseline gap-x-2 text-xs text-slate-500">
         <span className="font-medium text-slate-700">{s.autor_nombre || "Colega"}</span>
         {tel ? (
@@ -488,7 +507,10 @@ function Ficha({ s, copias, grupos }: { s: Signal; copias: number; grupos: numbe
               {/* Lo pedido a la izquierda, lo que calza a la derecha: sin el
                   pedido al lado hay que acordarse de qué buscaba el colega
                   mientras se leen seis propiedades. */}
-              <div className="grid gap-3 md:grid-cols-[minmax(0,13rem)_1fr]">
+              {/* @3xl es del contenedor (el carril), no de la ventana: dentro
+                  del carril de media pantalla el pedido y los matches van
+                  apilados; con más ancho, lado a lado. */}
+              <div className="grid gap-3 @3xl:grid-cols-[minmax(0,13rem)_1fr]">
                 <div className="rounded-md border border-slate-200 bg-white p-2.5">
                   <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
                     Lo que pide
@@ -816,24 +838,48 @@ function Ficha({ s, copias, grupos }: { s: Signal; copias: number; grupos: numbe
   );
 }
 
+type Filtro = "match" | "revisar" | "bot" | "todos";
+
+const FILTROS: { id: Filtro; etiqueta: string }[] = [
+  { id: "match", etiqueta: "Con match" },
+  { id: "revisar", etiqueta: "Por revisar" },
+  { id: "bot", etiqueta: "Bot resolvió" },
+  { id: "todos", etiqueta: "Todos" },
+];
+
+function pasaFiltro(s: Signal, filtro: Filtro): boolean {
+  const conMatch = (s.matches || []).length > 0;
+  switch (filtro) {
+    case "match": return conMatch;
+    case "revisar": return conMatch && s.estado === "nuevo";
+    case "bot": return !!s.respondida_at && s.respuesta_modo === "auto";
+    default: return true;
+  }
+}
+
 export default function SenalesGrupos({
   senales,
   clase,
   vacio,
+  embebido = false,
 }: {
   senales: Signal[];
   clase: "demanda" | "oferta";
   vacio: string;
+  /** Sin borde propio: vive dentro de un carril que ya lo tiene. */
+  embebido?: boolean;
 }) {
   // Las demandas arrancan filtradas: una demanda sin match no es accionable, y
   // ver 200 pedidos para encontrar los 4 que se pueden atender es lo mismo que
-  // no tener la pantalla.
-  const [soloMatch, setSoloMatch] = useState(clase === "demanda");
+  // no tener la pantalla. (Antes era un checkbox "Sólo los que tienen match";
+  // desde el rediseño del 2026-09-02 son pills, con dos cortes más que ya
+  // existían como dato pero no como filtro: por revisar y resueltos por el bot.)
+  const [filtro, setFiltro] = useState<Filtro>(clase === "demanda" ? "match" : "todos");
 
   // Los colegas difunden el mismo aviso a muchos grupos. El dedup nuevo lo corta
   // en la entrada, pero lo ya guardado antes de ese arreglo sigue en la tabla,
   // así que la pantalla también colapsa por (autor + texto).
-  const filas = useMemo(() => {
+  const todas = useMemo(() => {
     const porContenido = new Map<string, { s: Signal; copias: number; grupos: Set<string> }>();
     for (const s of senales) {
       const k = `${s.autor_nombre || ""}|${(s.texto_original || "").trim().toLowerCase()}`;
@@ -847,37 +893,48 @@ export default function SenalesGrupos({
         porContenido.set(k, { s, copias: 1, grupos: new Set([s.id]) });
       }
     }
-    const todas = [...porContenido.values()];
-    return soloMatch ? todas.filter((f) => (f.s.matches || []).length > 0) : todas;
-  }, [senales, soloMatch]);
+    return [...porContenido.values()];
+  }, [senales]);
 
-  const conMatch = useMemo(
-    () => new Set(senales.filter((s) => (s.matches || []).length > 0).map((s) => s.id)).size,
-    [senales]
-  );
+  const filas = useMemo(() => todas.filter((f) => pasaFiltro(f.s, filtro)), [todas, filtro]);
+
+  // Conteo por pill, sobre las filas ya colapsadas por contenido: el número
+  // del botón tiene que coincidir con lo que aparece al tocarlo.
+  const conteo = useMemo(() => {
+    const c: Record<Filtro, number> = { match: 0, revisar: 0, bot: 0, todos: todas.length };
+    for (const f of todas) {
+      if (pasaFiltro(f.s, "match")) c.match++;
+      if (pasaFiltro(f.s, "revisar")) c.revisar++;
+      if (pasaFiltro(f.s, "bot")) c.bot++;
+    }
+    return c;
+  }, [todas]);
 
   return (
     <>
-      <div className="mb-2 flex flex-wrap items-center gap-3 text-xs">
-        <label className="flex cursor-pointer items-center gap-1.5 text-slate-600">
-          <input
-            type="checkbox"
-            checked={soloMatch}
-            onChange={(e) => setSoloMatch(e.target.checked)}
-            className="h-3.5 w-3.5 rounded border-slate-300"
-          />
-          Sólo los que tienen match
-        </label>
-        <span className="text-slate-400">
-          {filas.length} de {senales.length} · {conMatch} con match
-        </span>
+      <div className="mb-2 flex flex-wrap items-center gap-1.5 text-xs">
+        {FILTROS.map((f) => (
+          <button
+            key={f.id}
+            type="button"
+            onClick={() => setFiltro(f.id)}
+            aria-pressed={filtro === f.id}
+            className={`rounded-full border px-2.5 py-1 font-semibold tabular-nums ${
+              filtro === f.id
+                ? "border-slate-900 bg-slate-900 text-white"
+                : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+            }`}
+          >
+            {f.etiqueta} · {conteo[f.id]}
+          </button>
+        ))}
       </div>
 
-      <ul className="rounded-lg border border-slate-200 bg-white px-4">
+      <ul className={embebido ? "px-4" : "rounded-lg border border-slate-200 bg-white px-4"}>
         {filas.length === 0 ? (
           <li className="py-4 text-sm italic text-slate-400">
-            {senales.length > 0 && soloMatch
-              ? "Ninguno tiene match con el inventario. Destildá el filtro para verlos todos."
+            {senales.length > 0 && filtro !== "todos"
+              ? "Ninguno entra en este filtro. Tocá «Todos» para verlos todos."
               : vacio}
           </li>
         ) : (

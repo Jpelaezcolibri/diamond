@@ -40,7 +40,15 @@ function pesos(n: number | null) {
   return n ? `$${n.toLocaleString("es-CO")}` : null;
 }
 
-export function MandatosPanel({ mandatos }: { mandatos: Mandato[] }) {
+export function MandatosPanel({
+  mandatos,
+  conteo,
+}: {
+  mandatos: Mandato[];
+  /** Matches entregados por mandato (mandato_id → cantidad), opcional. Se
+   *  calcula en page.tsx sobre los matches que ya trae: ninguna consulta más. */
+  conteo?: Map<string, number>;
+}) {
   if (mandatos.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">
@@ -50,9 +58,9 @@ export function MandatosPanel({ mandatos }: { mandatos: Mandato[] }) {
     );
   }
   return (
-    <div className="flex flex-col gap-3">
+    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
       {mandatos.map((m) => (
-        <div key={m.id} className="rounded-lg border border-slate-200 bg-white p-3">
+        <div key={m.id} className="rounded-xl border border-slate-200 border-t-[3px] border-t-sky-600 bg-white p-3">
           <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
             <p className="text-sm font-semibold text-slate-900">{m.cliente_nombre}</p>
             <span className="text-xs text-slate-400">
@@ -69,6 +77,13 @@ export function MandatosPanel({ mandatos }: { mandatos: Mandato[] }) {
           </p>
           {m.exigencias?.length > 0 && (
             <p className="mt-1 text-xs text-slate-400">Debe tener: {m.exigencias.join(", ")}</p>
+          )}
+          {conteo && (
+            <p className={`mt-2 text-xs font-semibold ${conteo.get(m.id) ? "text-emerald-700" : "text-slate-400"}`}>
+              {conteo.get(m.id)
+                ? `${conteo.get(m.id)} match${conteo.get(m.id) === 1 ? "" : "es"} entregado${conteo.get(m.id) === 1 ? "" : "s"}`
+                : "todavía sin match"}
+            </p>
           )}
         </div>
       ))}

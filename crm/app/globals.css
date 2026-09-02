@@ -1,5 +1,11 @@
 @import "tailwindcss";
 
+/* Fuente de títulos cargada en app/layout.tsx (next/font, variable --font-display). */
+@utility font-display {
+  font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: -0.01em;
+}
+
 body {
   @apply bg-slate-50 text-slate-900 antialiased;
 }

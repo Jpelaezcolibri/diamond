@@ -99,19 +99,26 @@ function Hilo({ hilo }: { hilo: Hilo }) {
   );
 }
 
-export default function LineaDmInbox({ mensajes }: { mensajes: DmMensaje[] }) {
+export default function LineaDmInbox({
+  mensajes,
+  embebido = false,
+}: {
+  mensajes: DmMensaje[];
+  /** Sin borde propio: vive dentro de una tarjeta que ya lo tiene. */
+  embebido?: boolean;
+}) {
   const hilos = agruparPorRemitente(mensajes);
 
   if (hilos.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">
+      <div className={`p-6 text-center text-sm text-slate-500 ${embebido ? "" : "rounded-lg border border-dashed border-slate-300"}`}>
         Todavía no llegó ningún mensaje directo a la línea vinculada.
       </div>
     );
   }
 
   return (
-    <div className="divide-y divide-slate-100 rounded-lg border border-slate-200 bg-white">
+    <div className={`divide-y divide-slate-100 bg-white ${embebido ? "" : "rounded-lg border border-slate-200"}`}>
       {hilos.map((h) => (
         <Hilo key={h.telefono || h.mensajes[0].id} hilo={h} />
       ))}

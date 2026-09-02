@@ -20,9 +20,13 @@ const ETIQUETA: Record<string, string> = { sombra: "Sombra (prueba)", asistido: 
 export default function ModoRespuestaToggle({
   modo,
   puedeCambiar = true,
+  compacto = false,
 }: {
   modo: string;
   puedeCambiar?: boolean;
+  /** Versión chip para la cabecera de /grupos (rediseño 2026-09-02): misma
+   *  acción y misma confirmación al pasar a automático, en una sola línea. */
+  compacto?: boolean;
 }) {
   const router = useRouter();
   const [guardando, setGuardando] = useState(false);
@@ -58,6 +62,38 @@ export default function ModoRespuestaToggle({
   }
 
   const esAuto = modo === "auto";
+
+  if (compacto) {
+    return (
+      <span
+        className={`inline-flex items-center gap-2 rounded-full border bg-white py-1 pl-3 pr-1 text-xs font-semibold ${
+          esAuto ? "border-red-300 text-red-800" : "border-slate-200 text-slate-700"
+        }`}
+        title={
+          esAuto
+            ? "El bot publica solo en el grupo gremial — nadie de Diamond lo revisa antes."
+            : "Sofi revalida cada pedido y avisa por privado a la asesora. Nada se publica en el grupo."
+        }
+      >
+        <span className={`inline-block h-2 w-2 rounded-full ${esAuto ? "bg-red-500" : "bg-slate-400"}`} />
+        Respuestas: {ETIQUETA[modo] || modo}
+        {puedeCambiar ? (
+          <button
+            onClick={() => cambiarA(esAuto ? "asistido" : "auto")}
+            disabled={guardando}
+            className={`rounded-full px-2 py-0.5 text-[11px] font-semibold disabled:opacity-50 ${
+              esAuto ? "bg-slate-100 text-slate-700 hover:bg-slate-200" : "bg-red-50 text-red-700 hover:bg-red-100"
+            }`}
+          >
+            {guardando ? "…" : esAuto ? "Pasar a manual" : "Automático"}
+          </button>
+        ) : (
+          <span className="pr-2" />
+        )}
+        {error && <span className="pr-2 text-red-700">{error}</span>}
+      </span>
+    );
+  }
 
   return (
     <div className={`mb-6 rounded-lg border p-4 ${esAuto ? "border-red-300 bg-red-50" : "border-slate-200 bg-slate-50"}`}>

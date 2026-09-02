@@ -10,7 +10,9 @@ import { createClient } from "@/lib/supabase/client";
 // component (la pagina ya es force-dynamic), asi que el dashboard, la
 // tabla de mensajes por asesora, y las dos tablas de entrada/salida se
 // actualizan solas -- no hace falta logica de "en vivo" separada en cada una.
-export default function GruposLiveWatcher() {
+// `tono="dorado"` es la variante para vivir sobre la isla oscura del
+// dashboard (fondo navy): mismo estado, colores legibles sobre oscuro.
+export default function GruposLiveWatcher({ tono = "claro" }: { tono?: "claro" | "dorado" }) {
   const router = useRouter();
   const [estado, setEstado] = useState<"conectando" | "en_vivo" | "reconectando">("conectando");
   const [toast, setToast] = useState<string | null>(null);
@@ -69,11 +71,19 @@ export default function GruposLiveWatcher() {
   return (
     <>
       <span
-        className={`inline-flex items-center gap-1.5 text-xs font-medium ${
-          estado === "en_vivo" ? "text-emerald-600" : "text-amber-600"
+        className={`inline-flex items-center gap-1.5 text-xs font-semibold ${
+          tono === "dorado"
+            ? estado === "en_vivo" ? "text-[#c9a24b]" : "text-amber-300"
+            : estado === "en_vivo" ? "text-emerald-600" : "text-amber-600"
         }`}
       >
-        <span className={`h-1.5 w-1.5 rounded-full ${estado === "en_vivo" ? "bg-emerald-500" : "bg-amber-500"}`} />
+        <span
+          className={`h-2 w-2 rounded-full ${
+            estado === "en_vivo"
+              ? tono === "dorado" ? "bg-[#c9a24b] shadow-[0_0_0_3px_rgba(201,162,75,0.25)]" : "bg-emerald-500"
+              : "bg-amber-500"
+          }`}
+        />
         {estado === "en_vivo" ? "en vivo" : estado === "reconectando" ? "reconectando…" : "conectando…"}
       </span>
       {toast && (

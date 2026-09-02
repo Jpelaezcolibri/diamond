@@ -20,14 +20,13 @@ import {
   type MatchEncontrado,
 } from "@/components/mandatos-panel";
 import { MensajesPorAsesoraPanel, type MensajesPorAsesora } from "@/components/mensajes-por-asesora-panel";
-import GruposLiveWatcher from "@/components/grupos-live-watcher";
+import DashboardMatches from "@/components/dashboard-matches";
+import Carril from "@/components/carril";
+import PanelPlegable from "@/components/panel-plegable";
 
 export const dynamic = "force-dynamic";
 
-type Metricas = {
-  dias: number; demandas: number; ofertas: number;
-  demandasConMatch: number; demandasPorDia: number; ofertasPorDia: number; tasaMatch: number;
-};
+import type { MetricasRadar as Metricas } from "@/components/dashboard-matches";
 
 type Mandato = {
   id: string;
@@ -407,195 +406,210 @@ export default async function GruposPage() {
   // Lo que falta por mirar. Es el número que importa: los otros sólo crecen.
   const pendientes = conMatchLista.filter((s) => s.estado === "nuevo").length;
 
+  // Matches entregados por mandato, para la grilla de "Mis mandatos": se
+  // cuenta sobre lo que ya vino, ninguna consulta más.
+  const matchesPorMandato = new Map<string, number>();
+  for (const x of matchesEncontrados) {
+    matchesPorMandato.set(x.mandato_id, (matchesPorMandato.get(x.mandato_id) ?? 0) + 1);
+  }
+
+  const gruposConResponder = gruposVivos.filter((g) => g.responde).length;
+  const ventasPorConfirmar = ventas.filter((v) => v.estado === "pendiente").length;
+
+  // Rediseño (Juan, 2026-09-02, mockup aprobado): cinco zonas con jerarquía
+  // -- cabecera compacta, isla oscura del dashboard, atención del día (admin),
+  // grupos plegados, y los dos carriles de trabajo lado a lado. Lo de
+  // configuración (cargar grupos, escucha en vivo) va plegado: casi no cambia
+  // y antes ocupaba media pantalla por encima de lo que se revisa a diario.
   return (
-    <div className="mx-auto max-w-5xl p-4 sm:p-6">
-      <h1 className="mb-1 text-2xl font-bold text-slate-900">Radar de grupos</h1>
-      <p className="mb-6 text-sm text-slate-500">
-        Un asesor está en 80 grupos con más de mil mensajes al día: nadie los lee, y el pedido
-        bueno se traspapela. Acá se destila eso en lo accionable — quién busca lo que vos tenés,
-        y qué publican los colegas. Los mensajes entran por tres vías: el export del chat, el
-        reenvío a Sofi, y —solo en los grupos que un administrador habilite— la escucha en vivo
-        desde una línea dedicada de la empresa.
-      </p>
+    <div className="mx-auto flex max-w-7xl flex-col gap-5 p-4 sm:p-6">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="font-display text-3xl font-extrabold text-slate-900">Radar de grupos</h1>
+          <p className="mt-1 max-w-[62ch] text-sm text-slate-600">
+            Quién busca lo que vos tenés, y qué publican los colegas que le sirve a tus compradores.
+            Destilado de {grupos.length} grupo{grupos.length === 1 ? "" : "s"}: exports del chat,
+            reenvíos a Sofi y, donde un administrador lo habilite, escucha en vivo.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <RadarToggle activo={radarActivo} puedeCambiar={admin} compacto />
+          {radarActivo && <ModoRespuestaToggle modo={modoRespuesta} puedeCambiar={admin} compacto />}
+        </div>
+      </div>
 
       {gruposRes.hasError && <ErrorBanner message={gruposRes.message} />}
 
-      <RadarToggle activo={radarActivo} puedeCambiar={admin} />
-      {radarActivo && <ModoRespuestaToggle modo={modoRespuesta} puedeCambiar={admin} />}
-
-      {/* Arriba de todo (Juan, 2026-08-21: "pasa el inbox y las posibles
-          ventas pra la parte superior... para tener mejor acceso"): son los
-          dos paneles que se revisan a diario, antes que la configuración de
-          "Escucha en vivo" (vincular línea, permisos), que casi no cambia. */}
-      {admin && (
-        <section className="mb-8">
-          <h2 className="mb-1 text-lg font-semibold text-slate-900">Posibles ventas</h2>
-          <p className="mb-3 text-sm text-slate-500">
-            Cruce diario: propiedades con una visita agendada (cliente directo o colega) que ya no
-            están disponibles según Wasi. No es una venta confirmada — puede haberse retirado o
-            vendido por otro medio. Confirmá o descartá para llevar el conteo real.
-          </p>
-          {ventasRes?.hasError && <ErrorBanner message={ventasRes.message} />}
-          <PosiblesVentas ventas={ventas} />
-        </section>
-      )}
-
-      {admin && (
-        <section className="mb-8">
-          <h2 className="mb-1 text-lg font-semibold text-slate-900">Inbox de la línea vinculada</h2>
-          <p className="mb-3 text-sm text-slate-500">
-            Mensajes directos (no de grupo) que le llegan a esa línea — nadie responde desde acá,
-            es solo lectura. Cuando un hilo muestra fecha de visita, coordinación de agenda, o
-            cualquier señal de posible venta, queda marcado.
-          </p>
-          {dmRes?.hasError && <ErrorBanner message={dmRes.message} />}
-          <LineaDmInbox mensajes={dmConPedido} />
-        </section>
-      )}
-
-      {admin && (
-        <section className="mb-8">
-          <h2 className="mb-1 text-lg font-semibold text-slate-900">Escucha en vivo</h2>
-          <p className="mb-3 text-sm text-slate-500">
-            Una línea dedicada de la empresa se vincula por QR y el radar lee los grupos que se
-            habiliten. En los que además tengan <strong>Responder</strong> prendido, publica una
-            respuesta cuando encuentra propiedades que encajan.
-          </p>
-          <div className="flex flex-col gap-4">
-            <VincularLinea sesiones={sesiones} asesores={asesoresRes?.data || []} />
-            <GruposPermisos grupos={gruposVivos} />
-          </div>
-        </section>
-      )}
-
       {sinVincular && (
-        <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+        <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
           Tu usuario todavía no está vinculado a una ficha de asesor, así que no
           podés subir grupos ni ver señales propias. Pedile a un administrador
           que te vincule desde <strong>Usuarios</strong>.
         </div>
       )}
 
-      {radarActivo && !sinVincular && (
-        <div className="mb-6">
-          <ImportarExport />
-        </div>
-      )}
-
-      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-lg font-semibold text-slate-900">Dashboard de matches</h2>
-        <GruposLiveWatcher />
-      </div>
-      <p className="mb-2 text-sm text-slate-500">
-        De un vistazo: qué estamos buscando y qué ya calzó, en los dos carriles (pedidos de colegas
-        contra nuestro inventario, y ofertas de colegas contra los mandatos de compra).
-      </p>
-      <div className="mb-2 grid grid-cols-2 gap-3 sm:grid-cols-5">
-        {[
-          { n: mandatos.length, t: "mandatos activos", d: "clientes propios buscando" },
-          { n: conMatch, t: "pedidos con match", d: `${pendientes} por revisar` },
-          { n: matchesEncontrados.length, t: "propiedades con match", d: "ofertas que sirven a un mandato" },
-          { n: autoDmRes.hasError ? "—" : autoDm, t: "bot resolvió solo", d: "DM directo al colega, sin asesora" },
-          { n: reenvioManualRes.hasError ? "—" : reenvioManual, t: "asesora reenvió a mano", d: "sin teléfono resuelto" },
-          ...(admin ? [{ n: matchesPendientes.length, t: "sin entregar", d: "matches que no llegaron a la asesora" }] : []),
-        ].map((c) => (
-          <div key={c.t} className="rounded-lg border border-slate-200 bg-white p-3">
-            <p className="text-2xl font-bold tabular-nums text-slate-900">{c.n}</p>
-            <p className="text-xs font-medium text-slate-700">{c.t}</p>
-            <p className="text-xs text-slate-400">{c.d}</p>
-          </div>
-        ))}
-      </div>
+      <DashboardMatches
+        admin={admin}
+        mandatosActivos={mandatos.length}
+        pedidosConMatch={conMatch}
+        pedidosPorRevisar={pendientes}
+        propiedadesConMatch={matchesEncontrados.length}
+        autoDm={autoDmRes.hasError ? null : autoDm}
+        reenvioManual={reenvioManualRes.hasError ? null : reenvioManual}
+        sinEntregar={matchesPendientes.length}
+        metricas={m}
+      />
       {autoDmRes.hasError && <ErrorBanner message={autoDmRes.message} />}
       {reenvioManualRes.hasError && <ErrorBanner message={reenvioManualRes.message} />}
-      {autoDm + reenvioManual > 0 && (
-        <p className="mb-6 text-xs text-slate-400">
-          {autoDm} de {autoDm + reenvioManual} pedidos atendidos los resolvió el bot solo; en{" "}
-          {reenvioManual} no se pudo ubicar el teléfono y le tocó a la asesora.
-        </p>
-      )}
 
-      {admin && (mensajesPorAsesora.length > 0 || entradaPorAsesorRes?.hasError || salidaPorAsesorRes?.hasError) && (
-        <div className="mb-6">
-          <h2 className="mb-1 text-sm font-semibold text-slate-900">Mensajes por asesora</h2>
-          {entradaPorAsesorRes?.hasError && <ErrorBanner message={entradaPorAsesorRes.message} />}
-          {salidaPorAsesorRes?.hasError && <ErrorBanner message={salidaPorAsesorRes.message} />}
-          <MensajesPorAsesoraPanel filas={mensajesPorAsesora} />
-        </div>
-      )}
-
-      {m && (
-        <div className="mb-6 rounded-lg border border-slate-200 bg-white p-4">
-          <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-            <h2 className="text-sm font-semibold text-slate-900">El radar, últimos {m.dias} días</h2>
-            <span className="text-xs text-slate-400">sale de la base, no se reinicia con los deploys</span>
+      {/* Atención hoy -- solo admin (Juan, 2026-08-21: "pasa el inbox y las
+          posibles ventas pra la parte superior... para tener mejor acceso"):
+          siguen arriba, pero en tres tarjetas lado a lado con scroll propio
+          en vez de tres listas apiladas a lo largo. */}
+      {admin && (
+        <section className="grid gap-4 lg:grid-cols-3">
+          <div className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white">
+            <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-4 py-3">
+              <h2
+                className="font-display text-sm font-bold text-slate-900"
+                title="Cruce diario: propiedades con una visita agendada (cliente directo o colega) que ya no están disponibles según Wasi. No es una venta confirmada."
+              >
+                Posibles ventas
+              </h2>
+              {ventasPorConfirmar > 0 ? (
+                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-bold text-amber-800">
+                  {ventasPorConfirmar} por confirmar
+                </span>
+              ) : (
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-500">{ventas.length}</span>
+              )}
+            </div>
+            <div className="max-h-80 overflow-y-auto">
+              {ventasRes?.hasError && <ErrorBanner message={ventasRes.message} />}
+              <PosiblesVentas ventas={ventas} embebido />
+            </div>
           </div>
-          <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
-            {[
-              { n: m.demandas, t: "pedidos", d: "colegas buscando algo" },
-              { n: m.demandasConMatch, t: "con match", d: "los únicos accionables" },
-              { n: m.ofertas, t: "propiedades", d: "publicadas por colegas" },
-              { n: m.demandasPorDia.toFixed(1), t: "pedidos/día", d: "caudal del canal" },
-              { n: `${Math.round(m.tasaMatch * 100)}%`, t: "tasa de match", d: "de los pedidos, cuántos podemos responder" },
-            ].map((c) => (
-              <div key={c.t} title={c.d}>
-                <span className="text-lg font-bold tabular-nums text-slate-900">{c.n}</span>{" "}
-                <span className="text-slate-600">{c.t}</span>
-              </div>
-            ))}
+
+          <div className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white">
+            <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-4 py-3">
+              <h2
+                className="font-display text-sm font-bold text-slate-900"
+                title="Mensajes directos (no de grupo) que le llegan a la línea vinculada. Solo lectura: nadie responde desde acá."
+              >
+                Inbox de la línea
+              </h2>
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-500">
+                {dmConPedido.length} mensaje{dmConPedido.length === 1 ? "" : "s"}
+              </span>
+            </div>
+            <div className="max-h-80 overflow-y-auto">
+              {dmRes?.hasError && <ErrorBanner message={dmRes.message} />}
+              <LineaDmInbox mensajes={dmConPedido} embebido />
+            </div>
           </div>
-          {m.demandas > 10 && m.tasaMatch < 0.1 && (
-            <p className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
-              Se detectan pedidos pero casi ninguno calza con el inventario. O estos grupos piden
-              otra cosa de la que tenemos, o al inventario le faltan zonas cargadas.
-            </p>
-          )}
-        </div>
+
+          <div className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white">
+            <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-4 py-3">
+              <h2
+                className="font-display text-sm font-bold text-slate-900"
+                title="Entrada: avisos de pedidos de colegas que recibió cada asesora. A mano: los que le tocó reenviar porque no se resolvió el teléfono. Salida: propiedades de colegas entregadas para sus mandatos."
+              >
+                Mensajes por asesora
+              </h2>
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-500">histórico</span>
+            </div>
+            <div className="max-h-80 overflow-y-auto">
+              {entradaPorAsesorRes?.hasError && <ErrorBanner message={entradaPorAsesorRes.message} />}
+              {salidaPorAsesorRes?.hasError && <ErrorBanner message={salidaPorAsesorRes.message} />}
+              <MensajesPorAsesoraPanel filas={mensajesPorAsesora} embebido />
+            </div>
+          </div>
+        </section>
       )}
 
-      <h2 className="mb-1 text-lg font-semibold text-slate-900">Grupos</h2>
-      <p className="mb-2 text-sm text-slate-500">
-        {grupos.length} grupo{grupos.length === 1 ? "" : "s"} cargado{grupos.length === 1 ? "" : "s"}, de
-        exports y reenvíos.
-      </p>
+      {radarActivo && !sinVincular && (
+        <PanelPlegable titulo="Cargar grupos" resumen="export .txt de WhatsApp · sin riesgo para ninguna línea">
+          <ImportarExport />
+        </PanelPlegable>
+      )}
+
       <GruposPanel grupos={grupos} />
 
-      <h2 className="mb-1 mt-8 text-lg font-semibold text-slate-900">Match: pedidos de colegas</h2>
-      <p className="mb-2 text-sm text-slate-500">
-        Clientes de <em>otras</em> inmobiliarias, no de Diamond — no van al embudo propio. Tocá el
-        botón de matches para ver qué ofrecerle y con qué mensaje.
-      </p>
-      {conMatchRes.hasError && <ErrorBanner message={conMatchRes.message} />}
-      {demandasRes.hasError && <ErrorBanner message={demandasRes.message} />}
-      <SenalesGrupos senales={demandas} clase="demanda" vacio="Nada detectado todavía." />
+      <section className="grid items-start gap-4 xl:grid-cols-2">
+        <Carril
+          tono="entrada"
+          titulo="Pedidos de colegas"
+          descripcion="Clientes de otras inmobiliarias que buscan algo que tenés. No van al embudo propio."
+          contador={conMatch}
+        >
+          {conMatchRes.hasError && <ErrorBanner message={conMatchRes.message} />}
+          {demandasRes.hasError && <ErrorBanner message={demandasRes.message} />}
+          <SenalesGrupos senales={demandas} clase="demanda" vacio="Nada detectado todavía." embebido />
+        </Carril>
 
-      <h2 className="mb-1 mt-8 text-lg font-semibold text-slate-900">Match: propiedades de colegas</h2>
-      <p className="mb-2 text-sm text-slate-500">
-        Solo lo que un colega publicó y le sirve a alguno de tus mandatos de compra — nunca son
-        inventario propio, confirmá disponibilidad antes de ofrecerlas a un cliente. Lo que no hace
-        match con nada no se guarda.
-      </p>
-      {matchesEncontradosRes.hasError && <ErrorBanner message={matchesEncontradosRes.message} />}
-      <MatchesEncontradosPanel matches={matchesEncontrados} />
+        <Carril
+          tono="salida"
+          titulo="Propiedades de colegas"
+          descripcion="Solo lo que un colega publicó y le sirve a uno de tus mandatos. Nunca es inventario propio: confirmá disponibilidad antes de ofrecerla."
+          contador={matchesEncontrados.length}
+        >
+          {matchesEncontradosRes.hasError && <ErrorBanner message={matchesEncontradosRes.message} />}
+          <MatchesEncontradosPanel matches={matchesEncontrados} />
+          {/* Los que no llegaron a la asesora viven en el mismo carril, en
+              rojo, debajo de los entregados: es supervisión del carril de
+              compra completo, por eso solo admin y sin filtro por asesor. */}
+          {admin && (matchesPendientes.length > 0 || matchesPendientesRes.hasError) && (
+            <div className="mt-4 border-t border-slate-200 pt-3">
+              <p className="mb-1 text-xs font-bold uppercase tracking-wider text-rose-700">
+                Sin entregar · {matchesPendientes.length}
+              </p>
+              <p className="mb-2 text-xs text-slate-500">
+                Avisos que no se le pudieron mandar al asesor dueño del mandato. Si algo se acumula acá,
+                hay un problema de entrega que resolver.
+              </p>
+              {matchesPendientesRes.hasError && <ErrorBanner message={matchesPendientesRes.message} />}
+              <MatchesPendientesPanel matches={matchesPendientes} />
+            </div>
+          )}
+        </Carril>
+      </section>
 
-      <h2 className="mb-1 mt-8 text-lg font-semibold text-slate-900">Mis mandatos de compra</h2>
-      <p className="mb-2 text-sm text-slate-500">
-        Clientes tuyos que están buscando. Cada oferta que un colega publique y le sirva
-        a alguno se te avisa por WhatsApp — no hace falta revisar esta lista para que funcione.
-      </p>
-      {mandatosRes.hasError && <ErrorBanner message={mandatosRes.message} />}
-      <MandatosPanel mandatos={mandatos} />
+      <section className="rounded-2xl border border-slate-200 bg-white">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-4 py-3">
+          <div>
+            <h2 className="font-display text-base font-bold text-slate-900">Mis mandatos de compra</h2>
+            <p className="text-xs text-slate-500">
+              Clientes tuyos que están buscando. Cada oferta que un colega publique y le sirva a alguno se
+              te avisa por WhatsApp — no hace falta revisar esta lista para que funcione.
+            </p>
+          </div>
+          <span className="rounded-full bg-sky-50 px-2 py-0.5 text-xs font-bold text-sky-800">
+            {mandatos.length} activo{mandatos.length === 1 ? "" : "s"}
+          </span>
+        </div>
+        <div className="p-4">
+          {mandatosRes.hasError && <ErrorBanner message={mandatosRes.message} />}
+          <MandatosPanel mandatos={mandatos} conteo={matchesPorMandato} />
+        </div>
+      </section>
 
       {admin && (
-        <>
-          <h2 className="mb-1 mt-8 text-lg font-semibold text-slate-900">Matches sin entregar</h2>
-          <p className="mb-2 text-sm text-slate-500">
-            Avisos que no se le pudieron mandar al asesor dueño del mandato. Ninguno debería
-            quedar acá mucho tiempo — si algo se acumula, hay un problema de entrega que resolver.
+        <PanelPlegable
+          titulo="Escucha en vivo"
+          resumen={`${sesiones.length} línea${sesiones.length === 1 ? "" : "s"} · ${gruposVivos.length} grupo${gruposVivos.length === 1 ? "" : "s"} · el bot responde en ${gruposConResponder} · solo admin`}
+        >
+          <p className="mb-3 text-sm text-slate-500">
+            Una línea dedicada de la empresa se vincula por QR y el radar lee los grupos que se
+            habiliten. En los que además tengan <strong>Responder</strong> prendido, publica una
+            respuesta cuando encuentra propiedades que encajan.
           </p>
-          {matchesPendientesRes.hasError && <ErrorBanner message={matchesPendientesRes.message} />}
-          <MatchesPendientesPanel matches={matchesPendientes} />
-        </>
+          {sesionesRes?.hasError && <ErrorBanner message={sesionesRes.message} />}
+          {asesoresRes?.hasError && <ErrorBanner message={asesoresRes.message} />}
+          <div className="flex flex-col gap-4">
+            <VincularLinea sesiones={sesiones} asesores={asesoresRes?.data || []} />
+            <GruposPermisos grupos={gruposVivos} />
+          </div>
+        </PanelPlegable>
       )}
     </div>
   );
