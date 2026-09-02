@@ -125,3 +125,94 @@ test("un digest de 12 ofertas sigue entrando en el tope de WhatsApp", () => {
   const texto = digest.construir("Natalia", [], muchas);
   assert.ok(texto.length < 4000, `el digest mide ${texto.length}, tiene que caber en los 4096 de Meta`);
 });
+
+// ── El respaldo entre asesoras (Juan, 2026-09-02): "si la ventana de una esta
+// cerrada enviar a la ventana de la otra, esto con el fin de que nunca se
+// pierda ninguna posibilidad de hacer negocios".
+//
+// El caso real: Catherine no le escribia a Sofi desde el 25 de agosto. Su
+// ventana llevaba SIETE DIAS cerrada y los 45 mensajes que se le mandaron el
+// 1 de septiembre se aceptaban en la API sin llegar a su telefono.
+
+const advisors = require("../src/data/advisors");
+const mensajeAsesor = require("../src/lib/mensaje-asesor");
+const { entregarConRespaldo } = require("../src/lib/entrega-asesor");
+
+const CATHE = { id: "adv-cathe", name: "Catherine Uribe", phone: "573001116489" };
+const NATA = { id: "adv-nata", name: "Natalia Velez", phone: "573001878024" };
+const ORG = { id: "org-1", name: "Diamond" };
+const CERRADA = "(#131047) Message failed to send because more than 24 hours have passed";
+
+function conEnvios(resultadoPorTelefono) {
+  const enviados = [];
+  const real = mensajeAsesor.enviarYRegistrar;
+  mensajeAsesor.enviarYRegistrar = async (org, tel, texto) => {
+    enviados.push({ tel, texto });
+    const r = resultadoPorTelefono[tel];
+    return r || { ok: true, wamid: `wm-${tel}` };
+  };
+  const realList = advisors.listElegibles;
+  advisors.listElegibles = async () => [CATHE, NATA];
+  return {
+    enviados,
+    restaurar: () => {
+      mensajeAsesor.enviarYRegistrar = real;
+      advisors.listElegibles = realList;
+    },
+  };
+}
+
+test("ventana cerrada: el aviso se entrega a la otra asesora, no se pierde", async () => {
+  const m = conEnvios({ "573001116489": { ok: false, error: CERRADA } });
+  try {
+    const r = await entregarConRespaldo(ORG, CATHE, "🎯 Oportunidad");
+    assert.strictEqual(r.ok, true, "el negocio no se pierde");
+    assert.strictEqual(r.advisor.name, "Natalia Velez", "lo recibe la suplente");
+    assert.strictEqual(r.suplente, true);
+    assert.strictEqual(m.enviados.length, 2, "se intento con la titular antes de pasarlo");
+    assert.match(m.enviados[1].texto, /Esto era para Catherine Uribe/, "la suplente sabe de quien era");
+    assert.match(m.enviados[1].texto, /le escriba cualquier cosa a Sofi/, "y como reabrirle el canal");
+    assert.match(m.enviados[1].texto, /🎯 Oportunidad/, "el aviso original va completo");
+  } finally {
+    m.restaurar();
+  }
+});
+
+test("con la ventana abierta no se molesta a nadie mas", async () => {
+  const m = conEnvios({});
+  try {
+    const r = await entregarConRespaldo(ORG, CATHE, "🎯 Oportunidad");
+    assert.strictEqual(r.suplente, false);
+    assert.strictEqual(r.advisor.name, "Catherine Uribe");
+    assert.strictEqual(m.enviados.length, 1);
+  } finally {
+    m.restaurar();
+  }
+});
+
+test("un fallo que NO es de ventana cerrada no se reintenta con otra persona", async () => {
+  // Un numero invalido o un error de credenciales no se arregla cambiando de
+  // destinatario: seria gastar dos envios para el mismo fallo.
+  const m = conEnvios({ "573001116489": { ok: false, error: "(#131026) Message undeliverable" } });
+  try {
+    const r = await entregarConRespaldo(ORG, CATHE, "🎯 Oportunidad");
+    assert.strictEqual(r.ok, false);
+    assert.strictEqual(m.enviados.length, 1, "no se molesta a la otra asesora");
+  } finally {
+    m.restaurar();
+  }
+});
+
+test("si NINGUNA puede recibir, lo dice — el pendiente se reintenta despues", async () => {
+  const m = conEnvios({
+    "573001116489": { ok: false, error: CERRADA },
+    "573001878024": { ok: false, error: CERRADA },
+  });
+  try {
+    const r = await entregarConRespaldo(ORG, CATHE, "🎯 Oportunidad");
+    assert.strictEqual(r.ok, false);
+    assert.match(r.error, /sin suplente con ventana abierta/);
+  } finally {
+    m.restaurar();
+  }
+});

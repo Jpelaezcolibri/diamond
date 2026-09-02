@@ -25,9 +25,9 @@ function linea(m) {
  * @param mensaje    { grupo_nombre, autor_nombre, texto_original }
  * @param veredicto  lo que devolvio src/groups/revalidar.js
  * @param matches    las candidatas que vio Sofi
- * @param resultado  { avisada, destinatarioNombre } — solo aplica si aprobo
+ * @param resultado  { avisada, destinatarioNombre, enCola } — solo aplica si aprobo
  */
-function construir(mensaje, veredicto, matches, { avisada = false, destinatarioNombre = null } = {}) {
+function construir(mensaje, veredicto, matches, { avisada = false, destinatarioNombre = null, enCola = false } = {}) {
   if (!veredicto) return null;
   const aprobo = Boolean(veredicto.sirve_alguna);
   const utiles = aprobo
@@ -36,9 +36,16 @@ function construir(mensaje, veredicto, matches, { avisada = false, destinatarioN
 
   let estadoAviso = null;
   if (aprobo) {
+    // BUG del 2026-09-02: cuando el aviso paso a entregarse agrupado, este
+    // feed empezo a decir "NO salio" apenas se encolaba — y salia igual dos
+    // minutos despues. Un reporte que dice que se perdio un negocio que en
+    // realidad se entrego es peor que no reportar nada: quema la confianza en
+    // el resto del panel.
     estadoAviso = avisada
       ? `Aviso enviado${destinatarioNombre ? ` a ${destinatarioNombre}` : ""}.`
-      : "Aprobo, pero el aviso NO salio (ventana de 24h cerrada o sin destinatario — ver trazabilidad_radar).";
+      : enCola
+        ? "En cola de salida — sale agrupado con lo demas en los proximos minutos."
+        : "Aprobo, pero el aviso NO salio (ventana de 24h cerrada o sin destinatario — ver trazabilidad_radar).";
   }
 
   return [

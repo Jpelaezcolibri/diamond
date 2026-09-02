@@ -565,7 +565,7 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
   // para la rafaga, no para el goteo.
   if (asesor && asesor.id && !ritmo.puedeEnviar(asesor.id)) {
     await feedComando
-      .registrar(org, señalParaFeed, veredicto, matches, { avisada: false, destinatarioNombre: "en cola de salida" })
+      .registrar(org, señalParaFeed, veredicto, matches, { avisada: false, enCola: true })
       .catch((e) => console.warn("[radar] No se pudo escribir en el feed del admin:", e.message));
     return { resultado: "en_cola", veredicto, texto, signalId: signal.id };
   }

@@ -42,7 +42,7 @@ const revalidar = require("../groups/revalidar");
 const alertaAsesor = require("../groups/alerta-asesor");
 const digest = require("../groups/digest-avisos");
 const directorio = require("../groups/directorio");
-const mensajeAsesor = require("../lib/mensaje-asesor");
+const { entregarConRespaldo } = require("../lib/entrega-asesor");
 const ritmo = require("../lib/ritmo-avisos");
 
 const INTERVALO_MS = 60 * 1000;
@@ -169,18 +169,25 @@ async function procesarOrg(org, ahora) {
 
   if (!texto) return null;
 
-  const telefono = String(asesor.phone).replace(/\D/g, "");
-  const envio = await mensajeAsesor.enviarYRegistrar(org, telefono, texto).catch((e) => ({ ok: false, error: e.message }));
-  if (!envio || !envio.ok) {
+  // Con respaldo (Juan, 2026-09-02: "si la ventana de una esta cerrada enviar
+  // a la ventana de la otra... que nunca se pierda ninguna posibilidad de
+  // hacer negocios"). Si la ventana de la asesora esta cerrada, el aviso se
+  // entrega a otra del equipo en vez de perderse.
+  const envio = await entregarConRespaldo(org, asesor, texto);
+  if (!envio.ok) {
     // No se marca nada: queda pendiente y se reintenta en la proxima pasada.
-    console.warn(`[avisos] no se pudo entregar el aviso a ${asesor.name}: ${envio && envio.error}`);
+    console.warn(`[avisos] no se pudo entregar el aviso a ${asesor.name}: ${envio.error}`);
     return { ok: false, total };
   }
 
-  ritmo.registrarEnvio(asesor.id, ahora);
+  // El ritmo se le cuenta a QUIEN LO RECIBIO: si lo tomo una suplente, la
+  // asesora original no gasto su turno y su proximo aviso puede salir ya.
+  ritmo.registrarEnvio(envio.advisor.id, ahora);
   for (const s of pedidos) {
     await groupSignals
-      .marcarAvisoEnviado(org.id, s.id, { wamid: envio.wamid || null, advisorId: asesor.id })
+      // El destinatario REAL, no a quien le tocaba: si respondio una suplente,
+      // el recordatorio y el escalado tienen que ir a ella.
+      .marcarAvisoEnviado(org.id, s.id, { wamid: envio.wamid || null, advisorId: envio.advisor.id })
       .catch((e) => console.warn("[avisos] no se pudo marcar la señal como avisada:", e.message));
   }
   for (const a of alertas) {
@@ -188,7 +195,10 @@ async function procesarOrg(org, ahora) {
       .marcarEntrega(org.id, a.id, { entregado: true, via: "digest", error: null, texto: a.texto })
       .catch((e) => console.warn("[avisos] no se pudo marcar la alerta como entregada:", e.message));
   }
-  console.log(`[avisos] ${asesor.name}: 1 mensaje con ${total} pendiente(s) (${pedidos.length} pedidos, ${alertas.length} ofertas).`);
+  console.log(
+    `[avisos] ${envio.advisor.name}${envio.suplente ? ` (suplente de ${asesor.name})` : ""}: ` +
+      `1 mensaje con ${total} pendiente(s) (${pedidos.length} pedidos, ${alertas.length} ofertas).`
+  );
   return { ok: true, total };
 }
 
