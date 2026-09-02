@@ -20,13 +20,12 @@ import {
   type MatchEncontrado,
 } from "@/components/mandatos-panel";
 import { MensajesPorAsesoraPanel, type MensajesPorAsesora } from "@/components/mensajes-por-asesora-panel";
-import DashboardMatches from "@/components/dashboard-matches";
+import DashboardMatches, { type MetricasRadar as Metricas } from "@/components/dashboard-matches";
 import Carril from "@/components/carril";
 import PanelPlegable from "@/components/panel-plegable";
 
 export const dynamic = "force-dynamic";
 
-import type { MetricasRadar as Metricas } from "@/components/dashboard-matches";
 
 type Mandato = {
   id: string;

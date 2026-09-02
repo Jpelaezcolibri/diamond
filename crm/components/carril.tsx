@@ -46,12 +46,12 @@ export default function Carril({
     <section className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white">
       <header className={`flex items-start justify-between gap-3 border-b px-4 py-3 ${t.head}`}>
         <div className="min-w-0">
-          <h3 className="font-display flex items-center gap-2 text-base font-bold text-slate-900">
+          <h2 className="font-display flex items-center gap-2 text-base font-bold text-slate-900">
             <span className={`rounded px-1.5 py-0.5 text-[10px] font-extrabold uppercase tracking-[0.12em] ${t.tag}`}>
               {t.flecha} {t.etiqueta}
             </span>
             {titulo}
-          </h3>
+          </h2>
           <p className="mt-0.5 text-xs text-slate-600">{descripcion}</p>
         </div>
         <span className={`font-display shrink-0 text-2xl font-extrabold tabular-nums ${t.contador}`}>{contador}</span>

@@ -77,16 +77,30 @@ export default function ModoRespuestaToggle({
       >
         <span className={`inline-block h-2 w-2 rounded-full ${esAuto ? "bg-red-500" : "bg-slate-400"}`} />
         Respuestas: {ETIQUETA[modo] || modo}
+        {/* Misma regla que la versión grande: se ofrecen los modos que NO
+            son el actual. Un solo botón "opuesto" dejaba a "sombra" sin
+            camino a manual (hallazgo de revisión, 2026-09-02). */}
         {puedeCambiar ? (
-          <button
-            onClick={() => cambiarA(esAuto ? "asistido" : "auto")}
-            disabled={guardando}
-            className={`rounded-full px-2 py-0.5 text-[11px] font-semibold disabled:opacity-50 ${
-              esAuto ? "bg-slate-100 text-slate-700 hover:bg-slate-200" : "bg-red-50 text-red-700 hover:bg-red-100"
-            }`}
-          >
-            {guardando ? "…" : esAuto ? "Pasar a manual" : "Automático"}
-          </button>
+          <span className="flex gap-1">
+            {modo !== "asistido" && (
+              <button
+                onClick={() => cambiarA("asistido")}
+                disabled={guardando}
+                className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-200 disabled:opacity-50"
+              >
+                {guardando ? "…" : "Manual"}
+              </button>
+            )}
+            {modo !== "auto" && (
+              <button
+                onClick={() => cambiarA("auto")}
+                disabled={guardando}
+                className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50"
+              >
+                {guardando ? "…" : "Automático"}
+              </button>
+            )}
+          </span>
         ) : (
           <span className="pr-2" />
         )}

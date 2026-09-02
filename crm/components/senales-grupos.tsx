@@ -224,7 +224,19 @@ function borrador(s: Signal, matches: Match[]) {
   );
 }
 
-function Ficha({ s, copias, grupos }: { s: Signal; copias: number; grupos: number }) {
+function Ficha({
+  s,
+  copias,
+  grupos,
+  onEstado,
+}: {
+  s: Signal;
+  copias: number;
+  grupos: number;
+  /** Avisa al listado el estado optimista, para que el filtro "Por revisar"
+   *  y su contador reaccionen sin esperar un refresh del servidor. */
+  onEstado: (id: string, estado: Signal["estado"]) => void;
+}) {
   // Arranca abierta (Juan, 2026-09-02): "las entradas deben traer la
   // tarjeta del pedido mas los links de las propuestas, para ver cada uno
   // de los pedidos mas facil" -- un clic extra por pedido para ver que le
@@ -263,6 +275,7 @@ function Ficha({ s, copias, grupos }: { s: Signal; copias: number; grupos: numbe
   async function marcar(nuevo: "gestionado" | "descartado" | "nuevo") {
     const previo = estado;
     setEstado(nuevo);
+    onEstado(s.id, nuevo);
     setGuardando(true);
     setErrorEstado(null);
     try {
@@ -274,6 +287,7 @@ function Ficha({ s, copias, grupos }: { s: Signal; copias: number; grupos: numbe
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "No se pudo guardar");
     } catch (e) {
       setEstado(previo);
+      onEstado(s.id, previo);
       setErrorEstado(e instanceof Error ? e.message : "No se pudo guardar");
     } finally {
       setGuardando(false);
@@ -875,6 +889,11 @@ export default function SenalesGrupos({
   // desde el rediseño del 2026-09-02 son pills, con dos cortes más que ya
   // existían como dato pero no como filtro: por revisar y resueltos por el bot.)
   const [filtro, setFiltro] = useState<Filtro>(clase === "demanda" ? "match" : "todos");
+  // Estado optimista por señal (lo marca la tarjeta al validar/descartar):
+  // sin esto, "Por revisar" seguía mostrando la tarjeta recién validada
+  // hasta el próximo refresh del servidor.
+  const [estados, setEstados] = useState<Record<string, Signal["estado"]>>({});
+  const onEstado = (id: string, estado: Signal["estado"]) => setEstados((prev) => ({ ...prev, [id]: estado }));
 
   // Los colegas difunden el mismo aviso a muchos grupos. El dedup nuevo lo corta
   // en la entrada, pero lo ya guardado antes de ese arreglo sigue en la tabla,
@@ -896,19 +915,26 @@ export default function SenalesGrupos({
     return [...porContenido.values()];
   }, [senales]);
 
-  const filas = useMemo(() => todas.filter((f) => pasaFiltro(f.s, filtro)), [todas, filtro]);
+  // La misma señal, con el estado optimista aplicado si la tarjeta lo cambió.
+  const conEstado = useMemo(
+    () => (s: Signal): Signal => (estados[s.id] ? { ...s, estado: estados[s.id] } : s),
+    [estados]
+  );
+
+  const filas = useMemo(() => todas.filter((f) => pasaFiltro(conEstado(f.s), filtro)), [todas, filtro, conEstado]);
 
   // Conteo por pill, sobre las filas ya colapsadas por contenido: el número
   // del botón tiene que coincidir con lo que aparece al tocarlo.
   const conteo = useMemo(() => {
     const c: Record<Filtro, number> = { match: 0, revisar: 0, bot: 0, todos: todas.length };
     for (const f of todas) {
-      if (pasaFiltro(f.s, "match")) c.match++;
-      if (pasaFiltro(f.s, "revisar")) c.revisar++;
-      if (pasaFiltro(f.s, "bot")) c.bot++;
+      const s = conEstado(f.s);
+      if (pasaFiltro(s, "match")) c.match++;
+      if (pasaFiltro(s, "revisar")) c.revisar++;
+      if (pasaFiltro(s, "bot")) c.bot++;
     }
     return c;
-  }, [todas]);
+  }, [todas, conEstado]);
 
   return (
     <>
@@ -938,7 +964,9 @@ export default function SenalesGrupos({
               : vacio}
           </li>
         ) : (
-          filas.map((f) => <Ficha key={f.s.id} s={f.s} copias={f.copias} grupos={f.grupos.size} />)
+          filas.map((f) => (
+            <Ficha key={f.s.id} s={f.s} copias={f.copias} grupos={f.grupos.size} onEstado={onEstado} />
+          ))
         )}
       </ul>
     </>
