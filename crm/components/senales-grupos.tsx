@@ -220,7 +220,11 @@ function borrador(s: Signal, matches: Match[]) {
 }
 
 function Ficha({ s, copias, grupos }: { s: Signal; copias: number; grupos: number }) {
-  const [abierta, setAbierta] = useState(false);
+  // Arranca abierta (Juan, 2026-09-02): "las entradas deben traer la
+  // tarjeta del pedido mas los links de las propuestas, para ver cada uno
+  // de los pedidos mas facil" -- un clic extra por pedido para ver que le
+  // podemos ofrecer al colega no aportaba nada.
+  const [abierta, setAbierta] = useState(true);
   const [copiado, setCopiado] = useState<"mensaje" | "grupo" | null>(null);
   // Optimista: marcar es una acción de un clic y esperar el viaje al servidor
   // para pintar el check se siente roto. Si falla, se revierte y se avisa.
