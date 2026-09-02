@@ -50,6 +50,9 @@ function conParticipantes(lista, contador = { n: 0 }) {
 function preparar() {
   memory.colegasGrupos.length = 0;
   directorio._resetCache();
+  // El mapa guardado tambien es estado de proceso: sin limpiarlo, un test
+  // resuelve un lid que otro sembro y el fallo aparece a kilometros de acá.
+  require("../src/data/directorio-lids")._reset();
 }
 
 test("resuelve el telefono desde la lista de participantes", async () => {
@@ -371,6 +374,67 @@ test("una pista que NO es un celular colombiano se ignora — un lid disfrazado 
       `la pista ${basura} no puede pasar por telefono`
     );
   }
+
+  waha.participantesDeGrupo = participantesReal;
+  waha.telefonoDeLid = telefonoDelIdReal;
+});
+
+// ── EL MAPA GUARDADO (Juan, 2026-09-02): "los numeros que ya se pueden ver en
+// todos los grupos como base de datos para que no tenga que ir a waha a
+// revisar en cada respuesta, si no que se crucen con el id del colega".
+//
+// El caso que lo motivo: ese dia WAHA alternaba entre devolver 735
+// participantes y devolver CERO, sin error. Cuando devolvia cero, el pedido se
+// desviaba al camino manual aunque el numero fuera visible diez minutos antes.
+
+const lidsGuardados = require("../src/data/directorio-lids");
+
+test("una pasada de participantes queda GUARDADA, no solo en memoria", async () => {
+  preparar();
+  lidsGuardados._reset();
+  conParticipantes([
+    { id: "198161251463188@lid", esLid: true, telefono: "573001234567", rol: "participant" },
+    { id: "111222333444555@lid", esLid: true, telefono: "573009998877", rol: "participant" },
+    { id: "999@lid", esLid: true, telefono: null, rol: "participant" },
+  ]);
+
+  await directorio.telefonoDe(ORG, "198161251463188", { sesion: SESION, jid: JID });
+
+  const guardados = await lidsGuardados.listar(ORG);
+  assert.strictEqual(guardados.length, 2, "los dos con telefono visible, el tercero no");
+  assert.ok(guardados.some((p) => p.lid === "111222333444555"), "se guarda TODA la pasada, no solo el que se buscaba");
+});
+
+test("tras un reinicio resuelve desde la base, SIN tocar WAHA", async () => {
+  preparar();
+  lidsGuardados._reset();
+  conParticipantes([{ id: "198161251463188@lid", esLid: true, telefono: "573001234567", rol: "participant" }]);
+  await directorio.telefonoDe(ORG, "198161251463188", { sesion: SESION, jid: JID });
+
+  // Simula el reinicio: el indice en memoria se pierde, la base queda.
+  directorio._resetCache();
+  const contador = conParticipantes([]); // WAHA ahora devuelve vacio, como paso de verdad
+
+  const tel = await directorio.telefonoDe(ORG, "198161251463188", {});
+  assert.strictEqual(tel, "573001234567", "el numero sobrevive al reinicio");
+  assert.strictEqual(contador.n, 0, "y no hizo falta preguntarle a WAHA");
+
+  waha.participantesDeGrupo = participantesReal;
+  waha.telefonoDeLid = telefonoDelIdReal;
+});
+
+test("un `pn` con basura NUNCA entra a la cache: de ahi sale a que numero se escribe", async () => {
+  preparar();
+  lidsGuardados._reset();
+  conParticipantes([
+    { id: "111@lid", esLid: true, telefono: "12345", rol: "participant" },
+    { id: "222@lid", esLid: true, telefono: "198161251463188", rol: "participant" }, // un lid disfrazado
+    { id: "333@lid", esLid: true, telefono: "573001234567", rol: "participant" },
+  ]);
+  await directorio.telefonoDe(ORG, "333", { sesion: SESION, jid: JID });
+
+  const guardados = await lidsGuardados.listar(ORG);
+  assert.deepStrictEqual(guardados.map((p) => p.lid), ["333"]);
 
   waha.participantesDeGrupo = participantesReal;
   waha.telefonoDeLid = telefonoDelIdReal;

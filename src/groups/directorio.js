@@ -22,6 +22,7 @@
 // minutos.
 
 const colegas = require("../data/colegas");
+const lidsGuardados = require("../data/directorio-lids");
 const waha = require("../lib/waha");
 const { esCelularColombiano } = require("../lib/contacto");
 
@@ -49,12 +50,36 @@ const ultimoRefresco = new Map(); // orgId:jid -> ms
 // promesa en vez de saltarsela.
 const enVuelo = new Map(); // orgId:jid -> Promise
 
+// Siembra el indice desde la base. Dos fuentes, en este orden:
+//
+//   1. directorio_lids — el mapa COMPLETO de participantes visibles que se fue
+//      juntando en los calentamientos (Juan, 2026-09-02: "los numeros que ya
+//      se pueden ver en todos los grupos como base de datos para que no tenga
+//      que ir a waha a revisar en cada respuesta"). Miles de pares.
+//   2. colegas_grupos — los colegas con los que ya hubo interaccion real. Va
+//      DESPUES para que pise a la cache si difieren: ese telefono se confirmo
+//      en una conversacion, el de la cache solo se vio en una lista.
+//
+// Antes solo existia la segunda, con 66 filas, asi que cada reinicio del bot
+// dejaba al radar dependiendo de que WAHA respondiera en ese instante.
 async function sembrar(orgId) {
   if (sembrado.has(orgId)) return;
   sembrado.add(orgId);
+
+  let deCache = 0;
+  for (const par of await lidsGuardados.listar(orgId).catch(() => [])) {
+    const lid = soloDigitos(par.lid);
+    if (lid && par.telefono) {
+      indice.set(`${orgId}:${lid}`, soloDigitos(par.telefono));
+      deCache++;
+    }
+  }
   for (const c of await colegas.listarConTelefono(orgId)) {
     const lid = soloDigitos(c.lid);
     if (lid && c.telefono) indice.set(`${orgId}:${lid}`, soloDigitos(c.telefono));
+  }
+  if (deCache > 0) {
+    console.log(`[directorio] sembrado con ${deCache} pares guardados — sin preguntarle nada a WAHA.`);
   }
 }
 
@@ -88,13 +113,26 @@ async function refrescarGrupo(orgId, sesion, jid, { forzar = false } = {}) {
     }
 
     let conTelefono = 0;
+    const nuevos = [];
     for (const p of participantes) {
       const lid = soloDigitos(p.id);
       const tel = soloDigitos(p.telefono);
-      if (lid && tel) {
+      // esCelularColombiano y no un truthy check: `pn` puede venir con basura,
+      // y esta cache es la que despues decide a que numero sale un mensaje.
+      if (lid && tel && esCelularColombiano(tel)) {
         indice.set(`${orgId}:${lid}`, tel);
+        nuevos.push({ lid, telefono: tel });
         conTelefono++;
       }
+    }
+    // Se persiste la pasada entera (Juan, 2026-09-02). Es lo que convierte la
+    // resolucion en una consulta local: WAHA pasa a servir solo para DESCUBRIR
+    // pares nuevos, nunca para responder un pedido. Best-effort: si falla, el
+    // indice en memoria igual quedo cargado para este proceso.
+    if (nuevos.length) {
+      await lidsGuardados
+        .guardar(orgId, nuevos)
+        .catch((e) => console.warn("[directorio] no se pudo guardar el mapa lid->telefono:", e.message));
     }
     // Una lista vacia tampoco se cree por 10 min: un grupo gremial nunca esta
     // vacio, asi que es un fallo silencioso de WAHA (ver participantesDeGrupo).
@@ -204,6 +242,9 @@ async function telefonoDe(orgId, lid, { sesion = null, jid = null, pista = null 
   const enIndice = indice.get(`${orgId}:${clave}`);
   if (enIndice) return enIndice;
 
+  // Con el indice sembrado desde la base, llegar hasta WAHA es ahora la
+  // excepcion —un lid que nunca se vio en ninguna pasada— y no el camino
+  // normal de cada pedido.
   if (sesion && jid) {
     await refrescarGrupo(orgId, sesion, jid);
     const despues = indice.get(`${orgId}:${clave}`);

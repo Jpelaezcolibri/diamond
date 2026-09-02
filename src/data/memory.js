@@ -46,6 +46,8 @@ const db = {
   // Colegas de los grupos gremiales con su telefono cuando se pudo resolver
   // (ver db/migrations/2026-08-22_colegas_grupos.sql).
   colegasGrupos: [],
+  // Cache de ruteo lid -> telefono (ver src/data/directorio-lids.js).
+  directorioLids: [],
   // Learning Domain: append-only, nunca se muta ni se borra (P15).
   signalEvents: [],
   uid,
