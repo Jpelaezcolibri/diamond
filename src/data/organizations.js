@@ -95,6 +95,34 @@ const MODOS_RESPUESTA = ["sombra", "asistido", "auto"];
 // Sin columna (migracion sin correr) o valor invalido, cae a la variable de
 // entorno — el comportamiento de siempre — y no a un default fijo: no hay
 // forma segura de adivinar que modo asumia production antes de esta migracion.
+// El carril de COMPRA (Juan, 2026-09-02): "quiero tener la posibilidad de
+// desactivar los mandatos... para poder enfocar todas las fuerzas en las
+// propiedades que tenemos para la venta".
+//
+// Degrada a ENCENDIDO si la columna no existe todavia: es el comportamiento
+// que la organizacion tenia antes de que el interruptor existiera, mismo
+// criterio que radarEncendido.
+function mandatosActivos(org) {
+  return !org || org.mandatos_activos !== false;
+}
+
+async function setMandatosActivos(orgId, activos) {
+  if (!supabase) {
+    const o = memory.organizations.find((x) => x.id === orgId);
+    if (!o) throw new Error("Organizacion no encontrada");
+    o.mandatos_activos = Boolean(activos);
+    return o;
+  }
+  const { data, error } = await supabase
+    .from("organizations")
+    .update({ mandatos_activos: Boolean(activos) })
+    .eq("id", orgId)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
 function modoDeRespuesta(org) {
   const valor = org && org.grupos_respuesta_modo;
   if (MODOS_RESPUESTA.includes(valor)) return valor;
@@ -123,4 +151,5 @@ module.exports = {
   findByWhatsappPhoneId, getDefault, listActive,
   findById, radarActivo, setRadarActivo, radarEncendido,
   modoDeRespuesta, setModoDeRespuesta, MODOS_RESPUESTA,
+  mandatosActivos, setMandatosActivos,
 };

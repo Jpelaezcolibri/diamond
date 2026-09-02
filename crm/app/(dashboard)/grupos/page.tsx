@@ -9,6 +9,7 @@ import SenalesGrupos, { type Signal } from "@/components/senales-grupos";
 import ImportarExport from "@/components/importar-export";
 import RadarToggle from "@/components/radar-toggle";
 import ModoRespuestaToggle from "@/components/modo-respuesta-toggle";
+import MandatosToggle from "@/components/mandatos-toggle";
 import VincularLinea, { type Sesion, type Asesor } from "@/components/vincular-linea";
 import GruposPermisos, { type GrupoVivo } from "@/components/grupos-permisos";
 import LineaDmInbox, { type DmMensaje } from "@/components/linea-dm-inbox";
@@ -86,8 +87,14 @@ export default async function GruposPage() {
   // columna no existe y la consulta falla: se asume ENCENDIDO, que es el
   // comportamiento que la organización tenía antes de que el botón existiera.
   const orgRes = await supabase
-    .from("organizations").select("radar_activo, grupos_respuesta_modo").limit(1).maybeSingle();
+    .from("organizations").select("*").limit(1).maybeSingle();
   const radarActivo = orgRes.data?.radar_activo !== false;
+  // Carril de compra (Juan, 2026-09-02). Mismo criterio que radarActivo y que
+  // src/data/organizations.js#mandatosActivos: sin la columna se asume
+  // ENCENDIDO, que es como venia funcionando. Por eso el select es "*": una
+  // lista explicita de columnas hace fallar la consulta ENTERA si una todavia
+  // no existe, y eso deja la pantalla en blanco en vez de degradar.
+  const mandatosActivos = orgRes.data?.mandatos_activos !== false;
   // Mismo criterio que src/data/organizations.js#modoDeRespuesta: sin
   // columna (migración sin correr) o valor vacío, "asistido" es el
   // comportamiento actual en producción — nunca se asume "auto" por defecto.
@@ -451,6 +458,9 @@ export default async function GruposPage() {
         <div className="flex flex-wrap items-center gap-2">
           <RadarToggle activo={radarActivo} puedeCambiar={admin} compacto />
           {radarActivo && <ModoRespuestaToggle modo={modoRespuesta} puedeCambiar={admin} compacto />}
+          {radarActivo && (
+            <MandatosToggle activo={mandatosActivos} cuantos={mandatos.length} puedeCambiar={admin} />
+          )}
         </div>
       </div>
 
@@ -574,6 +584,18 @@ export default async function GruposPage() {
           contador={matchesEncontrados.length}
         >
           {matchesEncontradosRes.hasError && <ErrorBanner message={matchesEncontradosRes.message} />}
+          {/* Con el carril apagado este panel se queda en cero para siempre.
+              Sin este cartel, un cero sin explicación se lee como "no hay
+              nada", que es justo lo contrario de lo que pasa. */}
+          {!mandatosActivos && (
+            <div className="mb-3 rounded-lg border border-slate-300 bg-slate-50 p-3 text-xs text-slate-600">
+              <span className="font-semibold text-slate-800">El carril de compra está apagado.</span>{" "}
+              Las ofertas nuevas de los colegas no se están cruzando contra tus{" "}
+              {mandatos.length === 1 ? "mandato" : `${mandatos.length} mandatos`}, para que toda la
+              atención vaya a vender lo propio. Lo de abajo es lo que ya se había cruzado y se sigue
+              pudiendo trabajar.
+            </div>
+          )}
           <MatchesEncontradosPanel matches={matchesEncontrados} />
           {/* Los que no llegaron a la asesora viven en el mismo carril, en
               rojo, debajo de los entregados: es supervisión del carril de

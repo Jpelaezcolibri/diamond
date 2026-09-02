@@ -49,6 +49,11 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
 - **Migraciones pendientes de correr en Supabase:**
   `db/migrations/2026-07-09_dmap_default_designer.sql` (default del motor de
   creativos → designer para orgs nuevas) y
+  `db/migrations/2026-09-02_mandatos_activos.sql` (columna
+  `organizations.mandatos_activos`: interruptor del carril de compra, para
+  poder apagar el cruce contra mandatos y volcar todo el foco a vender lo
+  propio — pedido de Juan el 2026-09-02. Sin correrla el bot funciona igual
+  que hoy: la lectura degrada a `true`) y
   `db/migrations/2026-09-02_realtime_grupos.sql` (agrega `group_signals` y
   `mandato_match_alerts` a la publicación de Supabase Realtime — sin esto,
   el badge "en vivo" del dashboard de matches de `/grupos` en el CRM se

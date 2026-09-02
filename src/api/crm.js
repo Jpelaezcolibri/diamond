@@ -353,6 +353,28 @@ router.post("/api/grupos/radar", async (req, res) => {
   }
 });
 
+// Prender o apagar el carril de COMPRA (el cruce de ofertas contra mandatos).
+//
+// Juan, 2026-09-02: "quiero tener la posibilidad de desactivar los mandatos,
+// esto con el fin de poder enfocar todas las fuerzas en las propiedades que
+// tenemos para la venta". No borra nada: los mandatos y lo ya cruzado quedan.
+router.post("/api/grupos/mandatos", async (req, res) => {
+  const { activo } = req.body || {};
+  if (typeof activo !== "boolean") {
+    return res.status(400).json({ error: "Falta 'activo' (true o false)" });
+  }
+  try {
+    const org = req.body?.orgId
+      ? { id: req.body.orgId }
+      : await organizations.getDefault();
+    const actualizada = await organizations.setMandatosActivos(org.id, activo);
+    console.log(`[radar] carril de compra ${activo ? "ENCENDIDO" : "APAGADO"} para ${actualizada.name || org.id}`);
+    res.json({ ok: true, mandatos_activos: actualizada.mandatos_activos });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ¿A cuantos colegas del grupo podriamos escribirle al privado?
 //
 // SOLO MIDE. No envia nada, no cambia nada, no toca el flujo del radar. Existe

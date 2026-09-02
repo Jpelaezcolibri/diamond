@@ -156,7 +156,12 @@ function instalarDobles() {
     },
   };
   require.cache[RUTA("data/organizations.js")] = {
-    exports: { radarEncendido: (org) => org.radar_activo !== false },
+    exports: {
+      radarEncendido: (org) => org.radar_activo !== false,
+      // El carril de compra (2026-09-02). Mismo criterio que el modulo real:
+      // solo se apaga con false explicito, nunca por ausencia de la columna.
+      mandatosActivos: (org) => !org || org.mandatos_activos !== false,
+    },
   };
   require.cache[RUTA("data/sync-estado.js")] = {
     exports: { estadoDelInventario: async () => inventario },

@@ -95,7 +95,11 @@ function instalar() {
     },
   };
   require.cache[RUTA("data/organizations.js")] = {
-    exports: { radarEncendido: () => true },
+    exports: {
+      radarEncendido: () => true,
+      // Carril de compra (2026-09-02): prendido, como en produccion hoy.
+      mandatosActivos: () => true,
+    },
   };
   require.cache[RUTA("groups/feed-comando.js")] = {
     exports: {

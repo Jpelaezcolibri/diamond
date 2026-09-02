@@ -980,10 +980,21 @@ async function responderPorDmManual(org, signalId, { sesion = null, refs = null 
  *   'oferta_sin_match' | 'oferta_cruzada'
  */
 async function manejarOferta(org, c, grupo = {}, { advisorId = null, sesion = null, jid = null } = {}) {
-  const activos = await mandatosData.listarActivos(org.id).catch((e) => {
-    console.warn("[radar] no se pudieron leer los mandatos:", e.message);
-    return [];
-  });
+  // INTERRUPTOR DEL CARRIL DE COMPRA (Juan, 2026-09-02). Apagado, las ofertas
+  // de colegas dejan de cruzarse contra los mandatos: ni se evaluan, ni se
+  // guardan, ni generan avisos. Los mandatos y lo ya cruzado NO se tocan —
+  // volver a prenderlo no pierde nada.
+  //
+  // El cruce contra LEADS propios sigue corriendo: es otra poblacion (nuestros
+  // clientes del embudo, no un mandato curado) y Juan apago los mandatos, no
+  // el embudo.
+  const conMandatos = organizations.mandatosActivos(org);
+  const activos = conMandatos
+    ? await mandatosData.listarActivos(org.id).catch((e) => {
+        console.warn("[radar] no se pudieron leer los mandatos:", e.message);
+        return [];
+      })
+    : [];
 
   // Prueba baratísima antes de escribir nada: el shape del clasificador se
   // aproxima al de ally_properties solo para este tanteo. La evaluacion real,
