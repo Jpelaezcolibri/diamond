@@ -45,6 +45,11 @@ async function persistirSenal(org, c, { origen = "export", advisorId = null, aut
     operacion: c.operacion || null,
     tipo: c.tipo || null,
     zona: c.zona || null,
+    // La lista COMPLETA, no solo la primera (caso Camilo Loaiza, 2026-09-02):
+    // un pedido de cinco sectores se guardaba con uno. Ver
+    // db/migrations/2026-09-02_group_signals_zonas.sql.
+    zonas: Array.isArray(c.zonas) && c.zonas.length ? c.zonas : null,
+    zonas_excluidas: Array.isArray(c.zonas_excluidas) && c.zonas_excluidas.length ? c.zonas_excluidas : null,
     ciudad: c.ciudad || null,
     precio_min: c.precio_min || null,
     precio_max: c.precio_max || null,

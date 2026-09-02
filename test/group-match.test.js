@@ -12,12 +12,38 @@ const demanda = {
 test("BUG: properties usa precio_max y ally-properties usa precioMax", () => {
   // Sin traducir, el filtro de precio se ignora en silencio en una de las dos
   // fuentes y TODO parece matchear — que es justo lo que haría pasar la
-  // compuerta de negocio por la razón equivocada.
-  assert.strictEqual(filtrosInventario(demanda).precio_max, 400000000);
+  // compuerta de negocio por la razón equivocada. Lo que este test fija es la
+  // CLAVE de cada fuente; el valor lleva el margen y se prueba abajo.
+  const conMargen = Math.round(400000000 * (1 + require("../src/groups/match").MARGEN_PRECIO));
+  assert.strictEqual(filtrosInventario(demanda).precio_max, conMargen);
   assert.strictEqual(filtrosInventario(demanda).precioMax, undefined);
 
-  assert.strictEqual(filtrosAliados(demanda).precioMax, 400000000);
+  assert.strictEqual(filtrosAliados(demanda).precioMax, conMargen);
   assert.strictEqual(filtrosAliados(demanda).precio_max, undefined);
+});
+
+// BUG real (Juan, 2026-09-02 — caso Camilo Loaiza). Mismo error que el de las
+// alcobas de mas abajo, en el otro filtro duro de filtrosInventario: el corte
+// de precio de la consulta SQL no sabia nada del margen de captura que
+// evaluarCandidata SI aplica. La ref 9702941 (Loma Del Esmeraldal, 2 alcobas,
+// 1 garaje, $720M, disponible) quedo fuera de un pedido de "Esmeraldal, 2
+// habitaciones, 1 parqueadero, hasta $700M" por 20 millones — un 2,9% — con
+// un margen configurado del 10% que la aceptaba. El mismo colega, once dias
+// antes y con techo de $750M, la habia recibido con puntaje 100.
+test("BUG: el prefiltro SQL de precio deja pasar el margen de captura", () => {
+  const { MARGEN_PRECIO } = require("../src/groups/match");
+  const camilo = { ...demanda, precio_max: 700000000 };
+  const techo = filtrosInventario(camilo).precio_max;
+
+  assert.ok(
+    techo >= 720000000,
+    `la consulta tiene que dejar pasar los $720M de la ref 9702941; corta en ${techo}`
+  );
+  assert.strictEqual(techo, Math.round(700000000 * (1 + MARGEN_PRECIO)));
+
+  // El margen relaja, no borra: mas alla del techo con margen se sigue
+  // cortando en la consulta, igual que antes.
+  assert.ok(techo < 800000000, "el margen no puede volverse barra libre");
 });
 
 test("las habitaciones van como habitaciones_min al inventario propio", () => {

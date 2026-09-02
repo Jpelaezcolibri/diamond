@@ -34,7 +34,20 @@ function filtrosInventario(c) {
   } else if (c.ciudad) {
     f.zona = c.ciudad;
   }
-  if (c.precio_max > 0) f.precio_max = c.precio_max;
+  // MISMO BUG que el de las alcobas de aca abajo, en el otro filtro duro de
+  // esta funcion (caso Camilo Loaiza, 2026-09-02). `properties.search` corta
+  // con un `precio > f.precio_max` seco, y no sabe nada del margen de captura
+  // que evaluarCandidata SI aplica mas abajo (techoConMargen). Resultado
+  // medido: la ref 9702941 —Loma Del Esmeraldal, 2 alcobas, 1 garaje, $720M,
+  // disponible— quedo fuera de un pedido de "Esmeraldal, 2 habitaciones, 1
+  // parqueadero, hasta $700M" por 20 millones, un 2,9%, cuando el margen del
+  // 10% la aceptaba. El mismo colega, el 21-ago y con techo de $750M, la
+  // recibio con puntaje 100.
+  //
+  // Se le pasa a la consulta el techo CON margen; quien decide de verdad
+  // sigue siendo evaluarCandidata, que ademas castiga a la que se pasa
+  // (CASTIGO_CORTO.precio) para que pasarse nunca puntue igual que caber.
+  if (c.precio_max > 0) f.precio_max = Math.round(c.precio_max * (1 + MARGEN_PRECIO));
   // BUG real (Juan, 2026-08-21 — caso GLOVI/VC9091, ref 8989725): este corte
   // es un .gte() duro en la consulta SQL (properties.search), que no sabe
   // nada de la flexibilidad de evaluarCandidata mas abajo (la que acepta una
@@ -61,7 +74,9 @@ function filtrosAliados(c) {
   const zonasAliado = zonasPedidas(c);
   if (zonasAliado.length) f.zona = zonasAliado.join(" ");
   else if (c.ciudad) f.zona = c.ciudad;
-  if (c.precio_max > 0) f.precioMax = c.precio_max;
+  // Mismo margen que el inventario propio (ver filtrosInventario): un aliado
+  // que se pasa un 3% del techo tampoco puede desaparecer antes de evaluarse.
+  if (c.precio_max > 0) f.precioMax = Math.round(c.precio_max * (1 + MARGEN_PRECIO));
   // operacion NO se pasa a proposito: ally-properties.matchesFilters la compara
   // con !== estricto, y la tabla guarda lo que extrajo Claude en su momento
   // ("Venta", "venta", "VENTA"). Se filtra abajo, sin distinguir mayusculas,

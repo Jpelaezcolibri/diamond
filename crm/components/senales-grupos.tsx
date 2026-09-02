@@ -31,6 +31,11 @@ export type Signal = {
   operacion: string | null;
   tipo: string | null;
   zona: string | null;
+  /** Todas las zonas que nombra el pedido, y las que excluye. Opcionales:
+   *  llegan con db/migrations/2026-09-02_group_signals_zonas.sql. Una señal
+   *  anterior trae solo `zona` (la primera) y la fila no se dibuja distinto. */
+  zonas?: string[] | null;
+  zonas_excluidas?: string[] | null;
   precio_max: number | null;
   habitaciones: number | null;
   /* Las otras exigencias del pedido. Opcionales porque llegan con
@@ -533,7 +538,12 @@ function Ficha({
                     {[
                       ["Operación", s.operacion],
                       ["Tipo", s.tipo],
-                      ["Zona", s.zona],
+                      // TODAS las que pidio, no solo la primera (caso Camilo
+                      // Loaiza, 2026-09-02: nombro cinco sectores y el panel
+                      // mostraba uno). Sin la migracion, `zonas` no viene y
+                      // esto cae a `zona`, como siempre.
+                      ["Zona", s.zonas?.length ? s.zonas.join(", ") : s.zona],
+                      ["No quiere", s.zonas_excluidas?.length ? s.zonas_excluidas.join(", ") : null],
                       ["Hasta", pesos(s.precio_max)],
                       /* Hasta el 2026-08-24 el recuadro terminaba en Alcobas,
                          aunque el motor puntuara con cuatro exigencias más.

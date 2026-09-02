@@ -78,6 +78,11 @@ async function create(orgId, fields) {
     operacion: fields.operacion || null,
     tipo: fields.tipo || null,
     zona: fields.zona || null,
+    // Las zonas completas y las excluidas (2026-09-02). Igual que las cinco
+    // exigencias de mas abajo: se extraian y se usaban, pero no se guardaban.
+    // Ver db/migrations/2026-09-02_group_signals_zonas.sql.
+    zonas: fields.zonas || null,
+    zonas_excluidas: fields.zonas_excluidas || null,
     ciudad: fields.ciudad || null,
     precio_min: fields.precio_min || null,
     precio_max: fields.precio_max || null,

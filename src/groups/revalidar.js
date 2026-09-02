@@ -190,8 +190,14 @@ LAS CUATRO SITUACIONES — confundirlas es el error mas caro que podes cometer
 | DUDOSA | NO, pero SI a 'refs_dudosas' | no es un descarte limpio y tampoco calza con confianza: DOS O MAS incumplimientos accesorios a la vez, o una zona vecina lejana que te genera dudas reales | nada mas: la asesora decide si llamar al colega |
 
 ACCESORIO vs DE FONDO — es la linea que decide CASI contra INCOMPATIBLE
+- SOBRAR NO ES FALLAR. Todo esto habla de lo que FALTA. Una propiedad con MAS
+  alcobas, MAS baños, MAS garajes o MAS metros de los pedidos CUMPLE: no la
+  descartes ni la mandes a dudosas por eso. Quien pide 2 alcobas casi siempre
+  acepta 3 si el precio le cuadra, y el precio ya lo verificamos aparte.
+  Mencionalo en 'por_que' ("tiene 3 alcobas, una mas de las que pediste") y
+  seguí. Lo unico que descalifica es quedarse corto.
 - De FONDO, nunca pasa: zona, municipio, tipo de propiedad, operacion,
-  presupuesto, y la cantidad de alcobas cuando el faltante cambia el producto
+  presupuesto, y la cantidad de alcobas cuando el FALTANTE cambia el producto
   (un 2 alcobas no resuelve un pedido de 3 o 4).
 - ACCESORIO, puede pasar con su aclaracion: un garaje de menos, el cuarto
   util, un baño de menos, unos pocos m² por debajo del minimo, un detalle de
@@ -210,6 +216,11 @@ ANTE LA DUDA
   de duda ni de descarte: es 'sin_confirmar'.
 - Si el motor se equivoco (aprobo algo que no sirve, o dejo abajo algo que si),
   decilo en 'desacuerdo_con_puntaje'. Es lo que nos permite calibrarlo.
+- Las candidatas marcadas [DE UN ALIADO] son de otra inmobiliaria: NO se le
+  pueden mandar al colega, nunca, aunque calcen perfecto. Si alguna vale la
+  pena, va en 'refs_dudosas' para que la asesora decida; jamas en
+  'refs_utiles'. Tampoco las uses para juzgar al resto: suelen traer solo zona
+  y precio, asi que su puntaje alto no significa que sean mejores.
 
 'por_que' lo va a leer la asesora que va a llamar al colega: escribilo para
 ella, corto y concreto.
@@ -267,9 +278,16 @@ function formatearCandidatas(matches) {
         .filter(Boolean)
         .join(" · ");
       const ubicacion = UBICACION[m.ubicacion] || null;
+      // Marcado explicito (2026-09-02): una candidata de un aliado no se le
+      // puede mandar al colega —publicable.js la frena con
+      // no_es_inventario_propio— pero Sofi no tenia como saberlo y gastaba
+      // criterio descartandolas. Caso Camilo: dos aliadas sin ref ni datos
+      // puntuaron 77, por encima del inventario propio (56-62), solo porque
+      // el puntaje premia lo verificable y de ellas se conocia poco.
+      const aliada = m.fuente === "aliado";
       const razones = (m.razones || []).join("; ");
       return [
-        `${i + 1}. [puntaje ${m.puntaje}] ${m.titulo || "Sin titulo"}`,
+        `${i + 1}. [puntaje ${m.puntaje}]${aliada ? " [DE UN ALIADO — no se le puede mandar al colega]" : ""} ${m.titulo || "Sin titulo"}`,
         `   ${datos}`,
         ubicacion ? `   ${ubicacion}` : null,
         `   el motor dice: ${razones}`,
