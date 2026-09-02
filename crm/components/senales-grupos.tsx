@@ -14,6 +14,12 @@ export type Match = {
   inmobiliaria?: string | null;
   /** Ficha en la landing de Diamond. Sólo el inventario propio la tiene. */
   link?: string | null;
+  /** El link ORIGINAL de Wasi. Es el UNICO que se le pasa a un colega: el se
+   *  lo reenvia a su cliente, y un link de la landing de Diamond le expondria
+   *  ese cliente a otra inmobiliaria. Misma regla que src/groups/redactar.js
+   *  ("mensaje blanqueado", Juan 2026-08-18) y que la regla 42 del prompt de
+   *  Sofi. Solo el inventario propio lo trae. */
+  linkWasi?: string | null;
   habitaciones?: number | null;
   area?: string | null;
   /** 0-100. Cuánto calza con lo pedido, no una probabilidad de venta. */
@@ -199,6 +205,13 @@ function Fuente({ fuente }: { fuente: string }) {
  * usuario marcó, en vez de reescribir la lógica de armar el texto en un
  * segundo lugar.
  */
+// EL LINK QUE VA ES EL DE WASI, NUNCA el de la landing (Juan, 2026-09-02).
+// Este texto lo copia la asesora y se lo manda al colega, y el colega se lo
+// reenvia a SU cliente: con el link de Diamond, ese cliente termina viendo a
+// otra inmobiliaria y el colega queda expuesto. El DM automatico
+// (src/groups/redactar.js) y el prompt de Sofi (regla 42) ya cumplian esta
+// regla desde el 2026-08-18; este borrador era el unico camino que seguia
+// entregando el link propio.
 function borrador(s: Signal, matches: Match[]) {
   const propios = matches.filter((m) => m.fuente === "diamond");
   if (propios.length === 0) return "";
@@ -219,7 +232,7 @@ function borrador(s: Signal, matches: Match[]) {
       .filter(Boolean)
       .join(" · ");
     const encabezado = [m.ref ? `Ref ${m.ref}` : null, m.titulo || "Propiedad"].filter(Boolean).join(" · ");
-    return `• ${encabezado}\n  ${ficha}${m.link ? `\n  ${m.link}` : ""}`;
+    return `• ${encabezado}\n  ${ficha}${m.linkWasi ? `\n  ${m.linkWasi}` : ""}`;
   });
 
   return (
