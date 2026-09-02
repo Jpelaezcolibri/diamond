@@ -185,7 +185,7 @@ LAS CUATRO SITUACIONES — confundirlas es el error mas caro que podes cometer
 | Situacion | ¿Entra a refs_utiles? | Cuando | Que ademas hacer |
 |---|---|---|---|
 | INCOMPATIBLE | NO, y tampoco a refs_dudosas | otra zona no vecina, otro municipio, otro tipo de propiedad, otra operacion, fuera de presupuesto, o algo innegociable que no cumple | nada: se descarta |
-| INCOMPLETO | SI | calza en todo lo verificable, pero el pedido menciona algo que el inventario NO REGISTRA (terraza, piso, antiguedad, vista) | listar ese dato en 'sin_confirmar' |
+| INCOMPLETO | SI | calza en todo lo verificable, pero el pedido menciona algo que el inventario NO REGISTRA (terraza, piso, antiguedad, vista) O que la ficha trae como "sin dato" (garajes: sin dato, baños: sin dato, estrato: sin dato) | listar ese dato en 'sin_confirmar' |
 | CASI | SI | SABEMOS el dato y NO cumple, pero es UNA SOLA cosa y es ACCESORIA | anotarlo en 'le_falta' con {ref, detalle} |
 | DUDOSA | NO, pero SI a 'refs_dudosas' | no es un descarte limpio y tampoco calza con confianza: DOS O MAS incumplimientos accesorios a la vez, o una zona vecina lejana que te genera dudas reales | nada mas: la asesora decide si llamar al colega |
 
@@ -213,7 +213,15 @@ ANTE LA DUDA
   confianza de refs_utiles, pero tampoco la pierdas sin que nadie la vea.
 - Entre DUDOSA e INCOMPLETO/CASI: segui el criterio de ACCESORIO / de FONDO.
 - Un dato que el pedido pide y el inventario simplemente no tiene NO es motivo
-  de duda ni de descarte: es 'sin_confirmar'.
+  de duda ni de descarte: es 'sin_confirmar'. "garajes: sin dato" NO significa
+  que no tiene garaje: significa que no lo sabemos. Solo un numero real que no
+  alcanza ("1 garajes" cuando pidio 2, "0 garajes") es un incumplimiento. Si
+  el pedido exige garaje y la ficha dice "garajes: sin dato", la propiedad va
+  en refs_utiles con "garaje" en sin_confirmar — nunca en refs_dudosas por
+  eso solo.
+- Todo lo que este dentro del presupuesto y tenga IGUAL O MAS de lo pedido
+  en metros, alcobas, baños o garajes se manda. Nada que este por encima se
+  niega.
 - Si el motor se equivoco (aprobo algo que no sirve, o dejo abajo algo que si),
   decilo en 'desacuerdo_con_puntaje'. Es lo que nos permite calibrarlo.
 - Las candidatas marcadas [DE UN ALIADO] son de otra inmobiliaria: NO se le
@@ -264,6 +272,16 @@ function formatearCandidatas(matches) {
       // Baños, garajes y estrato SI se le muestran ahora: el criterio de
       // ACCESORIO vs de FONDO ("tiene 1 garaje y pediste 2") depende de esos
       // datos, y hasta hoy Sofi tenia que adivinarlos del texto crudo.
+      // "SIN DATO" SE DICE, NO SE OMITE (Juan, 2026-09-02): "lo que no
+      // tengamos validado en wasi se le envia como observacion". Hasta hoy un
+      // garaje vacio en Wasi hacia DESAPARECER la linea de la ficha, y Sofi
+      // leia la ausencia como "no tiene garaje" — mando a dudosas tres refs
+      // del pedido de Melissa y la unica candidata de David Holguin, todas
+      // con garaje null, ninguna con garaje 0. Un 0 real sigue saliendo como
+      // 0: eso si es "no tiene". Con 85 de 114 propiedades sin garaje cargado,
+      // la diferencia decide la mitad de los pedidos.
+      const dato = (valor, unidad) =>
+        valor === null || valor === undefined || valor === "" ? `${unidad}: sin dato` : `${valor} ${unidad}`;
       const datos = [
         `ref ${m.ref}`,
         m.operacion,
@@ -271,9 +289,9 @@ function formatearCandidatas(matches) {
         m.precio,
         m.area,
         m.habitaciones ? `${m.habitaciones} alcobas` : null,
-        m.banos ? `${m.banos} baños` : null,
-        m.garajes ? `${m.garajes} garajes` : null,
-        m.estrato > 0 ? `estrato ${m.estrato}` : null,
+        dato(m.banos, "baños"),
+        dato(m.garajes, "garajes"),
+        m.estrato > 0 ? `estrato ${m.estrato}` : "estrato: sin dato",
       ]
         .filter(Boolean)
         .join(" · ");
