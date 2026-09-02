@@ -112,6 +112,20 @@ app.listen(config.port, () => {
   // momento del pedido (Juan, 2026-09-02: 0 telefonos guardados en una semana
   // con el mismo codigo que resolvia el 80% en frio).
   if (config.supabaseUrl) require("./scheduler/radar-directorio").start();
+  // A QUIEN LE LLEGAN LOS AVISOS (Juan, 2026-09-02: "me estan llegando a mi
+  // los mensajes y necesito que les llegue a natalia y a catherine"). El
+  // destino real de un aviso es la asesora de la rotacion; RADAR_ALERTA_TO
+  // suma copias para calibrar, y esas copias NO quedan registradas como
+  // conversacion, asi que no se ven en el CRM ni en ningun informe: el unico
+  // sintoma es que a alguien le llegan mensajes que no le tocan. Se dice en
+  // el arranque para que un numero olvidado ahi no pase otro mes inadvertido.
+  const copiasRadar = (process.env.RADAR_ALERTA_TO || "").split(",").map((t) => t.trim()).filter(Boolean);
+  if (copiasRadar.length > 0) {
+    console.warn(
+      `[radar] OJO: ademas de la asesora, cada aviso se copia a ${copiasRadar.length} numero(s) por RADAR_ALERTA_TO ` +
+        `(${copiasRadar.map((t) => `***${t.slice(-4)}`).join(", ")}). Vaciar esa variable para que solo lo reciba la asesora.`
+    );
+  }
   // Empuja a la asesora a responder el aviso de un pedido del radar: sirve
   // para calibrar (signal_events) y renueva la ventana de 24h de los avisos
   // siguientes.

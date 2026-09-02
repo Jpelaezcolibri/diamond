@@ -468,3 +468,89 @@ test("construirAvisoPostDm: sin grupo_nombre, no revienta -- dice 'sin nombre' e
   const texto = construirAvisoPostDm({ autor_nombre: "Patricia Gomez" }, veredictoConDudosas, [dudosa], ["AP004"]);
   assert.match(texto, /Grupo: sin nombre/);
 });
+
+
+// ── Lo que Juan pidio el 2026-09-02 mirando un aviso real que le llego:
+// "que la asesora entienda por que no se envio de manera automatica, que
+// entienda que busca el colega, que tenga el contacto del colega y la
+// informacion de la propiedad con su link de wasi, no es necesario enviar el
+// de diamond si no cabe en los caracteres".
+
+const senalCompleta = {
+  grupo_nombre: "PEDIDOS - BUSCANDO",
+  autor_nombre: "Lu Vallejo",
+  autor_telefono: "198161251463188",
+  texto_original: "Busco apartamento para remodelar en Laureles, presupuesto 620",
+  operacion: "compra",
+  tipo: "apartamento",
+  zonas: ["Laureles", "Simon Bolivar", "Castellana"],
+  zona: "Laureles",
+  precio_max: 620000000,
+  habitaciones: 3,
+  flexible_habitaciones: true,
+};
+
+const matchWasi = {
+  fuente: "diamond",
+  ref: "10013037",
+  titulo: "Vendo Apartamento en San Joaquin",
+  zona: "San Joaquin",
+  area: "101m2",
+  habitaciones: 3,
+  precio: "$480.000.000",
+  link: "https://diamondinmobiliaria.com/propiedades/vendo-apartamento-10013037",
+  linkWasi: "https://info.wasi.co/apartamento-venta-san-joaquin/10013037?shared=whatsapp",
+};
+
+const veredictoOk = {
+  es_pedido_real: true,
+  sirve_alguna: true,
+  refs_utiles: ["10013037"],
+  refs_dudosas: [],
+  sin_confirmar: [],
+  le_falta: [],
+  por_que: "Calza en zona y presupuesto.",
+  confianza: 0.9,
+};
+
+test("la ficha lleva el link de WASI, nunca el de la landing de Diamond", () => {
+  const texto = construir(senalCompleta, veredictoOk, [matchWasi], "573001234567");
+  assert.ok(texto.includes(matchWasi.linkWasi), "tiene que llevar el link de Wasi");
+  assert.ok(
+    !texto.includes("diamondinmobiliaria.com"),
+    "el link de la landing no puede aparecer: el colega se lo reenvia a su cliente"
+  );
+});
+
+test("dice POR QUE el bot no le escribio solo al colega", () => {
+  const sinTel = construir(senalCompleta, veredictoOk, [matchWasi], null, null, "sin_telefono");
+  assert.match(sinTel, /Por qué no salió solo:/);
+  assert.match(sinTel, /no tenía cómo escribirle/i);
+
+  const vencido = construir(senalCompleta, veredictoOk, [matchWasi], "573001234567", null, "pedido_vencido");
+  assert.match(vencido, /media hora/i, "el motivo tiene que ser el de ESE pedido, no uno generico");
+});
+
+test("sin motivo conocido no se inventa una explicacion", () => {
+  const texto = construir(senalCompleta, veredictoOk, [matchWasi], "573001234567", null, "ok");
+  assert.ok(!texto.includes("Por qué no salió solo"), "callar es mejor que inventar un motivo");
+});
+
+test("resume en una linea que busca el colega, sin repetir campos que no pidio", () => {
+  const texto = construir(senalCompleta, veredictoOk, [matchWasi], "573001234567");
+  assert.match(texto, /Busca: compra · apartamento · Laureles, Simon Bolivar, Castellana · hasta \$620/);
+  assert.match(texto, /3 alcobas \(o una menos con estudio\)/);
+  assert.ok(!/baños/.test(texto.split("Lo escribió así")[0]), "no lista lo que el pedido no menciono");
+});
+
+test("un pedido sin datos extraidos sale como antes, sin la linea de resumen", () => {
+  const pelado = { grupo_nombre: "G", autor_nombre: "X", texto_original: "hola" };
+  const texto = construir(pelado, veredictoOk, [matchWasi], "573001234567");
+  assert.ok(!texto.includes("Busca:"));
+  assert.match(texto, /Pidió:/);
+});
+
+test("con telefono resuelto, el contacto es el link directo al privado", () => {
+  const texto = construir(senalCompleta, veredictoOk, [matchWasi], "573001234567");
+  assert.match(texto, /Contacto: https:\/\/wa\.me\/573001234567/);
+});

@@ -63,7 +63,15 @@ function linea(match) {
   if (!String(match.zona || "").trim()) faltantes.push("sin zona");
   const nota = faltantes.length ? `\n  ⚠️ ${faltantes.join(", ")}` : "";
 
-  return `▸ Ref ${match.ref} — ${titulo}\n  ${datos}${nota}${match.link ? `\n  ${match.link}` : ""}`;
+  // linkWasi, NUNCA `link` (Juan, 2026-09-02): "la informacion de la propiedad
+  // con su link de wasi, no es necesario enviar el de diamond". Dos razones que
+  // apuntan al mismo lado — el de la landing no le sirve a la asesora (si se lo
+  // pasa al colega, el colega se lo reenvia a su cliente y ese cliente termina
+  // viendo a otra inmobiliaria), y mandar los dos duplicaba una URL larga por
+  // propiedad, que es lo que empujaba el aviso contra el tope de 4096. Una
+  // propiedad de aliado no tiene linkWasi y sale sin link, que es correcto: no
+  // es inventario nuestro.
+  return `▸ Ref ${match.ref} — ${titulo}\n  ${datos}${nota}${match.linkWasi ? `\n  ${match.linkWasi}` : ""}`;
 }
 
 // Texto de contacto: con telefono resuelto, el link directo al privado; sin
@@ -124,8 +132,58 @@ function mensajeListoParaReenviar(senal, veredicto, utiles, org) {
   });
 }
 
+// POR QUE ESTE PEDIDO NO SALIO SOLO (Juan, 2026-09-02): "que la asesora
+// entienda por que no se envio de manera automatica". Hasta hoy el aviso le
+// caia sin explicacion, y la pregunta obvia —"¿y por que no lo mandó el
+// bot?"— no tenia respuesta en el mensaje. El motivo ya existia: lo decide
+// src/groups/politica.js#decidirDm y queda guardado en la señal. Solo faltaba
+// decirlo en palabras.
+const PORQUE = {
+  sin_telefono: "No pudimos resolver el número del colega, así que el bot no tenía cómo escribirle. Te toca a vos.",
+  pedido_vencido: "El pedido ya tiene más de media hora. Que el bot escriba tan tarde se lee como spam; de parte tuya no.",
+  limite_colega_alcanzado: "Hoy ya le escribimos dos veces a este colega. Un tercer mensaje del bot se lee como insistencia.",
+  limite_linea_alcanzado: "La línea llegó a su tope de mensajes por hoy.",
+  limite_colega_no_verificable: "No pudimos contar cuántos mensajes le mandamos hoy a este colega, y ante la duda el bot no escribe.",
+  limite_linea_no_verificable: "No pudimos contar los mensajes que mandó la línea hoy, y ante la duda el bot no escribe.",
+  sin_fecha_mensaje: "El pedido llegó sin fecha, así que no podemos saber si todavía está vigente.",
+  dm_fallido: "El bot intentó escribirle y WhatsApp rechazó el envío.",
+};
+
+function porqueNoSalioSolo(motivo, hayUtiles) {
+  if (!hayUtiles) {
+    return "Sofi no aprobó ninguna del todo, así que no le escribió nada al colega. Estas quedan para que decidas vos.";
+  }
+  return PORQUE[motivo] || null;
+}
+
+// Lo que busca el colega, en una linea (Juan, 2026-09-02): "que entienda que
+// busca el colega". El texto crudo ya iba, pero un pedido de WhatsApp viene
+// con emojis, saltos y adornos — leerlo entero para sacar tres datos es
+// trabajo que el clasificador ya hizo. Se muestran SOLO los campos que el
+// pedido menciono: una linea con huecos ("hasta $0", "0 alcobas") seria peor
+// que no ponerla.
+function queBusca(senal) {
+  const zonas = Array.isArray(senal.zonas) && senal.zonas.length ? senal.zonas.join(", ") : senal.zona;
+  const partes = [
+    senal.operacion,
+    senal.tipo,
+    zonas,
+    senal.precio_max > 0 ? `hasta ${formato.formatearPrecio(senal.precio_max)}` : null,
+    senal.habitaciones > 0
+      ? `${senal.habitaciones} alcoba${senal.habitaciones === 1 ? "" : "s"}${senal.flexible_habitaciones ? " (o una menos con estudio)" : ""}`
+      : null,
+    senal.area_min > 0 ? `desde ${senal.area_min} m²` : null,
+    senal.banos > 0 ? `${senal.banos} baños` : null,
+    senal.garajes > 0 ? `${senal.garajes} garaje${senal.garajes === 1 ? "" : "s"}` : null,
+    senal.estrato > 0 ? `estrato ${senal.estrato}` : null,
+  ].filter(Boolean);
+  return partes.length ? partes.join(" · ") : null;
+}
+
 /**
- * @param senal           { grupo_nombre, autor_nombre, autor_telefono, texto_original }
+ * @param senal           { grupo_nombre, autor_nombre, autor_telefono, texto_original,
+ *                          y los campos del clasificado: operacion, tipo, zona(s),
+ *                          precio_max, habitaciones, area_min, banos, garajes, estrato }
  * @param veredicto       lo que devolvio src/groups/revalidar.js
  * @param matches         las candidatas; se muestran solo las que Sofi marco utiles
  * @param telefonoColega  telefono YA RESUELTO del colega (src/groups/directorio.js#telefonoDe),
@@ -135,9 +193,12 @@ function mensajeListoParaReenviar(senal, veredicto, utiles, org) {
  * @param org             el registro de organizations (para el numero de contacto oficial
  *                        multi-tenant, ver src/lib/contacto.js#linkContactoOficial). Opcional:
  *                        sin el, cae al env CONTACT_WHATSAPP_NUMBER, igual que antes.
+ * @param motivoDm        por que el bot NO le escribio solo al colega
+ *                        (src/groups/politica.js#decidirDm). Opcional: sin el, el
+ *                        aviso sale como antes, sin la linea de explicacion.
  * @returns el texto del aviso, o null si no hay nada que decir
  */
-function construir(senal, veredicto, matches, telefonoColega = null, org = null) {
+function construir(senal, veredicto, matches, telefonoColega = null, org = null, motivoDm = null) {
   const refsUtiles = veredicto && Array.isArray(veredicto.refs_utiles) ? veredicto.refs_utiles : [];
   const refsDudosas = veredicto && Array.isArray(veredicto.refs_dudosas) ? veredicto.refs_dudosas : [];
   if (!veredicto || (refsUtiles.length === 0 && refsDudosas.length === 0)) return null;
@@ -156,14 +217,19 @@ function construir(senal, veredicto, matches, telefonoColega = null, org = null)
   const quien = senal.autor_nombre || "un colega";
   const contactoTexto = contactoPara(telefonoColega, senal.autor_telefono, quien);
 
+  const busca = queBusca(senal);
+  const porque = porqueNoSalioSolo(motivoDm, utiles.length > 0);
+
   const cabecera = [
     `🎯 Oportunidad en un grupo`,
     ``,
     `Grupo: ${senal.grupo_nombre || "sin nombre"}`,
     `Colega: ${quien}`,
     `Contacto: ${contactoTexto}`,
+    ...(porque ? [``, `Por qué no salió solo: ${porque}`] : []),
+    ...(busca ? [``, `Busca: ${busca}`] : []),
     ``,
-    `Pidió:`,
+    busca ? `Lo escribió así:` : `Pidió:`,
     `"${(senal.texto_original || "").trim()}"`,
   ];
 

@@ -511,17 +511,34 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
     }
   }
 
+  // Se le pasan tambien los campos del clasificado (Juan, 2026-09-02: "que
+  // entienda que busca el colega") y el motivo por el que el DM no salio
+  // ("que entienda por que no se envio de manera automatica"). Los dos datos
+  // ya existian —el clasificador los extrae, decidirDm decide el motivo— y
+  // solo faltaba llevarlos hasta el mensaje que lee la asesora.
   const texto = alertaAsesor.construir(
     {
       grupo_nombre: grupo.nombre || grupo.jid,
       autor_nombre: mensaje.autor,
       autor_telefono: mensaje.autorTelefono,
       texto_original: mensaje.texto,
+      operacion: c.operacion,
+      tipo: c.tipo,
+      zona: c.zona,
+      zonas: c.zonas,
+      precio_max: c.precio_max,
+      habitaciones: c.habitaciones,
+      flexible_habitaciones: c.flexible_habitaciones,
+      area_min: c.area_min,
+      banos: c.banos,
+      garajes: c.garajes,
+      estrato: c.estrato,
     },
     veredicto,
     matches,
     telefonoColega,
-    org
+    org,
+    decisionDm.motivo
   );
   if (!texto) {
     await feedComando.registrar(org, señalParaFeed, veredicto, matches).catch((e) =>
