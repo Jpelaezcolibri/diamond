@@ -146,6 +146,33 @@ async function ultimosSalientes(conversationId, limit = 15) {
   return data;
 }
 
+// Estado de entrega por wamid, para los acuses del webhook. No retrocede:
+// los acuses pueden llegar desordenados (leido antes que entregado) y un
+// "entregado" tardio no puede borrar un "leido". "failed" siempre pisa.
+const RANGO_DELIVERY = { sent: 1, delivered: 2, read: 3, failed: 9 };
+async function setDeliveryPorWamid(wamid, delivery, error) {
+  if (!wamid || !RANGO_DELIVERY[delivery]) return false;
+  const pisa = (actual) => delivery === "failed" || (RANGO_DELIVERY[actual] || 0) < RANGO_DELIVERY[delivery];
+  if (!supabase) {
+    const m = memory.messages.find((x) => x.wa_message_id === wamid);
+    if (!m || !pisa(m.delivery)) return false;
+    m.delivery = delivery;
+    m.delivery_error = error || null;
+    return true;
+  }
+  try {
+    const { data } = await supabase.from("messages").select("id, delivery").eq("wa_message_id", wamid).maybeSingle();
+    if (!data || !pisa(data.delivery)) return false;
+    const { error: dbError } = await supabase
+      .from("messages").update({ delivery, delivery_error: error || null }).eq("id", data.id);
+    if (dbError) throw dbError;
+    return true;
+  } catch (e) {
+    console.warn("[conversations] No se pudo guardar el acuse:", e.message);
+    return false;
+  }
+}
+
 async function resetForLead(leadId) {
   if (!supabase) {
     const conv = memory.conversations.find((c) => c.lead_id === leadId);
@@ -241,6 +268,7 @@ module.exports = {
   appendMessage,
   getRecentMessages,
   ultimosSalientes,
+  setDeliveryPorWamid,
   resetForLead,
   setModo,
   setWaMessageId,

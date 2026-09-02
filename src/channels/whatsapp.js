@@ -279,7 +279,16 @@ router.post("/webhook", async (req, res) => {
 
   try {
     const value = req.body?.entry?.[0]?.changes?.[0]?.value;
-    if (value?.statuses) return; // ignorar acuses de entrega/lectura
+    // ACUSES (Juan, 2026-09-02, hallazgo #4). Hasta hoy se descartaban: "enviado"
+    // significaba que Meta acepto el POST y nada mas. Con esto pasa a
+    // "entregado" o "leido" cuando WhatsApp lo confirma, y a "fallido" con el
+    // motivo cuando lo rechaza despues (ventana cerrada, numero invalido). Es
+    // lo que convierte la alarma de ventana cerrada en un dato en vez de una
+    // inferencia. Best-effort: un acuse que no se pudo guardar no es noticia.
+    if (value?.statuses) {
+      await registrarAcuses(value.statuses).catch((e) => console.warn("[whatsapp] acuses:", e.message));
+      return;
+    }
     const message = value?.messages?.[0];
     if (!message) return;
 
@@ -416,6 +425,18 @@ router.post("/webhook", async (req, res) => {
   }
 });
 
+// Cada acuse trae el wamid del mensaje, el estado y, si fallo, el error.
+async function registrarAcuses(statuses) {
+  let guardados = 0;
+  for (const s of Array.isArray(statuses) ? statuses : []) {
+    if (!s || !s.id || !s.status) continue;
+    const e0 = Array.isArray(s.errors) && s.errors[0] ? s.errors[0] : null;
+    const err = e0 ? `(#${e0.code}) ${e0.title || e0.message || ""}`.trim() : null;
+    if (await conversations.setDeliveryPorWamid(s.id, s.status, err)) guardados++;
+  }
+  return guardados;
+}
+
 module.exports = router;
 module.exports.sendWhatsApp = sendWhatsApp;
 module.exports.sendWhatsAppButtons = sendWhatsAppButtons;
@@ -423,3 +444,4 @@ module.exports.sendWhatsAppTemplate = sendWhatsAppTemplate;
 module.exports.uploadMediaToMeta = uploadMediaToMeta;
 module.exports.sendWhatsAppMedia = sendWhatsAppMedia;
 module.exports.procesarBotonRadar = procesarBotonRadar;
+module.exports.registrarAcuses = registrarAcuses;

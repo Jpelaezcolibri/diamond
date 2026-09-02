@@ -25,6 +25,7 @@ const config = require("../config");
 const organizations = require("../data/organizations");
 const syncEstado = require("../data/sync-estado");
 const whatsappGroups = require("../data/whatsapp-groups");
+const salud = require("../data/salud");
 const waha = require("../lib/waha");
 // Se importa el MODULO y no la funcion suelta: destructurar congela la
 // referencia y deja los tests sin forma de mockear el envio — lo que ademas
@@ -91,6 +92,16 @@ async function revisar(ahora = new Date()) {
           `El radar no va a publicar nada hasta que corra. Sincroniza desde el CRM > Marketing.`
         : `No se pudo leer el estado del sync de Wasi. El radar no va a publicar nada.`,
     });
+  }
+
+  // -- 3. Lo que se rompe en silencio (Juan, 2026-09-02, hallazgo #4) --
+  // Conversaciones mudas, ventanas por cerrar, duplicados, rechazos de Meta,
+  // pedidos atascados. Cada uno nace de una falla real de ese dia; el detalle
+  // vive en src/data/salud.js. Nunca lanza.
+  try {
+    problemas.push(...(await salud.problemas(org.id, { ahora })));
+  } catch (e) {
+    console.error("[watchdog] No se pudieron correr los chequeos de salud:", e.message);
   }
 
   return problemas;

@@ -19,6 +19,7 @@ let estadosWaha = {};
 let inventario = { fresco: true, iso: new Date().toISOString(), horas: 1 };
 let enviados = [];
 let gruposEnabled = true;
+let problemasSalud = [];
 
 function instalar() {
   require.cache[RUTA("data/organizations.js")] = {
@@ -44,6 +45,9 @@ function instalar() {
       },
     },
   };
+  require.cache[RUTA("data/salud.js")] = {
+    exports: { problemas: async () => problemasSalud },
+  };
   require.cache[RUTA("config.js")] = {
     exports: { groups: { enabled: gruposEnabled }, supabaseUrl: "x" },
   };
@@ -58,6 +62,7 @@ beforeEach(() => {
   estadosWaha = {};
   inventario = { fresco: true, iso: new Date().toISOString(), horas: 1 };
   enviados = [];
+  problemasSalud = [];
   gruposEnabled = true;
   wd = instalar();
 });
@@ -162,4 +167,19 @@ test("el watchdog no intenta arreglar nada", () => {
   for (const p of ["reintentarUnaVez", "revincular", "crearSesion", "restart"]) {
     assert.ok(!fuente.includes(p), `el watchdog no puede llamar a ${p}`);
   }
+});
+
+// Los chequeos de salud (src/data/salud.js) entran por el mismo camino que la
+// sesion y el sync: misma deduplicacion, mismo "se normalizo".
+test("los problemas de salud se avisan una vez y se anuncia cuando se normalizan", async () => {
+  wd = instalar();
+  problemasSalud = [{ clave: "ventana:573028536489", texto: "La ventana de Catherine cierra en 3 h." }];
+
+  await wd.avisar(await wd.revisar());
+  await wd.avisar(await wd.revisar());
+  assert.strictEqual(enviados.filter((e) => e.texto.includes("Catherine")).length, 1, "no se repite cada media hora");
+
+  problemasSalud = [];
+  await wd.avisar(await wd.revisar());
+  assert.ok(enviados.some((e) => e.texto.includes("se normalizo") && e.texto.includes("ventana:573028536489")));
 });
