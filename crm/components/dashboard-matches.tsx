@@ -26,6 +26,8 @@ type Props = {
   propiedadesConMatch: number;
   /** null = la consulta falló (page.tsx muestra el ErrorBanner aparte). */
   autoDm: number | null;
+  /** DMs que una persona mando desde el CRM (politica_motivo = 'dm_manual'). */
+  dmManual: number | null;
   reenvioManual: number | null;
   /** Solo admin. */
   sinEntregar: number;
@@ -57,16 +59,16 @@ function Kpi({
   detalle: string;
   tono: keyof typeof TONO;
   badge?: string | null;
-  badgeTono?: "text-indigo-700" | "text-rose-700";
+  badgeTono?: "text-indigo-700" | "text-rose-700" | "text-teal-700";
 }) {
   // El badge va debajo del detalle, no flotando arriba a la derecha: con
   // "171 por revisar" y un 172 al lado se pisaban (visto con datos reales).
   return (
-    <div className={`flex min-h-24 flex-col justify-between rounded-xl p-3 text-white ${TONO[tono]}`}>
-      <p className="font-display text-3xl font-extrabold leading-none tabular-nums">{n}</p>
-      <div>
-        <p className="mt-2 text-xs font-bold">{titulo}</p>
-        <p className="text-[11px] opacity-80">{detalle}</p>
+    <div className={`flex min-h-24 min-w-0 flex-col justify-between rounded-xl p-2.5 text-white sm:p-3 ${TONO[tono]}`}>
+      <p className="font-display text-2xl font-extrabold leading-none tabular-nums sm:text-3xl">{n}</p>
+      <div className="min-w-0">
+        <p className="mt-2 text-[11px] font-bold leading-tight sm:text-xs">{titulo}</p>
+        <p className="text-[10px] leading-tight opacity-80 sm:text-[11px]">{detalle}</p>
         {badge && (
           <span className={`mt-1.5 inline-block rounded-full bg-white px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider ${badgeTono}`}>
             {badge}
@@ -91,7 +93,7 @@ function Carril({ tono, etiqueta, descripcion, children }: {
         </span>
         <span className="text-xs text-slate-400">{descripcion}</span>
       </div>
-      <div className="grid grid-cols-3 gap-2.5">{children}</div>
+      <div className="grid grid-cols-3 gap-2 sm:gap-2.5">{children}</div>
     </div>
   );
 }
@@ -103,6 +105,7 @@ export default function DashboardMatches({
   pedidosPorRevisar,
   propiedadesConMatch,
   autoDm,
+  dmManual,
   reenvioManual,
   sinEntregar,
   metricas,
@@ -139,7 +142,14 @@ export default function DashboardMatches({
               tono="indigo"
               badge={pedidosPorRevisar > 0 ? `${pedidosPorRevisar} por revisar` : null}
             />
-            <Kpi n={autoDm ?? "—"} titulo="Bot resolvió solo" detalle="DM directo al colega, sin asesora" tono="teal" />
+            <Kpi
+              n={autoDm ?? "—"}
+              titulo="Bot resolvió solo"
+              detalle="DM directo al colega, sin asesora"
+              tono="teal"
+              badge={dmManual ? `${dmManual} manual${dmManual === 1 ? "" : "es"} desde el CRM` : null}
+              badgeTono="text-teal-700"
+            />
             <Kpi n={reenvioManual ?? "—"} titulo="Asesora reenvió a mano" detalle="sin teléfono resuelto" tono="amber" />
           </Carril>
           <Carril tono="green" etiqueta="← Salida" descripcion="Ofertas de colegas · se las mostramos al cliente">

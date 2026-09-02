@@ -412,7 +412,7 @@ function Ficha({
   // del dashboard, para que el número de arriba y la tarjeta de abajo se
   // reconozcan como la misma cosa.
   const franja =
-    s.respondida_at && s.respuesta_modo === "auto"
+    s.respondida_at && s.respuesta_modo === "auto" && s.politica_motivo === "ok"
       ? "border-l-teal-500"
       : s.politica_motivo === "sin_telefono" && s.aviso_advisor_id
         ? "border-l-amber-500"
@@ -866,7 +866,10 @@ function pasaFiltro(s: Signal, filtro: Filtro): boolean {
   switch (filtro) {
     case "match": return conMatch;
     case "revisar": return conMatch && s.estado === "nuevo";
-    case "bot": return !!s.respondida_at && s.respuesta_modo === "auto";
+    // Solo el DM automatico de verdad (politica_motivo 'ok'): 'auto' a secas
+    // tambien lo llevan el DM manual desde el CRM y la publicacion en el
+    // grupo de agosto (auditoria 2026-09-02).
+    case "bot": return !!s.respondida_at && s.respuesta_modo === "auto" && s.politica_motivo === "ok";
     default: return true;
   }
 }

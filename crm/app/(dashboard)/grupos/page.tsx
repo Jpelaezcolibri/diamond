@@ -187,15 +187,32 @@ export default async function GruposPage() {
   // hace que el helper genérico de mias() no logre resolver el tipo de
   // retorno. select("*", {count, head}) sí resuelve, verificado con
   // `npx tsc --noEmit`.
-  const [autoDmRes, reenvioManualRes] = await Promise.all([
+  // OJO con `respuesta_modo = 'auto'` a secas (auditoria 2026-09-02): lo
+  // comparten el DM automatico, el DM manual desde el CRM y la publicacion
+  // dentro del grupo de agosto -- sumados daban "64 resolvio el bot solo"
+  // cuando el DM automatico habia salido UNA vez. Lo que distingue cada
+  // camino es politica_motivo: 'ok' = DM automatico de verdad, 'dm_manual' =
+  // lo mando una persona desde el CRM (src/groups/vivo.js#responderPorDmManual),
+  // null = publicacion en el grupo de antes del 22-ago. El `.eq` extra va
+  // DESPUES de mias(), nunca dentro (TS2589, ver reenvioManualRes).
+  const [autoDmRes, dmManualRes, reenvioManualRes] = await Promise.all([
     countSafe(
       mias(
         supabase
           .from("group_signals")
           .select("*", { count: "exact", head: true })
           .eq("respuesta_modo", "auto")
-      ),
+      ).eq("politica_motivo", "ok"),
       "grupos:auto_dm"
+    ),
+    countSafe(
+      mias(
+        supabase
+          .from("group_signals")
+          .select("*", { count: "exact", head: true })
+          .eq("respuesta_modo", "auto")
+      ).eq("politica_motivo", "dm_manual"),
+      "grupos:dm_manual"
     ),
     countSafe(
       mias(
@@ -208,6 +225,7 @@ export default async function GruposPage() {
     ),
   ]);
   const autoDm = autoDmRes.count;
+  const dmManual = dmManualRes.count;
   const reenvioManual = reenvioManualRes.count;
 
   // Métricas del embudo: viven en memoria del bot, no en la base. Se piden
@@ -421,7 +439,7 @@ export default async function GruposPage() {
   // configuración (cargar grupos, escucha en vivo) va plegado: casi no cambia
   // y antes ocupaba media pantalla por encima de lo que se revisa a diario.
   return (
-    <div className="mx-auto flex max-w-7xl flex-col gap-5 p-4 sm:p-6">
+    <div className="mx-auto flex max-w-[1800px] flex-col gap-4 px-3 py-4 sm:gap-5 sm:px-6 sm:py-6 2xl:px-10">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="font-display text-3xl font-extrabold text-slate-900">Radar de grupos</h1>
@@ -454,11 +472,13 @@ export default async function GruposPage() {
         pedidosPorRevisar={pendientes}
         propiedadesConMatch={matchesEncontrados.length}
         autoDm={autoDmRes.hasError ? null : autoDm}
+        dmManual={dmManualRes.hasError ? null : dmManual}
         reenvioManual={reenvioManualRes.hasError ? null : reenvioManual}
         sinEntregar={matchesPendientes.length}
         metricas={m}
       />
       {autoDmRes.hasError && <ErrorBanner message={autoDmRes.message} />}
+      {dmManualRes.hasError && <ErrorBanner message={dmManualRes.message} />}
       {reenvioManualRes.hasError && <ErrorBanner message={reenvioManualRes.message} />}
 
       {/* Atención hoy -- solo admin (Juan, 2026-08-21: "pasa el inbox y las
