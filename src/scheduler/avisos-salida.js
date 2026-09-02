@@ -154,6 +154,8 @@ async function procesarOrg(org, ahora) {
         precioMax: s.precio_max,
         utiles: (s.revalidacion && s.revalidacion.refs_utiles ? s.revalidacion.refs_utiles.length : 0),
         dudosas: (s.revalidacion && s.revalidacion.refs_dudosas ? s.revalidacion.refs_dudosas.length : 0),
+        // Por que le toca a ella y no lo resolvio el bot (Juan, 2026-09-02).
+        motivo: s.politica_motivo,
       })),
       alertas.map((a) => ({
         id: a.id,

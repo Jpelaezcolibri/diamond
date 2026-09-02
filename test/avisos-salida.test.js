@@ -216,3 +216,54 @@ test("si NINGUNA puede recibir, lo dice — el pendiente se reintenta despues", 
     m.restaurar();
   }
 });
+
+// ── El digest dice POR QUE le toca a la asesora (Juan, 2026-09-02): "esta
+// propiedad se debio contestar inmediatamente al colega por dm, otra cosa es
+// que no tenga el telefono publico... el mensaje debe llevar esa informacion".
+//
+// Verificado sobre el pedido real de Katalina Patino: entro a las 09:08:50, se
+// proceso 4 segundos despues, con una propiedad aprobada y la linea usando 1
+// de sus 150 mensajes del dia. `politica_traza` era exactamente
+// ["NO:sin_telefono"]. Lo UNICO que falto fue su numero.
+
+test("cada pedido dice por que no lo resolvio el bot", () => {
+  const texto = digest.construir("Natalia", [
+    pedido("Katalina Patiño", { motivo: "sin_telefono" }),
+    pedido("Jaime", { motivo: "pedido_vencido" }),
+  ], []);
+  assert.match(texto, /el bot le respondía solo, faltó su número/);
+  assert.match(texto, /el pedido ya tiene más de media hora/);
+});
+
+test("si TODO se freno por el mismo motivo, se dice una vez al cierre", () => {
+  const texto = digest.construir("Natalia", [
+    pedido("Katalina Patiño", { motivo: "sin_telefono" }),
+    pedido("Camila Uribe", { motivo: "sin_telefono" }),
+  ], []);
+  assert.match(texto, /lo único que faltó fue el número de cada colega/);
+  assert.match(texto, /Si le escribís vos, el resultado es el mismo/);
+});
+
+test("con motivos mezclados NO se generaliza al cierre", () => {
+  const texto = digest.construir("Natalia", [
+    pedido("Katalina Patiño", { motivo: "sin_telefono" }),
+    pedido("Jaime", { motivo: "limite_colega_alcanzado" }),
+  ], []);
+  assert.ok(!/lo único que faltó fue el número/.test(texto), "seria falso: no todos fueron por eso");
+  assert.match(texto, /Respondé con el número/);
+});
+
+test("un motivo desconocido no inventa explicacion", () => {
+  const texto = digest.construir("Natalia", [pedido("Lu", { motivo: "algo_nuevo" }), pedido("Jaime")], []);
+  assert.match(texto, /1\. Lu — compra/);
+  assert.ok(!texto.includes("undefined"));
+});
+
+test("los pedidos agrupados de un mismo colega tambien llevan su motivo", () => {
+  const texto = digest.construir("Natalia", [
+    pedido("Jaime", { zona: "Poblado", motivo: "pedido_vencido" }),
+    pedido("Jaime", { zona: "Laureles", motivo: "limite_colega_alcanzado" }),
+  ], []);
+  assert.match(texto, /Poblado.*— el pedido ya tiene más de media hora/);
+  assert.match(texto, /Laureles.*— ya le escribimos 2 veces hoy/);
+});

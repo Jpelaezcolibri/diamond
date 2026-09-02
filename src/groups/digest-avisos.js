@@ -31,14 +31,36 @@ function millones(valor) {
   return `$${Math.round(n / 1_000_000)}M`;
 }
 
+// POR QUE NO SALIO SOLO, en cuatro palabras (Juan, 2026-09-02): "esta
+// propiedad se debio contestar inmediatamente al colega por dm, otra cosa es
+// que no tenga el telefono publico... el mensaje debe llevar esa informacion".
+//
+// El caso que lo motivo: el pedido de Katalina Patino entro a las 09:08:50 y
+// se proceso 4 segundos despues, con una propiedad aprobada y la linea usando
+// 1 de sus 150 mensajes del dia. Lo UNICO que falto fue su numero. Sin esta
+// linea, la asesora lee el aviso y no sabe si el bot fallo, si la propiedad no
+// servia, o si le toca a ella — y son cosas muy distintas.
+const PORQUE_CORTO = {
+  sin_telefono: "el bot le respondía solo, faltó su número",
+  pedido_vencido: "el pedido ya tiene más de media hora",
+  limite_colega_alcanzado: "ya le escribimos 2 veces hoy",
+  limite_linea_alcanzado: "la línea llegó a su tope del día",
+  limite_colega_no_verificable: "no se pudo verificar cuántos le mandamos hoy",
+  limite_linea_no_verificable: "no se pudo verificar el volumen de la línea",
+  sin_fecha_mensaje: "el pedido llegó sin fecha",
+  dm_fallido: "WhatsApp rechazó el envío al colega",
+};
+
 // Una linea por pedido de colega. Lo que la asesora necesita para decidir si
-// pide el detalle: quien lo pidio, que busca y cuantas propiedades tenemos.
+// pide el detalle: quien lo pidio, que busca, cuantas propiedades tenemos y
+// por que le toca a ella.
 function lineaPedido(p, i) {
   const que = [p.operacion, p.tipo, p.zona, p.precioMax ? `hasta ${millones(p.precioMax)}` : null]
     .filter(Boolean)
     .join(" · ");
   const cuantas = p.utiles > 0 ? `${p.utiles} para ofrecer` : `${p.dudosas} para revisar`;
-  return `${i}. ${p.colega || "un colega"} — ${que || "sin detalle"}\n   ${cuantas}`;
+  const porque = PORQUE_CORTO[p.motivo];
+  return `${i}. ${p.colega || "un colega"} — ${que || "sin detalle"}\n   ${cuantas}${porque ? ` · ${porque}` : ""}`;
 }
 
 // Una linea por oferta de colega que le sirve a un mandato.
@@ -79,7 +101,7 @@ function construir(nombre, pedidos = [], ofertas = []) {
       if (i >= MAX_ITEMS) break;
       if (suyos.length === 1) {
         partes.push(lineaPedido({ ...suyos[0], colega }, ++i));
-      } else {
+      } else {  // varios del mismo colega
         // Varios pedidos del MISMO colega: una sola entrada, con el detalle
         // adentro. Es exactamente lo que evita los diez mensajes seguidos.
         partes.push(`${++i}. ${colega} — ${suyos.length} pedidos distintos`);
@@ -87,7 +109,8 @@ function construir(nombre, pedidos = [], ofertas = []) {
           const que = [s.operacion, s.tipo, s.zona, s.precioMax ? `hasta ${millones(s.precioMax)}` : null]
             .filter(Boolean)
             .join(" · ");
-          partes.push(`   · ${que || "sin detalle"}`);
+          const pq = PORQUE_CORTO[s.motivo];
+          partes.push(`   · ${que || "sin detalle"}${pq ? ` — ${pq}` : ""}`);
         }
         if (suyos.length > 4) partes.push(`   · y ${suyos.length - 4} más`);
       }
@@ -117,9 +140,17 @@ function construir(nombre, pedidos = [], ofertas = []) {
     }
   }
 
+  // Si TODO lo que hay pendiente se frenó por el mismo motivo, se dice una vez
+  // al cierre en vez de repetirlo por linea: es lo que de verdad hay que
+  // arreglar, no un detalle de cada item.
+  const motivos = new Set(pedidos.map((p) => p.motivo).filter(Boolean));
+  const todosSinTelefono = pedidos.length > 1 && motivos.size === 1 && motivos.has("sin_telefono");
+
   partes.push(
     ``,
-    `Respondé con el número para ver la ficha completa y el contacto del colega.`,
+    todosSinTelefono
+      ? `A todos les habríamos respondido solos: lo único que faltó fue el número de cada colega. Si le escribís vos, el resultado es el mismo.`
+      : `Respondé con el número para ver la ficha completa y el contacto del colega.`,
     `Si alguna ya la trabajaste, contame en qué quedó — con eso el radar aprende.`
   );
 
