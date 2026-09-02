@@ -16,3 +16,19 @@ export async function fetchSafe<T>(
   }
   return { data: data ?? [], hasError: false, message: null };
 }
+
+// Como fetchSafe, pero para cuando solo hace falta un conteo -- no trae
+// filas (head: true), asi que no choca contra el limite de max-rows de
+// Supabase (500-1000 segun plan) como si pasaria pidiendo todas las filas
+// y haciendo .length.
+export async function countSafe(
+  query: PromiseLike<{ count: number | null; error: { message: string } | null }>,
+  label: string
+): Promise<{ count: number; hasError: boolean; message: string | null }> {
+  const { count, error } = await query;
+  if (error) {
+    console.error(`[countSafe:${label}]`, error.message);
+    return { count: 0, hasError: true, message: error.message };
+  }
+  return { count: count ?? 0, hasError: false, message: null };
+}

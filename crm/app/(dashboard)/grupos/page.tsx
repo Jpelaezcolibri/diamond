@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin } from "@/lib/auth";
 import { callBot } from "@/lib/bot";
-import { fetchSafe } from "@/lib/fetch-safe";
+import { fetchSafe, countSafe } from "@/lib/fetch-safe";
 import ErrorBanner from "@/components/error-banner";
 import GruposPanel, { type Grupo } from "@/components/grupos-panel";
 import SenalesGrupos, { type Signal } from "@/components/senales-grupos";
@@ -13,7 +13,12 @@ import VincularLinea, { type Sesion, type Asesor } from "@/components/vincular-l
 import GruposPermisos, { type GrupoVivo } from "@/components/grupos-permisos";
 import LineaDmInbox, { type DmMensaje } from "@/components/linea-dm-inbox";
 import PosiblesVentas, { type PosibleVenta } from "@/components/posibles-ventas";
-import { MandatosPanel, MatchesPendientesPanel, MatchesEncontradosPanel } from "@/components/mandatos-panel";
+import {
+  MandatosPanel,
+  MatchesPendientesPanel,
+  MatchesEncontradosPanel,
+  type MatchEncontrado,
+} from "@/components/mandatos-panel";
 import { MensajesPorAsesoraPanel, type MensajesPorAsesora } from "@/components/mensajes-por-asesora-panel";
 import GruposLiveWatcher from "@/components/grupos-live-watcher";
 
@@ -46,18 +51,6 @@ type MatchPendiente = {
   error: string | null;
   escalado_a: string | null;
   created_at: string;
-};
-
-type MatchEncontrado = {
-  id: string;
-  mandato_id: string;
-  ally_property_id: string;
-  puntaje: number | null;
-  entregado_at: string | null;
-  escalado_a: string | null;
-  texto: string | null;
-  created_at: string;
-  ally_properties: { mensaje_original: string | null } | null;
 };
 
 export default async function GruposPage() {
@@ -183,25 +176,41 @@ export default async function GruposPage() {
   // llega con el texto ya armado para que ella misma se lo mande al colega).
   // Mismo filtro "mias" que el resto de la pagina -- un asesor ve solo sus
   // propias senales, admin las ve todas (ver test/crm-grupos-aislamiento.test.js).
-  // select("*") y no una lista de columnas: con una lista angosta el helper
-  // generico de mias() dispara TS2589 (mismo caso ya documentado mas abajo
-  // en este archivo, en la consulta de idsSeñalDm).
+  // Son conteos puros (Fix 3 de la revision final): { count: "exact", head:
+  // true } en vez de select("*") + .data.length -- no trae filas (head:
+  // true descarta el body igual, "*" es solo la firma de tipos), asi que no
+  // choca contra el limite de max-rows de Supabase (500-1000 filas segun
+  // plan) como pasaria pidiendo todas las filas para contarlas en memoria, y
+  // no baja el JSON de `matches` de cada fila solo para descartarlo.
+  // OJO: se probó primero con select("id", {count, head}) y SÍ disparó
+  // TS2589 (Type instantiation is excessively deep) al pasar por mias() --
+  // mismo síntoma que los dos casos ya documentados más abajo
+  // (entradaPorAsesorQuery e idsSeñalDm): una lista de columnas angosta
+  // hace que el helper genérico de mias() no logre resolver el tipo de
+  // retorno. select("*", {count, head}) sí resuelve, verificado con
+  // `npx tsc --noEmit`.
   const [autoDmRes, reenvioManualRes] = await Promise.all([
-    fetchSafe<Signal>(
-      mias(supabase.from("group_signals").select("*").eq("respuesta_modo", "auto")),
+    countSafe(
+      mias(
+        supabase
+          .from("group_signals")
+          .select("*", { count: "exact", head: true })
+          .eq("respuesta_modo", "auto")
+      ),
       "grupos:auto_dm"
     ),
-    fetchSafe<Signal>(
-      mias(supabase.from("group_signals").select("*").eq("politica_motivo", "sin_telefono")).not(
-        "aviso_advisor_id",
-        "is",
-        null
-      ),
+    countSafe(
+      mias(
+        supabase
+          .from("group_signals")
+          .select("*", { count: "exact", head: true })
+          .eq("politica_motivo", "sin_telefono")
+      ).not("aviso_advisor_id", "is", null),
       "grupos:reenvio_manual"
     ),
   ]);
-  const autoDm = autoDmRes.data.length;
-  const reenvioManual = reenvioManualRes.data.length;
+  const autoDm = autoDmRes.count;
+  const reenvioManual = reenvioManualRes.count;
 
   // Métricas del embudo: viven en memoria del bot, no en la base. Se piden
   // acá para no obligar a abrir una terminal cada vez que se quiere mirar el
@@ -248,28 +257,29 @@ export default async function GruposPage() {
   // excessively deep), igual que el caso ya documentado de idsSeñalDm mas abajo.
   // El `.not(...)` que de verdad filtra va DESPUES de mias(), nunca dentro:
   // encadenarlo dentro tambien dispara el mismo TS2589 (probado).
-  const entradaPorAsesorQuery = mias(
-    supabase.from("group_signals").select("*").eq("clase", "demanda")
-  ).not("aviso_advisor_id", "is", null);
-  const [entradaPorAsesorRes, salidaPorAsesorRes, activosRes] = admin
+  //
+  // No hay consulta separada de asesores activos acá: sería un duplicado
+  // exacto de `asesoresRes` (arriba, en el bloque de "Escucha en vivo"),
+  // que ya trae { id, name, phone } de los mismos `advisors` activos.
+  const [entradaPorAsesorRes, salidaPorAsesorRes] = admin
     ? await Promise.all([
         fetchSafe<{ aviso_advisor_id: string; politica_motivo: string | null }>(
-          entradaPorAsesorQuery,
+          mias(supabase.from("group_signals").select("*").eq("clase", "demanda")).not(
+            "aviso_advisor_id",
+            "is",
+            null
+          ),
           "grupos:entrada_por_asesor"
         ),
         fetchSafe<{ advisor_id: string }>(
           supabase.from("mandato_match_alerts").select("advisor_id").eq("entregado", true),
           "grupos:salida_por_asesor"
         ),
-        fetchSafe<{ id: string; name: string }>(
-          supabase.from("advisors").select("id, name").eq("activo", true),
-          "grupos:advisores_activos_mensajes"
-        ),
       ])
-    : [null, null, null];
+    : [null, null];
 
   const mensajesPorAsesora: MensajesPorAsesora[] = admin
-    ? (activosRes?.data || [])
+    ? (asesoresRes?.data || [])
         .map((a) => {
           const propias = (entradaPorAsesorRes?.data || []).filter((f) => f.aviso_advisor_id === a.id);
           return {
@@ -485,8 +495,8 @@ export default async function GruposPage() {
           { n: mandatos.length, t: "mandatos activos", d: "clientes propios buscando" },
           { n: conMatch, t: "pedidos con match", d: `${pendientes} por revisar` },
           { n: matchesEncontrados.length, t: "propiedades con match", d: "ofertas que sirven a un mandato" },
-          { n: autoDm, t: "bot resolvió solo", d: "DM directo al colega, sin asesora" },
-          { n: reenvioManual, t: "asesora reenvió a mano", d: "sin teléfono resuelto" },
+          { n: autoDmRes.hasError ? "—" : autoDm, t: "bot resolvió solo", d: "DM directo al colega, sin asesora" },
+          { n: reenvioManualRes.hasError ? "—" : reenvioManual, t: "asesora reenvió a mano", d: "sin teléfono resuelto" },
           ...(admin ? [{ n: matchesPendientes.length, t: "sin entregar", d: "matches que no llegaron a la asesora" }] : []),
         ].map((c) => (
           <div key={c.t} className="rounded-lg border border-slate-200 bg-white p-3">
@@ -496,14 +506,16 @@ export default async function GruposPage() {
           </div>
         ))}
       </div>
+      {autoDmRes.hasError && <ErrorBanner message={autoDmRes.message} />}
+      {reenvioManualRes.hasError && <ErrorBanner message={reenvioManualRes.message} />}
       {autoDm + reenvioManual > 0 && (
         <p className="mb-6 text-xs text-slate-400">
-          {autoDm} de {autoDm + reenvioManual} pedidos con teléfono ubicable los resolvió el bot
-          solo, sin que nadie tuviera que escribirle a un colega.
+          {autoDm} de {autoDm + reenvioManual} pedidos atendidos los resolvió el bot solo; en{" "}
+          {reenvioManual} no se pudo ubicar el teléfono y le tocó a la asesora.
         </p>
       )}
 
-      {admin && mensajesPorAsesora.length > 0 && (
+      {admin && (mensajesPorAsesora.length > 0 || entradaPorAsesorRes?.hasError || salidaPorAsesorRes?.hasError) && (
         <div className="mb-6">
           <h2 className="mb-1 text-sm font-semibold text-slate-900">Mensajes por asesora</h2>
           {entradaPorAsesorRes?.hasError && <ErrorBanner message={entradaPorAsesorRes.message} />}

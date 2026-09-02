@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -14,20 +14,44 @@ export default function GruposLiveWatcher() {
   const router = useRouter();
   const [estado, setEstado] = useState<"conectando" | "en_vivo" | "reconectando">("conectando");
   const [toast, setToast] = useState<string | null>(null);
+  const toastTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const refrescarPendiente = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const supabase = createClient();
+
+    // Un solo timer de toast: dos eventos seguidos (frecuente en una racha
+    // de importación) antes no compartían timer, así que el primer setTimeout
+    // apagaba el toast del SEGUNDO evento antes de sus 4s reales.
+    function mostrarToast(msg: string) {
+      if (toastTimeout.current) clearTimeout(toastTimeout.current);
+      setToast(msg);
+      toastTimeout.current = setTimeout(() => setToast(null), 4000);
+    }
+
+    // router.refresh() re-corre toda la página server (una docena de viajes
+    // a la base, y para admin una llamada HTTP al bot en Railway). Un INSERT
+    // por evento sin coalescer significa un refresh completo por fila, y
+    // esta misma tabla ya tuvo ráfagas de ~300 señales en una hora y veinte
+    // (ver comentario en page.tsx). Se agrupa cualquier ráfaga detrás de un
+    // solo refresh cada 3s en vez de uno por evento.
+    function refrescarConDebounce() {
+      if (refrescarPendiente.current) return; // ya hay uno programado, no apilar mas
+      refrescarPendiente.current = setTimeout(() => {
+        refrescarPendiente.current = null;
+        router.refresh();
+      }, 3000);
+    }
+
     const channel = supabase
       .channel("grupos-live")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "group_signals" }, () => {
-        setToast("🔔 Nuevo pedido de un colega");
-        router.refresh();
-        setTimeout(() => setToast(null), 4000);
+        mostrarToast("🔔 Nuevo pedido de un colega");
+        refrescarConDebounce();
       })
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "mandato_match_alerts" }, () => {
-        setToast("🔔 Nueva propiedad con match");
-        router.refresh();
-        setTimeout(() => setToast(null), 4000);
+        mostrarToast("🔔 Nueva propiedad con match");
+        refrescarConDebounce();
       })
       .subscribe((status) => {
         if (status === "SUBSCRIBED") setEstado("en_vivo");
@@ -37,6 +61,8 @@ export default function GruposLiveWatcher() {
       });
     return () => {
       supabase.removeChannel(channel);
+      if (toastTimeout.current) clearTimeout(toastTimeout.current);
+      if (refrescarPendiente.current) clearTimeout(refrescarPendiente.current);
     };
   }, [router]);
 
