@@ -49,12 +49,18 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
 - **Migraciones pendientes de correr en Supabase:**
   `db/migrations/2026-07-09_dmap_default_designer.sql` (default del motor de
   creativos → designer para orgs nuevas) y
-  `db/migrations/2026-08-18_radar_aviso_destinatario.sql` (guarda A QUIEN se
-  le manda cada aviso del radar + su wamid, para que trazabilidad_radar no
-  tenga que adivinar y para que una respuesta citada — swipe-to-reply — se
-  pueda enlazar con el pedido exacto). El código ya degrada limpio sin ella
-  (verificado en producción 2026-08-18), pero sin correrla `aviso.para` sale
-  siempre `null` y `registrar_resultado_radar` no puede resolver por cita.
+  `db/migrations/2026-09-02_realtime_grupos.sql` (agrega `group_signals` y
+  `mandato_match_alerts` a la publicación de Supabase Realtime — sin esto,
+  el badge "en vivo" del dashboard de matches de `/grupos` en el CRM se
+  conecta pero nunca recibe un evento, mismo caso ya documentado en
+  `2026-08-14_realtime_leads.sql` para el kanban).
+  Ya corrida y verificada (confirmado 2026-09-02 con datos reales en
+  producción — la columna existe y tiene 48 filas con valor real):
+  `2026-08-18_radar_aviso_destinatario.sql` (guarda A QUIEN se le manda cada
+  aviso del radar + su wamid, para que trazabilidad_radar no tenga que
+  adivinar y para que una respuesta citada — swipe-to-reply — se pueda
+  enlazar con el pedido exacto) — corrección: esta nota decía "pendiente"
+  desde el 2026-08-18, quedó desactualizada.
   Ya corrida y verificada 2026-08-18: `2026-07-25_advisor_rotacion.sql`
   (Catherine Uribe es la única con `recibe_transferencias=true` en venta).
   `db/migrations/2026-08-21_property_prioridad_venta.sql` (columna
