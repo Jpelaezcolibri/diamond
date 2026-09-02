@@ -29,8 +29,19 @@ let corriendo = false;
 
 async function calentarOrg(org) {
   const sesiones = await whatsappGroups.listSessions(org.id).catch(() => []);
-  const activa = sesiones.find((s) => s.estado === "activa");
-  if (!activa) return null;
+  // Se prefiere la marcada activa, pero con UNA sola sesion vinculada se usa
+  // esa igual (2026-09-02): la columna `estado` puede quedar desactualizada
+  // —paso en produccion— y calentar el indice solo LEE listas de
+  // participantes, no manda nada, asi que fallar cerrado aca no protege de
+  // nada y deja el DM automatico sin telefonos. El envio si sigue exigiendo
+  // sesion activa donde corresponde (vivo.js#aprobarManual).
+  const activa = sesiones.find((s) => s.estado === "activa") || (sesiones.length === 1 ? sesiones[0] : null);
+  if (!activa) {
+    if (sesiones.length > 1) {
+      console.warn(`[directorio] ${sesiones.length} sesiones y ninguna activa: no se calienta (seria adivinar por cual).`);
+    }
+    return null;
+  }
 
   const grupos = (await whatsappGroups.listGroups(org.id).catch(() => []))
     .filter((g) => g.jid && g.jid.endsWith("@g.us") && g.modo && g.modo !== "ignorar");

@@ -51,7 +51,16 @@ function ahora() {
 // regla que costo una cuenta el 2026-07-30 es que nunca se vincula la linea de
 // un asesor ni la que atiende clientes; anotarlo en la fila evita que la regla
 // viva solo en la cabeza de alguien.
-async function upsertSession(orgId, { nombre, advisorId = null, estado = "pendiente", rol = "dedicada", reiniciarCorte = false }) {
+// `estado` por defecto es null y NO "pendiente" (2026-09-02): con el default
+// viejo, cualquier llamada que no lo mandara —el boton "Vincular linea" sobre
+// una sesion que YA estaba trabajando, por ejemplo— degradaba la fila de
+// "activa" a "pendiente" sin que nada fallara. Y esa columna decide cosas:
+// vivo.js#aprobarManual devuelve `sesion_ambigua` si ninguna esta activa
+// (o sea, el CRM deja de poder publicar un pedido aprobado a mano) y el
+// calentamiento del directorio deja de encontrar sesion. Un estado solo
+// cambia cuando alguien lo dice explicitamente; si no, se conserva el que
+// habia, y solo una fila nueva arranca en "pendiente".
+async function upsertSession(orgId, { nombre, advisorId = null, estado = null, rol = "dedicada", reiniciarCorte = false }) {
   const ahoraIso = new Date().toISOString();
   cacheSesiones.delete(`${orgId}:${nombre}`);
 
@@ -59,13 +68,13 @@ async function upsertSession(orgId, { nombre, advisorId = null, estado = "pendie
     const existente = memory.whatsappSessions.find((s) => s.org_id === orgId && s.nombre === nombre);
     if (existente) {
       return Object.assign(existente, {
-        estado,
+        estado: estado || existente.estado || "pendiente",
         rol,
         updated_at: ahoraIso,
         ...(reiniciarCorte ? { escucha_desde: ahoraIso } : {}),
       });
     }
-    const creada = { id: memory.uid(), org_id: orgId, nombre, advisor_id: advisorId, estado, rol, escucha_desde: ahoraIso, created_at: ahoraIso };
+    const creada = { id: memory.uid(), org_id: orgId, nombre, advisor_id: advisorId, estado: estado || "pendiente", rol, escucha_desde: ahoraIso, created_at: ahoraIso };
     memory.whatsappSessions.push(creada);
     return creada;
   }
@@ -73,7 +82,7 @@ async function upsertSession(orgId, { nombre, advisorId = null, estado = "pendie
   const { data: existente } = await supabase
     .from("whatsapp_sessions").select("*").eq("org_id", orgId).eq("nombre", nombre).maybeSingle();
 
-  const patch = { org_id: orgId, nombre, estado, rol, updated_at: ahoraIso };
+  const patch = { org_id: orgId, nombre, estado: estado || existente?.estado || "pendiente", rol, updated_at: ahoraIso };
   if (advisorId) patch.advisor_id = advisorId;
   if (reiniciarCorte || !existente?.escucha_desde) patch.escucha_desde = ahoraIso;
 

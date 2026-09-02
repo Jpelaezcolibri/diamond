@@ -403,3 +403,4 @@ test("NUNCA acepta un lid ni basura como telefono", () => {
     assert.strictEqual(canal._telefonoVisible(p), null, `no puede aceptar ${JSON.stringify(p)}`);
   }
 });
+
