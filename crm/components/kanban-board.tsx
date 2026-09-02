@@ -1,7 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { createClient } from "@/lib/supabase/client";
 import {
   DndContext,
   DragOverlay,
@@ -186,12 +188,43 @@ export default function KanbanBoard({
   roster: Record<string, TeamMember>;
   currentUserId: string;
 }) {
+  const router = useRouter();
   const [leads, setLeads] = useState<Lead[]>(initialLeads);
   const [tab, setTab] = useState<string>("compra");
   const [onlyMine, setOnlyMine] = useState(false);
   const [active, setActive] = useState<Lead | null>(null);
   const [error, setError] = useState<string | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  // Movimientos de tarjeta cuyo POST todavia no confirmo. Mientras haya alguno
+  // en vuelo, la verdad la tiene el optimismo local y NO se pisa con los datos
+  // del servidor (que aun no lo conocen).
+  const pendientes = useRef(0);
+
+  // El tablero se entera de lo que entra. `leads` es lo que pintan las
+  // columnas, y `conversations` alimenta la ultima actividad de cada tarjeta;
+  // un mensaje nuevo mueve esa fecha sin tocar el lead, asi que hay que
+  // escuchar las dos. Mismo patron que el inbox (inbox-list.tsx).
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel("kanban-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "leads" }, () => router.refresh())
+      .on("postgres_changes", { event: "*", schema: "public", table: "conversations" }, () => router.refresh())
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [router]);
+
+  // Sincroniza el tablero con los datos frescos del servidor. Hace falta porque
+  // `useState(initialLeads)` solo corre al montar: sin esto, router.refresh()
+  // traeria los leads nuevos y las columnas seguirian pintando la lista vieja.
+  // Se salta mientras se arrastra o mientras un movimiento esta sin confirmar,
+  // para no devolver una tarjeta a su columna anterior a mitad de camino.
+  useEffect(() => {
+    if (active || pendientes.current > 0) return;
+    setLeads(initialLeads);
+  }, [initialLeads, active]);
 
   const visibles = useMemo(
     () => leads.filter((l) => (l.categoria || "otros") === tab && (!onlyMine || l.owner_id === currentUserId)),
@@ -230,10 +263,13 @@ export default function KanbanBoard({
     );
     setError(null);
 
+    pendientes.current += 1;
     const res = await fetch("/api/leads/estado", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ leadId, estado }),
+    }).finally(() => {
+      pendientes.current -= 1;
     });
     if (!res.ok) {
       setLeads((prev) =>
