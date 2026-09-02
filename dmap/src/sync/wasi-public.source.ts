@@ -115,6 +115,11 @@ function toCanonicalProperty(property: PropertyRow, fetched: WasiPublicFetchResu
     area: property.area,
     habitaciones: property.habitaciones,
     banos: property.banos,
+    // El scraper de la pagina publica no los parsea: se conserva lo que la
+    // fila ya tenia, para que un fallback a esta fuente nunca BORRE un garaje
+    // o un estrato que la API oficial si habia traido.
+    garaje: property.garaje,
+    estrato: property.estrato,
     zona: property.zona,
     ciudad: property.ciudad,
     link: property.link,

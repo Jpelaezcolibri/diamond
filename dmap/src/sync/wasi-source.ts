@@ -11,6 +11,15 @@ export const canonicalPropertySchema = z.object({
   area: z.string().nullable().default(null),
   habitaciones: z.number().int().nullable().default(null),
   banos: z.number().int().nullable().default(null),
+  // Garaje y estrato (2026-09-02). Faltaban desde el principio: el sync los
+  // escribia como null al crear y no los volvia a mirar, asi que llenarlos en
+  // Wasi no llegaba a la base. Medido ese dia: garaje cargado en 29% del
+  // inventario y estrato en 32%, y los que si estaban venian del import de
+  // Excel viejo, no de Wasi. El radar puntua por lo que puede VERIFICAR, asi
+  // que un apartamento con garaje sin cargar pierde contra otro del que
+  // sabemos menos.
+  garaje: z.number().int().nullable().default(null),
+  estrato: z.number().int().nullable().default(null),
   zona: z.string().nullable().default(null),
   ciudad: z.string().nullable().default(null),
   link: z.string().nullable().default(null),

@@ -252,3 +252,41 @@ describe("tipo desde el catalogo /property-type/all", () => {
     expect(toCanonicalProperty(raw).tipo).toBeNull();
   });
 });
+
+// GARAJE Y ESTRATO (2026-09-02). Faltaban desde el principio: el sync los
+// escribia como null al crear y no los volvia a mirar, asi que llenarlos en
+// Wasi no llegaba nunca a la base. Medido ese dia: garaje cargado en el 29%
+// del inventario y estrato en el 32%, y los que si estaban venian del import
+// de Excel viejo. El radar puntua por lo que puede VERIFICAR, asi que un
+// apartamento con garaje sin cargar pierde contra otro del que sabemos menos.
+describe("garaje y estrato", () => {
+  it("los trae de la API cuando vienen", () => {
+    const p = toCanonicalProperty(
+      wasiApiPropertySchema.parse({ id_property: 1, reference: "AP1", garages: 2, stratum: 5 })
+    );
+    expect(p.garaje).toBe(2);
+    expect(p.estrato).toBe(5);
+  });
+
+  it("acepta que la API los mande como string", () => {
+    const p = toCanonicalProperty(
+      wasiApiPropertySchema.parse({ id_property: 1, reference: "AP1", garages: "1", stratum: "4" })
+    );
+    expect(p.garaje).toBe(1);
+    expect(p.estrato).toBe(4);
+  });
+
+  it("sin el dato quedan en null, nunca en 0 — un cero seria decir que NO tiene", () => {
+    const p = toCanonicalProperty(wasiApiPropertySchema.parse({ id_property: 1, reference: "AP1" }));
+    expect(p.garaje).toBeNull();
+    expect(p.estrato).toBeNull();
+  });
+
+  it("un cero explicito de Wasi SI se conserva: significa que no tiene garaje", () => {
+    const p = toCanonicalProperty(
+      wasiApiPropertySchema.parse({ id_property: 1, reference: "AP1", garages: 0, stratum: 0 })
+    );
+    expect(p.garaje).toBe(0);
+    expect(p.estrato).toBe(0);
+  });
+});

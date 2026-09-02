@@ -86,8 +86,8 @@ async function processCandidate(orgId: string, syncRunId: string, candidate: Syn
       area: data.area,
       habitaciones: data.habitaciones,
       banos: data.banos,
-      garaje: null,
-      estrato: null,
+      garaje: data.garaje,
+      estrato: data.estrato,
       administracion: null,
       zona: data.zona,
       ciudad: data.ciudad,
@@ -146,6 +146,26 @@ async function processCandidate(orgId: string, syncRunId: string, candidate: Syn
     patch.disponible = true;
     if (data.imageUrls.length > 0) patch.images = data.imageUrls;
   }
+
+  // GARAJE Y ESTRATO se refrescan en CADA corrida, no solo cuando el diff
+  // detecta un cambio (2026-09-02). Dos razones:
+  //
+  //   1. No estan en el content_hash a proposito. Meterlos ahi cambiaria el
+  //      hash de las 122 propiedades de golpe y marcaria todo el inventario
+  //      como "modificado" en una sola corrida, con el ruido que eso genera
+  //      aguas abajo. Aca no hace falta: asignar el mismo valor es
+  //      idempotente y no dispara ningun evento.
+  //   2. El refresh completo de arriba solo corre en la PRIMERA sincronizacion
+  //      de una propiedad, y las 122 ya la pasaron. Sin esto, el dato nuevo de
+  //      Wasi nunca llegaria a una fila existente — que es justo el problema
+  //      que este cambio vino a resolver.
+  //
+  // Solo se escribe cuando la fuente TIENE el dato: si Wasi lo manda vacio se
+  // conserva lo que haya en la fila (ej. lo que cargo el import de Excel del
+  // 2026-07), en vez de borrarlo.
+  if (data.garaje !== null) patch.garaje = data.garaje;
+  if (data.estrato !== null) patch.estrato = data.estrato;
+
   for (const event of diff.events) {
     if (event.changeType === "price_changed") patch.precio = data.precio;
     if (event.changeType === "status_changed") patch.disponible = snapshot.disponible;

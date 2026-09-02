@@ -48,6 +48,11 @@ export const wasiApiPropertySchema = z
     unit_area_label: z.string().nullable().optional(),
     bedrooms: z.union([z.string(), z.number()]).nullable().optional(),
     bathrooms: z.union([z.string(), z.number()]).nullable().optional(),
+    // Nombres segun la documentacion de la API v1 de Wasi. El esquema es
+    // passthrough, asi que si esta version los manda con otro nombre no se
+    // rompe nada: simplemente llegan null y el aviso de abajo lo delata.
+    garages: z.union([z.string(), z.number()]).nullable().optional(),
+    stratum: z.union([z.string(), z.number()]).nullable().optional(),
     zone_label: z.string().nullable().optional(),
     city_label: z.string().nullable().optional(),
     link: z.string().nullable().optional(),
@@ -157,6 +162,8 @@ export function toCanonicalProperty(raw: WasiApiProperty, propertyTypes: Propert
     area: normalizeArea(raw),
     habitaciones: toNumberOrNull(raw.bedrooms),
     banos: toNumberOrNull(raw.bathrooms),
+    garaje: toNumberOrNull(raw.garages),
+    estrato: toNumberOrNull(raw.stratum),
     zona: raw.zone_label ?? null,
     ciudad: raw.city_label ?? null,
     link: raw.link ?? null,
@@ -244,6 +251,12 @@ export class WasiApiSource implements WasiSource {
     // que la busqueda con for_sale=true trae solo ventas; los arriendos que
     // el cliente cargue despues llegan por la pasada for_rent=true.
     const seenIds = new Set<string>();
+    // Termometro de los campos nuevos (2026-09-02): si la API los manda con
+    // otro nombre, TODAS quedarian en null y el sintoma seria identico a "en
+    // Wasi no estan cargados". Este contador distingue las dos cosas en el
+    // log, sin agregar una sola llamada.
+    let conGaraje = 0;
+    let conEstrato = 0;
     const allProperties: WasiApiProperty[] = [];
     const passes: Record<string, string>[] = [{ for_sale: "true" }, { for_rent: "true" }];
     for (const pass of passes) {
@@ -260,6 +273,8 @@ export class WasiApiSource implements WasiSource {
 
     const candidates: SyncCandidate[] = allProperties.map((raw) => {
       const data = toCanonicalProperty(raw, propertyTypes);
+      if (data.garaje !== null) conGaraje += 1;
+      if (data.estrato !== null) conEstrato += 1;
       return {
         propertyId: existingByRef.get(data.ref) ?? null,
         wasiId: String(raw.id_property),
@@ -267,6 +282,19 @@ export class WasiApiSource implements WasiSource {
         data
       };
     });
+
+    // Si NINGUNA trajo el dato, lo mas probable es que esta version de la API
+    // los mande con otro nombre — el sintoma seria identico a "en Wasi no
+    // estan cargados" y nos costaria semanas notarlo. Se dice en el log.
+    if (allProperties.length > 0 && conGaraje === 0 && conEstrato === 0) {
+      console.warn(
+        `[sync] Wasi devolvio ${allProperties.length} propiedades y NINGUNA trae garages ni stratum. ` +
+          "O el inventario no los tiene cargados, o esta version de la API usa otro nombre de campo " +
+          "(ver wasiApiPropertySchema en wasi-api.source.ts)."
+      );
+    } else {
+      console.log(`[sync] Wasi: ${conGaraje}/${allProperties.length} con garaje, ${conEstrato}/${allProperties.length} con estrato.`);
+    }
 
     // Retiros: propiedades Wasi de la org, aun disponibles, que ya no estan
     // en el inventario de la API (vendidas o despublicadas en Wasi).
