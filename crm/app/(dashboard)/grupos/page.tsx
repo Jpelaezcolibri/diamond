@@ -14,6 +14,7 @@ import GruposPermisos, { type GrupoVivo } from "@/components/grupos-permisos";
 import LineaDmInbox, { type DmMensaje } from "@/components/linea-dm-inbox";
 import PosiblesVentas, { type PosibleVenta } from "@/components/posibles-ventas";
 import { MandatosPanel, MatchesPendientesPanel, MatchesEncontradosPanel } from "@/components/mandatos-panel";
+import { MensajesPorAsesoraPanel, type MensajesPorAsesora } from "@/components/mensajes-por-asesora-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -232,6 +233,54 @@ export default async function GruposPage() {
   const sesiones = sesionesRes?.data || [];
   const gruposVivos: GrupoVivo[] = grupos.filter((g) => g.jid.endsWith("@g.us"));
 
+  // Mensajes por asesora (Juan, 2026-09-02): comparación admin-only entre
+  // asesoras -- mismo criterio que "Matches sin entregar", no es informacion
+  // que cada asesora necesite ver de si misma en esta pantalla (su propio
+  // trabajo ya se ve en el resto de la pagina). La consulta a group_signals
+  // SI pasa por mias() -- ver "OJO" mas abajo, es obligatorio aunque el
+  // bloque entero solo corra para admin.
+  // El filtro `.eq("clase", "demanda")` no acota el resultado -- `aviso_advisor_id`
+  // solo se escribe en la rama de demanda de src/groups/vivo.js (manejarOferta,
+  // el camino de ofertas, nunca la toca) -- pero SIN el eq, `mias()` recibiendo
+  // un `select("*")` sin filtro previo dispara TS2589 (Type instantiation is
+  // excessively deep), igual que el caso ya documentado de idsSeñalDm mas abajo.
+  // El `.not(...)` que de verdad filtra va DESPUES de mias(), nunca dentro:
+  // encadenarlo dentro tambien dispara el mismo TS2589 (probado).
+  const entradaPorAsesorQuery = mias(
+    supabase.from("group_signals").select("*").eq("clase", "demanda")
+  ).not("aviso_advisor_id", "is", null);
+  const [entradaPorAsesorRes, salidaPorAsesorRes, activosRes] = admin
+    ? await Promise.all([
+        fetchSafe<{ aviso_advisor_id: string; politica_motivo: string | null }>(
+          entradaPorAsesorQuery,
+          "grupos:entrada_por_asesor"
+        ),
+        fetchSafe<{ advisor_id: string }>(
+          supabase.from("mandato_match_alerts").select("advisor_id").eq("entregado", true),
+          "grupos:salida_por_asesor"
+        ),
+        fetchSafe<{ id: string; name: string }>(
+          supabase.from("advisors").select("id, name").eq("activo", true),
+          "grupos:advisores_activos_mensajes"
+        ),
+      ])
+    : [null, null, null];
+
+  const mensajesPorAsesora: MensajesPorAsesora[] = admin
+    ? (activosRes?.data || [])
+        .map((a) => {
+          const propias = (entradaPorAsesorRes?.data || []).filter((f) => f.aviso_advisor_id === a.id);
+          return {
+            id: a.id,
+            nombre: a.name,
+            entrada: propias.length,
+            reenvioManual: propias.filter((f) => f.politica_motivo === "sin_telefono").length,
+            salida: (salidaPorAsesorRes?.data || []).filter((f) => f.advisor_id === a.id).length,
+          };
+        })
+        .filter((f) => f.entrada > 0 || f.salida > 0)
+    : [];
+
   // Inbox de la línea vinculada y "Posibles ventas" (Juan, 2026-08-21): mismo
   // criterio de admin-only que el resto de "Escucha en vivo" — es la misma
   // línea sensible, no tarea diaria de un asesor. Ambas consultas se
@@ -447,6 +496,15 @@ export default async function GruposPage() {
           {autoDm} de {autoDm + reenvioManual} pedidos con teléfono ubicable los resolvió el bot
           solo, sin que nadie tuviera que escribirle a un colega.
         </p>
+      )}
+
+      {admin && mensajesPorAsesora.length > 0 && (
+        <div className="mb-6">
+          <h2 className="mb-1 text-sm font-semibold text-slate-900">Mensajes por asesora</h2>
+          {entradaPorAsesorRes?.hasError && <ErrorBanner message={entradaPorAsesorRes.message} />}
+          {salidaPorAsesorRes?.hasError && <ErrorBanner message={salidaPorAsesorRes.message} />}
+          <MensajesPorAsesoraPanel filas={mensajesPorAsesora} />
+        </div>
       )}
 
       {m && (
