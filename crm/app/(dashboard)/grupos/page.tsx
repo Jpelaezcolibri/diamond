@@ -201,7 +201,31 @@ export default async function GruposPage() {
   // lo mando una persona desde el CRM (src/groups/vivo.js#responderPorDmManual),
   // null = publicacion en el grupo de antes del 22-ago. El `.eq` extra va
   // DESPUES de mias(), nunca dentro (TS2589, ver reenvioManualRes).
-  const [autoDmRes, dmManualRes, reenvioManualRes] = await Promise.all([
+  // El KPI "Pedidos con match" se contaba como el largo de la lista de
+  // arriba, que tiene limit(200) para no traer la tabla entera a la pantalla:
+  // el numero se clavaba en 200 y no subia nunca mas (Juan, 2026-09-02:
+  // "valida si la tabla de pedidos con match solo tiene 200 slots por que no
+  // veo que suba"). La lista sigue en 200 —es lo que se muestra—; el numero
+  // sale de un conteo real, como los otros dos KPIs de este carril.
+  const [conMatchTotalRes, porRevisarRes, autoDmRes, dmManualRes, reenvioManualRes] = await Promise.all([
+    countSafe(
+      mias(
+        supabase
+          .from("group_signals")
+          .select("*", { count: "exact", head: true })
+          .eq("clase", "demanda")
+      ).neq("matches", "[]"),
+      "grupos:con_match_total"
+    ),
+    countSafe(
+      mias(
+        supabase
+          .from("group_signals")
+          .select("*", { count: "exact", head: true })
+          .eq("clase", "demanda")
+      ).neq("matches", "[]").eq("estado", "nuevo"),
+      "grupos:por_revisar"
+    ),
     countSafe(
       mias(
         supabase
@@ -425,9 +449,12 @@ export default async function GruposPage() {
     ...(demandasRes.data || []).filter((s) => !yaEstan.has(s.id)).map(conGrupo),
   ];
 
-  const conMatch = conMatchLista.length;
+  // Conteo real, no el largo de la lista (que esta topada en 200). Si el
+  // conteo fallo, se cae al largo de la lista: un numero corto es mejor que
+  // un cero que parece "no hay nada".
+  const conMatch = conMatchTotalRes.hasError ? conMatchLista.length : conMatchTotalRes.count;
   // Lo que falta por mirar. Es el número que importa: los otros sólo crecen.
-  const pendientes = conMatchLista.filter((s) => s.estado === "nuevo").length;
+  const pendientes = porRevisarRes.hasError ? conMatchLista.filter((s) => s.estado === "nuevo").length : porRevisarRes.count;
 
   // Matches entregados por mandato, para la grilla de "Mis mandatos": se
   // cuenta sobre lo que ya vino, ninguna consulta más.
