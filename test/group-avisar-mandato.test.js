@@ -6,6 +6,10 @@ const canalWhatsapp = require("../src/channels/whatsapp");
 const advisors = require("../src/data/advisors");
 const directorio = require("../src/groups/directorio");
 const { cruzarOfertaConMandatos } = require("../src/groups/avisar-mandato");
+// El freno de ritmo vive en memoria del proceso (src/lib/ritmo-avisos.js):
+// sin resetearlo, el segundo test del archivo veria "ya se le escribio hace
+// poco" y encolaria el aviso en vez de mandarlo.
+const ritmo = require("../src/lib/ritmo-avisos");
 
 const ORG = { id: "org-1" };
 const OFERTA = {
@@ -16,6 +20,7 @@ const OFERTA = {
 let enviados, plantillas;
 
 beforeEach(() => {
+  ritmo._reset();
   mandatosData._reset();
   enviados = [];
   plantillas = [];
@@ -131,9 +136,32 @@ test("con tope diario en 1, el segundo match del dia no se manda", async () => {
   assert.strictEqual(enviados.length, 1);
 });
 
-test("sin tope configurado no se limita nada (default de producto)", async () => {
+// CAMBIO DE COMPORTAMIENTO (Juan, 2026-09-02): la segunda oferta seguida ya
+// no sale como segundo WhatsApp. El tope diario sigue sin descartar nada —esa
+// es la regla de producto que este test protege— pero el freno de ritmo
+// (src/lib/ritmo-avisos.js) la deja registrada y sin entregar, para que la
+// bandeja de salida la mande agrupada con las demas. El caso real: 18 ofertas
+// del mismo mandato a Natalia en tres horas, cuatro rechazadas por WhatsApp
+// con `pair rate limit hit`.
+test("sin tope configurado NADA se descarta: la segunda queda en cola, no se pierde", async () => {
+  await unMandato();
+  const r1 = await cruzarOfertaConMandatos(ORG, OFERTA, { allyPropertyId: "ally-1" });
+  const r2 = await cruzarOfertaConMandatos(ORG, OFERTA, { allyPropertyId: "ally-2" });
+
+  assert.strictEqual(enviados.length, 1, "solo la primera sale en el momento");
+  assert.strictEqual(r1.resultado, "enviado");
+  assert.strictEqual(r2.resultado, "en_cola", "la segunda no se descarta: espera a la bandeja");
+
+  // Y queda registrada con su texto, lista para que la bandeja la agrupe.
+  const pendientes = await mandatosData.pendientes(ORG.id);
+  assert.strictEqual(pendientes.length, 1);
+  assert.ok(pendientes[0].texto, "la alerta pendiente conserva el texto ya redactado");
+});
+
+test("pasada la ventana de ritmo, la siguiente vuelve a salir en el momento", async () => {
   await unMandato();
   await cruzarOfertaConMandatos(ORG, OFERTA, { allyPropertyId: "ally-1" });
+  ritmo._reset(); // equivale a que pasaron los AVISOS_VENTANA_MIN minutos
   await cruzarOfertaConMandatos(ORG, OFERTA, { allyPropertyId: "ally-2" });
   assert.strictEqual(enviados.length, 2);
 });

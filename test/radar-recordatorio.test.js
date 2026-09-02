@@ -4,6 +4,9 @@
 
 const { test } = require("node:test");
 const assert = require("node:assert");
+// El freno de ritmo es de proceso (src/lib/ritmo-avisos.js): sin resetearlo,
+// el segundo test veria "a esa asesora ya se le escribio" y no insistiria.
+const ritmo = require("../src/lib/ritmo-avisos");
 
 const recordatorio = require("../src/scheduler/radar-recordatorio");
 const groupSignals = require("../src/data/group-signals");
@@ -11,6 +14,9 @@ const signalEvents = require("../src/data/signal-events");
 const organizations = require("../src/data/organizations");
 const advisors = require("../src/data/advisors");
 const mensajeAsesor = require("../src/lib/mensaje-asesor");
+
+const { beforeEach: _be } = require("node:test");
+_be(() => ritmo._reset());
 
 test("textoRecordatorio: una sola señal incluye el pedido, saluda 'Cathe' y pide un resultado corto", () => {
   const t = recordatorio.textoRecordatorio([{ texto_original: "busco apto en Sabaneta 3 alcobas" }]);

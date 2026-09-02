@@ -21,6 +21,7 @@ const mandatosData = require("../data/mandatos");
 const advisors = require("../data/advisors");
 const directorio = require("./directorio");
 const mensajeAsesor = require("../lib/mensaje-asesor");
+const ritmo = require("../lib/ritmo-avisos");
 const canalWhatsapp = require("../channels/whatsapp");
 const { evaluarOferta } = require("./cruce-mandatos");
 const { buildMandatoMatchAlert, paramsPlantilla } = require("../notifications/mandato-aviso");
@@ -96,9 +97,24 @@ async function cruzarOfertaConMandatos(org, oferta, opts = {}) {
     // registro el mandato, no cambia); lo unico que cambia es a quien se le
     // manda el aviso.
     const advisor = await advisors.findAsesorPrincipalRadar(org).catch(() => null);
+
+    // FRENO DE RITMO (Juan, 2026-09-02). Este es el camino que mas ruido
+    // generaba: 18 ofertas del MISMO mandato a Natalia en tres horas, tres en
+    // el mismo minuto, cuatro rechazadas por WhatsApp. Si a la asesora ya se
+    // le escribio hace poco, la alerta queda registrada con su texto y sin
+    // entregar; la bandeja de salida la manda agrupada con las demas.
+    if (advisor && advisor.id && !ritmo.puedeEnviar(advisor.id)) {
+      await mandatosData.marcarEntrega(org.id, alertaId, {
+        entregado: false, via: null, error: null, texto,
+      });
+      ultimoResultado = "en_cola";
+      continue;
+    }
+
     const entrega = advisor && advisor.phone
       ? await entregar(org, advisor.phone, texto, { mandato, oferta })
       : { ok: false, via: null, error: "mandato sin asesor con telefono" };
+    if (entrega.ok && advisor && advisor.id) ritmo.registrarEnvio(advisor.id);
 
     await mandatosData.marcarEntrega(org.id, alertaId, {
       entregado: entrega.ok, via: entrega.via, error: entrega.error, texto,

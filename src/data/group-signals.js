@@ -443,6 +443,40 @@ async function pendientesDeAviso(orgId, advisorId = null, { limite = 20 } = {}) 
 // Avisos SALIDOS hace mas de `minutos` a un asesor conocido, sin recordatorio
 // todavia — candidatos para src/scheduler/radar-recordatorio.js. El filtro de
 // "sin resultado ya registrado" lo aplica el scheduler (cruzando contra
+// Pedidos que Sofi ya juzgo y que TODAVIA no se le avisaron a nadie: la cola
+// de entrada de la bandeja de salida (src/scheduler/avisos-salida.js).
+//
+// Trae las que tienen veredicto guardado; si ese veredicto APRUEBA o no lo
+// decide revalidar.js#apruebaAviso en quien llama — el criterio vive en un
+// solo lugar y no se duplica en una consulta SQL que envejeceria aparte.
+//
+// `respondida_at` null: un pedido que ya se resolvio por DM automatico no
+// tiene nada que avisarle a la asesora.
+async function aprobadasSinAvisar(orgId, { desdeIso, limite = 30 } = {}) {
+  if (!supabase) {
+    return (memory.groupSignals || []).filter(
+      (s) => s.org_id === orgId && s.clase === "demanda" && s.revalidacion && !s.enviado_at && !s.respondida_at
+    );
+  }
+  const { data, error } = await supabase
+    .from("group_signals")
+    .select("*")
+    .eq("org_id", orgId)
+    .eq("clase", "demanda")
+    .not("revalidacion", "is", null)
+    .is("enviado_at", null)
+    .is("respondida_at", null)
+    .gte("created_at", desdeIso)
+    .order("created_at", { ascending: true })
+    .limit(limite);
+  if (error) {
+    if (esColumnaFaltante(error)) return [];
+    console.error("[grupos] No se pudieron leer los pedidos aprobados sin avisar:", error.message);
+    return [];
+  }
+  return data || [];
+}
+
 // signal_events), por la misma razon de dependencia que pendientesDeAviso.
 async function candidatosRecordatorio(orgId, { antesDeIso, limite = 100 } = {}) {
   if (!supabase) return [];
@@ -777,7 +811,7 @@ module.exports = {
   create, list, setEstado, resumen, marcarEnviada, ultimaFechaImportada,
   pendientesDigest, marcarDigest, revertirDigest,
   marcarRespondida, respuestasDesde, guardarRevalidacion, marcarAvisoEnviado,
-  guardarPolitica, obtenerPorId, calladosPendientes, buscarPorTelefono,
+  guardarPolitica, obtenerPorId, calladosPendientes, buscarPorTelefono, aprobadasSinAvisar,
   findByWamid, pendientesDeAviso, candidatosRecordatorio, claimRecordatorio,
   candidatosEscaladoSilencio, claimEscaladoSilencio,
   dmsHoyPorColega, dmsHoyLinea,

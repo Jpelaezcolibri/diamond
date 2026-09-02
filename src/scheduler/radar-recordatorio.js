@@ -26,6 +26,7 @@ const signalEvents = require("../data/signal-events");
 // tambien queda guardado como mensaje real en la conversacion con el asesor
 // (ver src/lib/mensaje-asesor.js), visible en el panel "Equipo" del CRM.
 const mensajeAsesor = require("../lib/mensaje-asesor");
+const ritmo = require("../lib/ritmo-avisos");
 
 function resumenPedido(señal) {
   const texto = (señal.texto_original || "").replace(/\s+/g, " ").trim();
@@ -110,8 +111,25 @@ async function runOnce() {
         const advisor = await advisors.findById(org.id, advisorId);
         if (!advisor || !advisor.phone) continue;
 
+        // MISMO FRENO QUE LOS AVISOS (Juan, 2026-09-02: "no quiero que seas
+        // tan insistente"). Un recordatorio es un mensaje mas en el mismo
+        // chat, asi que compite por la misma ventana: si a la asesora ya se
+        // le escribio hace poco, este tick no insiste. El 1 de septiembre
+        // Catherine recibio QUINCE recordatorios en un dia, ademas de 27
+        // avisos, y no respondio ninguno.
+        //
+        // Las señales ya quedaron reclamadas (claimRecordatorio, arriba), asi
+        // que no se recuerdan de nuevo: se pierde ESTE empujon, no el dato.
+        // Es deliberado — el objetivo del recordatorio es que responda, y
+        // amontonarle mensajes logra lo contrario.
+        if (!ritmo.puedeEnviar(advisorId)) {
+          console.log(`[radar-recordatorio] ${advisor.name} recibio algo hace poco: no se insiste con ${señales.length} pendiente(s).`);
+          continue;
+        }
+
         const { ok, error } = await mensajeAsesor.enviarYRegistrar(org, advisor.phone, textoRecordatorio(señales));
         if (ok) {
+          ritmo.registrarEnvio(advisorId);
           sent++;
         } else {
           // No se reintenta: si fallo es casi siempre porque la ventana de

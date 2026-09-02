@@ -47,6 +47,7 @@ const mandatosData = require("../data/mandatos");
 const { evaluarOferta } = require("./cruce-mandatos");
 const command = require("../data/command");
 const cruceLeads = require("./cruce-leads");
+const ritmo = require("../lib/ritmo-avisos");
 
 const VENTANA_LIMITE_HORAS = 24;
 
@@ -553,6 +554,22 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
     return { resultado: "sin_destinatario", veredicto, texto, signalId: signal.id };
   }
 
+  // FRENO DE RITMO (Juan, 2026-09-02: "no quiero que seas tan insistente").
+  // Si a esta asesora ya se le escribio hace poco, el aviso NO sale ahora: la
+  // señal queda con enviado_at en null y la bandeja de salida
+  // (src/scheduler/avisos-salida.js) la entrega agrupada con lo demas que se
+  // acumule. Medido ese dia: 23 mensajes a Natalia en tres horas, cero
+  // respuestas y cuatro rechazados por WhatsApp por exceso de frecuencia.
+  //
+  // El PRIMER aviso siempre pasa y sale en el momento — la agrupacion existe
+  // para la rafaga, no para el goteo.
+  if (asesor && asesor.id && !ritmo.puedeEnviar(asesor.id)) {
+    await feedComando
+      .registrar(org, señalParaFeed, veredicto, matches, { avisada: false, destinatarioNombre: "en cola de salida" })
+      .catch((e) => console.warn("[radar] No se pudo escribir en el feed del admin:", e.message));
+    return { resultado: "en_cola", veredicto, texto, signalId: signal.id };
+  }
+
   // Sale por la Cloud API OFICIAL de Sofi, no por la linea vinculada.
   //
   // El telefono PRINCIPAL (asesor.phone) es el UNICO que pasa por
@@ -615,6 +632,9 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
   // confundirlas fue justo el bug que le hizo inventar un nombre a Sofi el
   // 2026-08-18.
   if (alguno) {
+    // Solo cuenta para el ritmo si llego a la asesora PRINCIPAL: una copia de
+    // calibracion que si salio no justifica callar el aviso siguiente.
+    if (entregadoATelefonoPrincipal && asesor && asesor.id) ritmo.registrarEnvio(asesor.id);
     await groupSignals.marcarAvisoEnviado(org.id, signal.id, {
       wamid: wamidPrincipal,
       advisorId: asesor && asesor.id ? asesor.id : null,

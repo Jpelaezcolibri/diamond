@@ -7,6 +7,8 @@
 
 const { test, beforeEach } = require("node:test");
 const assert = require("node:assert");
+// Ver la nota en group-avisar-mandato.test.js: el freno de ritmo es de proceso.
+const ritmo = require("../src/lib/ritmo-avisos");
 const path = require("node:path");
 
 const RUTA = (m) => require.resolve(path.join("..", "src", m));
@@ -190,6 +192,7 @@ const APRUEBA = {
 
 let vivo;
 beforeEach(() => {
+  ritmo._reset();
   claseDevuelta = "demanda";
   matchesDevueltos = [match()];
   veredictoDeSofi = { ...APRUEBA };

@@ -133,6 +133,9 @@ app.listen(config.port, () => {
   // Escalado a Catherine si Natalia (asesor PRINCIPAL del radar) no responde
   // el aviso a tiempo, en los dos carriles (venta y compra) — Juan, 2026-08-26.
   if (config.supabaseUrl) require("./scheduler/radar-silencio").start();
+  // Bandeja de salida: junta lo pendiente y le manda a cada asesora un solo
+  // mensaje agrupado en vez de uno por oportunidad (Juan, 2026-09-02).
+  if (config.supabaseUrl) require("./scheduler/avisos-salida").start();
   // Cruce diario visitas -> ventas (Juan, 2026-08-21): de lo que el sistema
   // pudo capturar como visita agendada, ¿cual propiedad ya no esta
   // disponible? "quiero tener el control de las visitas y ventas".
