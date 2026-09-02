@@ -286,6 +286,21 @@ async function procesarMensaje(org, mensaje, { grupo, modo = "sombra", enviar = 
   return { resultado: "publicado", texto, wamid: envio.wamid, publicables, traza: decision.traza, signalId: signal.id };
 }
 
+// QUE propiedades llevaba el aviso a la asesora (Juan, 2026-09-02: "necesito
+// que quede marcado el match en la propiedad que se envio con el bot de manera
+// automatica y cuales se avisaron").
+//
+// Son las mismas que alerta-asesor.construir muestra: las que Sofi marco
+// utiles mas las dudosas ("para revisar"). Se guardan aparte de
+// respuesta_refs, que son las que salieron SOLAS al privado del colega.
+function refsDelAviso(veredicto) {
+  if (!veredicto) return null;
+  const utiles = Array.isArray(veredicto.refs_utiles) ? veredicto.refs_utiles : [];
+  const dudosas = Array.isArray(veredicto.refs_dudosas) ? veredicto.refs_dudosas : [];
+  const todas = [...new Set([...utiles, ...dudosas].map(String).filter(Boolean))];
+  return todas.length ? todas : null;
+}
+
 // El texto que recibe el colega en el DM directo (Juan, 2026-08-24).
 //
 // Reusa redactar.mensajeGrupo TAL CUAL — "el mismo texto que antes iba al
@@ -654,6 +669,7 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
     await groupSignals.marcarAvisoEnviado(org.id, signal.id, {
       wamid: wamidPrincipal,
       advisorId: asesor && asesor.id ? asesor.id : null,
+      refs: refsDelAviso(veredicto),
     });
   }
 
@@ -824,18 +840,42 @@ async function aprobarManual(org, signalId) {
   const activas = sesiones.filter((s) => s.estado === "activa");
   if (activas.length !== 1) return { resultado: "sesion_ambigua", cantidad: activas.length };
 
-  // Citar el pedido original (ver la nota en waha.js#enviarTexto): en un
-  // grupo activo ya se perdio en el scroll, y sin la cita el colega no se
-  // entera de que le respondieron — es justo el problema que motivo la
-  // aprobacion manual.
-  const idOriginal = String(signal.wa_message_id || "").replace(/^vivo:/, "") || null;
-  const envio = await waha.enviarTexto(activas[0].nombre, grupo.jid, texto, { replyTo: idOriginal });
+  // AL PRIVADO DEL COLEGA, NUNCA AL GRUPO (Juan, 2026-09-02: "necesito que me
+  // asegures que las respuestas no van al grupo si no al dm").
+  //
+  // Hasta hoy esta funcion hacia `waha.enviarTexto(sesion, grupo.jid, ...)`:
+  // aprobar un pedido publicaba la respuesta EN EL GRUPO GREMIAL, citando el
+  // mensaje original. Era la unica via del radar que escribia en un grupo —
+  // el camino automatico (asistir) y el DM manual (responderPorDmManual)
+  // siempre fueron al privado.
+  //
+  // Por que se cambia y no solo se documenta: publicar con la linea de una
+  // asesora en un grupo gremial es exactamente la conducta que en julio
+  // termino en el BANEO de la cuenta de una asesora. Ademas el gremio espera
+  // la respuesta al interno; en el grupo se quema la oportunidad delante de
+  // la competencia.
+  //
+  // Si no se puede resolver el telefono NO se publica igual: se devuelve
+  // `sin_telefono` y el pedido cae al aviso a la asesora, que decide a mano.
+  // Falla cerrado — el grupo dejo de ser una salida posible.
+  const telefonoColega = await directorio
+    .telefonoDe(org.id, signal.autor_telefono, { sesion: activas[0].nombre, jid: grupo && grupo.jid })
+    .catch((e) => {
+      console.warn("[radar] No se pudo resolver el telefono del colega para la aprobacion manual:", e.message);
+      return null;
+    });
+  if (!telefonoColega) return { resultado: "sin_telefono", texto, publicables };
+
+  const envio = await waha.enviarDm(activas[0].nombre, telefonoColega, texto);
   if (!envio || !envio.ok) return { resultado: "error_envio", error: envio && envio.error };
 
   const refs = publicables.map((m) => m.ref).filter(Boolean);
   await groupSignals.marcarRespondida(org.id, signal.id, { texto, wamid: envio.wamid, modo: "auto", refs });
 
-  return { resultado: "publicado", texto, wamid: envio.wamid, publicables, grupo: grupo.nombre || grupo.jid };
+  // `destino` para que quien lo muestre no tenga que adivinar: el CRM y Sofi
+  // decian "publicado" y de ahi salio que Sofi le contara a Juan que la
+  // respuesta iba al grupo.
+  return { resultado: "publicado", destino: "dm_colega", telefono: telefonoColega, texto, wamid: envio.wamid, publicables, grupo: grupo.nombre || grupo.jid };
 }
 
 // DM manual al colega, desde el CRM (Juan, 2026-08-24): "que pueda mandar el

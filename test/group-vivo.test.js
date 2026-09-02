@@ -558,21 +558,50 @@ function grupoHabilitado(extra = {}) {
   return { id: "grp-1", jid: "vivo:gremial", nombre: "Gremial", responde: true, modo: "sombra", ...extra };
 }
 
-test("aprobarManual: publica el pedido callado y lo marca respondido", async () => {
+test("aprobarManual: responde al PRIVADO del colega y lo marca respondido", async () => {
   señalParaAprobar = señalCallada();
   grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = "573001234567";
 
   const r = await vivo.aprobarManual({ id: "org-1" }, "sig-callada");
 
   assert.strictEqual(r.resultado, "publicado");
-  assert.strictEqual(enviadosManual.length, 1);
-  assert.strictEqual(enviadosManual[0].sesion, "RADA-NATALIA");
-  assert.strictEqual(enviadosManual[0].chatId, "vivo:gremial");
-  // Cita el pedido original (Juan, 2026-08-20) — sin el prefijo "vivo:" que es
-  // solo de nuestro almacenamiento, WhatsApp no lo conoce.
-  assert.strictEqual(enviadosManual[0].replyTo, "false_120363@g.us_ABCDEF");
+  assert.strictEqual(r.destino, "dm_colega");
+  assert.strictEqual(enviosDmManual.length, 1, "salio por DM");
+  assert.strictEqual(enviosDmManual[0].sesion, "RADA-NATALIA");
+  assert.strictEqual(enviosDmManual[0].telefono, "573001234567");
   assert.strictEqual(marcadas.length, 1);
   assert.strictEqual(marcadas[0].modo, "auto");
+});
+
+// LA REGLA (Juan, 2026-09-02): "necesito que me asegures que las respuestas no
+// van al grupo si no al dm". Hasta este cambio, aprobar a mano publicaba EN EL
+// GRUPO gremial citando el pedido — la unica via del radar que escribia en un
+// grupo. Es la conducta que en julio termino en el baneo de la cuenta de una
+// asesora, y ademas quema la oportunidad delante de la competencia.
+test("aprobarManual: NUNCA escribe en el grupo", async () => {
+  señalParaAprobar = señalCallada();
+  grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = "573001234567";
+
+  await vivo.aprobarManual({ id: "org-1" }, "sig-callada");
+
+  assert.strictEqual(enviadosManual.length, 0, "no se publico nada en el grupo");
+});
+
+// Falla cerrado: sin telefono NO se cae de vuelta al grupo. El pedido queda
+// para la asesora, que decide a mano.
+test("aprobarManual: sin telefono del colega no publica en el grupo ni marca respondida", async () => {
+  señalParaAprobar = señalCallada();
+  grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = null;
+
+  const r = await vivo.aprobarManual({ id: "org-1" }, "sig-callada");
+
+  assert.strictEqual(r.resultado, "sin_telefono");
+  assert.strictEqual(enviadosManual.length, 0, "el grupo dejo de ser una salida posible");
+  assert.strictEqual(enviosDmManual.length, 0);
+  assert.strictEqual(marcadas.length, 0);
 });
 
 test("aprobarManual: una señal ya respondida no se vuelve a publicar", async () => {
@@ -594,9 +623,10 @@ test("aprobarManual: un grupo en modo escucha (responde=false) SI se puede aprob
   señalParaAprobar = señalCallada();
   grupoParaAprobar = grupoHabilitado({ responde: false });
 
+  telefonoColegaManual = "573001234567";
   const r = await vivo.aprobarManual({ id: "org-1" }, "sig-callada");
   assert.strictEqual(r.resultado, "publicado");
-  assert.strictEqual(enviadosManual.length, 1);
+  assert.strictEqual(enviosDmManual.length, 1);
 });
 
 test("aprobarManual: un grupo apagado del todo (modo ignorar) SI sigue sin publicarse", async () => {
@@ -613,13 +643,14 @@ test("aprobarManual: un grupo apagado del todo (modo ignorar) SI sigue sin publi
 // seguia devolviendo el mismo "no se puede" — la aprobacion humana no
 // aprobaba nada porque seguia exigiendo el mismo umbral del camino 100%
 // automatico.
-test("aprobarManual: un match que SOLO fallo por puntaje bajo SI se publica aprobado a mano", async () => {
+test("aprobarManual: un match que SOLO fallo por puntaje bajo SI sale aprobado a mano", async () => {
   señalParaAprobar = señalCallada({ matches: [matchBueno({ puntaje: 66 })] });
   grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = "573001234567";
 
   const r = await vivo.aprobarManual({ id: "org-1" }, "sig-callada");
   assert.strictEqual(r.resultado, "publicado");
-  assert.strictEqual(enviadosManual.length, 1);
+  assert.strictEqual(enviosDmManual.length, 1);
 });
 
 test("aprobarManual: la zona equivocada SIGUE sin publicarse aunque se apruebe a mano — es seguridad, no confianza", async () => {
@@ -665,7 +696,9 @@ test("aprobarManual: sin exactamente una sesion activa, falla cerrado en vez de 
 test("aprobarManual: si el envio falla, no se marca como respondida", async () => {
   señalParaAprobar = señalCallada();
   grupoParaAprobar = grupoHabilitado();
-  envioResultado = { ok: false, error: "sesion caida" };
+  telefonoColegaManual = "573001234567";
+  // Ahora el envio es el DM, no la publicacion en el grupo.
+  envioDmManualResultado = { ok: false, error: "sesion caida" };
 
   const r = await vivo.aprobarManual({ id: "org-1" }, "sig-callada");
   assert.strictEqual(r.resultado, "error_envio");

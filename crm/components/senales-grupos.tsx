@@ -77,6 +77,10 @@ export type Signal = {
    *  subconjunto de `matches`: el resto se descartó por la compuerta de
    *  calidad. Null en señales de antes del 2026-08-19. */
   respuesta_refs?: string[] | null;
+  /** Refs que el aviso a la asesora llevaba (2026-09-02). Complemento de
+   *  respuesta_refs: esas salieron solas al privado del colega, estas quedaron
+   *  en manos de la asesora para decidir. */
+  aviso_refs?: string[] | null;
   /** Por qué no salió DM automático ("sin_telefono" = le tocó a la asesora
    *  reenviarlo a mano) y a quién se le mandó el aviso. Vienen del
    *  select("*"); se usan solo para la franja de estado de la tarjeta. */
@@ -624,11 +628,25 @@ function Ficha({
                         {m.ref && s.respuesta_refs?.includes(String(m.ref)) && (
                           <span
                             className="rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-800"
-                            title="Esta propiedad quedó dentro del mensaje que el bot respondió"
+                            title="El bot le mandó esta propiedad al privado del colega, sin que nadie interviniera"
                           >
-                            📤 enviado
+                            📤 al colega
                           </span>
                         )}
+                        {/* Lo que NO salió solo pero sí se le pasó a la asesora
+                            (Juan, 2026-09-02: "cuales se avisaron"). Se muestra
+                            solo si no salió por DM: las dos etiquetas juntas
+                            confunden más de lo que informan. */}
+                        {m.ref &&
+                          !s.respuesta_refs?.includes(String(m.ref)) &&
+                          s.aviso_refs?.includes(String(m.ref)) && (
+                            <span
+                              className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800"
+                              title="Esta propiedad se le avisó a la asesora para que decida — el bot no la mandó solo"
+                            >
+                              👤 avisada
+                            </span>
+                          )}
                         {typeof m.puntaje === "number" && (
                           <span
                             className={[

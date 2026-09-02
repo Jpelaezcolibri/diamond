@@ -364,11 +364,22 @@ async function guardarRevalidacion(orgId, signalId, veredicto) {
 // sin ellos el aviso igual queda marcado como enviado, solo que ni Sofi ni
 // trazabilidad_radar van a poder decir A QUIEN se le mando ni matchear una
 // respuesta citada con esta señal.
-async function marcarAvisoEnviado(orgId, signalId, { wamid = null, advisorId = null } = {}) {
+// `refs` (2026-09-02): QUE propiedades llevaba el aviso. Juan: "necesito que
+// quede marcado el match en la propiedad que se envio con el bot de manera
+// automatica y cuales se avisaron". Es el complemento de respuesta_refs — esas
+// son las que salieron solas al privado del colega; estas son las que quedaron
+// en manos de la asesora. Best-effort igual que wamid/advisorId: si falta la
+// migracion, el aviso igual se marca enviado.
+async function marcarAvisoEnviado(orgId, signalId, { wamid = null, advisorId = null, refs = null } = {}) {
   if (!supabase) return true;
   const patch = { enviado_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+  const conRefs = { ...patch, aviso_wamid: wamid, aviso_advisor_id: advisorId, aviso_refs: refs };
   const conDestinatario = { ...patch, aviso_wamid: wamid, aviso_advisor_id: advisorId };
-  let { error } = await supabase.from("group_signals").update(conDestinatario).eq("org_id", orgId).eq("id", signalId);
+  let { error } = await supabase.from("group_signals").update(conRefs).eq("org_id", orgId).eq("id", signalId);
+  if (error && esColumnaFaltante(error)) {
+    console.warn("[grupos] Falta la migracion 2026-09-02_group_signals_aviso_refs.sql: el aviso se marca enviado, pero sin decir que propiedades llevaba.");
+    ({ error } = await supabase.from("group_signals").update(conDestinatario).eq("org_id", orgId).eq("id", signalId));
+  }
   if (error && esColumnaFaltante(error)) {
     console.error("[grupos] Falta la migracion 2026-08-18_radar_aviso_destinatario.sql: el aviso se marca enviado, pero sin destinatario.");
     ({ error } = await supabase.from("group_signals").update(patch).eq("org_id", orgId).eq("id", signalId));

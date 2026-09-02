@@ -49,6 +49,11 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
 - **Migraciones pendientes de correr en Supabase:**
   `db/migrations/2026-07-09_dmap_default_designer.sql` (default del motor de
   creativos → designer para orgs nuevas) y
+  `db/migrations/2026-09-02_group_signals_aviso_refs.sql` (columna
+  `group_signals.aviso_refs`: que propiedades llevaba el aviso a la asesora,
+  para poder distinguir por propiedad lo que el bot mando solo al colega
+  —`respuesta_refs`— de lo que quedo en manos de ella. Degrada limpio sin
+  correrla) y
   `db/migrations/2026-09-02_mandatos_activos.sql` (columna
   `organizations.mandatos_activos`: interruptor del carril de compra, para
   poder apagar el cruce contra mandatos y volcar todo el foco a vender lo
