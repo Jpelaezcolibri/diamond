@@ -33,6 +33,7 @@ export type MatchEncontrado = {
   escalado_a: string | null;
   texto: string | null;
   created_at: string;
+  ally_properties: { mensaje_original: string | null } | null;
 };
 
 function pesos(n: number | null) {
@@ -105,6 +106,15 @@ export function MatchesPendientesPanel({ matches }: { matches: MatchPendiente[] 
   );
 }
 
+// El link a la publicacion (cuando el colega lo pego) solo vive dentro del
+// texto crudo que compartio en el grupo -- mandato_match_alerts.texto (el
+// aviso que ya se le mando a la asesora) NUNCA lo incluye.
+function extraerLink(texto: string | null): string | null {
+  if (!texto) return null;
+  const m = texto.match(/https?:\/\/\S+/);
+  return m ? m[0] : null;
+}
+
 export function MatchesEncontradosPanel({ matches }: { matches: MatchEncontrado[] }) {
   if (matches.length === 0) {
     return (
@@ -126,6 +136,21 @@ export function MatchesEncontradosPanel({ matches }: { matches: MatchEncontrado[
             <span className="text-xs text-slate-400">{absoluteDateTime(m.created_at)}</span>
           </div>
           <p className="whitespace-pre-wrap text-slate-800">{m.texto || "(sin texto guardado)"}</p>
+          {(() => {
+            const link = extraerLink(m.ally_properties?.mensaje_original ?? null);
+            return link ? (
+              <a
+                href={link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-1 inline-block text-xs font-medium text-blue-700 underline"
+              >
+                🔗 Ver publicación original
+              </a>
+            ) : (
+              <p className="mt-1 text-xs text-slate-400">Sin link — contactá al colega directo.</p>
+            );
+          })()}
         </div>
       ))}
     </div>

@@ -56,6 +56,7 @@ type MatchEncontrado = {
   escalado_a: string | null;
   texto: string | null;
   created_at: string;
+  ally_properties: { mensaje_original: string | null } | null;
 };
 
 export default async function GruposPage() {
@@ -164,7 +165,7 @@ export default async function GruposPage() {
     // propios mandatos, admin los ve todos.
     fetchSafe<MatchEncontrado>(
       mias(
-        supabase.from("mandato_match_alerts").select("*").eq("entregado", true)
+        supabase.from("mandato_match_alerts").select("*, ally_properties(mensaje_original)").eq("entregado", true)
           .order("created_at", { ascending: false }).limit(100)
       ),
       "grupos:matches_encontrados"
