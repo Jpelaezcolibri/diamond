@@ -333,7 +333,12 @@ Expected: FAIL — `Cannot find module '../src/data/mandatos'`
 //
 // Sin supabase (tests, dev sin credenciales) guarda en memoria con el mismo
 // contrato, igual que src/data/command.js.
-const { supabase } = require("./supabase");
+// OJO: src/data/supabase.js hace `module.exports = client` — exporta el cliente
+// DIRECTO, no un objeto. Destructurar `{ supabase }` da undefined y este modulo
+// nunca escribiria en la base real: caeria SIEMPRE en la rama de memoria, en
+// silencio y tambien en produccion. Se importa igual que los 10 modulos
+// hermanos de src/data/.
+const supabase = require("./supabase");
 
 const memory = { mandatos: [], alertas: [] };
 let seq = 0;
@@ -980,7 +985,11 @@ function buildMandatoMatchAlert({ mandato, oferta, evaluacion, colega = {}, grup
   const quien = colega.nombre || "Un colega";
   const contacto = colega.telefono
     ? `Teléfono: +${colega.telefono}`
-    : `El colega no dejó número visible — ${tocarNombreEnGrupo(quien)}${grupo ? ` en el grupo ${grupo}` : ""}.`;
+    // tocarNombreEnGrupo ya devuelve la frase completa y YA dice "en el grupo"
+    // (src/lib/contacto.js). Concatenarle " en el grupo X" produce "...en el grupo
+    // para abrirle el chat directo ... en el grupo SOLO POBLADO". El nombre del
+    // grupo lo da la linea "Visto en:" de mas abajo, que ya existe.
+    : `El colega no dejó número visible — ${tocarNombreEnGrupo(quien)}.`;
 
   const visto = [grupo ? `Visto en: ${grupo}` : null, horaBogota(vistoEnIso) || null]
     .filter(Boolean).join(" · ");
@@ -1575,7 +1584,11 @@ Reemplazar el bloque completo de `// Ofertas de colegas: apagadas...` hasta
   // Si algun dia hace falta el archivo completo de ofertas, el camino es el
   // import de export .txt (importar-export.js), que sigue guardando todo a
   // proposito: ahi es una carga puntual, no ruido continuo.
-  if (c.clase === "oferta") return manejarOferta(org, c, grupo, { advisorId, sesion, jid });
+  // OJO: `jid` NO es una variable suelta en este scope (procesarMensaje solo
+  // destructura grupo, modo, enviar, asesor, advisorId, sesion, ahora). El jid del
+  // grupo vive en `grupo.jid` — pasar un `jid` inexistente aca es un
+  // ReferenceError que revienta el primer mensaje de tipo oferta en produccion.
+  if (c.clase === "oferta") return manejarOferta(org, c, grupo, { advisorId, sesion, jid: grupo && grupo.jid });
 ```
 
 Y agregar la función (exportada, para poder probarla sola):
@@ -1871,17 +1884,32 @@ module.exports = {
 };
 ```
 
-y en `sofi-comando-tools.js`:
+**VERIFICADO 2026-08-25 antes de ejecutar esta tarea — el `scope` de Sofi-Comando
+NO tiene la misma forma que el `ctx` de WhatsApp; hay que adaptar en el punto de
+llamada.** `scope` es `{ orgId, viewerUid, isAdmin }` (`sofi-comando.js:232`, `const
+ctx = { scope, session }`), no `{ org, advisor }`. `viewerUid` es el `auth_user_id`
+de quien está en la sesión del Centro de Comando — se resuelve la fila de
+`advisors` con `advisors.findByAuthUserId(orgId, authUserId)` (ya existe,
+`src/data/advisors.js:140`).
+
+En `sofi-comando-tools.js`:
 
 ```javascript
 const { registrarMandatoCompra } = require("./tools");
-// ... en el switch/ejecutor:
-if (name === "registrar_mandato_compra") return registrarMandatoCompra(input, scope);
+const advisors = require("../data/advisors"); // si ya esta importado, reusar
+
+// dentro de executeCommandTool, antes del switch, con el mismo `scope` que ya
+// se destructura arriba (`const { scope, session } = ctx;`):
+if (name === "registrar_mandato_compra") {
+  const advisor = await advisors.findByAuthUserId(scope.orgId, scope.viewerUid);
+  return registrarMandatoCompra(input, { org: { id: scope.orgId }, advisor });
+}
 ```
 
-Verificar que el `scope` de Sofi-Comando expone `advisor` y `org` con la misma forma
-que el `ctx` del motor de WhatsApp. Si no, adaptar en el punto de llamada — **nunca**
-duplicando el handler.
+Construye en el punto de llamada el mismo shape `{ org: {id}, advisor }` que ya
+espera `registrarMandatoCompra`, sin duplicar el handler ni inventar un segundo
+contrato. Si `advisor` sale `null`, el propio handler ya sabe decir que es una
+herramienta interna del equipo.
 
 - [ ] **Step 7: Correr toda la suite**
 
@@ -1897,67 +1925,241 @@ git commit -m "feat(radar): Sofi guarda mandatos de compra y confirma que entend
 
 ---
 
-### Task 8: Mandatos y pendientes en el CRM
+### Task 8 (REESCRITA): Mandatos y matches pendientes en el panel del CRM
+
+**El plan original apuntaba a un archivo equivocado.** `crm/app/api/grupos/radar/route.ts`
+es un `POST` que solo prende/apaga el motor vía `callBot` (proxy al servidor del bot) —
+no expone ninguna lectura de señales. El panel real es un **Server Component de
+Next.js**, `crm/app/(dashboard)/grupos/page.tsx`, que consulta Supabase directo con
+`createClient()` y el helper `fetchSafe<T>(query, label)` (definido en
+`crm/lib/fetch-safe.ts`), que ya degrada limpio si falta una tabla o columna —
+exactamente el comportamiento que se necesita si la migración de la Tarea 1 no está
+corrida todavía. Esta tarea reescrita apunta a ese archivo real.
 
 **Files:**
-- Modify: `crm/app/api/grupos/radar/route.ts`
+- Modify: `crm/app/(dashboard)/grupos/page.tsx`
+- Create: `crm/components/mandatos-panel.tsx`
 
 **Interfaces:**
-- Consumes: tablas `mandatos_compra` y `mandato_match_alerts`.
-- Produces: el GET del radar devuelve además `mandatos` y `matchesPendientes`.
+- Consumes: `fetchSafe<T>(query, label)` de `@/lib/fetch-safe` (ya importado en la
+  página), `createClient()` de `@/lib/supabase/server` (ya importado), el helper
+  `mias<T>(q)` YA DEFINIDO en la página (filtra por `advisor_id` para un no-admin).
+- Produces: dos secciones nuevas en la página, después de "Propiedades de colegas"
+  (al final del JSX, antes del cierre del `<div>` raíz): "Mis mandatos de compra" y
+  "Matches sin entregar".
 
-- [ ] **Step 1: Leer la ruta actual y seguir su patrón**
+- [ ] **Step 1: Agregar las dos consultas, siguiendo el patrón exacto de las que ya existen**
 
-Run: `sed -n 1,80p crm/app/api/grupos/radar/route.ts`
-
-Identificar cómo resuelve la org y cómo arma la respuesta. Seguir ese patrón exacto.
-
-- [ ] **Step 2: Agregar las dos consultas, blindadas**
+Justo después del bloque `const [gruposRes, conMatchRes, demandasRes, ofertasRes] = await Promise.all([...`
+(no antes: `mias` ya está definida arriba de ese punto en el archivo), agregar:
 
 ```typescript
-// Se lee con select("*") y se tolera el error a proposito: si la migracion
-// 2026-08-25_mandatos_compra.sql todavia no se corrio en Supabase, esta pantalla
-// tiene que seguir abriendo. Es la leccion de las columnas nuevas del radar: un
-// SELECT que asume una columna recien agregada rompe el panel entero.
-const { data: mandatos } = await supabase
-  .from("mandatos_compra")
-  .select("*")
-  .eq("org_id", orgId)
-  .eq("estado", "activo")
-  .order("created_at", { ascending: false })
-  .limit(100);
-
-const { data: matchesPendientes } = await supabase
-  .from("mandato_match_alerts")
-  .select("*")
-  .eq("org_id", orgId)
-  .eq("entregado", false)
-  .order("created_at", { ascending: false })
-  .limit(50);
-
-// ... y en el return, junto a lo que ya devuelve:
-mandatos: mandatos ?? [],
-matchesPendientes: matchesPendientes ?? [],
+const [mandatosRes, matchesPendientesRes] = await Promise.all([
+  fetchSafe<Mandato>(
+    mias(
+      supabase.from("mandatos_compra").select("*").eq("estado", "activo")
+        .order("created_at", { ascending: false })
+    ),
+    "grupos:mandatos"
+  ),
+  fetchSafe<MatchPendiente>(
+    supabase.from("mandato_match_alerts").select("*").eq("entregado", false)
+      .order("created_at", { ascending: false }).limit(50),
+    "grupos:matches_pendientes"
+  ),
+]);
+const mandatos = mandatosRes.data;
+const matchesPendientes = matchesPendientesRes.data;
 ```
 
-- [ ] **Step 3: Verificar que el CRM compila**
+`mandato_match_alerts` NO se filtra con `mias()`: un match pendiente le importa a
+cualquiera que pueda ver el panel de administración de matches sin entregar (es
+información operativa del carril de compra, no del mandato de un asesor puntual) —
+seguí el mismo criterio que ya usa `whatsapp_groups` en esta página (sin filtro de
+asesor, porque los grupos son compartidos). Si en el futuro hace falta acotarlo,
+que sea una decisión de producto explícita, no un default silencioso de esta tarea.
 
-Run: `cd crm && npm run build`
-Expected: build exitoso, sin errores de TypeScript
+- [ ] **Step 2: Tipos, junto a los `type` que ya existen arriba del archivo (cerca de `type Metricas`)**
 
-- [ ] **Step 4: Verificar que la ruta degrada sin la migración**
+```typescript
+type Mandato = {
+  id: string;
+  cliente_nombre: string;
+  operacion: string | null;
+  tipo: string | null;
+  zonas: string[];
+  precio_max: number | null;
+  habitaciones: number | null;
+  area_min: number | null;
+  exigencias: string[];
+  estado: string;
+  created_at: string;
+};
 
-Con la migración sin correr, la respuesta tiene que traer `mandatos: []` y
-`matchesPendientes: []` sin lanzar 500.
+type MatchPendiente = {
+  id: string;
+  mandato_id: string;
+  ally_property_id: string;
+  puntaje: number | null;
+  error: string | null;
+  escalado_a: string | null;
+  created_at: string;
+};
+```
+
+- [ ] **Step 3: El componente `crm/components/mandatos-panel.tsx`**
+
+Server Component simple (sin `"use client"`, no hace falta interactividad — es
+solo lectura, igual que `GruposPanel` cuando no necesita estado), siguiendo
+exactamente el estilo visual de `grupos-panel.tsx` (mismas clases Tailwind, mismo
+patrón de "estado vacío"):
+
+```typescript
+export type Mandato = {
+  id: string;
+  cliente_nombre: string;
+  operacion: string | null;
+  tipo: string | null;
+  zonas: string[];
+  precio_max: number | null;
+  habitaciones: number | null;
+  area_min: number | null;
+  exigencias: string[];
+  estado: string;
+  created_at: string;
+};
+
+export type MatchPendiente = {
+  id: string;
+  mandato_id: string;
+  ally_property_id: string;
+  puntaje: number | null;
+  error: string | null;
+  escalado_a: string | null;
+  created_at: string;
+};
+
+function pesos(n: number | null) {
+  return n ? `$${n.toLocaleString("es-CO")}` : null;
+}
+
+export function MandatosPanel({ mandatos }: { mandatos: Mandato[] }) {
+  if (mandatos.length === 0) {
+    return (
+      <div className="rounded-lg border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">
+        Todavía no hay mandatos de compra cargados. Reenviale a Sofi el pedido de un
+        cliente comprador para que empiece a cruzarlo contra lo que publican los colegas.
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-3">
+      {mandatos.map((m) => (
+        <div key={m.id} className="rounded-lg border border-slate-200 bg-white p-3">
+          <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
+            <p className="text-sm font-semibold text-slate-900">{m.cliente_nombre}</p>
+            <span className="text-xs text-slate-400">
+              {m.operacion || "?"} · {m.tipo || "?"}
+            </span>
+          </div>
+          <p className="text-xs text-slate-600">
+            {[
+              pesos(m.precio_max) ? `hasta ${pesos(m.precio_max)}` : null,
+              m.habitaciones ? `${m.habitaciones} hab` : null,
+              m.area_min ? `${m.area_min} m² min` : null,
+              m.zonas?.length ? m.zonas.join(", ") : null,
+            ].filter(Boolean).join(" · ") || "sin más detalle"}
+          </p>
+          {m.exigencias?.length > 0 && (
+            <p className="mt-1 text-xs text-slate-400">Debe tener: {m.exigencias.join(", ")}</p>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function MatchesPendientesPanel({ matches }: { matches: MatchPendiente[] }) {
+  if (matches.length === 0) {
+    return (
+      <div className="rounded-lg border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">
+        Ningún match sin entregar. Cuando un aviso no se pueda mandar al asesor
+        (ventana cerrada y plantilla fallida, o número inválido) aparece acá.
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-2">
+      {matches.map((m) => (
+        <div key={m.id} className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm">
+          <p className="text-slate-800">
+            Mandato <code className="text-xs">{m.mandato_id.slice(0, 8)}</code> · Oferta{" "}
+            <code className="text-xs">{m.ally_property_id.slice(0, 8)}</code>
+          </p>
+          <p className="mt-1 text-xs text-amber-800">
+            {m.escalado_a
+              ? "Escalado a +" + m.escalado_a
+              : m.error
+                ? "Sin entregar: " + m.error
+                : "Sin entregar todavía"}
+          </p>
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+- [ ] **Step 4: Insertar las dos secciones en `page.tsx`, después de "Propiedades de colegas" y antes del cierre del `<div>` raíz**
+
+```tsx
+      <h2 className="mb-1 mt-8 text-lg font-semibold text-slate-900">Mis mandatos de compra</h2>
+      <p className="mb-2 text-sm text-slate-500">
+        Clientes tuyos que están buscando. Cada oferta que un colega publique y le sirva
+        a alguno se te avisa por WhatsApp — no hace falta revisar esta lista para que funcione.
+      </p>
+      {mandatosRes.hasError && <ErrorBanner message={mandatosRes.message} />}
+      <MandatosPanel mandatos={mandatos} />
+
+      {admin && (
+        <>
+          <h2 className="mb-1 mt-8 text-lg font-semibold text-slate-900">Matches sin entregar</h2>
+          <p className="mb-2 text-sm text-slate-500">
+            Avisos que no se le pudieron mandar al asesor dueño del mandato. Ninguno debería
+            quedar acá mucho tiempo — si algo se acumula, hay un problema de entrega que resolver.
+          </p>
+          {matchesPendientesRes.hasError && <ErrorBanner message={matchesPendientesRes.message} />}
+          <MatchesPendientesPanel matches={matchesPendientes} />
+        </>
+      )}
+```
+
+Agregar el import junto a los otros imports de componentes de la página:
+```typescript
+import { MandatosPanel, MatchesPendientesPanel } from "@/components/mandatos-panel";
+```
+
+"Matches sin entregar" queda **solo para admin** (mismo patrón que "Posibles ventas",
+"Inbox de la línea vinculada", "Escucha en vivo" en esta misma página) — es
+información de supervisión del sistema completo, no del mandato de un asesor
+puntual. "Mis mandatos de compra" es visible para cualquiera con `miAdvisorId`
+(ya filtrado por `mias()`) o para admin (que ve todos).
+
+- [ ] **Step 5: Verificar que compila**
 
 Run: `cd crm && npx tsc --noEmit`
-Expected: sin errores
+Expected: sin errores nuevos. Si hay errores preexistentes en el proyecto que no
+tienen que ver con estos dos archivos, anotalos pero no los arregles — están fuera
+del alcance de esta tarea.
 
-- [ ] **Step 5: Commit**
+Run: `cd crm && npm run build`
+Expected: build exitoso.
+
+- [ ] **Step 6: Commit**
 
 ```bash
-git add crm/app/api/grupos/radar/route.ts
-git commit -m "feat(crm): el radar expone los mandatos activos y los matches sin entregar"
+git add "crm/app/(dashboard)/grupos/page.tsx" crm/components/mandatos-panel.tsx
+git commit -m "feat(crm): mostrar mandatos de compra y matches sin entregar en el panel del radar"
 ```
 
 ---
@@ -2005,11 +2207,34 @@ qué recibe, y qué hacer cuando un match queda pendiente.
 Run: `npm test`
 Expected: PASS — toda la suite, incluidos los 5 archivos nuevos de test
 
-Run: `node -e "require('./src/server.js')" ` y matarlo tras confirmar que arranca sin
-excepciones de require (los módulos nuevos entran en la cadena de `vivo.js`).
+**RIESGO REAL, leer antes de correr esto.** `src/server.js` llama a `app.listen(...)`
+SIN ninguna guarda de `require.main === module` — requerir el archivo siempre lo
+arranca. Y dentro del callback de `listen`, cada scheduler
+(`reminders`, `followups`, `group-digest`, `radar-watchdog`, `radar-recordatorio`,
+`visitas-venta`) se enciende con `if (config.supabaseUrl) ...start()` —
+`config.supabaseUrl` lee `process.env.SUPABASE_URL` DIRECTO, sin pasar por el guard
+de `NODE_TEST_CONTEXT` de `src/data/supabase.js`. El `.env` de esta máquina tiene
+credenciales REALES de producción. Sin cuidado, este chequeo puede terminar
+disparando un scheduler real (por ejemplo, `radar-recordatorio` podría mandarle un
+WhatsApp real a una asesora).
 
-En Windows, para matar el proceso del puerto:
-`netstat -ano | findstr :3000` y después `taskkill /PID <pid> /F`
+Por eso el comando SÍ lleva `NODE_TEST_CONTEXT=1`: eso hace que
+`src/data/supabase.js` exporte `client = null` (ver su guard, es independiente de
+si `SUPABASE_URL` está seteada), así que aunque los schedulers arranquen, cada
+módulo de datos que llamen cae a su rama de memoria y no toca la red. El objetivo
+de este paso es solo confirmar que la cadena de `require` no tiene un módulo roto
+o un ciclo — nada más.
+
+Run (con el flag, y matándolo apenas confirmes la línea de arranque en el log):
+
+```bash
+NODE_TEST_CONTEXT=1 timeout 5 node -e "require('./src/server.js')" 2>&1 | head -20
+```
+
+Si no tenés `timeout` disponible en tu shell, corré `NODE_TEST_CONTEXT=1 node -e "require('./src/server.js')"`
+en background, esperá la línea `Bot inmobiliario corriendo en puerto...` en el log,
+y matalo enseguida por PID (en Windows: `netstat -ano | findstr :3000` y después
+`taskkill /PID <pid> /F`). **Nunca corras este chequeo sin `NODE_TEST_CONTEXT=1`.**
 
 - [ ] **Step 5: Commit**
 
