@@ -53,6 +53,7 @@ function Kpi({
   tono,
   badge,
   badgeTono = "text-indigo-700",
+  href,
 }: {
   n: number | string;
   titulo: string;
@@ -60,11 +61,15 @@ function Kpi({
   tono: keyof typeof TONO;
   badge?: string | null;
   badgeTono?: "text-indigo-700" | "text-rose-700" | "text-teal-700";
+  /** Ancla de la lista que hay detrás de este número (Juan, 2026-09-02:
+   *  "necesito entender por ejemplo cuáles son los 4 sin entregar"). Un KPI
+   *  sin destino no es clickeable: no todos tienen una lista que mostrar. */
+  href?: string;
 }) {
   // El badge va debajo del detalle, no flotando arriba a la derecha: con
   // "171 por revisar" y un 172 al lado se pisaban (visto con datos reales).
-  return (
-    <div className={`flex min-h-24 min-w-0 flex-col justify-between rounded-xl p-2.5 text-white sm:p-3 ${TONO[tono]}`}>
+  const contenido = (
+    <>
       <p className="font-display text-2xl font-extrabold leading-none tabular-nums sm:text-3xl">{n}</p>
       <div className="min-w-0">
         <p className="mt-2 text-[11px] font-bold leading-tight sm:text-xs">{titulo}</p>
@@ -75,7 +80,20 @@ function Kpi({
           </span>
         )}
       </div>
-    </div>
+    </>
+  );
+  const clases = `flex min-h-24 min-w-0 flex-col justify-between rounded-xl p-2.5 text-white sm:p-3 ${TONO[tono]}`;
+
+  if (!href) return <div className={clases}>{contenido}</div>;
+  return (
+    <a
+      href={href}
+      className={`${clases} cursor-pointer transition hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white`}
+      title="Ver la lista"
+    >
+      {contenido}
+      <span className="mt-1 text-[10px] font-bold opacity-70">Ver la lista →</span>
+    </a>
   );
 }
 
@@ -141,6 +159,7 @@ export default function DashboardMatches({
               detalle="calzan con inventario propio"
               tono="indigo"
               badge={pedidosPorRevisar > 0 ? `${pedidosPorRevisar} por revisar` : null}
+              href="#entrada-match"
             />
             <Kpi
               n={autoDm ?? "—"}
@@ -149,12 +168,13 @@ export default function DashboardMatches({
               tono="teal"
               badge={dmManual ? `${dmManual} manual${dmManual === 1 ? "" : "es"} desde el CRM` : null}
               badgeTono="text-teal-700"
+              href="#entrada-bot"
             />
-            <Kpi n={reenvioManual ?? "—"} titulo="Asesora reenvió a mano" detalle="sin teléfono resuelto" tono="amber" />
+            <Kpi n={reenvioManual ?? "—"} titulo="Asesora reenvió a mano" detalle="sin teléfono resuelto" tono="amber" href="#entrada-mano" />
           </Carril>
           <Carril tono="green" etiqueta="← Salida" descripcion="Ofertas de colegas · se las mostramos al cliente">
-            <Kpi n={mandatosActivos} titulo="Mandatos activos" detalle="clientes propios buscando" tono="sky" />
-            <Kpi n={propiedadesConMatch} titulo="Propiedades con match" detalle="ofertas que sirven a un mandato" tono="green" />
+            <Kpi n={mandatosActivos} titulo="Mandatos activos" detalle="clientes propios buscando" tono="sky" href="#mandatos" />
+            <Kpi n={propiedadesConMatch} titulo="Propiedades con match" detalle="ofertas que sirven a un mandato" tono="green" href="#salida" />
             {admin ? (
               <Kpi
                 n={sinEntregar}
@@ -163,6 +183,7 @@ export default function DashboardMatches({
                 tono="rose"
                 badge={sinEntregar > 0 ? "atender" : null}
                 badgeTono="text-rose-700"
+                href="#sin-entregar"
               />
             ) : (
               // Un asesor no ve "sin entregar" (es supervisión del carril

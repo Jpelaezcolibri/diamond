@@ -15,10 +15,10 @@ import LineaDmInbox, { type DmMensaje } from "@/components/linea-dm-inbox";
 import PosiblesVentas, { type PosibleVenta } from "@/components/posibles-ventas";
 import {
   MandatosPanel,
-  MatchesPendientesPanel,
   MatchesEncontradosPanel,
   type MatchEncontrado,
 } from "@/components/mandatos-panel";
+import { MatchesPendientesPanel, type MatchPendiente } from "@/components/matches-pendientes-panel";
 import { MensajesPorAsesoraPanel, type MensajesPorAsesora } from "@/components/mensajes-por-asesora-panel";
 import DashboardMatches, { type MetricasRadar as Metricas } from "@/components/dashboard-matches";
 import Carril from "@/components/carril";
@@ -41,15 +41,6 @@ type Mandato = {
   created_at: string;
 };
 
-type MatchPendiente = {
-  id: string;
-  mandato_id: string;
-  ally_property_id: string;
-  puntaje: number | null;
-  error: string | null;
-  escalado_a: string | null;
-  created_at: string;
-};
 
 export default async function GruposPage() {
   const supabase = await createClient();
@@ -143,9 +134,17 @@ export default async function GruposPage() {
       ),
       "grupos:mandatos"
     ),
+    // Con el cliente del mandato, la oferta y el TEXTO del aviso que no salio
+    // (Juan, 2026-09-02: "necesito entender cuales son los 4 sin entregar y
+    // cuales son y como los envio"). Antes solo se mostraban dos ids
+    // truncados, que no le sirven a nadie para actuar.
     fetchSafe<MatchPendiente>(
-      supabase.from("mandato_match_alerts").select("*").eq("entregado", false)
-        .order("created_at", { ascending: false }).limit(50),
+      supabase
+        .from("mandato_match_alerts")
+        .select("*, mandatos_compra(cliente_nombre), ally_properties(mensaje_original)")
+        .eq("entregado", false)
+        .order("created_at", { ascending: false })
+        .limit(50),
       "grupos:matches_pendientes"
     ),
     // Ofertas de colegas que SI hicieron match con un mandato activo (Juan,
@@ -556,6 +555,7 @@ export default async function GruposPage() {
 
       <section className="grid items-start gap-4 xl:grid-cols-2">
         <Carril
+          anclas={["entrada", "entrada-match", "entrada-revisar", "entrada-bot", "entrada-mano"]}
           tono="entrada"
           titulo="Pedidos de colegas"
           descripcion="Clientes de otras inmobiliarias que buscan algo que tenés. No van al embudo propio."
@@ -567,6 +567,7 @@ export default async function GruposPage() {
         </Carril>
 
         <Carril
+          anclas={["salida"]}
           tono="salida"
           titulo="Propiedades de colegas"
           descripcion="Solo lo que un colega publicó y le sirve a uno de tus mandatos. Nunca es inventario propio: confirmá disponibilidad antes de ofrecerla."
@@ -578,7 +579,7 @@ export default async function GruposPage() {
               rojo, debajo de los entregados: es supervisión del carril de
               compra completo, por eso solo admin y sin filtro por asesor. */}
           {admin && (matchesPendientes.length > 0 || matchesPendientesRes.hasError) && (
-            <div className="mt-4 border-t border-slate-200 pt-3">
+            <div id="sin-entregar" className="mt-4 scroll-mt-4 border-t border-slate-200 pt-3">
               <p className="mb-1 text-xs font-bold uppercase tracking-wider text-rose-700">
                 Sin entregar · {matchesPendientes.length}
               </p>
@@ -593,7 +594,7 @@ export default async function GruposPage() {
         </Carril>
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white">
+      <section id="mandatos" className="scroll-mt-4 rounded-2xl border border-slate-200 bg-white">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-4 py-3">
           <div>
             <h2 className="font-display text-base font-bold text-slate-900">Mis mandatos de compra</h2>

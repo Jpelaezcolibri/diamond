@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { fechaHora } from "@/lib/fecha";
 import { formatearArea, formatearPrecio, pluralAlcobas } from "@/lib/formato";
 
@@ -875,14 +875,25 @@ function Ficha({
   );
 }
 
-type Filtro = "match" | "revisar" | "bot" | "todos";
+type Filtro = "match" | "revisar" | "bot" | "mano" | "todos";
 
 const FILTROS: { id: Filtro; etiqueta: string }[] = [
   { id: "match", etiqueta: "Con match" },
   { id: "revisar", etiqueta: "Por revisar" },
   { id: "bot", etiqueta: "Bot resolvió" },
+  { id: "mano", etiqueta: "A mano" },
   { id: "todos", etiqueta: "Todos" },
 ];
+
+// El KPI del dashboard es un link a #entrada-<filtro>: al llegar, la lista se
+// abre ya filtrada por ese número (Juan, 2026-09-02: "que pueda ingresar y me
+// lleve a cada una de las listas"). Si el ancla no nombra un filtro conocido,
+// no pasa nada y se usa el de siempre.
+function filtroDelAncla(): Filtro | null {
+  if (typeof window === "undefined") return null;
+  const h = window.location.hash.replace("#entrada-", "");
+  return (["match", "revisar", "bot", "mano", "todos"] as Filtro[]).includes(h as Filtro) ? (h as Filtro) : null;
+}
 
 function pasaFiltro(s: Signal, filtro: Filtro): boolean {
   const conMatch = (s.matches || []).length > 0;
@@ -893,6 +904,9 @@ function pasaFiltro(s: Signal, filtro: Filtro): boolean {
     // tambien lo llevan el DM manual desde el CRM y la publicacion en el
     // grupo de agosto (auditoria 2026-09-02).
     case "bot": return !!s.respondida_at && s.respuesta_modo === "auto" && s.politica_motivo === "ok";
+    // Los que le tocaron a la asesora porque no se resolvió el teléfono del
+    // colega — el número "Asesora reenvió a mano" del dashboard.
+    case "mano": return s.politica_motivo === "sin_telefono" && !!s.aviso_advisor_id;
     default: return true;
   }
 }
@@ -915,6 +929,11 @@ export default function SenalesGrupos({
   // desde el rediseño del 2026-09-02 son pills, con dos cortes más que ya
   // existían como dato pero no como filtro: por revisar y resueltos por el bot.)
   const [filtro, setFiltro] = useState<Filtro>(clase === "demanda" ? "match" : "todos");
+  // Al montar, si se llegó desde un KPI del dashboard, se respeta ese filtro.
+  useEffect(() => {
+    const delAncla = filtroDelAncla();
+    if (delAncla) setFiltro(delAncla);
+  }, []);
   // Estado optimista por señal (lo marca la tarjeta al validar/descartar):
   // sin esto, "Por revisar" seguía mostrando la tarjeta recién validada
   // hasta el próximo refresh del servidor.
@@ -952,12 +971,13 @@ export default function SenalesGrupos({
   // Conteo por pill, sobre las filas ya colapsadas por contenido: el número
   // del botón tiene que coincidir con lo que aparece al tocarlo.
   const conteo = useMemo(() => {
-    const c: Record<Filtro, number> = { match: 0, revisar: 0, bot: 0, todos: todas.length };
+    const c: Record<Filtro, number> = { match: 0, revisar: 0, bot: 0, mano: 0, todos: todas.length };
     for (const f of todas) {
       const s = conEstado(f.s);
       if (pasaFiltro(s, "match")) c.match++;
       if (pasaFiltro(s, "revisar")) c.revisar++;
       if (pasaFiltro(s, "bot")) c.bot++;
+      if (pasaFiltro(s, "mano")) c.mano++;
     }
     return c;
   }, [todas, conEstado]);

@@ -31,6 +31,7 @@ export default function Carril({
   descripcion,
   contador,
   herramientas,
+  anclas = [],
   children,
 }: {
   tono: keyof typeof TONO;
@@ -39,11 +40,19 @@ export default function Carril({
   contador: number;
   /** Fila de filtros o acciones justo debajo del encabezado. */
   herramientas?: ReactNode;
+  /** Ids a los que apuntan los KPI del dashboard. Van como anclas invisibles
+   *  arriba del carril para que el navegador tenga a dónde saltar: un mismo
+   *  carril es el destino de varios números distintos, cada uno con su filtro
+   *  (Juan, 2026-09-02). */
+  anclas?: string[];
   children: ReactNode;
 }) {
   const t = TONO[tono];
   return (
-    <section className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white">
+    <section className="flex min-w-0 scroll-mt-4 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white">
+      {anclas.map((a) => (
+        <span key={a} id={a} className="block scroll-mt-4" aria-hidden />
+      ))}
       <header className={`flex items-start justify-between gap-3 border-b px-4 py-3 ${t.head}`}>
         <div className="min-w-0">
           <h2 className="font-display flex items-center gap-2 text-base font-bold text-slate-900">

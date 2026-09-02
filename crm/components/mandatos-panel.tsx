@@ -14,16 +14,6 @@ export type Mandato = {
   created_at: string;
 };
 
-export type MatchPendiente = {
-  id: string;
-  mandato_id: string;
-  ally_property_id: string;
-  puntaje: number | null;
-  error: string | null;
-  escalado_a: string | null;
-  created_at: string;
-};
-
 export type MatchEncontrado = {
   id: string;
   mandato_id: string;
@@ -85,36 +75,6 @@ export function MandatosPanel({
                 : "todavía sin match"}
             </p>
           )}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-export function MatchesPendientesPanel({ matches }: { matches: MatchPendiente[] }) {
-  if (matches.length === 0) {
-    return (
-      <div className="rounded-lg border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">
-        Ningún match sin entregar. Cuando un aviso no se pueda mandar al asesor
-        (ventana cerrada y plantilla fallida, o número inválido) aparece acá.
-      </div>
-    );
-  }
-  return (
-    <div className="flex flex-col gap-2">
-      {matches.map((m) => (
-        <div key={m.id} className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm">
-          <p className="text-slate-800">
-            Mandato <code className="text-xs">{m.mandato_id.slice(0, 8)}</code> · Oferta{" "}
-            <code className="text-xs">{m.ally_property_id.slice(0, 8)}</code>
-          </p>
-          <p className="mt-1 text-xs text-amber-800">
-            {m.escalado_a
-              ? "Escalado a +" + m.escalado_a
-              : m.error
-                ? "Sin entregar: " + m.error
-                : "Sin entregar todavía"}
-          </p>
         </div>
       ))}
     </div>
