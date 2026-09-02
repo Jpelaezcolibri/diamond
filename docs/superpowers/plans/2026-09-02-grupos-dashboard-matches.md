@@ -13,7 +13,7 @@
 - El filtro `mias` (definido en `page.tsx`, filtra por `advisor_id`) debe aplicarse a toda query nueva de señales/mensajes que no sea explícitamente de supervisión admin-only — mismo criterio que ya usan `mandatosRes` y `matchesEncontradosRes`.
 - La sección "Mensajes por asesora" es **admin-only** (compara entre asesoras) — mismo criterio que "Matches sin entregar".
 - No se modifica nada en `src/` (el bot) — todo el trabajo es en `crm/`.
-- Este proyecto (`crm/`) no tiene suite de tests automatizados para componentes; la verificación de cada tarea es `npx tsc --noEmit` (desde `crm/`) + `npm run build` (desde `crm/`), ambos sin errores. No hay comando de test unitario que correr.
+- Este proyecto (`crm/`) no tiene suite de tests automatizados para componentes React; la verificación de cada tarea es `npx tsc --noEmit` (desde `crm/`) + `npm run build` (desde `crm/`), ambos sin errores. **Corrección post-Tarea-1:** SÍ existe un test de Node en la raíz del repo que escanea el código fuente de `page.tsx` — `test/crm-grupos-aislamiento.test.js` — y falla si alguna consulta a `group_signals` no está envuelta en `mias(`. Cualquier tarea que toque `page.tsx` y agregue o modifique una consulta a `group_signals` DEBE correr también `node --test test/crm-grupos-aislamiento.test.js` desde la raíz del repo (no solo `tsc`/`build`) antes de dar la tarea por verificada.
 - Los nombres en español ya establecidos en el archivo (Grupo, Mandato, MatchPendiente, MatchEncontrado, señal, asesor) se mantienen — no traducir ni renombrar lo existente.
 
 ---
@@ -197,11 +197,13 @@ Localizar el bloque admin-only que ya trae `sesionesRes, asesoresRes` (busca `co
   // Mensajes por asesora (Juan, 2026-09-02): comparación admin-only entre
   // asesoras -- mismo criterio que "Matches sin entregar", no es informacion
   // que cada asesora necesite ver de si misma en esta pantalla (su propio
-  // trabajo ya se ve en el resto de la pagina).
+  // trabajo ya se ve en el resto de la pagina). La consulta a group_signals
+  // SI pasa por mias() -- ver "OJO" mas abajo, es obligatorio aunque el
+  // bloque entero solo corra para admin.
   const [entradaPorAsesorRes, salidaPorAsesorRes, activosRes] = admin
     ? await Promise.all([
         fetchSafe<{ aviso_advisor_id: string; politica_motivo: string | null }>(
-          supabase.from("group_signals").select("aviso_advisor_id, politica_motivo").not("aviso_advisor_id", "is", null),
+          mias(supabase.from("group_signals").select("*")).not("aviso_advisor_id", "is", null),
           "grupos:entrada_por_asesor"
         ),
         fetchSafe<{ advisor_id: string }>(
@@ -231,7 +233,29 @@ Localizar el bloque admin-only que ya trae `sesionesRes, asesoresRes` (busca `co
     : [];
 ```
 
-**OJO:** esta consulta es admin-only (no pasa por `mias`) porque el propósito de la sección es comparar entre asesoras — un no-admin nunca la ve.
+**OJO — obligatorio, no opcional:** este repo tiene un test que escanea el
+código fuente de esta página y falla si CUALQUIER
+`supabase.from("group_signals")` no está envuelto en `mias(` —
+`test/crm-grupos-aislamiento.test.js` ("toda consulta a group_signals pasa
+por el filtro por asesor"), sin excepción para queries admin-only. Envolver
+en `mias()` acá es semánticamente un no-op para un admin (mira la
+implementación de `mias`: si `admin` es true devuelve la query sin tocar),
+así que no cambia el comportamiento — pero es obligatorio para que el test
+siga en verde. **Correr `node --test test/crm-grupos-aislamiento.test.js`
+desde la raíz del repo (no desde `crm/`) además de `tsc`/`build` al
+verificar esta tarea** — ya se encontró esta trampa una vez en la Tarea 1 de
+este mismo plan (commit `ffc5c41`, "restaurar el filtro mias() en los KPIs
+de dashboard de Grupos") y no debe repetirse.
+
+**Sobre `select("*")` en vez de una lista de columnas:** con una lista
+angosta el helper genérico de `mias()` dispara el error de TypeScript
+TS2589 ("Type instantiation is excessively deep") — mismo problema ya
+documentado en este archivo en la consulta de `idsSeñalDm`. La forma que sí
+compila (verificada en la Tarea 1 de este plan): `mias(query-con-un-solo-.eq()-o-select("*")-sin-mas-filtros)`,
+y cualquier filtro adicional (`.not(...)`, etc.) encadenado DESPUÉS de
+`mias(...)`, nunca dentro. El código de arriba ya sigue este patrón —
+seguirlo literal, no "simplificarlo" volviendo a meter el `.not()` dentro
+de `mias(...)`.
 
 - [ ] **Step 3: Renderizar la sección**
 
@@ -682,6 +706,13 @@ git commit -m "feat(crm): dashboard de matches se actualiza en vivo (Supabase Re
 ### Task 7: Deploy y verificación
 
 **Files:** ninguno (push + verificación operativa)
+
+- [ ] **Step 0: Gate final de aislamiento**
+
+Antes de pushear, correr una última vez desde la raíz del repo:
+`node --test test/crm-grupos-aislamiento.test.js` — debe dar 6/6 en verde.
+Si alguna tarea de este plan reintrodujo una consulta a `group_signals` sin
+`mias(`, se detiene acá, no en producción.
 
 - [ ] **Step 1: Push a main**
 
