@@ -28,7 +28,7 @@ Equipo: 1 dev (Juan) + Claude Code. Idioma de la app: español (Colombia).
 Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
 `docs:`, `config:`).
 
-## 2. Estado actual (2026-07-07)
+## 2. Estado actual (2026-09-03)
 
 - **Objetivo activo:** DMAP Fase 1 cerrada y desplegada (sync, IA de
   creativos, publicación, analytics); foco actual = cerrar los known issues
@@ -46,58 +46,22 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
   `origin/main` y desplegados. Confirmar igualmente con
   `git log origin/main..HEAD` antes de asumir que un commit local está en
   producción (Railway despliega desde GitHub).
-- **Migraciones pendientes de correr en Supabase:**
-  `db/migrations/2026-07-09_dmap_default_designer.sql` (default del motor de
-  creativos → designer para orgs nuevas) y
-  `db/migrations/2026-09-03_aviso_link.sql` (columnas `aviso_token`,
-  `visto_at`, `gestionado_at` y `gestion` en `group_signals`: el link que va
-  en cada aviso a la asesora, y las dos medidas que reemplazan "por revisar"
-  en `/grupos`. Necesita ademas `CRM_PUBLIC_URL` en Railway. Degrada limpio
-  sin correrla: el aviso sale sin link y el KPI no muestra numero) y
-  `db/migrations/2026-09-02_group_signals_aviso_refs.sql` (columna
-  `group_signals.aviso_refs`: que propiedades llevaba el aviso a la asesora,
-  para poder distinguir por propiedad lo que el bot mando solo al colega
-  —`respuesta_refs`— de lo que quedo en manos de ella. Degrada limpio sin
-  correrla) y
-  `db/migrations/2026-09-02_mandatos_activos.sql` (columna
-  `organizations.mandatos_activos`: interruptor del carril de compra, para
-  poder apagar el cruce contra mandatos y volcar todo el foco a vender lo
-  propio — pedido de Juan el 2026-09-02. Sin correrla el bot funciona igual
-  que hoy: la lectura degrada a `true`) y
-  `db/migrations/2026-09-02_realtime_grupos.sql` (agrega `group_signals` y
-  `mandato_match_alerts` a la publicación de Supabase Realtime — sin esto,
-  el badge "en vivo" del dashboard de matches de `/grupos` en el CRM se
-  conecta pero nunca recibe un evento, mismo caso ya documentado en
-  `2026-08-14_realtime_leads.sql` para el kanban).
-  Ya corrida y verificada (confirmado 2026-09-02 con datos reales en
-  producción — la columna existe y tiene 48 filas con valor real):
-  `2026-08-18_radar_aviso_destinatario.sql` (guarda A QUIEN se le manda cada
-  aviso del radar + su wamid, para que trazabilidad_radar no tenga que
-  adivinar y para que una respuesta citada — swipe-to-reply — se pueda
-  enlazar con el pedido exacto) — corrección: esta nota decía "pendiente"
-  desde el 2026-08-18, quedó desactualizada.
-  Ya corrida y verificada 2026-08-18: `2026-07-25_advisor_rotacion.sql`
-  (Catherine Uribe es la única con `recibe_transferencias=true` en venta).
-  `db/migrations/2026-08-21_property_prioridad_venta.sql` (columna
-  `properties.prioridad_venta`, suma puntaje en el radar de grupos solo a la
-  ref `8989725` — urgencia de venta pedida por Juan sobre esa propiedad
-  puntual, el resto del inventario no se toca).
-  `db/migrations/2026-08-24_contact_whatsapp_number.sql` (columna
-  `organizations.contact_whatsapp_number`, el numero de la linea oficial que
-  se ofrece en los avisos al colega del radar de grupos, resuelto por
-  organización en vez de una sola env var de Railway — el código ya degrada
-  limpio a `CONTACT_WHATSAPP_NUMBER` sin ella).
-  `db/migrations/2026-08-24_group_signals_exigencias.sql` (columnas
-  `area_min`, `banos`, `garajes`, `estrato` y `flexible_habitaciones` en
-  `group_signals`: el clasificador ya extraía esos campos y el motor de cruce
-  ya los usaba para puntuar, pero no se guardaban — el panel mostraba un
-  pedido recortado y el efecto del castigo por cumplir corto no se podía
-  medir sobre histórico. El código degrada limpio sin ella: el insert
-  reintenta sacando solo la columna que falte, y el CRM lee con `select("*")`).
-  Ya corrida y verificada 2026-08-25: `2026-08-25_mandatos_compra.sql` (carril
-  de compra que cruza mandatos de compradores registrados por Natalia contra
-  ofertas de colegas; las dos tablas existen en Supabase, vacías, listas para
-  el primer mandato real).
+- **Migraciones en Supabase (verificado 2026-09-03 contra producción por
+  REST, proyecto `qwqmlmyyswpdypdfvmiv`):** TODAS las columnas y tablas de
+  `db/migrations/` hasta `2026-09-03_aviso_link.sql` existen y tienen datos
+  reales (10 señales con `aviso_token`, 81 con `aviso_advisor_id`,
+  `organizations.mandatos_activos=false`, `directorio_lids` creada,
+  `creative_engine='designer'` en la org Diamond). `CRM_PUBLIC_URL` ya está en
+  Railway y el arranque lo confirma en el log ("Link de avisos: https://crm...").
+  Publicación Realtime verificada 2026-09-03 con `pg_publication_tables`:
+  leads, conversations, messages, publication_events, command_messages,
+  group_signals y mandato_match_alerts — `2026-08-14_realtime_leads.sql` y
+  `2026-09-02_realtime_grupos.sql` corridas. `2026-07-09_dmap_default_designer.sql`
+  corrida el mismo día en el mismo bloque (solo el DEFAULT para orgs nuevas).
+  **No hay migraciones pendientes.**
+  Regla: antes de declarar una migración "pendiente" acá, verificarla con un
+  `select` por REST — esta lista estuvo desactualizada del 2026-08-18 al
+  2026-09-03.
 - **Pendientes de negocio:** teléfonos reales de asesores de arriendo/
   vehículos en `advisors` · corregir precio de la ref `9921388` en Wasi ·
   verificación de empresa en Meta · confirmar las 3 propiedades exclusivas
