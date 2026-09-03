@@ -165,6 +165,85 @@ Preguntas para ella:
 7. ¿Hay pedidos que preferís que vayan directo a otra persona (por zona, por
    tipo, por monto)?
 
+## DECISIÓN (Juan, 2026-09-02, noche): opción D. Abrir el link es política de la empresa.
+
+Natalia la adopta. Lo que sigue es el diseño del flujo completo, partido en
+bloques para mirarlo uno por uno. Incluye dos verdades técnicas que hay que
+aceptar antes de construir.
+
+### Verdad técnica 1: no existe un link que abra un GRUPO con el mensaje puesto
+
+Lo que Juan pidió: "al darle enviar se abra WhatsApp y se vincule con el
+grupo al cual se le debe enviar el mensaje". WhatsApp no ofrece eso:
+
+| Link | Qué hace | Sirve para |
+|---|---|---|
+| `wa.me/<numero>?text=...` | Abre el chat directo con ESA persona, con el texto ya escrito | Colegas con número resuelto |
+| `whatsapp://send?text=...` | Abre WhatsApp con el texto y el SELECTOR de chats; ella elige a quién | Cualquier caso; un toque más, y no sabemos a quién eligió |
+| `chat.whatsapp.com/<invite>` | Abre la pantalla de UNIRSE al grupo, no el chat | Nada |
+| Abrir un grupo por su id con texto | No existe | — |
+
+Además la regla de hoy (Juan, misma fecha) es que la respuesta va al PRIVADO
+del colega, nunca al grupo. Así que el destino correcto es el chat directo, y
+ahí está el nudo: **los pedidos que le llegan a Natalia son justamente los
+que no tienen número** — los que sí lo tienen ya los mandó el bot solo. Un
+link que depende del número no ayuda en el caso que más importa.
+
+Lo que SÍ se puede hacer, por caso:
+
+- **Con número** (el bot no mandó por límite diario, pedido vencido o rechazo
+  de WhatsApp): botón "Enviar" → `wa.me/<numero>?text=<mensaje>` → se abre el
+  chat con el texto listo → ella toca enviar en WhatsApp. Dos toques.
+- **Sin número** (la mayoría): botón "Copiar mensaje y abrir WhatsApp" →
+  copia el texto al portapapeles y abre WhatsApp → la página le dice en qué
+  grupo está el colega y que toque su nombre → pega y envía. Cuatro toques,
+  todos en su teléfono, que es donde están los grupos.
+
+En los dos casos, **el toque del botón en la página es nuestra medición**
+(`gestionado_at`, con `gestion = "envio"`). No podemos ver el envío real
+dentro de WhatsApp; vemos la intención, que es lo más cerca que se puede
+llegar sin volver a publicar por la línea vinculada.
+
+### Verdad técnica 2: Catherine no está en los grupos
+
+Hallazgo de Juan: los grupos viven en el teléfono de Natalia. Si un pedido se
+escala a Catherine, ella no puede tocar el nombre del colega porque no ve el
+grupo; tendría que devolvérselo a Natalia. El escalado como estaba pensado no
+cierra.
+
+Tres salidas, de mejor a peor:
+
+1. **Catherine entra a los mismos grupos con su propio celular.** Sin WAHA,
+   sin vincular nada: solo membresía. Con eso puede tocar nombres y escribir
+   por privado igual que Natalia. Es una decisión de negocio (¿la aceptan en
+   los grupos?), no de código. Si se puede, el escalado es un traspaso real.
+2. **El escalado solo para casos con número.** Catherine recibe `wa.me` y
+   puede escribir desde su teléfono. Cubre pocos casos (ver arriba).
+3. **El escalado es un recordatorio, no un traspaso.** Catherine recibe
+   "Natalia tiene esto sin gestionar hace 2 h" y la empuja. Barato, débil.
+
+### Los bloques
+
+**Bloque 1 — El link y la medición.** Token por aviso, página `/aviso/[token]`
+para celular, botón de URL "Ver la oportunidad" en el aviso de WhatsApp,
+`visto_at` al abrir. KPIs: "por revisar" desaparece; entran **vistos** y
+**gestionados**. Vale solo, sin los otros bloques. ~2 días.
+
+**Bloque 2 — El envío asistido.** En la página: el mensaje ya redactado
+(`redactar.mensajeGrupo`, el mismo del DM automático, con las observaciones
+de lo no confirmado), y el botón según el caso: `wa.me` si hay número,
+"Copiar y abrir WhatsApp" si no. Más "No sirve". El toque graba
+`gestionado_at`. ~1 día.
+
+**Bloque 3 — El contador y el traspaso.** Solo después de decidir qué pasa
+con Catherine (salida 1, 2 o 3). Reemplaza el disparador de
+`radar-silencio.js` por "sin gestionar", solo en horario, solo aprobadas,
+ventana inicial 2 h. El link de la que lo pierde dice "pasó a X". ~1 día
+una vez decidido.
+
+**Orden:** 1 → 2 → decidir Catherine → 3. Cada bloque se mira antes del
+siguiente.
+
 ## Preguntas para Natalia (mañana)
 
 0. Si el aviso trajera un link "Ver la oportunidad" con las fichas y el
