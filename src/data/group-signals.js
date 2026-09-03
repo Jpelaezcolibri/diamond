@@ -4,6 +4,7 @@
 // worker (invariante de privacidad #4 del diseno). Este modulo no tiene forma
 // de guardar un mensaje que no sea senal, y eso es a proposito.
 
+const crypto = require("node:crypto");
 const supabase = require("./supabase");
 const memory = require("./memory");
 
@@ -818,7 +819,87 @@ async function buscarPorTelefono(orgId, telefono) {
   return data;
 }
 
+// ── El link del aviso (Juan, 2026-09-02, opcion D) ──────────────────────
+// Ver db/migrations/2026-09-03_aviso_link.sql y el plan
+// docs/superpowers/plans/2026-09-03-radar-link-en-el-aviso.md.
+
+// Token irrepetible por señal. Idempotente: si ya tiene, devuelve el mismo
+// (el digest y el aviso unico pueden pedirlo los dos). Sin la migracion
+// devuelve null y el aviso sale sin link.
+async function asegurarToken(orgId, signalId) {
+  if (!supabase) {
+    const s = memory.groupSignals.find((x) => x.org_id === orgId && x.id === signalId);
+    if (!s) return null;
+    if (!s.aviso_token) s.aviso_token = crypto.randomBytes(24).toString("base64url");
+    return s.aviso_token;
+  }
+  const { data: actual, error: e1 } = await supabase
+    .from("group_signals").select("aviso_token").eq("org_id", orgId).eq("id", signalId).maybeSingle();
+  if (e1) {
+    if (esColumnaFaltante(e1)) console.warn("[grupos] Falta 2026-09-03_aviso_link.sql: el aviso sale sin link.");
+    return null;
+  }
+  if (!actual) return null;
+  if (actual.aviso_token) return actual.aviso_token;
+  const token = crypto.randomBytes(24).toString("base64url");
+  const { error } = await supabase.from("group_signals").update({ aviso_token: token }).eq("org_id", orgId).eq("id", signalId);
+  if (error) {
+    console.warn("[grupos] No se pudo guardar el token del aviso:", error.message);
+    return null;
+  }
+  return token;
+}
+
+async function obtenerPorToken(token) {
+  if (!token) return null;
+  if (!supabase) return memory.groupSignals.find((x) => x.aviso_token === token) || null;
+  const { data, error } = await supabase.from("group_signals").select("*").eq("aviso_token", token).maybeSingle();
+  if (error) return null;
+  return data || null;
+}
+
+// Solo la PRIMERA apertura escribe: "visto" es un hecho, no un contador.
+async function marcarVisto(orgId, signalId) {
+  const ahora = new Date().toISOString();
+  if (!supabase) {
+    const s = memory.groupSignals.find((x) => x.org_id === orgId && x.id === signalId);
+    if (!s || s.visto_at) return false;
+    s.visto_at = ahora;
+    return true;
+  }
+  const { data, error } = await supabase
+    .from("group_signals").update({ visto_at: ahora })
+    .eq("org_id", orgId).eq("id", signalId).is("visto_at", null).select("id");
+  if (error) {
+    console.warn("[grupos] No se pudo marcar visto:", error.message);
+    return false;
+  }
+  return Boolean(data && data.length);
+}
+
+const GESTIONES = ["envio", "no_sirve"];
+async function marcarGestion(orgId, signalId, gestion) {
+  if (!GESTIONES.includes(gestion)) throw new Error(`Gestion invalida: ${gestion}`);
+  const ahora = new Date().toISOString();
+  if (!supabase) {
+    const s = memory.groupSignals.find((x) => x.org_id === orgId && x.id === signalId);
+    if (!s) return false;
+    s.gestionado_at = ahora;
+    s.gestion = gestion;
+    return true;
+  }
+  const { error } = await supabase
+    .from("group_signals").update({ gestionado_at: ahora, gestion, updated_at: ahora })
+    .eq("org_id", orgId).eq("id", signalId);
+  if (error) {
+    console.warn("[grupos] No se pudo marcar la gestion:", error.message);
+    return false;
+  }
+  return true;
+}
+
 module.exports = {
+  asegurarToken, obtenerPorToken, marcarVisto, marcarGestion,
   create, list, setEstado, resumen, marcarEnviada, ultimaFechaImportada,
   pendientesDigest, marcarDigest, revertirDigest,
   marcarRespondida, respuestasDesde, guardarRevalidacion, marcarAvisoEnviado,
