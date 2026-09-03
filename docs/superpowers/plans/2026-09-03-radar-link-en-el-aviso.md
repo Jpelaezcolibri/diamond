@@ -314,7 +314,10 @@ y en la llamada, después de `decisionDm.motivo`, agregar el 7º argumento: `{ l
   const link = require("../lib/link-aviso").urlDeAviso(await groupSignals.asegurarToken(org.id, senal.id));
 ```
 
-y cerrar la llamada con `..., s.politica_motivo, { link })` (verificar cuál es el 6º argumento actual en ese archivo y respetarlo). En el digest, dentro de `pedidos.map((s) => ({ ... }))`, el map pasa a ser `async` con `Promise.all`:
+y en la llamada a `alertaAsesor.construir(...)` de esa función, que hoy termina en `senal.politica_motivo
+  );`, agregar el séptimo argumento: `senal.politica_motivo,
+    { link }
+  );`. En el digest, dentro de `pedidos.map((s) => ({ ... }))`, el map pasa a ser `async` con `Promise.all`:
 
 ```js
       pedidos: await Promise.all(pedidos.map(async (s) => ({
@@ -381,7 +384,7 @@ beforeEach(async () => {
 });
 
 test("ver: primera apertura marca visto, la segunda no", async (t) => {
-  t.mock.method(organizations, "getById", async () => ({ id: "org-1", name: "Diamond" }));
+  t.mock.method(organizations, "findById", async () => ({ id: "org-1", name: "Diamond" }));
   t.mock.method(whatsappGroups, "listSessions", async () => []);
   t.mock.method(vivo, "prepararAviso", async () => ({ resultado: "ok", senal: { id: "s1" }, utiles: [], dudosas: [], mensaje: null, telefonoColega: null, motivo: "sin_telefono", porque: "x", aprobada: false }));
   const r1 = res(); await rutaDe("/api/grupos/aviso/ver")({ body: { token } }, r1);
@@ -407,7 +410,7 @@ test("gestion: envio y no_sirve se guardan; no_sirve ademas descarta la señal",
 
 Run: `node --test test/aviso-endpoint.test.js` → FAIL (`No existe POST /api/grupos/aviso/ver`).
 
-(Si `organizations.getById` no existe, usar la función que sí resuelva una org por id en `src/data/organizations.js`; si ninguna lo hace, agregar `getById(id)` con una consulta `select * eq id` y rama memoria `memory.organizations.find`.)
+(`organizations.findById(orgId)` ya existe en `src/data/organizations.js`.)
 
 - [ ] **Step 2: `vivo.prepararAviso`** — después de `responderPorDmManual`, antes de `module.exports`:
 
@@ -463,7 +466,7 @@ router.post("/api/grupos/aviso/ver", async (req, res) => {
   const signal = token ? await groupSignals.obtenerPorToken(token) : null;
   if (!signal) return res.status(404).json({ error: "Este link no existe o venció" });
   try {
-    const org = await organizations.getById(signal.org_id);
+    const org = await organizations.findById(signal.org_id);
     const sesiones = await whatsappGroups.listSessions(org.id).catch(() => []);
     const sesion = (sesiones.find((s) => s.estado === "activa") || {}).nombre || null;
     const datos = await vivo.prepararAviso(org, signal.id, { sesion });
