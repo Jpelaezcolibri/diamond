@@ -241,8 +241,14 @@ con Catherine (salida 1, 2 o 3). Reemplaza el disparador de
 ventana inicial 2 h. El link de la que lo pierde dice "pasó a X". ~1 día
 una vez decidido.
 
-**Orden:** 1 → 2 → decidir Catherine → 3. Cada bloque se mira antes del
-siguiente.
+**Orden:** 1 → 2 → 3. Cada bloque se mira antes del siguiente.
+
+**Catherine (Juan, 2026-09-02, noche): salida 1.** Ya esta en casi todos los
+grupos con su propio celular, asi que puede tocar nombres y escribir por
+privado igual que Natalia. El traspaso del bloque 3 es real. Pendiente:
+confirmar en cuales grupos NO esta, para que el escalado no le mande un
+pedido de un grupo que no ve (el aviso trae el nombre del grupo; alcanza
+con una lista).
 
 ## Preguntas para Natalia (mañana)
 
