@@ -45,7 +45,10 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
+  // /aviso es publico a proposito (Juan, 2026-09-02, opcion D): la asesora lo
+  // abre desde WhatsApp sin sesion; el token irrepetible de la URL es la
+  // autorizacion, y el bot es quien lo valida.
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|api|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|api|aviso|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };
