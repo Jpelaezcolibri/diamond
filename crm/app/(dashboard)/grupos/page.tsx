@@ -207,7 +207,11 @@ export default async function GruposPage() {
   // "valida si la tabla de pedidos con match solo tiene 200 slots por que no
   // veo que suba"). La lista sigue en 200 —es lo que se muestra—; el numero
   // sale de un conteo real, como los otros dos KPIs de este carril.
-  const [conMatchTotalRes, porRevisarRes, autoDmRes, dmManualRes, reenvioManualRes] = await Promise.all([
+  // "Por revisar" se fue (Juan, 2026-09-02): media clics en el CRM que nadie
+  // hace (212 de 213). En su lugar, dos hechos de la asesora: abrio el link
+  // del aviso (visto_at) y toco un boton adentro (gestionado_at). Ver
+  // db/migrations/2026-09-03_aviso_link.sql.
+  const [conMatchTotalRes, vistosRes, gestionadosRes, autoDmRes, dmManualRes, reenvioManualRes] = await Promise.all([
     countSafe(
       mias(
         supabase
@@ -223,8 +227,17 @@ export default async function GruposPage() {
           .from("group_signals")
           .select("*", { count: "exact", head: true })
           .eq("clase", "demanda")
-      ).neq("matches", "[]").eq("estado", "nuevo"),
-      "grupos:por_revisar"
+      ).neq("matches", "[]").not("visto_at", "is", null),
+      "grupos:vistos"
+    ),
+    countSafe(
+      mias(
+        supabase
+          .from("group_signals")
+          .select("*", { count: "exact", head: true })
+          .eq("clase", "demanda")
+      ).neq("matches", "[]").not("gestionado_at", "is", null),
+      "grupos:gestionados"
     ),
     countSafe(
       mias(
@@ -453,8 +466,10 @@ export default async function GruposPage() {
   // conteo fallo, se cae al largo de la lista: un numero corto es mejor que
   // un cero que parece "no hay nada".
   const conMatch = conMatchTotalRes.hasError ? conMatchLista.length : conMatchTotalRes.count;
-  // Lo que falta por mirar. Es el número que importa: los otros sólo crecen.
-  const pendientes = porRevisarRes.hasError ? conMatchLista.filter((s) => s.estado === "nuevo").length : porRevisarRes.count;
+  // Sin la migracion la consulta falla y se muestra "—", nunca un cero que
+  // parezca "nadie abrio nada".
+  const vistos = vistosRes.hasError ? null : vistosRes.count;
+  const gestionados = gestionadosRes.hasError ? null : gestionadosRes.count;
 
   // Matches entregados por mandato, para la grilla de "Mis mandatos": se
   // cuenta sobre lo que ya vino, ninguna consulta más.
@@ -505,7 +520,8 @@ export default async function GruposPage() {
         admin={admin}
         mandatosActivos={mandatos.length}
         pedidosConMatch={conMatch}
-        pedidosPorRevisar={pendientes}
+        vistos={vistos}
+        gestionados={gestionados}
         propiedadesConMatch={matchesEncontrados.length}
         autoDm={autoDmRes.hasError ? null : autoDm}
         dmManual={dmManualRes.hasError ? null : dmManual}

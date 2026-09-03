@@ -22,7 +22,10 @@ type Props = {
   admin: boolean;
   mandatosActivos: number;
   pedidosConMatch: number;
-  pedidosPorRevisar: number;
+  /** Avisos que la asesora abrio (visto_at) y que gestiono (gestionado_at).
+   *  null = la consulta fallo (migracion 2026-09-03_aviso_link sin correr). */
+  vistos: number | null;
+  gestionados: number | null;
   propiedadesConMatch: number;
   /** null = la consulta falló (page.tsx muestra el ErrorBanner aparte). */
   autoDm: number | null;
@@ -120,7 +123,8 @@ export default function DashboardMatches({
   admin,
   mandatosActivos,
   pedidosConMatch,
-  pedidosPorRevisar,
+  vistos,
+  gestionados,
   propiedadesConMatch,
   autoDm,
   dmManual,
@@ -158,7 +162,7 @@ export default function DashboardMatches({
               titulo="Pedidos con match"
               detalle="calzan con inventario propio"
               tono="indigo"
-              badge={pedidosPorRevisar > 0 ? `${pedidosPorRevisar} por revisar` : null}
+              badge={vistos === null ? null : `${vistos} vistos · ${gestionados ?? 0} gestionados`}
               href="#entrada-match"
             />
             <Kpi
