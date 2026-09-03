@@ -41,6 +41,7 @@ const whatsappGroups = require("../data/whatsapp-groups");
 const revalidar = require("../groups/revalidar");
 const alertaAsesor = require("../groups/alerta-asesor");
 const digest = require("../groups/digest-avisos");
+const linkAvisoLib = require("../lib/link-aviso");
 const directorio = require("../groups/directorio");
 const { entregarConRespaldo } = require("../lib/entrega-asesor");
 const ritmo = require("../lib/ritmo-avisos");
@@ -66,6 +67,7 @@ async function textoDePedido(org, senal, grupos, sesion) {
   const telefono = await directorio
     .telefonoDe(org.id, senal.autor_telefono, { sesion, jid: grupo.jid })
     .catch(() => null);
+  const link = linkAvisoLib.urlDeAviso(await groupSignals.asegurarToken(org.id, senal.id));
   return alertaAsesor.construir(
     {
       grupo_nombre: grupo.nombre || grupo.jid || null,
@@ -88,7 +90,8 @@ async function textoDePedido(org, senal, grupos, sesion) {
     senal.matches || [],
     telefono,
     org,
-    senal.politica_motivo
+    senal.politica_motivo,
+    { link }
   );
 }
 
@@ -140,6 +143,11 @@ async function procesarOrg(org, ahora) {
       ? await textoDePedido(org, pedidos[0], grupos, sesion)
       : alertas[0].texto;
   } else {
+    // El link de cada pedido del digest (Juan, 2026-09-02, opcion D).
+    const links = new Map();
+    for (const s of pedidos) {
+      links.set(s.id, linkAvisoLib.urlDeAviso(await groupSignals.asegurarToken(org.id, s.id)));
+    }
     const mandatos = new Map(
       (await mandatosData.listarActivos(org.id).catch(() => [])).map((m) => [m.id, m.cliente_nombre])
     );
@@ -156,6 +164,7 @@ async function procesarOrg(org, ahora) {
         dudosas: (s.revalidacion && s.revalidacion.refs_dudosas ? s.revalidacion.refs_dudosas.length : 0),
         // Por que le toca a ella y no lo resolvio el bot (Juan, 2026-09-02).
         motivo: s.politica_motivo,
+        link: links.get(s.id) || null,
       })),
       alertas.map((a) => ({
         id: a.id,

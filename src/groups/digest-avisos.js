@@ -60,7 +60,9 @@ function lineaPedido(p, i) {
     .join(" · ");
   const cuantas = p.utiles > 0 ? `${p.utiles} para ofrecer` : `${p.dudosas} para revisar`;
   const porque = PORQUE_CORTO[p.motivo];
-  return `${i}. ${p.colega || "un colega"} — ${que || "sin detalle"}\n   ${cuantas}${porque ? ` · ${porque}` : ""}`;
+  const base = `${i}. ${p.colega || "un colega"} — ${que || "sin detalle"}\n   ${cuantas}${porque ? ` · ${porque}` : ""}`;
+  // El link de cada pedido (Juan, 2026-09-02, opcion D). Solo si lo tiene.
+  return p.link ? `${base}\n   👉 ${p.link}` : base;
 }
 
 // Una linea por oferta de colega que le sirve a un mandato.

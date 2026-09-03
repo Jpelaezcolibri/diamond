@@ -33,6 +33,7 @@ const organizations = require("../data/organizations");
 const syncEstado = require("../data/sync-estado");
 const whatsappGroups = require("../data/whatsapp-groups");
 const advisors = require("../data/advisors");
+const linkAvisoLib = require("../lib/link-aviso");
 const avisoCercano = require("./aviso-cercano");
 const directorio = require("./directorio");
 const waha = require("../lib/waha");
@@ -532,6 +533,9 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
   // ("que entienda por que no se envio de manera automatica"). Los dos datos
   // ya existian —el clasificador los extrae, decidirDm decide el motivo— y
   // solo faltaba llevarlos hasta el mensaje que lee la asesora.
+  // El link del aviso (Juan, 2026-09-02, opcion D). Sin migracion o sin
+  // CRM_PUBLIC_URL queda null y el aviso sale como hoy.
+  const linkAviso = linkAvisoLib.urlDeAviso(await groupSignals.asegurarToken(org.id, signal.id));
   const texto = alertaAsesor.construir(
     {
       grupo_nombre: grupo.nombre || grupo.jid,
@@ -554,7 +558,8 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
     matches,
     telefonoColega,
     org,
-    decisionDm.motivo
+    decisionDm.motivo,
+    { link: linkAviso }
   );
   if (!texto) {
     await feedComando.registrar(org, señalParaFeed, veredicto, matches).catch((e) =>

@@ -205,7 +205,7 @@ function queBusca(senal) {
  *                        aviso sale como antes, sin la linea de explicacion.
  * @returns el texto del aviso, o null si no hay nada que decir
  */
-function construir(senal, veredicto, matches, telefonoColega = null, org = null, motivoDm = null) {
+function construir(senal, veredicto, matches, telefonoColega = null, org = null, motivoDm = null, { link = null } = {}) {
   const refsUtiles = veredicto && Array.isArray(veredicto.refs_utiles) ? veredicto.refs_utiles : [];
   const refsDudosas = veredicto && Array.isArray(veredicto.refs_dudosas) ? veredicto.refs_dudosas : [];
   if (!veredicto || (refsUtiles.length === 0 && refsDudosas.length === 0)) return null;
@@ -236,6 +236,10 @@ function construir(senal, veredicto, matches, telefonoColega = null, org = null,
     `Grupo: ${senal.grupo_nombre || "sin nombre"}`,
     `Colega: ${quien}`,
     `Contacto: ${contactoTexto}`,
+    // El link (Juan, 2026-09-02, opcion D): arriba, antes del pedido, para
+    // que sea lo primero que toca. Lo esencial sigue inline: si un dia no le
+    // abre, no pierde el negocio por una metrica.
+    ...(link ? [``, `👉 Ver la oportunidad: ${link}`] : []),
     ...(porque ? [``, `Por qué no salió solo: ${porque}`] : []),
     ...(busca ? [``, `Busca: ${busca}`] : []),
     ``,

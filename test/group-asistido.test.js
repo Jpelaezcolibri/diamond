@@ -82,6 +82,8 @@ function instalar() {
   require.cache[RUTA("data/group-signals.js")] = {
     exports: {
       guardarRevalidacion: async (org, id, v) => { revalidacionesGuardadas.push({ id, v }); return true; },
+      // El link del aviso (2026-09-03): sin migracion no hay token, y el aviso sale sin link.
+      asegurarToken: async () => null,
       marcarAvisoEnviado: async (org, id, opts) => { avisosMarcados.push({ id, ...opts }); return true; },
       respuestasDesde: async () => ({ cantidad: 0, ultimaIso: null }),
       marcarRespondida: async (orgId, id, datos) => { marcadasRespondidas.push({ id, ...datos }); return true; },

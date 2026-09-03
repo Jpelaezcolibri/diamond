@@ -116,6 +116,8 @@ function instalarDobles() {
   require.cache[RUTA("data/group-signals.js")] = {
     exports: {
       respuestasDesde: async () => respuestasRecientes,
+      // El link del aviso (2026-09-03): sin migracion no hay token, y el aviso sale sin link.
+      asegurarToken: async () => null,
       marcarRespondida: async (orgId, id, datos) => { marcadas.push({ id, ...datos }); return true; },
       guardarPolitica: async (orgId, id, datos) => { politicasGuardadas.push({ id, ...datos }); return true; },
       obtenerPorId: async () => señalParaAprobar,
