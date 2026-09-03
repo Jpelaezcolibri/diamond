@@ -37,6 +37,10 @@ async function informe(org) {
 
   const visitas = listaEnv("RADAR_VISITAS_ALERTA_TO");
   const copias = listaEnv("RADAR_ALERTA_TO");
+  // El link de los avisos (opcion D, 2026-09-03): sin CRM_PUBLIC_URL el aviso
+  // sale igual, pero sin link — y sin link no hay "visto" ni "gestionado".
+  const linkAvisos = String(process.env.CRM_PUBLIC_URL || "").trim();
+  if (!linkAvisos) faltantes.push("link de avisos (CRM_PUBLIC_URL)");
 
   const partes = [
     `Sofi arranco (${org.name || org.id}).`,
@@ -45,6 +49,7 @@ async function informe(org) {
     `Respaldo: ${process.env.RADAR_ESCALADO_PHONE ? enmascarar(process.env.RADAR_ESCALADO_PHONE) : respaldo.map((a) => a.name).join(", ") || "NADIE"}.`,
     `Vigilante: ${vigilante.map(enmascarar).join(", ") || "NADIE"}.`,
     `Visitas: ${visitas.length ? visitas.map(enmascarar).join(", ") : "sin configurar"}.`,
+    `Link de avisos: ${linkAvisos || "sin configurar"}.`,
   ];
   // Las copias son la unica que es peor si ESTA: es lo que le mandaba a Juan
   // cada aviso. Solo se menciona cuando hay algo.

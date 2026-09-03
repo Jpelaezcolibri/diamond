@@ -49,6 +49,11 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
 - **Migraciones pendientes de correr en Supabase:**
   `db/migrations/2026-07-09_dmap_default_designer.sql` (default del motor de
   creativos → designer para orgs nuevas) y
+  `db/migrations/2026-09-03_aviso_link.sql` (columnas `aviso_token`,
+  `visto_at`, `gestionado_at` y `gestion` en `group_signals`: el link que va
+  en cada aviso a la asesora, y las dos medidas que reemplazan "por revisar"
+  en `/grupos`. Necesita ademas `CRM_PUBLIC_URL` en Railway. Degrada limpio
+  sin correrla: el aviso sale sin link y el KPI no muestra numero) y
   `db/migrations/2026-09-02_group_signals_aviso_refs.sql` (columna
   `group_signals.aviso_refs`: que propiedades llevaba el aviso a la asesora,
   para poder distinguir por propiedad lo que el bot mando solo al colega

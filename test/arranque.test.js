@@ -39,6 +39,7 @@ beforeEach(() => {
   delete process.env.RADAR_VISITAS_ALERTA_TO;
   delete process.env.RADAR_ALERTA_TO;
   process.env.RADAR_WATCHDOG_TO = "573016981200";
+  process.env.CRM_PUBLIC_URL = "https://crm.ejemplo.com";
 });
 
 test("con todo configurado, dice quien es quien y no reporta faltantes", async () => {
@@ -75,4 +76,19 @@ test("anunciar lo manda al vigilante y nunca revienta", async () => {
   assert.strictEqual(enviados.length, 1);
   assert.strictEqual(enviados[0].to, "573016981200");
   assert.ok(enviados[0].texto.startsWith("Sofi arranco"));
+});
+
+test("sin CRM_PUBLIC_URL, el informe dice que los avisos salen sin link", async () => {
+  delete process.env.CRM_PUBLIC_URL;
+  const arranque = instalar();
+  const { texto, faltantes } = await arranque.informe({ id: "org-1" });
+  assert.ok(faltantes.includes("link de avisos (CRM_PUBLIC_URL)"));
+  assert.ok(texto.includes("Link de avisos: sin configurar"));
+});
+
+test("con CRM_PUBLIC_URL, el informe la muestra", async () => {
+  const arranque = instalar();
+  const { texto, faltantes } = await arranque.informe({ id: "org-1" });
+  assert.ok(!faltantes.includes("link de avisos (CRM_PUBLIC_URL)"));
+  assert.ok(texto.includes("Link de avisos: https://crm.ejemplo.com."));
 });
