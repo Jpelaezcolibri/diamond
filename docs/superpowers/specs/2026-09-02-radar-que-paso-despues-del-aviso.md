@@ -65,9 +65,86 @@ El botón registra lo mínimo en el momento; el CRM permite completar después
 (nota, fecha, resultado) para lo que valga la pena. Es A primero y B encima
 cuando el dato mínimo ya esté fluyendo.
 
+## Opción D — Un link en el aviso: abrirlo es el dato, y adentro se trabaja
+
+Propuesta de Juan (2026-09-02, tarde). Cada aviso a la asesora lleva un link
+con un token único. Abrirlo registra `visto_at`; adentro está la mesa de
+trabajo de ese pedido: las fichas, el contacto del colega, el texto del DM
+listo para copiar, y dos toques — "ya le escribí" / "no sirve" — que
+registran `gestionado`. Sin login, sin entrar al CRM, una pantalla por pedido.
+
+**Por qué es mejor que A y B.** A da el dato pero no sirve para trabajar; B
+sirve para trabajar pero no se abre. D hace las dos cosas desde el mismo
+mensaje. Y reemplaza el KPI "por revisar" —que hoy mide clics en el CRM que
+nadie hace— por dos medidas reales: **vistos** y **gestionados**.
+
+**La regla que lo hace seguro.** No se guarda toda la información detrás del
+link. El aviso sigue diciendo inline lo esencial (quién, qué busca, contacto);
+detrás van las fichas, las observaciones y el DM. Si un día no le abre, no
+pierde el negocio por una métrica.
+
+**Cómo se arma, reutilizando:**
+- Token por aviso, irrepetible, con vencimiento; resuelve la organización
+  solo (multi-tenant). Columna `aviso_token` en `group_signals`.
+- Ruta nueva en el CRM, para celular: `/aviso/[token]`. Muestra lo que ya
+  existe (tarjeta de señal, fichas, link de Wasi, texto del DM) y acciona lo
+  que ya existe (`responderPorDmManual`, `rechazarPedidoRadar`).
+- Primer GET graba `visto_at`; la acción graba `gestionado_at` + `gestion`.
+- El aviso sale con un botón de URL de WhatsApp ("Ver la oportunidad") —
+  la Cloud API lo soporta (`cta_url`) — y el mismo link va al respaldo.
+- El DM automático al colega no cambia: esto es solo para lo que va a la
+  asesora.
+
+Esfuerzo: dos o tres días (página, token, dos KPIs, botón de URL).
+
+### El contador: si no lo abre a tiempo, pasa a Catherine
+
+Propuesta de Juan sobre D. Revisión crítica, no complaciente:
+
+**Lo que tiene de bueno.** Hoy ya existe un escalado a Catherine
+(`scheduler/radar-silencio.js`) que dispara cuando Natalia "no respondió el
+aviso" — o sea, cuando no le escribió nada a Sofi. Es una señal débil: puede
+haber llamado al colega sin contestarle a Sofi. "Abrió el link" es mejor señal,
+y "gestionó" es la mejor. El contador no es un mecanismo nuevo: es cambiarle
+el disparador a uno que ya existe. Eso es un punto a favor, no en contra.
+
+**Donde falla si se hace literal:**
+
+1. *Abrir no es actuar.* Si el contador se apaga con "lo abrió", una mirada
+   de dos segundos silencia el escalado y el pedido muere callado. El
+   contador tiene que contar hasta **gestionado**, no hasta visto. "Visto"
+   solo cambia el texto del escalado ("lo abrió hace 40 min y no hizo nada").
+2. *Copia no, traspaso sí.* Si las dos lo reciben, las dos pueden escribirle
+   al mismo colega por la misma propiedad — el desorden que las reglas de
+   comisión compartida existen para evitar, y se ve mal ante el colega. Cuando
+   pasa a Catherine, el link de Natalia dice "pasó a Catherine" y el de
+   Catherine dice "era de Natalia". Una dueña a la vez. `entrega-asesor.js`
+   ya escribe ese encabezado.
+3. *El reloj tiene que saber la hora.* Treinta minutos a ciegas a las 7 pm, en
+   visita o un domingo, y Catherine recibe copias de cosas que Natalia habría
+   resuelto a las 8 am. El contador cuenta solo en horario (`advisors.horario`
+   ya existe: Catherine 08:00-18:00) y se pausa afuera.
+4. *Solo lo aprobado.* El escalado es para oportunidades con `refs_utiles`.
+   Escalar dudosas es recrear en la línea de Catherine los 22 avisos por día
+   que se acaban de quitar de la de Natalia.
+5. *Capacidad.* Hoy fueron 22 avisos a Natalia. Si abre la mitad, son ~11
+   escalados por día a Catherine. Si ella no los va a trabajar, el escalado es
+   teatro. Es la pregunta #5-#7 de mañana, no un parámetro del código.
+
+**Lo que no arregla, y hay que decirlo:** si Natalia no abre los links, la
+solución no es Catherine — es la conversación de mañana.
+
+**Recomendación:** hacerlo, con estas cinco condiciones, reemplazando el
+disparador de `radar-silencio.js` (no un scheduler nuevo). Ventana inicial
+generosa (2 h en horario) y medir dos semanas antes de apretarla.
+
 ## Recomendación
 
-**A ahora. C cuando el botón ya se esté usando.** Empezar por lo que se va a
+**D, si Natalia dice que abriría un link en el aviso.** Si no, A ahora y C
+después. En cualquiera de los dos casos, el contador entra con las cinco
+condiciones de arriba.
+
+Lo que decía antes de la opción D — **A ahora. C cuando el botón ya se esté usando.** Empezar por lo que se va a
 usar de verdad y medir la tasa de respuesta de Natalia a los botones antes de
 construir la pantalla. Si en dos semanas el botón se toca en más del 60% de
 los avisos, vale la pena B encima. Si no, el problema no es la herramienta.
@@ -90,6 +167,8 @@ Preguntas para ella:
 
 ## Preguntas para Natalia (mañana)
 
+0. Si el aviso trajera un link "Ver la oportunidad" con las fichas y el
+   contacto, ¿lo abrirías? ¿Desde ahí marcarías "ya le escribí"?
 1. Cuando te llega un aviso y le escribís al colega, ¿te costaría tocar un
    botón en el mismo mensaje para dejarlo registrado?
 2. ¿Qué es lo mínimo que te serviría recordar después de cada aviso: solo
