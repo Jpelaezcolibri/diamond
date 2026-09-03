@@ -422,43 +422,41 @@ async function enviarTexto(sesion, chatId, texto, { replyTo = null } = {}) {
 // — si entrega, el boton de la pagina del aviso puede mandar sin numero.
 async function enviarDm(sesion, telefono, texto, { lid = null } = {}) {
   if (!configurado()) return { ok: false, error: "Falta WAHA_URL o WAHA_API_KEY" };
+
+  // UN solo destino, resuelto antes de tocar la red, y UN solo envio abajo:
+  // el test group-canal.test.js fija que este archivo tenga exactamente dos
+  // llamadas a /api/sendText (enviarTexto y esta), para que una capacidad de
+  // escritura nueva no entre sin que nadie la decida.
+  let chatId;
   if (lid) {
     const digitosLid = String(lid).replace(/\D/g, "");
     if (digitosLid.length < 10) return { ok: false, error: `Lid invalido: ${lid}` };
-    try {
-      const r = await pedir("/api/sendText", {
-        metodo: "POST",
-        body: { session: sesion, chatId: `${digitosLid}@lid`, text: texto },
-      });
-      const wamid = r?.id?._serialized || r?.id || r?.key?.id || null;
-      return { ok: true, wamid, destino: `${digitosLid}@lid` };
-    } catch (e) {
-      console.error(`[waha] No se pudo mandar el DM al lid ${digitosLid}: ${e.message}`);
-      const abortado = e.name === "TimeoutError" || e.name === "AbortError";
-      return { ok: false, error: e.message, previoAlEnvio: !abortado, destino: `${digitosLid}@lid` };
+    chatId = `${digitosLid}@lid`;
+  } else {
+    if (!esCelularColombiano(telefono)) {
+      // Guarda dura, simetrica a la de enviarTexto: un destino que no tenga
+      // forma de celular colombiano real significa que algo aguas arriba se
+      // equivoco (un @lid sin resolver, un chatId de grupo, basura), y
+      // escribirle a eso es peor que no enviar nada. Un lid entra SOLO por
+      // la opcion explicita de arriba, nunca por `telefono`.
+      return { ok: false, error: `Destino invalido para el DM: ${telefono}` };
     }
+    // Se normaliza a los 12 digitos con indicativo de pais: esCelularColombiano
+    // acepta tambien la forma corta (10 digitos, sin 57), pero el chatId de
+    // WhatsApp necesita el numero completo.
+    const digitos = String(telefono).replace(/\D/g, "");
+    chatId = `${digitos.length === 10 ? `57${digitos}` : digitos}@c.us`;
   }
-  if (!esCelularColombiano(telefono)) {
-    // Guarda dura, simetrica a la de enviarTexto: un destino que no tenga
-    // forma de celular colombiano real significa que algo aguas arriba se
-    // equivoco (un @lid sin resolver, un chatId de grupo, basura), y
-    // escribirle a eso es peor que no enviar nada.
-    return { ok: false, error: `Destino invalido para el DM: ${telefono}` };
-  }
-  // Se normaliza a los 12 digitos con indicativo de pais: esCelularColombiano
-  // acepta tambien la forma corta (10 digitos, sin 57), pero el chatId de
-  // WhatsApp necesita el numero completo.
-  const digitos = String(telefono).replace(/\D/g, "");
-  const completo = digitos.length === 10 ? `57${digitos}` : digitos;
+
   try {
     const r = await pedir("/api/sendText", {
       metodo: "POST",
-      body: { session: sesion, chatId: `${completo}@c.us`, text: texto },
+      body: { session: sesion, chatId, text: texto },
     });
     const wamid = r?.id?._serialized || r?.id || r?.key?.id || null;
-    return { ok: true, wamid };
+    return { ok: true, wamid, destino: chatId };
   } catch (e) {
-    console.error(`[waha] No se pudo mandar el DM a ${completo}: ${e.message}`);
+    console.error(`[waha] No se pudo mandar el DM a ${chatId}: ${e.message}`);
     // `previoAlEnvio` distingue los dos fallos que arriba se tratan igual, y
     // la diferencia es exactamente la que permite (o prohibe) reintentar sin
     // duplicarle el mensaje al colega:
@@ -470,7 +468,7 @@ async function enviarDm(sesion, telefono, texto, { lid = null } = {}) {
     // La regla de la cabecera de este archivo ("nunca reintentar") se
     // mantiene intacta para ese segundo caso, que es el que la motivo.
     const abortado = e.name === "TimeoutError" || e.name === "AbortError";
-    return { ok: false, error: e.message, previoAlEnvio: !abortado };
+    return { ok: false, error: e.message, previoAlEnvio: !abortado, destino: chatId };
   }
 }
 
