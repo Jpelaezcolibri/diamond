@@ -375,6 +375,52 @@ router.post("/api/grupos/mandatos", async (req, res) => {
   }
 });
 
+// LA PAGINA DEL AVISO (Juan, 2026-09-02, opcion D). Por TOKEN, sin sesion
+// de usuario: el token es irrepetible y resuelve la org solo. El CRM llama
+// con la API key server-side; el navegador nunca ve esta ruta.
+router.post("/api/grupos/aviso/ver", async (req, res) => {
+  const groupSignals = require("../data/group-signals");
+  const vivo = require("../groups/vivo");
+  const token = String(req.body?.token || "").trim();
+  const signal = token ? await groupSignals.obtenerPorToken(token) : null;
+  if (!signal) return res.status(404).json({ error: "Este link no existe o venció" });
+  try {
+    const org = await organizations.findById(signal.org_id);
+    if (!org) return res.status(404).json({ error: "Organizacion no encontrada" });
+    const sesiones = await whatsappGroups.listSessions(org.id).catch(() => []);
+    const sesion = (sesiones.find((s) => s.estado === "activa") || {}).nombre || null;
+    const datos = await vivo.prepararAviso(org, signal.id, { sesion });
+    if (datos.resultado !== "ok") return res.status(404).json({ error: datos.resultado });
+    // Visto = primera apertura. Se marca DESPUES de armar la pagina: si algo
+    // revienta arriba, no queda un "visto" de algo que nunca se mostro.
+    const vistoAhora = await groupSignals.marcarVisto(org.id, signal.id);
+    res.json({ ...datos, visto_ahora: vistoAhora, org: { name: org.name } });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post("/api/grupos/aviso/gestion", async (req, res) => {
+  const groupSignals = require("../data/group-signals");
+  const token = String(req.body?.token || "").trim();
+  const gestion = String(req.body?.gestion || "");
+  if (!["envio", "no_sirve"].includes(gestion)) {
+    return res.status(400).json({ error: "gestion debe ser envio o no_sirve" });
+  }
+  const signal = token ? await groupSignals.obtenerPorToken(token) : null;
+  if (!signal) return res.status(404).json({ error: "Este link no existe o venció" });
+  try {
+    await groupSignals.marcarGestion(signal.org_id, signal.id, gestion);
+    // "No sirve" desde la pagina es el mismo descarte que desde el CRM.
+    if (gestion === "no_sirve") {
+      await groupSignals.setEstado(signal.org_id, signal.id, "descartado").catch(() => {});
+    }
+    res.json({ ok: true, gestion });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ¿A cuantos colegas del grupo podriamos escribirle al privado?
 //
 // SOLO MIDE. No envia nada, no cambia nada, no toca el flujo del radar. Existe

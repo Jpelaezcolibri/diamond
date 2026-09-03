@@ -1136,7 +1136,77 @@ async function manejarOferta(org, c, grupo = {}, { advisorId = null, sesion = nu
   };
 }
 
+// Lo que ve la asesora al abrir el link del aviso (Juan, 2026-09-02, opcion
+// D). Mismas piezas que responderPorDmManual —compuerta de calidad, telefono,
+// texto redactado— pero SIN enviar nada: el envio lo hace ella desde su
+// telefono, y la pagina solo registra que toco el boton. La regla se
+// mantiene desde aca: el mensaje es para el PRIVADO del colega; el grupo es
+// donde lo encuentra, no a donde escribe.
+async function prepararAviso(org, signalId, { sesion = null } = {}) {
+  const signal = await groupSignals.obtenerPorId(org.id, signalId);
+  if (!signal) return { resultado: "no_encontrada" };
+  const grupo = await whatsappGroups.obtenerGrupo(org.id, signal.group_id).catch(() => null);
+  const rev = signal.revalidacion || {};
+  const porRef = (refs) =>
+    (refs || []).map((r) => (signal.matches || []).find((m) => m && String(m.ref) === String(r))).filter(Boolean);
+
+  const inventario = await syncEstado.estadoDelInventario(org.id, {}).catch(() => ({ fresco: true }));
+  const { publicables: candidatas, descartados } = publicable.filtrar(porRef(rev.refs_utiles), {
+    syncFresco: inventario.fresco,
+    umbral: 0,
+  });
+  const { verificadas: utiles, rotas } = await verificarLink
+    .verificar(candidatas)
+    .catch(() => ({ verificadas: candidatas, rotas: [] }));
+  for (const r of rotas) descartados.push({ ref: r.ref, motivos: ["link_no_abre"] });
+
+  const telefonoColega = await directorio
+    .telefonoDe(org.id, signal.autor_telefono, { sesion, jid: grupo && grupo.jid })
+    .catch(() => null);
+
+  const aprobada = utiles.length > 0;
+  const mensaje = aprobada
+    ? redactar.mensajeGrupo({ autor_nombre: signal.autor_nombre }, utiles, {
+        org,
+        sinConfirmar: rev.sin_confirmar || [],
+        leFalta: rev.le_falta || [],
+      })
+    : null;
+
+  return {
+    resultado: "ok",
+    senal: {
+      id: signal.id,
+      autor_nombre: signal.autor_nombre,
+      grupo_nombre: (grupo && (grupo.nombre || grupo.jid)) || null,
+      texto_original: signal.texto_original,
+      created_at: signal.created_at,
+      operacion: signal.operacion,
+      tipo: signal.tipo,
+      zona: signal.zona,
+      zonas: signal.zonas,
+      precio_max: signal.precio_max,
+      habitaciones: signal.habitaciones,
+      garajes: signal.garajes,
+      area_min: signal.area_min,
+      sin_confirmar: rev.sin_confirmar || [],
+      visto_at: signal.visto_at || null,
+      gestionado_at: signal.gestionado_at || null,
+      gestion: signal.gestion || null,
+      respondida_at: signal.respondida_at || null,
+    },
+    utiles,
+    dudosas: porRef(rev.refs_dudosas),
+    descartados,
+    mensaje,
+    telefonoColega,
+    motivo: signal.politica_motivo || null,
+    porque: alertaAsesor.porqueNoSalioSolo(signal.politica_motivo, aprobada),
+    aprobada,
+  };
+}
+
 module.exports = {
-  procesarMensaje, idEnVivo, asistir, destinatarios, aprobarManual, responderPorDmManual,
+  procesarMensaje, idEnVivo, asistir, destinatarios, aprobarManual, responderPorDmManual, prepararAviso,
   manejarOferta, VENTANA_LIMITE_HORAS,
 };
