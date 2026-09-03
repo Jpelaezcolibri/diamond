@@ -375,6 +375,45 @@ router.post("/api/grupos/mandatos", async (req, res) => {
   }
 });
 
+// DIAGNOSTICO DE WAHA (bloque 2, 2026-09-03). Solo lectura: version, motor,
+// cuantos lids conoce la sesion. Para saber si la instancia acepta destinos
+// @lid antes de probar un envio.
+router.get("/api/grupos/waha/diagnostico", async (req, res) => {
+  const waha = require("../lib/waha");
+  try {
+    const org = await organizations.getDefault();
+    const sesiones = await whatsappGroups.listSessions(org.id).catch(() => []);
+    const activa = sesiones.find((s) => s.estado === "activa") || null;
+    const version = await waha.versionInfo();
+    const lids = activa ? await waha.contarLids(activa.nombre) : null;
+    res.json({ configurado: waha.configurado(), sesion: activa ? activa.nombre : null, version, lidsConocidos: lids });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// PRUEBA CONTROLADA: un DM a un lid (bloque 2, 2026-09-03). Explicita a
+// proposito — no la usa ningun flujo automatico. Sirve para verificar UNA
+// vez, contra un destinatario del equipo, si WhatsApp entrega a `<lid>@lid`.
+// Queda registrado en el log con el lid y el resultado.
+router.post("/api/grupos/waha/prueba-lid", async (req, res) => {
+  const waha = require("../lib/waha");
+  const lid = String(req.body?.lid || "").replace(/\D/g, "");
+  const texto = String(req.body?.texto || "").trim();
+  if (lid.length < 10 || !texto) return res.status(400).json({ error: "Falta lid (digitos) o texto" });
+  try {
+    const org = await organizations.getDefault();
+    const sesiones = await whatsappGroups.listSessions(org.id).catch(() => []);
+    const activa = sesiones.find((s) => s.estado === "activa");
+    if (!activa) return res.status(409).json({ error: "No hay una sesion activa" });
+    const r = await waha.enviarDm(activa.nombre, null, texto, { lid });
+    console.log(`[waha] PRUEBA lid ${lid} desde ${activa.nombre}: ${r.ok ? "ENTREGADO a WAHA, wamid " + r.wamid : "FALLO " + r.error}`);
+    res.status(r.ok ? 200 : 502).json(r);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // LA PAGINA DEL AVISO (Juan, 2026-09-02, opcion D). Por TOKEN, sin sesion
 // de usuario: el token es irrepetible y resuelve la org solo. El CRM llama
 // con la API key server-side; el navegador nunca ve esta ruta.

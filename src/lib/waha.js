@@ -415,8 +415,29 @@ async function enviarTexto(sesion, chatId, texto, { replyTo = null } = {}) {
 // la funcion que le escribe al privado a un desconocido — el mismo tipo de
 // paso que ya costo el baneo de julio de 2026 — asi que exige la FORMA de un
 // celular colombiano (3 + 9 digitos), no un rango de longitud.
-async function enviarDm(sesion, telefono, texto) {
+// `lid` (bloque 2, 2026-09-03): destino por identificador oculto, `<lid>@lid`,
+// SOLO cuando quien llama lo pide a proposito. La guarda de abajo sigue
+// intacta para el camino normal: un lid nunca entra por `telefono`. Es la
+// prueba de si WhatsApp entrega un DM a un participante cuyo numero no se ve
+// — si entrega, el boton de la pagina del aviso puede mandar sin numero.
+async function enviarDm(sesion, telefono, texto, { lid = null } = {}) {
   if (!configurado()) return { ok: false, error: "Falta WAHA_URL o WAHA_API_KEY" };
+  if (lid) {
+    const digitosLid = String(lid).replace(/\D/g, "");
+    if (digitosLid.length < 10) return { ok: false, error: `Lid invalido: ${lid}` };
+    try {
+      const r = await pedir("/api/sendText", {
+        metodo: "POST",
+        body: { session: sesion, chatId: `${digitosLid}@lid`, text: texto },
+      });
+      const wamid = r?.id?._serialized || r?.id || r?.key?.id || null;
+      return { ok: true, wamid, destino: `${digitosLid}@lid` };
+    } catch (e) {
+      console.error(`[waha] No se pudo mandar el DM al lid ${digitosLid}: ${e.message}`);
+      const abortado = e.name === "TimeoutError" || e.name === "AbortError";
+      return { ok: false, error: e.message, previoAlEnvio: !abortado, destino: `${digitosLid}@lid` };
+    }
+  }
   if (!esCelularColombiano(telefono)) {
     // Guarda dura, simetrica a la de enviarTexto: un destino que no tenga
     // forma de celular colombiano real significa que algo aguas arriba se
@@ -525,6 +546,17 @@ async function participantesDeGrupo(sesion, jid) {
 }
 
 /** Cuantos mapeos lid→telefono conoce la sesion. Sirve de termometro barato. */
+// Version y motor de WAHA. Solo lectura. Existe para saber, sin adivinar,
+// si la instancia desplegada esta en una version que acepta destinos @lid.
+async function versionInfo() {
+  try {
+    const r = await pedir("/api/version");
+    return { version: r?.version || null, engine: r?.engine || null, tier: r?.tier || null, raw: r };
+  } catch (e) {
+    return { version: null, engine: null, tier: null, error: e.message };
+  }
+}
+
 async function contarLids(sesion) {
   try {
     const r = await pedir(`/api/${encodeURIComponent(sesion)}/lids/count`);
@@ -538,4 +570,5 @@ async function contarLids(sesion) {
 module.exports = {
   configurado, crearSesion, estadoSesion, reintentarUnaVez, revincular, qr,
   listarGrupos, nombresPorJid, enviarTexto, enviarDm, telefonoDeLid, contarLids, participantesDeGrupo,
+  versionInfo,
 };
