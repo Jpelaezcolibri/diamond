@@ -204,6 +204,19 @@ En los dos casos, **el toque del botón en la página es nuestra medición**
 dentro de WhatsApp; vemos la intención, que es lo más cerca que se puede
 llegar sin volver a publicar por la línea vinculada.
 
+**Resultado de la prueba (2026-09-03).** WAHA 2026.8.1, motor NOWEB, tier
+CORE. `POST /api/sendText` con `chatId: 269230108872829@lid` (Catherine,
+desde la linea de Natalia) devolvio `ok: true` con wamid
+`3EB0DF3CC0083932561D07` — el mismo formato de los DMs por numero que
+salieron ese dia. WhatsApp acepto el destino @lid. Entrega confirmada por
+Catherine: PENDIENTE de que Juan lo verifique con ella.
+
+Si se confirma, el bloque 2 cambia de forma: el boton verde de la pagina
+puede mandar el DM desde la linea de Natalia **tambien sin numero**, con un
+toque y sin copiar/pegar, con los mismos topes de politica.js (2 por colega
+por dia, tope de la linea). El camino "copiar y abrir WhatsApp" queda como
+respaldo si WAHA esta caida.
+
 ### Verdad técnica 2: Catherine no está en los grupos
 
 Hallazgo de Juan: los grupos viven en el teléfono de Natalia. Si un pedido se
