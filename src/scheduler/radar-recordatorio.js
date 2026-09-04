@@ -41,7 +41,22 @@ function resumenPedido(señal) {
 // por corrida. Cada senal individual sigue recordandose UNA sola vez en toda
 // su vida (recordatorio_enviado_at, ver claimRecordatorio abajo); lo que
 // cambia es que varias pendientes juntas llegan en un solo mensaje, no en N.
-function textoRecordatorio(señales) {
+// BUG REAL (Juan, 2026-09-04): el saludo decia "Cathe," HARDCODEADO, pero el
+// mensaje se agrupa por `aviso_advisor_id` y sale a quien haya recibido el
+// aviso. A Natalia le llego un recordatorio saludandola con el nombre de otra
+// persona — "no entiendo por que le contesta cathe". Ademas de quedar mal,
+// contamina el dato: quien lo lee no sabe si el pedido era suyo o de Catherine.
+//
+// El nombre sale del asesor que YA se resolvio en runOnce (advisors.findById),
+// asi que no hay consulta nueva. Se usa el primer nombre porque es como se
+// habla en los mensajes del equipo; sin nombre se cae a un saludo neutro antes
+// que a inventar uno.
+function primerNombre(advisor) {
+  const nombre = String((advisor && advisor.name) || "").trim();
+  return nombre ? nombre.split(/\s+/)[0] : null;
+}
+
+function textoRecordatorio(señales, advisor = null) {
   const lista = señales.map((s) => resumenPedido(s)).filter(Boolean);
 
   const cuerpo =
@@ -49,8 +64,9 @@ function textoRecordatorio(señales) {
       ? `¿en que quedo el pedido${lista[0] ? ` de "${lista[0]}"` : ""} que te avise hace un rato?`
       : `tenes ${señales.length} pedidos del radar sin resultado:\n\n${lista.map((t) => `▸ "${t}"`).join("\n")}\n\n¿en que quedaron?`;
 
+  const saludo = primerNombre(advisor);
   return [
-    `Cathe, ${cuerpo}`,
+    saludo ? `${saludo}, ${cuerpo}` : cuerpo.charAt(0).toUpperCase() + cuerpo.slice(1),
     `Contame asi sea corto por cada uno (le escribi / no servia / hubo visita / se cerro) — con eso el radar aprende.`,
     `Es muy importante que respondas para poder seguir contando con el radar.`,
   ].join("\n\n");
@@ -127,7 +143,7 @@ async function runOnce() {
           continue;
         }
 
-        const { ok, error } = await mensajeAsesor.enviarYRegistrar(org, advisor.phone, textoRecordatorio(señales));
+        const { ok, error } = await mensajeAsesor.enviarYRegistrar(org, advisor.phone, textoRecordatorio(señales, advisor));
         if (ok) {
           ritmo.registrarEnvio(advisorId);
           sent++;
