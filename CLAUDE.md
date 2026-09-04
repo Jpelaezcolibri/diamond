@@ -28,7 +28,22 @@ Equipo: 1 dev (Juan) + Claude Code. Idioma de la app: español (Colombia).
 Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
 `docs:`, `config:`).
 
-## 2. Estado actual (2026-09-03)
+## 2. Estado actual (2026-09-04)
+
+- **Radar en observación (desplegado 2026-09-04, commit `aec9fc8`).** Se aflojó
+  la política de DM al colega: `match.js` ya no descarta por alcobas de más ni
+  por baños/garajes cortos, y se quitó el tope de 2 DMs por colega. Decisión de
+  Juan con el riesgo sobre la mesa — spec y plan en `docs/superpowers/`.
+  **Hay que mirarlo, no dejarlo correr solo:** WhatsApp le impone a la línea
+  ~300 mensajes por mes calendario (`messageCapping`), y hay un cortacircuitos
+  que frena los DMs al 80% y deriva todo a la asesora.
+  `GET /webhook/grupos/estado` devuelve `dmsUltimas24h` y `cuotaWhatsapp`.
+  **Ojo al leerlos: no miden lo mismo.** `dmsUltimas24h` cuenta filas con
+  `respuesta_modo='auto'`, que incluye publicaciones viejas en grupo, así que
+  está inflado (al desplegar decía 18 contra 13 de WhatsApp en todo el mes).
+  El número que manda es `cuotaWhatsapp.usados`.
+- **El remote de git quedó en SSH** (2026-09-04). El 403 de HTTPS por la cuenta
+  CAPELA127 es historia: `git push origin main` funciona sin rodeos.
 
 - **Objetivo activo:** DMAP Fase 1 cerrada y desplegada (sync, IA de
   creativos, publicación, analytics); foco actual = cerrar los known issues
@@ -58,6 +73,8 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
   group_signals y mandato_match_alerts — `2026-08-14_realtime_leads.sql` y
   `2026-09-02_realtime_grupos.sql` corridas. `2026-07-09_dmap_default_designer.sql`
   corrida el mismo día en el mismo bloque (solo el DEFAULT para orgs nuevas).
+  `2026-09-04_dm_destinatario.sql` (columnas de auditoría del destinatario del
+  DM) corrida y verificada por REST el 2026-09-04.
   **No hay migraciones pendientes.**
   Regla: antes de declarar una migración "pendiente" acá, verificarla con un
   `select` por REST — esta lista estuvo desactualizada del 2026-08-18 al
