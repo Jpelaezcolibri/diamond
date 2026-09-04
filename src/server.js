@@ -125,6 +125,11 @@ app.listen(config.port, () => {
   // Escalado a Catherine si Natalia (asesor PRINCIPAL del radar) no responde
   // el aviso a tiempo, en los dos carriles (venta y compra) — Juan, 2026-08-26.
   if (config.supabaseUrl) require("./scheduler/radar-silencio").start();
+  // Mantiene abierta la ventana de 24h de Meta con la asesora del radar (Juan,
+  // 2026-09-04): su linea vinculada le escribe a Sofi, porque solo un mensaje
+  // ENTRANTE de ella reabre la ventana y sin ella los avisos se represan.
+  // Apagado por defecto: es un envio automatico desde una linea no oficial.
+  if (config.supabaseUrl) require("./scheduler/ventana-asesora").start();
   // Bandeja de salida: junta lo pendiente y le manda a cada asesora un solo
   // mensaje agrupado en vez de uno por oportunidad (Juan, 2026-09-02).
   if (config.supabaseUrl) require("./scheduler/avisos-salida").start();

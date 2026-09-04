@@ -136,6 +136,28 @@ const config = {
       intervalMin: parseInt(process.env.RADAR_SILENCIO_INTERVAL_MIN || "5", 10),
     },
 
+    // Mantener abierta la ventana de 24h con la asesora del radar (Juan,
+    // 2026-09-04: "y si desde la linea de natalia que la tenemos vinculada
+    // para enviar los mensajes le enviamos un mensajes a sofi todos los dias
+    // para abrir la ventana??").
+    //
+    // Meta solo entrega texto libre a quien le escribio al negocio en las
+    // ultimas 24h. Si la asesora no le escribe a Sofi, su ventana se cierra y
+    // los avisos del radar se pierden — ese dia habia mensajes represados.
+    // Nada de lo que hagamos desde nuestro lado la reabre: solo la reabre un
+    // mensaje ENTRANTE de ella. Y su linea ES la linea vinculada a WAHA, o sea
+    // que ya la controlamos por API. Ver src/scheduler/ventana-asesora.js.
+    ventanaAsesora: {
+      // APAGADO por defecto, a diferencia del resto de los bloques del radar:
+      // es un envio automatico desde una linea no oficial (la misma clase de
+      // linea que ya fue baneada el 2026-07-30). Se enciende a conciencia.
+      enabled: process.env.VENTANA_ASESORA_ENABLED === "true",
+      // 20h y no 24: 4h de margen antes de que Meta cierre la ventana, para que
+      // un tick perdido o un WAHA lento no la dejen cerrarse igual.
+      horas: parseInt(process.env.VENTANA_ASESORA_HORAS || "20", 10),
+      intervalMin: parseInt(process.env.VENTANA_ASESORA_INTERVAL_MIN || "60", 10),
+    },
+
     // Feed en vivo para el admin (Juan, 2026-08-18): cada pedido que Sofi
     // revisa —lo apruebe o lo rechace— le queda en su propia sesion de
     // Sofi-Comando. adminUserId es el auth user id (no el email) del admin
