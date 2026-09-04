@@ -139,7 +139,18 @@ async function runOnce() {
   }
 
   const sent = resultados.filter((r) => r.resultado === "enviado").length;
-  if (sent) console.log(`[ventana-asesora] ${sent} ventana(s) reabierta(s)`);
+
+  // OBSERVABILIDAD (Juan lo encendio en produccion el 2026-09-04). Hasta aca
+  // esto solo logueaba cuando SE MANDABA algo, y por eso el caso mas comun
+  // —"ventana_abierta", ella escribio sola, no hay nada que hacer— y el mas
+  // grave —"linea_no_es_de_la_asesora": la guarda fallo y este worker no va a
+  // mandar NUNCA— se veian exactamente igual: silencio absoluto.
+  //
+  // Con la guarda rota el worker parece sano mientras Natalia se queda sin
+  // avisos, que es el modo de falla que este proyecto ya pago dos veces (el
+  // sync de Wasi 16 dias detenido, los 7 avisos en `sent` que nunca llegaron).
+  // Una linea por corrida es barata; descubrirlo dentro de una semana no.
+  console.log(`[ventana-asesora] ${resultados.map((r) => `${r.org}=${r.resultado}`).join(" | ") || "sin orgs activas"}`);
   return { sent, resultados };
 }
 
