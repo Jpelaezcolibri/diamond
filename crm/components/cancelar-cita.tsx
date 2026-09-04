@@ -28,6 +28,17 @@ type Resultado = {
   cliente: string | null;
 } | null;
 
+// Lo que salió mal, y si sabemos qué pasó con la cita.
+//
+// `incierto` es el caso del timeout (review 2026-09-04). El bot cancela el
+// registro en el primer instante y recién después arranca la cascada de avisos;
+// el peor caso —línea oficial con reintento (~30 s) + WAHA (20 s) + la alerta
+// al equipo (~30 s)— pasa de los 60 s que le da callBot. O sea: el escenario
+// más lento es justo "los dos canales caídos", el que esta rama existe para
+// manejar. Decirle ahí al asesor "la cita sigue en pie" es afirmar lo contrario
+// de la verdad y hacer que dé por viva una visita ya cancelada.
+type Fallo = { mensaje: string; incierto: boolean } | null;
+
 type Ctx = {
   ocupado: string | null;
   cancelar: (leadId: string, cliente: string | null) => void;
@@ -44,7 +55,7 @@ export function CancelarCitaAvisos({ children }: { children: React.ReactNode }) 
   const [, startTransition] = useTransition();
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [resultado, setResultado] = useState<Resultado>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Fallo>(null);
 
   // Solo los avisos que llegaron a destino se cierran solos. "no_se_pudo"
   // se queda hasta que la persona lo cierre: es lo único que le recuerda que
@@ -76,7 +87,15 @@ export function CancelarCitaAvisos({ children }: { children: React.ReactNode }) 
         body: JSON.stringify({ leadId, motivo: motivo.trim() || null }),
       }).catch(() => null);
       const body = res ? await res.json().catch(() => ({})) : {};
-      if (!res || !res.ok) throw new Error(body.error || "El bot no respondió");
+      if (!res || !res.ok) {
+        // Un timeout NO es "no pasó nada": el registro puede haber cambiado ya.
+        // Se refresca igual el calendario, que es lo único que dice la verdad,
+        // y el banner manda a mirarlo en vez de afirmar nada.
+        const incierto = Boolean(body.timeout);
+        setError({ mensaje: body.error || "El bot no respondió", incierto });
+        if (incierto) startTransition(() => router.refresh());
+        return;
+      }
 
       // Si el bot no dice de dónde salió el aviso, se asume lo peor. Un aviso
       // que no sabemos si llegó tiene exactamente las mismas consecuencias que
@@ -92,7 +111,7 @@ export function CancelarCitaAvisos({ children }: { children: React.ReactNode }) 
       setResultado({ aviso, cliente });
       startTransition(() => router.refresh());
     } catch (e) {
-      setError(e instanceof Error ? e.message : "No se pudo cancelar");
+      setError({ mensaje: e instanceof Error ? e.message : "No se pudo cancelar", incierto: false });
     } finally {
       setOcupado(null);
     }
@@ -110,16 +129,41 @@ export function CancelarCitaAvisos({ children }: { children: React.ReactNode }) 
           aria-live="assertive"
           className="fixed inset-x-0 bottom-4 z-50 mx-auto w-[min(36rem,calc(100%-2rem))]"
         >
-          {error && (
+          {error && !error.incierto && (
             <div className="flex items-start gap-2 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-800 shadow-lg">
               <span className="text-lg leading-none">⚠️</span>
               <div className="flex-1">
                 <p className="font-medium">No se pudo cancelar la cita.</p>
-                <p className="text-xs text-red-700/80">{error} — la cita sigue en pie.</p>
+                <p className="text-xs text-red-700/80">{error.mensaje} — la cita sigue en pie.</p>
               </div>
               <button type="button" onClick={() => setError(null)} className="text-xs font-medium underline">
                 Cerrar
               </button>
+            </div>
+          )}
+          {error?.incierto && (
+            // Se acabó el tiempo esperando al bot. NO se afirma ni que se
+            // canceló ni que sigue en pie: el registro se cambia antes de que
+            // arranque la cascada de avisos, así que un corte a los 60 s deja
+            // el resultado genuinamente desconocido desde acá. El calendario
+            // ya se refrescó solo; lo honesto es mandar a mirarlo.
+            <div className="flex items-start gap-3 rounded-2xl border-2 border-amber-400 bg-amber-50 p-4 text-amber-900 shadow-xl">
+              <span className="text-2xl leading-none">⏳</span>
+              <div className="flex-1">
+                <p className="text-base font-bold">No sabemos si quedó cancelada.</p>
+                <p className="mt-1 text-sm text-amber-800">
+                  {error.mensaje} Puede que sí se haya cancelado y que al colega le falte el aviso.
+                  Refrescamos el calendario: si la cita ya no aparece, quedó cancelada — y conviene
+                  escribirle vos al colega por las dudas.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setError(null)}
+                  className="mt-2 rounded-md border border-amber-400 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 hover:bg-amber-100"
+                >
+                  Entendido
+                </button>
+              </div>
             </div>
           )}
           {resultado?.aviso === "ya_cancelada" && (

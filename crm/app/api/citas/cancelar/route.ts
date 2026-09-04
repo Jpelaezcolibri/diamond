@@ -14,6 +14,14 @@ export async function POST(request: Request) {
   const { leadId, motivo } = await request.json().catch(() => ({}));
   if (!leadId) return NextResponse.json({ error: "Falta leadId" }, { status: 400 });
 
+  // El `timeout` viaja al cliente a propósito (Juan, 2026-09-04): cancelar
+  // cambia el registro en el PRIMER instante y después sigue con la cascada de
+  // avisos, que en el peor caso —los dos canales caídos, justo el que esta
+  // rama existe para manejar— pasa de los 60 s del callBot. Si el navegador no
+  // puede distinguir ese corte de un fallo real, termina afirmando que la cita
+  // sigue en pie cuando en realidad quedó cancelada.
   const r = await callBot("/api/citas/cancelar", { leadId, motivo: motivo || null });
-  return r.ok ? NextResponse.json(r.data) : NextResponse.json({ error: r.error }, { status: r.status });
+  return r.ok
+    ? NextResponse.json(r.data)
+    : NextResponse.json({ error: r.error, timeout: r.timeout }, { status: r.status });
 }
