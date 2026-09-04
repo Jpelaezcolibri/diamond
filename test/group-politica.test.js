@@ -189,21 +189,35 @@ test("un pedido mas viejo que el limite de antiguedad no se manda por DM", () =>
   assert.strictEqual(politica.decidirDm(justo).enviarDm, true);
 });
 
-test("un colega ya contactado dos veces hoy (tope 2) no recibe un tercer DM; con uno, si", () => {
-  const d = politica.decidirDm(escenarioDm({ dmsHoyColega: 2 }));
-  assert.strictEqual(d.enviarDm, false);
-  assert.strictEqual(d.motivo, "limite_colega_alcanzado");
-
-  // Juan, 2026-09-02: dos pedidos distintos del mismo colega en la manana
-  // merecen dos respuestas; el dedup por contenido ya evita el pedido repetido.
-  const conCupo = politica.decidirDm(escenarioDm({ dmsHoyColega: 1 }));
-  assert.strictEqual(conCupo.enviarDm, true);
+// TOPE POR COLEGA QUITADO (Juan, 2026-09-04): "quita la restriccion de la
+// cantidad de mensajes a un mismo colega ya que vamos a tener respuestas
+// directas a mensajes enviados por ellos, entonces no veo el problema de que
+// respondamos a mas de 2 mensajes en un dia".
+//
+// Lo que sigue protegiendo contra el spam NO es este tope: es el dedup por
+// contenido (el mismo pedido difundido a cinco grupos manda UN solo DM) y la
+// antiguedad maxima. Los dos siguen en pie.
+test("un colega con tres pedidos distintos en el dia recibe los tres", () => {
+  assert.strictEqual(politica.decidirDm(escenarioDm({ dmsHoyColega: 2 })).enviarDm, true);
+  assert.strictEqual(politica.decidirDm(escenarioDm({ dmsHoyColega: 9 })).enviarDm, true);
 });
 
-test("si no se puede contar cuantos DMs recibio el colega hoy, se calla -- ante la duda, no", () => {
+// No poder contar los DMs del colega ya no puede frenar nada: sin tope, el
+// numero es informacion para medir, no una compuerta.
+test("no poder contar los DMs del colega ya no frena el envio", () => {
   const d = politica.decidirDm(escenarioDm({ dmsHoyColega: null }));
-  assert.strictEqual(d.enviarDm, false);
-  assert.strictEqual(d.motivo, "limite_colega_no_verificable");
+  assert.strictEqual(d.enviarDm, true);
+});
+
+// Se sigue registrando para poder medir el volumen por colega.
+test("el conteo por colega sigue quedando en la traza", () => {
+  const d = politica.decidirDm(escenarioDm({ dmsHoyColega: 4 }));
+  assert.ok(d.traza.some((t) => t.includes("dms_colega_hoy:4")), d.traza.join(","));
+});
+
+// El tope de LA LINEA no se toca: es cortacircuitos, no cuota.
+test("el tope diario de la linea sigue frenando", () => {
+  assert.strictEqual(politica.decidirDm(escenarioDm({ dmsHoyLinea: 150 })).motivo, "limite_linea_alcanzado");
 });
 
 test("al tope diario de la linea (150), se calla -- es cortacircuito, no cuota", () => {

@@ -627,14 +627,22 @@ test("un pedido fuera de ventana (mas de 30 min desde el mensaje del grupo) se a
   assert.strictEqual(politicasGuardadas[0].motivo, "pedido_vencido");
 });
 
-test("un colega ya contactado hoy (tope 1) no recibe un segundo DM -- se avisa a la asesora", async () => {
+// TOPE POR COLEGA QUITADO en este camino (Juan, 2026-09-04): "quita la
+// restriccion de la cantidad de mensajes a un mismo colega ya que vamos a
+// tener respuestas directas a mensajes enviados por ellos, entonces no veo el
+// problema de que respondamos a mas de 2 mensajes en un dia". Antes esto
+// esperaba que el tercer DM del dia se desviara a la asesora (motivo
+// limite_colega_alcanzado); ahora el DM automatico sale igual, sin importar
+// cuantos van en el dia -- ver src/groups/politica.js#decidirDm.
+test("un colega ya contactado varias veces hoy sigue recibiendo el DM -- ya no hay tope por colega", async () => {
   telefonoColegaResuelto = "573001234567";
-  dmsHoyColegaMock = 2;
+  dmsHoyColegaMock = 9;
   const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
 
-  assert.strictEqual(r.resultado, "avisada");
-  assert.strictEqual(enviosDm.length, 0);
-  assert.strictEqual(politicasGuardadas[0].motivo, "limite_colega_alcanzado");
+  assert.strictEqual(r.resultado, "dm_enviado");
+  assert.strictEqual(enviosDm.length, 1);
+  assert.strictEqual(enviadosPorSofi.length, 0, "la asesora no recibe nada: el DM automatico salio");
+  assert.strictEqual(politicasGuardadas[0].motivo, "ok");
 });
 
 test("al tope diario de la linea, se avisa a la asesora -- es cortacircuito, no descarte", async () => {
