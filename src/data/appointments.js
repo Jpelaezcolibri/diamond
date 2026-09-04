@@ -5,6 +5,7 @@
 // citas de la org y se filtran en JS, sin indice jsonb.
 const supabase = require("./supabase");
 const memory = require("./memory");
+const citasData = require("./citas");
 
 // Horario por defecto cuando el asesor no configuro el suyo: L-V 8am-6pm.
 const DEFAULT_HORARIO = { dias: [1, 2, 3, 4, 5], desde: "08:00", hasta: "18:00" };
@@ -60,6 +61,11 @@ function hayChoque(leadsConCita, advisorId, fechaHoraIso, excludeLeadId = null) 
   return leadsConCita.some((l) => {
     if (l.id === excludeLeadId) return false;
     if (!l.cita || l.cita.advisor_id !== advisorId || !l.cita.fecha_hora) return false;
+    // Una cancelada no ocupa espacio (Juan, 2026-09-04): si no se libera la
+    // hora, cancelar es cosmetico — el registro cambia y la agenda sigue
+    // bloqueada. Una PROPUESTA si ocupa: todavia puede confirmarse y dos
+    // personas no pueden reservar la misma hora.
+    if (!citasData.estaViva(l.cita)) return false;
     const otra = new Date(l.cita.fecha_hora).getTime();
     if (isNaN(otra)) return false;
     return Math.abs(otra - inicio) < ventanaMs;

@@ -81,3 +81,34 @@ test("hayChoque: cita sin advisor_id (flujo viejo) no cuenta", () => {
   const leads = [lead("l1", null, juevesRef("10:00"))];
   assert.strictEqual(hayChoque(leads, AID, juevesRef("10:00")), false);
 });
+
+// SI NO SE LIBERA EL ESPACIO, CANCELAR NO SIRVE (Juan, 2026-09-04).
+// hayChoque miraba TODAS las citas del lead sin importar su estado, asi que
+// una cancelada seguia bloqueando esa hora en la agenda del asesor. Cancelar
+// habria sido cosmetico: el registro cambiaba y la agenda seguia ocupada.
+test("una cita cancelada no bloquea esa hora en la agenda", async () => {
+  const appointments = require("../src/data/appointments");
+  const advisorId = "auth-user-1";
+  const cuando = "2026-09-10T15:00:00-05:00";
+  const cancelada = [{ id: "lead-1", cita: { advisor_id: advisorId, fecha_hora: cuando, estado: "cancelada" } }];
+  assert.strictEqual(appointments.hayChoque(cancelada, advisorId, cuando), false);
+});
+
+// Una propuesta SI ocupa: todavia puede confirmarse, y dos personas no pueden
+// reservar la misma hora.
+test("una cita propuesta si bloquea esa hora", async () => {
+  const appointments = require("../src/data/appointments");
+  const advisorId = "auth-user-1";
+  const cuando = "2026-09-10T15:00:00-05:00";
+  const propuesta = [{ id: "lead-1", cita: { advisor_id: advisorId, fecha_hora: cuando, estado: "propuesta" } }];
+  assert.strictEqual(appointments.hayChoque(propuesta, advisorId, cuando), true);
+});
+
+// Una cita vieja sin estado sigue ocupando: es lo que el equipo asumio.
+test("una cita sin estado sigue bloqueando", async () => {
+  const appointments = require("../src/data/appointments");
+  const advisorId = "auth-user-1";
+  const cuando = "2026-09-10T15:00:00-05:00";
+  const vieja = [{ id: "lead-1", cita: { advisor_id: advisorId, fecha_hora: cuando } }];
+  assert.strictEqual(appointments.hayChoque(vieja, advisorId, cuando), true);
+});
