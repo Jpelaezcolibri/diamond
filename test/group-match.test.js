@@ -301,23 +301,35 @@ test("FLEXIBLE: sigue sin aceptar DOS de menos, ni con la señal activa", () => 
   assert.strictEqual(evaluarCandidata(apto({ habitaciones: 1 }), pide({ habitaciones: 3, flexible_habitaciones: true }), "diamond"), null);
 });
 
-test("FLEXIBLE: baños y garajes reciben el MISMO margen que alcobas — antes eran estrictos", () => {
+// RENOMBRADO Y REESCRITO (revision final, 2026-09-04). Se llamaba "baños y
+// garajes reciben el MISMO margen que alcobas", y eso ya era falso: alcobas
+// aflojan UNA (y solo con flexible_habitaciones), baños y garajes no tienen
+// tope por abajo. Ademas, con `ok: () => true` la señal no influye en
+// baños/garajes, asi que las aserciones "con la señal" no podian fallar por la
+// razon que el nombre enunciaba. Lo que se afirma ahora es la regla vigente, y
+// discrimina: DOS de menos entra igual -- bajo la regla de alcobas ("una de
+// menos") esto devolveria null.
+test("baños y garajes no tienen tope por abajo: no es el margen de alcobas, es ilimitado", () => {
   // REVERTIDO (Juan, 2026-09-04): "si no tiene si no un parqueadero o no esta
-  // registrado si tiene o no parqueadero, envialo con la observacion". Las dos
-  // aserciones de abajo afirmaban la regla vieja (sin flexible_habitaciones,
-  // quedarse corto en baños/garajes descartaba) -- esa regla es justo la que
-  // esta tarea elimina, asi que ahora SI entran, sin necesidad de la señal.
+  // registrado si tiene o no parqueadero, envialo con la observacion".
   //
-  // garaje:0/banos:0 en el inventario se leen como "sin dato" (no
-  // descalifica, pero tampoco entra en esta prueba) — se usa 1 real contra
-  // un pedido de 2, que es justo el caso "una de menos" que se esta probando.
-  assert.ok(evaluarCandidata(apto({ banos: 1 }), pide({ banos: 2 }), "diamond"), "sin la señal, un baño menos ya entra igual");
-  assert.ok(evaluarCandidata(apto({ garaje: 1 }), pide({ garajes: 2 }), "diamond"), "lo mismo para garajes");
+  // garaje:0/banos:0 en el inventario se leen como "sin dato" (no descalifica,
+  // pero tampoco entra en esta prueba) — se usan valores reales.
+  assert.ok(
+    evaluarCandidata(apto({ banos: 1 }), pide({ banos: 3 }), "diamond"),
+    "DOS baños de menos, sin la señal: con el margen de alcobas esto seria null"
+  );
+  assert.ok(
+    evaluarCandidata(apto({ garaje: 1 }), pide({ garajes: 3 }), "diamond"),
+    "lo mismo para garajes"
+  );
 
-  const conBanos = evaluarCandidata(apto({ banos: 1 }), pide({ banos: 2, flexible_habitaciones: true }), "diamond");
-  const conGarajes = evaluarCandidata(apto({ garaje: 1 }), pide({ garajes: 2, flexible_habitaciones: true }), "diamond");
-  assert.ok(conBanos, "con la señal, un baño menos tiene que servir");
-  assert.ok(conGarajes, "con la señal, un garaje menos tiene que servir");
+  // El contraste que le da sentido: las alcobas SI conservan su tope de una.
+  assert.strictEqual(
+    evaluarCandidata(apto({ habitaciones: 1 }), pide({ habitaciones: 3 }), "diamond"),
+    null,
+    "las alcobas definen el producto: dos de menos sigue descartando"
+  );
 });
 
 // EL RESCATE DEL 24-AGO, DESBLOQUEADO (Juan, 2026-09-04). revalidar.js tiene
