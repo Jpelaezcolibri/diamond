@@ -43,6 +43,26 @@ test("isReminderDue: sin cita o sin fecha -> no toca", () => {
   assert.strictEqual(isReminderDue(lead({ advisor_id: "adv-1" }), NOW, 60), false);
 });
 
+// HALLAZGO 1 (review 2026-09-04): el recordatorio ignoraba el estado. Una cita
+// que se cancelo ayer desde el CRM desaparecia del calendario pero HOY, una
+// hora antes, le llegaba igual al asesor la plantilla `recordatorio_cita`
+// diciendo "visita con Marta a las 3:00 p.m.". Es "la agenda que miente"
+// entregada por WhatsApp — el incidente exacto que origino esta rama.
+test("isReminderDue: una cita CANCELADA no dispara el recordatorio al asesor", () => {
+  const l = lead({ fecha_hora: iso(45), advisor_id: "adv-1", tipo: "visita", estado: "cancelada" });
+  assert.strictEqual(isReminderDue(l, NOW, 60), false);
+});
+
+// Los otros tres estados SI siguen vivos: una propuesta todavia puede
+// confirmarse y una reprogramada es una cita real movida de hora. Y una cita
+// sin `estado` —todas las de produccion— se lee como confirmada (src/data/citas.js).
+test("isReminderDue: propuesta, confirmada, reprogramada y sin estado si recuerdan", () => {
+  for (const estado of ["propuesta", "confirmada", "reprogramada", undefined]) {
+    const l = lead({ fecha_hora: iso(45), advisor_id: "adv-1", tipo: "visita", estado });
+    assert.strictEqual(isReminderDue(l, NOW, 60), true, `estado=${estado}`);
+  }
+});
+
 test("reminderParams: arma los 4 valores en orden asesor/tipo/cliente/hora", () => {
   const advisor = { name: "Camila", phone: "573009990000" };
   const l = lead({ fecha_hora: "2026-07-23T15:00:00-05:00", advisor_id: "adv-1", tipo: "visita" });

@@ -143,6 +143,12 @@ async function checkAvailability(orgId, advisor, fechaHoraIso, { excludeLeadId =
 function isReminderDue(lead, nowMs, windowMin) {
   const c = lead && lead.cita;
   if (!c || !c.fecha_hora || !c.advisor_id || c.recordatorio_enviado) return false;
+  // Una cancelada no se recuerda (Juan, 2026-09-04). Sin esto, una cita que se
+  // cancelo ayer desde el CRM desaparecia del calendario pero al asesor le
+  // llegaba igual la plantilla `recordatorio_cita` una hora antes: la agenda
+  // que miente, entregada por WhatsApp. Es el incidente que origino la rama.
+  // Mismo criterio que hayChoque (linea 68) y que el calendario del CRM.
+  if (!citasData.estaViva(c)) return false;
   const t = new Date(c.fecha_hora).getTime();
   if (isNaN(t)) return false;
   return t > nowMs && t <= nowMs + windowMin * 60 * 1000;
