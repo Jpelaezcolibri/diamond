@@ -584,7 +584,11 @@ const MODOS_RESPUESTA = ["sombra", "auto", "humano"];
 // migracion de respuesta_refs no corrio todavia, se reintenta sin esa columna
 // en vez de perder el resto del registro (texto/wamid/modo) — mismo criterio
 // que el resto de este archivo (ver esColumnaFaltante).
-async function marcarRespondida(orgId, signalId, { texto, wamid = null, modo = "auto", refs = null } = {}) {
+async function marcarRespondida(
+  orgId,
+  signalId,
+  { texto, wamid = null, modo = "auto", refs = null, destinoTelefono = null, destinoLid = null } = {}
+) {
   if (!MODOS_RESPUESTA.includes(modo)) throw new Error(`Modo de respuesta invalido: ${modo}`);
   if (!supabase) return true;
   const patch = {
@@ -595,7 +599,28 @@ async function marcarRespondida(orgId, signalId, { texto, wamid = null, modo = "
     respuesta_refs: refs && refs.length ? refs : null,
     updated_at: new Date().toISOString(),
   };
+  // A QUIEN salio (Juan, 2026-09-04). Van en el MISMO patch y no en un update
+  // aparte a proposito: un segundo update podria fallar solo y dejar la señal
+  // marcada como respondida pero sin destinatario, que es el estado que hace
+  // imposible auditar. O entran los dos con la respuesta, o no entra ninguno.
+  if (destinoTelefono) patch.respuesta_destino_telefono = destinoTelefono;
+  if (destinoLid) patch.respuesta_destino_lid = destinoLid;
+
   let { error } = await supabase.from("group_signals").update(patch).eq("org_id", orgId).eq("id", signalId);
+
+  // Degradacion, en el orden en que importa: primero se sueltan los campos de
+  // AUDITORIA (2026-09-04_dm_destinatario.sql), que se pueden perder; despues
+  // respuesta_refs. Marcar la respuesta es lo ultimo que se sacrifica: sin esa
+  // marca el colega recibe el MISMO DM dos veces, que es peor que cualquier
+  // dato de auditoria perdido.
+  if (error && esColumnaFaltante(error)) {
+    console.warn(
+      "[grupos] Falta la migracion 2026-09-04_dm_destinatario.sql: la respuesta se marca, pero sin decir a quien salio."
+    );
+    delete patch.respuesta_destino_telefono;
+    delete patch.respuesta_destino_lid;
+    ({ error } = await supabase.from("group_signals").update(patch).eq("org_id", orgId).eq("id", signalId));
+  }
   if (error && esColumnaFaltante(error)) {
     delete patch.respuesta_refs;
     ({ error } = await supabase.from("group_signals").update(patch).eq("org_id", orgId).eq("id", signalId));

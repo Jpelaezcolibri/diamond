@@ -39,7 +39,7 @@ test("dmsHoyLinea sin supabase (modo memoria/test) devuelve 0", async () => {
 function construirQuery(resultado) {
   const llamadas = [];
   const q = {};
-  for (const metodo of ["select", "eq", "gte", "order", "limit"]) {
+  for (const metodo of ["select", "eq", "gte", "order", "limit", "update"]) {
     q[metodo] = (...args) => { llamadas.push([metodo, ...args]); return q; };
   }
   // El builder real de supabase-js es "thenable": awaitarlo dispara la query.
@@ -108,4 +108,57 @@ test("dmsHoyLinea: un fallo de la base tambien devuelve null, no un cero optimis
   const { mod } = instalarConSupabase({ data: null, error: { code: "500", message: "boom" } });
   const n = await mod.dmsHoyLinea("org-9", "2026-08-24T00:00:00.000Z");
   assert.strictEqual(n, null);
+});
+
+// AUDITORIA DEL DESTINATARIO (Juan, 2026-09-04). Sin esto, "a quien le
+// escribimos" solo se podia reconstruir cruzando contra el directorio, que
+// cambia con el tiempo -- o sea que no se podia reconstruir.
+test("marcarRespondida guarda el telefono y el lid del destinatario", async () => {
+  const { mod, llamadasPorTabla } = instalarConSupabase({ data: null, error: null });
+
+  await mod.marcarRespondida("org-9", "sig-1", {
+    texto: "hola", wamid: "wm-1", modo: "auto", refs: ["9944723"],
+    destinoTelefono: "573001234567", destinoLid: "184564139970806",
+  });
+
+  const [, patch] = llamadasPorTabla[0].llamadas.find(([m]) => m === "update");
+  assert.strictEqual(patch.respuesta_destino_telefono, "573001234567");
+  assert.strictEqual(patch.respuesta_destino_lid, "184564139970806");
+});
+
+// Degradacion limpia: si la migracion no corrio, la respuesta se marca igual.
+// Perder la marca de "ya respondido" duplicaria el DM al colega, que es MUCHO
+// peor que perder el dato de auditoria.
+test("sin la migracion corrida, se marca igual y sin los campos nuevos", async () => {
+  // PGRST204 = PostgREST no encuentra la columna. Falla la primera vez y
+  // acierta la segunda, que es como se comporta una migracion sin correr.
+  let intentos = 0;
+  const supabasePath = require.resolve("../src/data/supabase");
+  const groupSignalsPath = require.resolve("../src/data/group-signals");
+  const updates = [];
+  delete require.cache[supabasePath];
+  require.cache[supabasePath] = {
+    id: supabasePath, filename: supabasePath, loaded: true,
+    exports: {
+      from: () => {
+        const q = {};
+        for (const m of ["select", "eq", "gte", "order", "limit", "update"]) {
+          q[m] = (...args) => { if (m === "update") updates.push(args[0]); return q; };
+        }
+        q.then = (resolve) =>
+          resolve(intentos++ === 0 ? { error: { code: "PGRST204", message: "respuesta_destino_lid" } } : { error: null });
+        return q;
+      },
+    },
+  };
+  delete require.cache[groupSignalsPath];
+  const mod = require("../src/data/group-signals");
+
+  const ok = await mod.marcarRespondida("org-9", "sig-1", {
+    texto: "hola", wamid: "wm-1", modo: "auto", destinoTelefono: "573001234567",
+  });
+
+  assert.strictEqual(ok, true, "la señal tiene que quedar marcada igual");
+  assert.ok(updates[1].respondida_at, "el segundo intento sigue marcando la respuesta");
+  assert.strictEqual(updates[1].respuesta_destino_telefono, undefined, "sin las columnas nuevas");
 });

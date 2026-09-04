@@ -55,6 +55,7 @@ const { esCelularColombiano } = require("../lib/contacto");
 const vivo = require("../groups/vivo");
 const waha = require("../lib/waha");
 const dm = require("../groups/dm");
+const groupSignals = require("../data/group-signals");
 
 const router = express.Router();
 
@@ -401,7 +402,28 @@ router.post("/webhook/grupos", async (req, res) => {
 router.get("/webhook/grupos/estado", async (req, res) => {
   if (!autorizado(req)) return res.status(401).json({ ok: false });
   const org = await organizations.getDefault().catch(() => null);
-  res.json({ ok: true, modo: organizations.modoDeRespuesta(org), metricas });
+
+  // Sesion activa de la linea, mismo criterio de "una sola" que usa vivo.js
+  // (aprobarManual): con 0 o mas de una, no hay como saber por cual linea
+  // consultar la cuota de WhatsApp.
+  const sesiones = org ? await whatsappGroups.listSessions(org.id).catch(() => []) : [];
+  const activas = sesiones.filter((s) => s.estado === "activa");
+  const sesionActiva = activas.length === 1 ? activas[0].nombre : null;
+
+  const ahora = new Date();
+  const desdeMedianoche = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate()).toISOString();
+
+  res.json({
+    ok: true,
+    modo: organizations.modoDeRespuesta(org),
+    metricas,
+    // Volumen de DMs de la linea HOY, contrastable contra la cuota que reporta
+    // WhatsApp (Juan, 2026-09-04: "tratemos de medir los mensajes que enviamos
+    // a colegas desde la linea de natalia por dia"). Los dos numeros juntos, a
+    // proposito: el nuestro se puede desincronizar, el de WhatsApp manda.
+    dmsHoy: org ? await groupSignals.dmsHoyLinea(org.id, desdeMedianoche).catch(() => null) : null,
+    cuotaWhatsapp: sesionActiva ? await waha.cuotaDeLinea(sesionActiva).catch(() => null) : null,
+  });
 });
 
 module.exports = router;

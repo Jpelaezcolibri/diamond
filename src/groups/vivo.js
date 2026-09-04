@@ -473,7 +473,15 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
         // que es el UNICO que llega hasta aca, 'auto' solo puede significar
         // "el sistema lo mando solo por DM", nunca "lo publico en el grupo".
         const refsDm = utiles.map((m) => m.ref).filter(Boolean);
-        await groupSignals.marcarRespondida(org.id, signal.id, { texto: textoDm, wamid: envioDm.wamid, modo: "auto", refs: refsDm });
+        // A QUIEN salio el DM (Juan, 2026-09-04). mensaje.autorTelefono NO es
+        // un telefono pese al nombre -- es el @lid crudo (soloDigitos(ev.autorId)
+        // en whatsapp-group.js) -- por eso va como destinoLid, y telefonoColega
+        // (el numero real ya resuelto por el directorio) como destinoTelefono.
+        await groupSignals.marcarRespondida(org.id, signal.id, {
+          texto: textoDm, wamid: envioDm.wamid, modo: "auto", refs: refsDm,
+          destinoTelefono: telefonoColega || null,
+          destinoLid: mensaje.autorTelefono || null,
+        });
 
         // Aviso post-DM (Juan, 2026-09-01): "no tiene nada que hacer" solo es
         // cierto si no queda nada pendiente -- si el pedido tenia dudosas,
@@ -1022,7 +1030,13 @@ async function responderPorDmManual(org, signalId, { sesion = null, refs = null 
   // enviado, que puede ser un subconjunto de lo elegido si algo no paso la
   // compuerta (ver `descartados` mas abajo).
   const refsEnviadas = publicables.map((m) => m.ref).filter(Boolean);
-  await groupSignals.marcarRespondida(org.id, signal.id, { texto, wamid: envioDm.wamid, modo: "auto", refs: refsEnviadas });
+  // A QUIEN salio (Juan, 2026-09-04). signal.autor_telefono, igual que
+  // mensaje.autorTelefono en asistir, es el @lid -- no el telefono real.
+  await groupSignals.marcarRespondida(org.id, signal.id, {
+    texto, wamid: envioDm.wamid, modo: "auto", refs: refsEnviadas,
+    destinoTelefono: telefonoColega || null,
+    destinoLid: signal.autor_telefono || null,
+  });
   // Distingue en la señal misma que esto lo mando una PERSONA desde el CRM
   // (auditoria 2026-09-02): respuesta_modo='auto' lo comparten el DM
   // automatico, este DM manual y la publicacion en el grupo de agosto, y el
