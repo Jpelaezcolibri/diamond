@@ -112,6 +112,12 @@ function mismaOperacion(propiedad, c) {
 //   3. La zona se comparaba tambien contra `ciudad`: pedir un barrio de
 //      Envigado devolvia el municipio entero.
 //   4. `habitaciones_min` es >=: pedir 3 alcobas traia una de 6.
+//      YA NO ES UN DEFECTO (Juan, 2026-09-04): mientras el pedido traiga
+//      presupuesto, traer una de 6 es conducta deliberada -- "si necesita 2
+//      habitaciones y tiene 3 o 4 o 5 por el mismo precio o sobre el rango que
+//      definimos". Lo que lo vuelve seguro es la banda de precio, no el tope de
+//      alcobas; por eso, sin presupuesto, el tope sigue vigente. Ver la nota
+//      completa en la exigencia de habitaciones, mas abajo.
 //
 // Principio para los datos que faltan: **lo desconocido no descalifica**. Si el
 // inventario no tiene el area cargada no podemos culpar a la propiedad por una
@@ -128,7 +134,14 @@ const PUNTAJE_BASE = 55;
 // $20M casi seguro sean negociables. El pedido explicito fue "capturar la
 // mayor cantidad de ofertas posible" dandole margen al bot en las variables
 // que NO son criticas para el cliente (precio, metros) sin tocar las que si
-// lo son (alcobas, banos, garajes, estrato: estas siguen exactas).
+// lo son (alcobas, banos, garajes, estrato: estas seguian exactas).
+//
+// DE LAS CUATRO "EXACTAS", HOY QUEDAN DOS (Juan, 2026-09-04). Baños y garajes
+// dejaron de descartar: "si no tiene si no un parqueadero (...) envialo con la
+// observacion" -- quedarse corto entra con su castigo y su razon, y Sofi lo
+// declara en `le_falta`. Alcobas se abrieron hacia ARRIBA, y solo cuando el
+// pedido trae presupuesto. Siguen siendo compuertas duras: el estrato, la
+// banda de precio, la zona, y las alcobas hacia abajo.
 //
 // El margen relaja la compuerta, no la borra: mas alla de el, se sigue
 // rechazando igual que antes. Configurable sin redesplegar, mismo patron que

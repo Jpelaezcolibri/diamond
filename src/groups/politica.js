@@ -10,9 +10,20 @@
 //   1. CALLAR ES GRATIS. Perder una oportunidad cuesta una comision; publicar un
 //      disparate ante 80 inmobiliarias competidoras cuesta la reputacion, y esa
 //      no se recupera cambiando de linea.
-//   2. ANTE LA DUDA, NO. Si un dato no se puede verificar —por ejemplo, si no se
-//      pudo contar cuantas veces ya hablamos hoy— la respuesta es callar. Nunca
-//      se asume el caso favorable.
+//   2. ANTE LA DUDA, NO. Si un dato no se puede verificar la respuesta es
+//      callar; nunca se asume el caso favorable. Sigue rigiendo todo este
+//      archivo: `decidir` no publica sin poder contar las respuestas del dia,
+//      y `decidirDm` no manda nada si no puede verificar el volumen de la
+//      linea (`limite_linea_no_verificable`) ni si el pedido no trae fecha.
+//
+//      UNA EXCEPCION, EXPLICITA (Juan, 2026-09-04): no poder contar cuantos
+//      DMs recibio HOY ese colega ya no frena el DM. Era el ejemplo canonico
+//      de este principio, y dejo de serlo porque dejo de haber un tope por
+//      colega que verificar: sin limite, ese numero no es una compuerta a
+//      ciegas, es una medicion que se guarda en la traza. El principio no se
+//      relajo — lo que desaparecio es la duda, porque desaparecio la pregunta.
+//      Los ejes de riesgo que si quedaron (volumen de la linea, cuota de
+//      WhatsApp, antiguedad del pedido) siguen fallando cerrado.
 //
 // Los limites de frecuencia existen para no spamear a los colegas y para que el
 // grupo no expulse a Diamond, no para disimular que hay un bot: el mensaje se
