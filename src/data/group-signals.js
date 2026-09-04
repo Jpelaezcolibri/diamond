@@ -684,9 +684,11 @@ async function marcarRespondida(
 async function obtenerPorId(orgId, signalId) {
   if (!supabase) return memory.groupSignals?.find((s) => s.org_id === orgId && s.id === signalId) || null;
   // autor_telefono se agrego (Juan, 2026-08-24) para vivo.js#responderPorDmManual:
-  // sin el no hay como resolver el telefono del colega ni contar los DMs que
-  // ya salieron hoy por el mismo remitente. aprobarManual (el otro llamador)
-  // simplemente no usa esta columna extra.
+  // sin el no hay como resolver el telefono del colega al que se le va a
+  // escribir. Tambien servia para contar los DMs que ya salieron hoy por el
+  // mismo remitente, pero ese tope se quito de los dos caminos manuales (Juan,
+  // 2026-09-04). aprobarManual (el otro llamador) usa la columna solo para
+  // dejar registrado a quien salio el DM (destinoLid).
   //
   // revalidacion se agrego (Juan, 2026-08-24) para el mismo llamador: si esta
   // señal ya paso por modo asistido, ahi quedo guardado el veredicto de Sofi

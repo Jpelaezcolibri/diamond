@@ -236,25 +236,23 @@ test("si no se puede contar el volumen de la linea, se calla", () => {
   assert.strictEqual(d.motivo, "limite_linea_no_verificable");
 });
 
-// LOS DEFAULTS, Y QUE RIGE CADA UNO (renombrado en la revision final,
-// 2026-09-04). El nombre viejo decia "2 DM/colega/dia" como si fuera un limite
-// de decidirDm, y desde el 2026-09-04 no lo es: decidirDm no lo aplica. La
-// propiedad sigue existiendo porque vivo.js#responderPorDmManual -- el DM que
-// dispara un HUMANO desde el CRM -- la lee directo, y ese camino si conserva
-// el tope ("LIMITES QUE SI SE RESPETAN... siguen firmes aunque decida un
-// humano", Juan, 2026-08-24). Borrarla habria vuelto ese chequeo un
-// `>= undefined` -- siempre false -- apagando la proteccion en silencio.
+// LOS DEFAULTS, Y QUE RIGE CADA UNO. `dmsPorColegaDia` ya no esta en la lista
+// (Juan, 2026-09-04): decidirDm dejo de aplicarlo, y el mismo dia los dos
+// caminos manuales de vivo.js tambien perdieron el tope, asi que la propiedad
+// se quedo sin un solo lector y se borro. La asercion de abajo es lo que
+// impide que vuelva a aparecer como una perilla que no mueve nada.
 test("los defaults del DM, y de quien es cada uno", () => {
   // Estos tres SI son compuertas de decidirDm.
   assert.strictEqual(politica.LIMITES_DM_DEFAULT.antiguedadMaximaMin, 30);
   assert.strictEqual(politica.LIMITES_DM_DEFAULT.topeDiarioLinea, 150);
   // La perilla del cortacircuitos por la cuota de WhatsApp (RADAR_DM_CUOTA_MAX):
   // 0.8 de 300 = 240, con 60 de colchon. No tenia ninguna asercion, y es la
-  // proteccion mas nueva de la linea -- la que ya fue baneada una vez.
+  // proteccion mas nueva de la linea -- la que ya fue baneada una vez. Los
+  // caminos MANUALES no usan esta fraccion: cortan al 100% (ver
+  // vivo.js#cuotaAgotada y test/group-vivo.test.js).
   assert.strictEqual(politica.LIMITES_DM_DEFAULT.fraccionCuotaMaxima, 0.8);
-  // Este NO lo aplica decidirDm: hoy solo rige la via manual del CRM
-  // (vivo.js#responderPorDmManual, ver test/group-vivo.test.js).
-  assert.strictEqual(politica.LIMITES_DM_DEFAULT.dmsPorColegaDia, 2);
+  // Ningun tope por colega, en ningun camino.
+  assert.ok(!("dmsPorColegaDia" in politica.LIMITES_DM_DEFAULT));
 });
 
 test("la traza de decidirDm tambien termina en NO: cuando se calla", () => {

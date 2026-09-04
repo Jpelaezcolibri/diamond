@@ -45,6 +45,11 @@ let enviosDmManual = [];
 let envioDmManualResultado = { ok: true, wamid: "wm-dm-manual" };
 let dmsHoyColegaManualMock = 0;
 let dmsHoyLineaManualMock = 0;
+// La cuota de WhatsApp de la linea en los caminos MANUALES (Juan, 2026-09-04).
+// `null` = no se pudo leer, que es el valor por defecto igual que en produccion
+// cuando WAHA no contesta.
+let cuotaLineaMock = null;
+let cuotasPedidas = [];
 
 function instalarDobles() {
   require.cache[RUTA("groups/classify.js")] = {
@@ -146,6 +151,10 @@ function instalarDobles() {
       enviarDm: async (sesion, telefono, texto) => {
         enviosDmManual.push({ sesion, telefono, texto });
         return envioDmManualResultado;
+      },
+      cuotaDeLinea: async (sesion) => {
+        cuotasPedidas.push(sesion);
+        return cuotaLineaMock;
       },
     },
   };
@@ -255,6 +264,8 @@ beforeEach(() => {
   envioDmManualResultado = { ok: true, wamid: "wm-dm-manual" };
   dmsHoyColegaManualMock = 0;
   dmsHoyLineaManualMock = 0;
+  cuotaLineaMock = null;
+  cuotasPedidas = [];
   vivo = instalarDobles();
 });
 
@@ -560,6 +571,16 @@ function grupoHabilitado(extra = {}) {
   return { id: "grp-1", jid: "vivo:gremial", nombre: "Gremial", responde: true, modo: "sombra", ...extra };
 }
 
+// La cuota que WhatsApp le impone a la linea (no la ponemos nosotros): 300
+// mensajes por ciclo de mes calendario, medido el 2026-09-04 en la linea del
+// radar. Ver src/lib/waha.js#cuotaDeLinea.
+function cuotaWa(usados, total = 300) {
+  return {
+    usados, total, fraccion: usados / total,
+    cycleStart: "2026-09-01T00:00:00Z", cycleEnd: "2026-10-01T00:00:00Z",
+  };
+}
+
 test("aprobarManual: responde al PRIVADO del colega y lo marca respondido", async () => {
   señalParaAprobar = señalCallada();
   grupoParaAprobar = grupoHabilitado();
@@ -725,6 +746,88 @@ test("aprobarManual: si el envio falla, no se marca como respondida", async () =
   assert.strictEqual(marcadas.length, 0);
 });
 
+// ── Frenos de VOLUMEN en aprobarManual (Juan, 2026-09-04). Hasta hoy este
+// camino no tenia NINGUNO: se podia aprobar sin limite, con la misma linea
+// que ya fue baneada una vez. No son frenos de confianza (la decision humana
+// sigue reemplazando el puntaje, la antiguedad y el permiso del grupo): son
+// del eje de volumen de la linea, que ninguna decision humana cambia.
+
+test("aprobarManual: al tope diario de la linea no manda — cortacircuito de volumen", async () => {
+  señalParaAprobar = señalCallada();
+  grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = "573001234567";
+  dmsHoyLineaManualMock = 150;
+
+  const r = await vivo.aprobarManual({ id: "org-1" }, "sig-callada");
+
+  assert.strictEqual(r.resultado, "limite_linea_alcanzado");
+  assert.strictEqual(enviosDmManual.length, 0);
+  // No se pierde: sin marcarRespondida, el pedido sigue disponible para la asesora.
+  assert.strictEqual(marcadas.length, 0);
+});
+
+test("aprobarManual: si el tope de la linea no se puede contar, falla cerrado", async () => {
+  señalParaAprobar = señalCallada();
+  grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = "573001234567";
+  dmsHoyLineaManualMock = null;
+
+  const r = await vivo.aprobarManual({ id: "org-1" }, "sig-callada");
+
+  assert.strictEqual(r.resultado, "limite_linea_no_verificable");
+  assert.strictEqual(enviosDmManual.length, 0);
+});
+
+test("aprobarManual: por debajo del tope diario manda normalmente", async () => {
+  señalParaAprobar = señalCallada();
+  grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = "573001234567";
+  dmsHoyLineaManualMock = 149;
+
+  const r = await vivo.aprobarManual({ id: "org-1" }, "sig-callada");
+
+  assert.strictEqual(r.resultado, "publicado");
+  assert.strictEqual(enviosDmManual.length, 1);
+});
+
+test("aprobarManual: con la cuota de WhatsApp agotada (300/300) no manda", async () => {
+  señalParaAprobar = señalCallada();
+  grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = "573001234567";
+  cuotaLineaMock = cuotaWa(300);
+
+  const r = await vivo.aprobarManual({ id: "org-1" }, "sig-callada");
+
+  assert.strictEqual(r.resultado, "cuota_whatsapp_agotada");
+  assert.strictEqual(enviosDmManual.length, 0);
+  assert.strictEqual(marcadas.length, 0);
+  assert.deepStrictEqual(cuotasPedidas, ["RADA-NATALIA"]);
+});
+
+test("aprobarManual: al 80% de la cuota SI manda — el colchon del automatico es para el humano", async () => {
+  señalParaAprobar = señalCallada();
+  grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = "573001234567";
+  cuotaLineaMock = cuotaWa(245);
+
+  const r = await vivo.aprobarManual({ id: "org-1" }, "sig-callada");
+
+  assert.strictEqual(r.resultado, "publicado");
+  assert.strictEqual(enviosDmManual.length, 1);
+});
+
+test("aprobarManual: si la cuota no se puede leer, no frena", async () => {
+  señalParaAprobar = señalCallada();
+  grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = "573001234567";
+  cuotaLineaMock = null;
+
+  const r = await vivo.aprobarManual({ id: "org-1" }, "sig-callada");
+
+  assert.strictEqual(r.resultado, "publicado");
+  assert.strictEqual(enviosDmManual.length, 1);
+});
+
 // ── responderPorDmManual: mandar el DM DESPUES, desde el CRM (Juan,
 // 2026-08-24). Dos casos reales: un pedido que entro cuando la org estaba en
 // otro modo (nunca se intento el DM), y un pedido que si se intento pero
@@ -776,16 +879,82 @@ test("responderPorDmManual: sin sesion de WAHA, no se puede intentar el envio", 
   assert.strictEqual(enviosDmManual.length, 0);
 });
 
-test("responderPorDmManual: un colega ya contactado dos veces hoy (tope 2) no recibe un tercer DM manual", async () => {
+// EL TOPE POR COLEGA SE FUE TAMBIEN DE ACA (Juan, 2026-09-04). El camino
+// automatico lo perdio el mismo dia; dejarlo solo en el manual invertia el
+// sentido: un colega al que el radar YA le respondio tres pedidos dejaba a la
+// asesora sin poder mandarle el cuarto a mano. Es el mismo argumento con el
+// que esta funcion ya se salta el limite de antiguedad — un humano que
+// decide no necesita esa tutela.
+test("responderPorDmManual: un colega ya contactado varias veces hoy SI recibe el DM que un humano decide mandarle", async () => {
   señalParaAprobar = señalCallada({ autor_telefono: "141746805670125" });
   grupoParaAprobar = grupoHabilitado();
   telefonoColegaManual = "573001234567";
-  dmsHoyColegaManualMock = 2;
+  dmsHoyColegaManualMock = 7;
 
   const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
 
-  assert.strictEqual(r.resultado, "limite_colega_alcanzado");
+  assert.strictEqual(r.resultado, "dm_enviado");
+  assert.strictEqual(enviosDmManual.length, 1);
+});
+
+// El conteo por colega ya no decide nada, asi que tampoco puede frenar por no
+// poder contarse (`limite_colega_no_verificable` existia SOLO para sostener el
+// tope de arriba).
+test("responderPorDmManual: no poder contar los DMs del colega ya no frena nada", async () => {
+  señalParaAprobar = señalCallada({ autor_telefono: "141746805670125" });
+  grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = "573001234567";
+  dmsHoyColegaManualMock = null;
+
+  const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
+
+  assert.strictEqual(r.resultado, "dm_enviado");
+  assert.strictEqual(enviosDmManual.length, 1);
+});
+
+// ── La cuota de WhatsApp en los caminos manuales: al 100%, no al 80% (Juan,
+// 2026-09-04). El corte al 80% del camino automatico reserva ~60 mensajes A
+// PROPOSITO, y ese colchon existe justamente para que una persona lo gaste a
+// conciencia. Al 100% ya no es una decision humana: es WhatsApp rechazando.
+
+test("responderPorDmManual: con la cuota de WhatsApp agotada (300/300) no manda", async () => {
+  señalParaAprobar = señalCallada({ autor_telefono: "141746805670125" });
+  grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = "573001234567";
+  cuotaLineaMock = cuotaWa(300);
+
+  const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
+
+  assert.strictEqual(r.resultado, "cuota_whatsapp_agotada");
   assert.strictEqual(enviosDmManual.length, 0);
+  // El pedido NO se pierde: sigue sin marcarse respondido, asi que la via de
+  // la asesora queda intacta.
+  assert.strictEqual(marcadas.length, 0);
+  assert.deepStrictEqual(cuotasPedidas, ["RADA-NATALIA"]);
+});
+
+test("responderPorDmManual: al 80% de la cuota SI manda — ese colchon es justamente para el humano", async () => {
+  señalParaAprobar = señalCallada({ autor_telefono: "141746805670125" });
+  grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = "573001234567";
+  cuotaLineaMock = cuotaWa(245); // el camino automatico ya estaria frenado aca
+
+  const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
+
+  assert.strictEqual(r.resultado, "dm_enviado");
+  assert.strictEqual(enviosDmManual.length, 1);
+});
+
+test("responderPorDmManual: si la cuota no se puede leer, no frena — queda el tope de linea en el mismo eje", async () => {
+  señalParaAprobar = señalCallada({ autor_telefono: "141746805670125" });
+  grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = "573001234567";
+  cuotaLineaMock = null;
+
+  const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
+
+  assert.strictEqual(r.resultado, "dm_enviado");
+  assert.strictEqual(enviosDmManual.length, 1);
 });
 
 test("responderPorDmManual: al tope diario de la linea, tampoco manda -- cortacircuito de volumen", async () => {

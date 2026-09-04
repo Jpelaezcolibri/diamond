@@ -136,10 +136,19 @@ const MENSAJE_RESULTADO_DM: Record<string, string> = {
   sin_sesion: "No hay una línea de WhatsApp lista para mandar el DM.",
   sin_propiedades_publicables: "Ninguna propiedad pasa el control de calidad ahora mismo (el inventario pudo cambiar).",
   sin_texto: "No se pudo armar el mensaje.",
-  limite_colega_alcanzado: "Ya se le mandó un DM a este colega hoy — no se manda un segundo.",
-  limite_colega_no_verificable: "No se pudo verificar el límite de mensajes al colega; por seguridad, no se mandó nada.",
+  // El tope por colega se quitó de los dos caminos (Juan, 2026-09-04), así
+  // que `limite_colega_alcanzado` / `limite_colega_no_verificable` ya no
+  // pueden llegar acá — se sacaron del mapa para que no queden mensajes que
+  // describen una regla que dejó de existir. Lo que queda es el eje de
+  // volumen de la línea, que sigue firme aunque decida un humano.
   limite_linea_alcanzado: "Se llegó al tope diario de mensajes de la línea.",
   limite_linea_no_verificable: "No se pudo verificar el tope diario de la línea; por seguridad, no se mandó nada.",
+  // Al 100% de la cuota que WhatsApp le impone a la línea (~300 por mes
+  // calendario) el freno ya no es nuestro: es WhatsApp rechazando. El corte
+  // al 80% del camino automático NO aplica acá a propósito — ese colchón
+  // existe justamente para que una persona lo gaste a conciencia.
+  cuota_whatsapp_agotada:
+    "La línea agotó su cuota de mensajes de WhatsApp de este mes. No es un límite nuestro: hasta que arranque el próximo ciclo, WhatsApp los rechaza. Escribile a mano.",
   error_envio: "El envío falló. Se puede volver a intentar.",
   ya_respondida: "Este pedido ya tiene una respuesta registrada.",
   no_es_demanda: "Esto no es un pedido (demanda).",

@@ -154,21 +154,20 @@ function decidir({
 // alla "no publicar" puede significar "nadie se entera" (ya_respondida,
 // modo_apagado); aca un "no" SIEMPRE tiene una salida de respaldo.
 const LIMITES_DM_DEFAULT = {
-  // TOPE POR COLEGA EN decidirDm: QUITADO (Juan, 2026-09-04). Estuvo en 1
+  // TOPE POR COLEGA: QUITADO POR COMPLETO (Juan, 2026-09-04). Estuvo en 1
   // (24-ago) y en 2 (02-sep). El argumento de Juan para sacarlo: estos DMs son
   // RESPUESTAS a pedidos que el colega acaba de publicar, no mensajes en frio
   // -- responder tres pedidos distintos en un dia no es insistencia, es
-  // servicio. decidirDm ya no lo aplica (ver mas abajo).
+  // servicio.
   //
-  // La propiedad SIGUE existiendo aca (no se borro) porque
-  // src/groups/vivo.js#responderPorDmManual -- el DM que dispara un HUMANO
-  // desde el CRM, no el radar -- la lee directo (`limites.dmsPorColegaDia`,
-  // fuera del alcance de esta funcion) y ese camino conserva el tope a
-  // proposito: "LIMITES QUE SI SE RESPETAN... siguen firmes aunque decida un
-  // humano" (Juan, 2026-08-24). Borrar la propiedad no habria tocado ese
-  // texto ni ese test (test/group-vivo.test.js), pero si habria vuelto el
-  // chequeo `dmsColegaHoy >= limites.dmsPorColegaDia` un `>= undefined`
-  // -- siempre false -- y habria apagado esa proteccion en silencio.
+  // La propiedad `dmsPorColegaDia` (y su RADAR_DM_POR_COLEGA_DIA) vivio unas
+  // horas mas que decidirDm porque vivo.js#responderPorDmManual la leia
+  // directo y borrarla habria vuelto ese chequeo un `>= undefined` -- siempre
+  // false -- apagando la proteccion en silencio. El mismo dia los DOS caminos
+  // manuales perdieron el tope tambien (dejarlo solo ahi frenaba justo el
+  // unico envio que una persona miro antes de mandar), asi que ya no queda
+  // ningun lector: la propiedad se borro en vez de quedar como una perilla
+  // que no mueve nada.
   //
   // Lo que protege contra el spam del lado automatico (decidirDm) sigue en
   // pie y no es este tope:
@@ -176,7 +175,6 @@ const LIMITES_DM_DEFAULT = {
   //     difundido a cinco grupos manda UN solo DM.
   //   · antiguedadMaximaMin: nunca se responde un pedido viejo.
   //   · topeDiarioLinea y la cuota de WhatsApp: el volumen de la linea.
-  dmsPorColegaDia: Number(process.env.RADAR_DM_POR_COLEGA_DIA || 2),
   // Un DM por un pedido de ayer es exactamente lo que un colega reporta: "me
   // escribieron de la nada por algo que ya resolvi". Se mide contra la fecha
   // DEL MENSAJE en el grupo, nunca contra cuando se proceso la fila (ver la

@@ -808,6 +808,35 @@ async function avisarCercano(org, signal, mensaje, grupo, matches, { edificio = 
   }
 }
 
+// LA CUOTA DE WHATSAPP EN LOS CAMINOS MANUALES: AL 100%, NO AL 80% (Juan,
+// 2026-09-04).
+//
+// El camino automatico corta en `fraccionCuotaMaxima` (0.8 de 300 = 240, ver
+// politica.js#LIMITES_DM_DEFAULT) y ese corte reserva ~60 mensajes A
+// PROPOSITO. El colchon existe justamente para que una PERSONA lo gaste a
+// conciencia: el pedido que vale la pena y que el radar no habria mandado
+// solo. Frenar tambien a la asesora en 240 dejaria ese colchon sin dueño —
+// nadie podria usar lo que se reservo para alguien.
+//
+// Al 100% ya no queda ninguna decision humana que respetar: es WhatsApp
+// rechazando el envio. Frenar aca es decir la verdad antes de que la linea se
+// coma el rechazo — la misma linea que ya fue baneada una vez (2026-07-30).
+//
+// `null` (no se pudo leer) NO frena: mismo criterio que politica.js#decidirDm
+// — un cero optimista seria peor, y el topeDiarioLinea sigue cubriendo el
+// mismo eje de volumen.
+//
+// La LECTURA vive aca y no en politica.js a proposito: ese archivo es codigo
+// puro, sin IO.
+async function cuotaAgotada(sesion) {
+  if (!sesion) return false;
+  const cuota = await waha.cuotaDeLinea(sesion).catch((e) => {
+    console.warn("[radar] No se pudo leer la cuota de WhatsApp de la linea:", e.message);
+    return null;
+  });
+  return Boolean(cuota && cuota.fraccion >= 1);
+}
+
 // Aprobacion manual de un pedido que el radar callo (Juan, 2026-08-20): "que
 // yo pueda aprobarlo de manera manual dentro del chat de Sofi y que una vez
 // aprobado se responda de manera automatica". Corre EXACTAMENTE la misma
@@ -868,6 +897,26 @@ async function aprobarManual(org, signalId) {
   const sesiones = await whatsappGroups.listSessions(org.id);
   const activas = sesiones.filter((s) => s.estado === "activa");
   if (activas.length !== 1) return { resultado: "sesion_ambigua", cantidad: activas.length };
+
+  // FRENOS DE VOLUMEN DE LA LINEA (Juan, 2026-09-04). Hasta hoy este camino
+  // no tenia NINGUNO: aprobar desde el chat de Sofi podia mandar sin limite.
+  //
+  // No contradicen la decision humana que esta funcion existe para respetar:
+  // el umbral de puntaje, la antiguedad del pedido y el permiso de responder
+  // del grupo siguen apagados aca a proposito, porque son ejes de CONFIANZA y
+  // la persona que aprueba los reemplaza. El tope diario y la cuota de
+  // WhatsApp son otro eje — el volumen de la linea, la misma que ya fue
+  // baneada una vez (2026-07-30) — y ninguna decision humana lo cambia:
+  // pasado el tope, quien rechaza es WhatsApp, no nosotros.
+  //
+  // Ningun pedido se pierde por esto: no se marca respondida, asi que el
+  // pedido queda igual que antes esperando a la asesora.
+  const desdeIso = new Date(Date.now() - VENTANA_LIMITE_HORAS * 3600 * 1000).toISOString();
+  const dmsLineaHoy = await groupSignals.dmsHoyLinea(org.id, desdeIso);
+  if (dmsLineaHoy === null || dmsLineaHoy === undefined) return { resultado: "limite_linea_no_verificable" };
+  if (dmsLineaHoy >= politica.LIMITES_DM_DEFAULT.topeDiarioLinea) return { resultado: "limite_linea_alcanzado" };
+  // Al 100%, no al 80% — ver la nota de cuotaAgotada arriba.
+  if (await cuotaAgotada(activas[0].nombre)) return { resultado: "cuota_whatsapp_agotada" };
 
   // AL PRIVADO DEL COLEGA, NUNCA AL GRUPO (Juan, 2026-09-02: "necesito que me
   // asegures que las respuestas no van al grupo si no al dm").
@@ -1009,10 +1058,22 @@ async function responderPorDmManual(org, signalId, { sesion = null, refs = null 
   });
   if (!texto) return { resultado: "sin_texto" };
 
-  // LIMITES QUE SI SE RESPETAN (Juan, 2026-08-24): una vez por colega por dia
-  // y el tope diario de la linea. Protegen al colega (spam) y a la linea (la
+  // LIMITES QUE SI SE RESPETAN: el volumen DE LA LINEA, y nada mas. El tope
+  // diario propio y la cuota que impone WhatsApp protegen a la linea (la
   // misma que ya fue baneada en julio de 2026, ver src/lib/waha.js) -- no son
-  // una cuota de confianza, siguen firmes aunque decida un humano.
+  // ejes de confianza, siguen firmes aunque decida un humano: pasados, quien
+  // rechaza es WhatsApp, no nosotros.
+  //
+  // EL TOPE POR COLEGA SE QUITO DE ACA (Juan, 2026-09-04), el mismo dia que
+  // decidirDm lo perdio en el camino automatico (ver la nota en
+  // politica.js#LIMITES_DM_DEFAULT). Mientras los dos caminos cortaban en 2 el
+  // efecto era simetrico; con el automatico sin tope quedaba invertido: un
+  // colega al que el radar YA le respondio tres pedidos dejaba a la asesora
+  // sin poder mandarle el cuarto A MANO -- el unico envio que alguien miro
+  // antes de mandar era el unico frenado. Es el mismo argumento con el que
+  // esta funcion ya se salta el limite de antiguedad: un humano que decide no
+  // necesita esa tutela. Con el tope se fue `limite_colega_no_verificable`,
+  // que existia solo para sostenerlo.
   //
   // NO se aplica el limite de antiguedad de politica.js#decidirDm (los 30 min
   // desde el mensaje del grupo): ese es EXACTAMENTE el freno que esta funcion
@@ -1021,15 +1082,14 @@ async function responderPorDmManual(org, signalId, { sesion = null, refs = null 
   // como apagar solo esa pieza) y se replica aca a mano solo lo que SI sigue
   // protegiendo, con los mismos limites de politica.js#LIMITES_DM_DEFAULT.
   const desdeIso = new Date(Date.now() - VENTANA_LIMITE_HORAS * 3600 * 1000).toISOString();
-  const [dmsColegaHoy, dmsLineaHoy] = await Promise.all([
-    groupSignals.dmsHoyPorColega(org.id, signal.autor_telefono, desdeIso),
-    groupSignals.dmsHoyLinea(org.id, desdeIso),
-  ]);
+  const dmsLineaHoy = await groupSignals.dmsHoyLinea(org.id, desdeIso);
   const limites = politica.LIMITES_DM_DEFAULT;
-  if (dmsColegaHoy === null || dmsColegaHoy === undefined) return { resultado: "limite_colega_no_verificable" };
-  if (dmsColegaHoy >= limites.dmsPorColegaDia) return { resultado: "limite_colega_alcanzado" };
   if (dmsLineaHoy === null || dmsLineaHoy === undefined) return { resultado: "limite_linea_no_verificable" };
   if (dmsLineaHoy >= limites.topeDiarioLinea) return { resultado: "limite_linea_alcanzado" };
+  // Al 100%, no al 80% -- ver la nota de cuotaAgotada mas arriba en este
+  // archivo. Ningun pedido se pierde: sin marcarRespondida, el pedido sigue
+  // esperando a la asesora igual que antes.
+  if (await cuotaAgotada(sesion)) return { resultado: "cuota_whatsapp_agotada" };
 
   const envioDm = await waha.enviarDm(sesion, telefonoColega, texto).catch((e) => ({ ok: false, error: e.message }));
   if (!envioDm || !envioDm.ok) return { resultado: "error_envio", error: envioDm && envioDm.error };

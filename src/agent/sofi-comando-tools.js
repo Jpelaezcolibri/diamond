@@ -939,6 +939,17 @@ async function aprobarPedidoRadarComando(input, ctx) {
     }
     case "sesion_ambigua":
       return `No hay exactamente una sesion de WhatsApp activa (encontre ${r.cantidad}) — no se puede saber por cual linea publicar.`;
+    // Frenos de volumen de la linea (Juan, 2026-09-04): el tope diario propio
+    // y la cuota que impone WhatsApp. No contradicen la aprobacion (el
+    // puntaje, la antiguedad y el permiso del grupo siguen apagados aca): son
+    // el eje de volumen, que ninguna decision humana cambia. El pedido no se
+    // pierde — queda sin responder, para escribirle a mano.
+    case "limite_linea_alcanzado":
+      return "La linea ya llego a su tope de mensajes por hoy — no se aprobo. El pedido sigue ahi para escribirle a mano.";
+    case "limite_linea_no_verificable":
+      return "No pude contar cuantos mensajes mando la linea hoy, y ante la duda no escribo. El pedido sigue ahi.";
+    case "cuota_whatsapp_agotada":
+      return "La linea agoto su cuota de mensajes de WhatsApp de este mes (la pone WhatsApp, no nosotros) — hasta el proximo ciclo hay que escribirle a mano.";
     case "error_envio":
       return `El envio fallo: ${r.error || "sin detalle"}.`;
     default:
