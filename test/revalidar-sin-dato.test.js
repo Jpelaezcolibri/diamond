@@ -18,10 +18,22 @@ test("un garaje vacio se muestra como 'sin dato', no desaparece", () => {
   assert.ok(ficha.includes("2 baños"));
 });
 
-test("un cero real sigue siendo cero: eso SI es 'no tiene'", () => {
+// SUPERADO (Juan, 2026-09-04). Este test fijaba que un 0 se mostrara como
+// "0 garajes" porque se asumia que Wasi distingue "no tiene" (0) de "no lo
+// cargamos" (null). NO LO HACE: medido contra produccion el 2026-09-04 sobre
+// las 114 disponibles, garaje = 0 en 39 y garaje = null en CERO.
+//
+// O sea que la rama del null era codigo muerto para garajes, y las 39
+// propiedades sin el campo cargado —el 34% del inventario— llegaban a Sofi
+// como "0 garajes", que ella lee como "confirmado que no tiene". A las 15:00
+// del 2026-09-04 descarto dos refs de 95 y 85 puntos por eso: "es un
+// incumplimiento de fondo, no accesorio". Hizo lo correcto con un dato falso.
+//
+// Ahora el criterio es el mismo que match.js ya usaba (`!(e.tiene > 0)`).
+test("un cero de Wasi es 'sin dato': ese campo nunca se cargo", () => {
   const ficha = formatearCandidatas([{ ...base, banos: 2, garajes: 0, estrato: 3 }]);
-  assert.ok(ficha.includes("0 garajes"), ficha);
-  assert.ok(!ficha.includes("garajes: sin dato"));
+  assert.ok(ficha.includes("garajes: sin dato"), ficha);
+  assert.ok(!ficha.includes("0 garajes"), "un 0 de Wasi no puede leerse como 'no tiene'");
   assert.ok(ficha.includes("estrato 3"));
 });
 

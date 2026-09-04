@@ -274,3 +274,39 @@ test("el prompt le ordena a Sofi mandar a dudosas lo que no se puede evaluar", (
 // declarado dos lineas antes -- tautologica, no podia fallar -- y el resto ya
 // lo cubre "apruebaAviso: SOLO refs_dudosas (refs_utiles vacio) SI aprueba el
 // aviso", mas arriba en este archivo.
+
+// EL CERO DE WASI NO ES UN CERO (Juan, 2026-09-04): "no podemos dejar de
+// ofrecer un apartamento por un parqueadero".
+//
+// Caso real de las 15:00 del 2026-09-04 (pedido de Juan Carlos Montes en
+// Pedidos Poblado/Envigado): el motor dio 95 y 85, y Sofi descarto las dos —
+// "ambas propiedades tienen 0 garajes registrados (...) es un incumplimiento
+// de fondo, no accesorio". Hizo lo correcto con un dato falso: medido contra
+// produccion, garaje=0 en 39 de las 114 disponibles y garaje=null en CERO, o
+// sea que Wasi manda 0 cuando el campo no esta cargado.
+test("un garaje en 0 se le muestra a Sofi como 'sin dato', no como 'no tiene'", () => {
+  const { formatearCandidatas } = require("../src/groups/revalidar");
+  const t = formatearCandidatas([{ ref: "9702941", garajes: 0, banos: 0, estrato: 0, habitaciones: 2 }]);
+  assert.match(t, /garajes: sin dato/);
+  assert.ok(!/0 garajes/.test(t), "un 0 de Wasi no puede leerse como 'no tiene'");
+  assert.match(t, /baños: sin dato/);
+  assert.match(t, /estrato: sin dato/);
+});
+
+test("un garaje real sigue saliendo con su numero", () => {
+  const { formatearCandidatas } = require("../src/groups/revalidar");
+  assert.match(formatearCandidatas([{ ref: "1", garajes: 2, banos: 3 }]), /2 garajes/);
+  assert.match(formatearCandidatas([{ ref: "1", garajes: 2, banos: 3 }]), /3 baños/);
+});
+
+// La lista de "de fondo" es cerrada: Sofi ascendio el parqueadero a "de fondo"
+// y descarto. El prompt tiene que cerrarle esa puerta.
+test("el prompt cierra la lista de 'de fondo' y deja el parqueadero como accesorio", () => {
+  const s = require("../src/groups/revalidar").SISTEMA;
+  assert.match(s, /LISTA DE "DE FONDO" ES CERRADA/);
+  // El prompt va envuelto a ~70 columnas, asi que la frase puede quedar
+  // partida por un salto de linea: se compara tolerando el corte.
+  assert.match(s.replace(/\s+/g, " "), /no podemos dejar de ofrecer un apartamento por un parqueadero/);
+  assert.ok(!/Si dudas si algo es accesorio o de fondo, tratalo como de FONDO/.test(s),
+    "la regla vieja mandaba a de FONDO ante la duda: era el permiso para descartar");
+});

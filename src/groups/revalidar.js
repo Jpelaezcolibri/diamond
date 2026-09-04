@@ -209,7 +209,15 @@ ACCESORIO vs DE FONDO — es la linea que decide CASI contra INCOMPATIBLE
   separado fuera accesorio. "Le falta un parqueadero" se le ofrece a un
   colega; "le falta un parqueadero, un baño y 6 m²" es hacerle perder el
   tiempo — eso es DUDOSA.
-- Si dudas si algo es accesorio o de fondo, tratalo como de FONDO.
+- LA LISTA DE "DE FONDO" ES CERRADA: zona, municipio, tipo, operacion,
+  presupuesto y alcobas. NADA MAS. El parqueadero, los baños, el estrato, el
+  cuarto util y los acabados son SIEMPRE accesorios — no podes ascenderlos a
+  "de fondo" por mas central que te parezca el requisito en ese pedido puntual.
+  Regla de Juan, 2026-09-04, literal: "no podemos dejar de ofrecer un
+  apartamento por un parqueadero". Un colega prefiere ver la propiedad y
+  decidir el mismo; vos no decidis por el.
+- Si dudas si algo es accesorio o de fondo, es ACCESORIO: si no esta en la
+  lista cerrada de arriba, no es de fondo.
 
 ANTE LA DUDA
 - Entre INCOMPATIBLE y DUDOSA: preferi DUDOSA. Nunca la mandes con la
@@ -295,8 +303,28 @@ function formatearCandidatas(matches) {
       // con garaje null, ninguna con garaje 0. Un 0 real sigue saliendo como
       // 0: eso si es "no tiene". Con 85 de 114 propiedades sin garaje cargado,
       // la diferencia decide la mitad de los pedidos.
+      // CORRECCION (Juan, 2026-09-04): "no podemos dejar de ofrecer un
+      // apartamento por un parqueadero".
+      //
+      // La regla de arriba asumia que Wasi distingue "no tiene garaje" (0) de
+      // "no lo cargamos" (null). NO LO HACE. Medido contra produccion el
+      // 2026-09-04 sobre las 114 disponibles: garaje = 0 en 39, garaje = null
+      // en CERO. O sea que la rama "sin dato" era codigo muerto para garajes,
+      // y las 39 propiedades sin el campo cargado —el 34% del inventario— se
+      // le presentaban a Sofi como "0 garajes", que ella lee como "confirmado
+      // que no tiene".
+      //
+      // Caso real que lo destapo (15:00 del 2026-09-04, pedido de Juan Carlos
+      // Montes en Pedidos Poblado/Envigado): el motor dio 95 y 85, y Sofi
+      // descarto las dos diciendo "ambas propiedades tienen 0 garajes
+      // registrados (...) es un incumplimiento de fondo, no accesorio". Hizo
+      // lo correcto con un dato falso.
+      //
+      // Ahora el criterio es el MISMO que ya usa match.js (`!(e.tiene > 0)`
+      // = sin dato) y el que esta linea ya aplicaba para estrato. Un cero deja
+      // de significar "no tiene" porque en estos datos nunca lo significo.
       const dato = (valor, unidad) =>
-        valor === null || valor === undefined || valor === "" ? `${unidad}: sin dato` : `${valor} ${unidad}`;
+        Number(valor) > 0 ? `${valor} ${unidad}` : `${unidad}: sin dato`;
       const datos = [
         `ref ${m.ref}`,
         m.operacion,
