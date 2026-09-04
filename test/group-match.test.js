@@ -815,3 +815,31 @@ test("un dato que el inventario no tiene no se castiga -- lo desconocido no desc
   );
   assert.ok(!conExigencia.razones.join(" | ").includes("pediste"));
 });
+
+// LA APERTURA HACIA ARRIBA ESTA CONDICIONADA AL PRESUPUESTO (revision final,
+// 2026-09-04). El pedido de Juan fue "si necesita 2 habitaciones y tiene 3 o 4
+// o 5 POR EL MISMO PRECIO O SOBRE EL RANGO QUE DEFINIMOS" — la banda de precio
+// no es un detalle de la frase, es lo que hace segura la apertura.
+//
+// Sin `precio_max` ni `precio_min` el bloque de precio de evaluarCandidata no
+// corre: no queda ni banda ni tope de alcobas, y la propiedad pasa sin NINGUNA
+// compuerta de tamaño. Medido antes del fix: este mismo caso devolvia puntaje
+// 81 con ubicacion exacta, o sea candidata a DM.
+test("sin presupuesto, un pedido de 2 alcobas NO acepta una de 9", () => {
+  const sinPrecio = {
+    operacion: "venta", tipo: "apartamento", zona: "Laureles",
+    precio_min: 0, precio_max: 0, habitaciones: 2,
+  };
+  const mansion = apto({ habitaciones: 9, area: "600 m²", precio: "$2.500.000.000" });
+  assert.strictEqual(
+    evaluarCandidata(mansion, sinPrecio, "diamond"),
+    null,
+    "sin banda de precio, el tope de alcobas es la unica compuerta de tamaño que queda"
+  );
+});
+
+test("CON presupuesto, un pedido de 2 alcobas SI acepta una de 5 (lo que Juan pidio)", () => {
+  const m = evaluarCandidata(apto({ habitaciones: 5 }), pide({ habitaciones: 2 }), "diamond");
+  assert.ok(m, "dentro de la banda de precio, tres alcobas de mas no pueden descartar");
+  assert.match(m.razones.join(" | "), /5 alcobas/);
+});

@@ -35,3 +35,31 @@ test("con totalQuota en cero devuelve null y no divide por cero", async () => {
   respuesta = { me: { messageCapping: { totalQuota: 0, usedQuota: 0 } } };
   assert.strictEqual(await waha.cuotaDeLinea("RADA-NATALIA"), null);
 });
+
+// EL CERO OPTIMISTA QUE LA CABECERA DE cuotaDeLinea PROHIBE (revision final,
+// 2026-09-04). `Number(cap.usedQuota) || 0` convierte undefined/null/"n/a" en
+// 0, y ese 0 no dice "no sabemos": le dice al cortacircuitos que hay 300 de
+// cuota libre. Si el uso real fuera 290/300 se sigue enviando hasta que
+// WhatsApp corte la linea — la misma linea que ya fue baneada una vez
+// (2026-07-30). Ademas la traza guardaria "cuota_wa:0/300", una afirmacion
+// falsa en el registro de auditoria.
+test("con totalQuota pero SIN usedQuota devuelve null, no un cero optimista", async () => {
+  respuesta = { name: "RADA-NATALIA", status: "WORKING", me: { messageCapping: { totalQuota: 300 } } };
+  assert.strictEqual(await waha.cuotaDeLinea("RADA-NATALIA"), null);
+});
+
+test("un usedQuota que no es un numero tampoco se lee como cero", async () => {
+  respuesta = { me: { messageCapping: { totalQuota: 300, usedQuota: "n/a" } } };
+  assert.strictEqual(await waha.cuotaDeLinea("RADA-NATALIA"), null);
+
+  respuesta = { me: { messageCapping: { totalQuota: 300, usedQuota: null } } };
+  assert.strictEqual(await waha.cuotaDeLinea("RADA-NATALIA"), null);
+});
+
+// Un cero REAL sigue siendo un cero: la linea que no mando nada en el ciclo.
+test("usedQuota en cero explicito si es un cero legitimo", async () => {
+  respuesta = { me: { messageCapping: { totalQuota: 300, usedQuota: 0 } } };
+  const c = await waha.cuotaDeLinea("RADA-NATALIA");
+  assert.strictEqual(c.usados, 0);
+  assert.strictEqual(c.fraccion, 0);
+});

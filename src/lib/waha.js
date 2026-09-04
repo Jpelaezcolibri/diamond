@@ -171,7 +171,22 @@ async function cuotaDeLinea(nombre) {
   const cap = s && s.me && s.me.messageCapping;
   const total = Number(cap && cap.totalQuota);
   if (!(total > 0)) return null;
-  const usados = Number(cap.usedQuota) || 0;
+  // NO `Number(cap.usedQuota) || 0` (revision final, 2026-09-04): eso convertia
+  // undefined, null o "n/a" en un 0 que el cortacircuitos lee como "hay 300 de
+  // cuota libre", justo cuando no sabemos nada. Con 290/300 reales se seguiria
+  // enviando hasta que WhatsApp corte la linea -- la misma que ya fue baneada
+  // el 2026-07-30 -- y la traza guardaria "cuota_wa:0/300", una afirmacion
+  // falsa en el registro de auditoria.
+  //
+  // `Number.isFinite` solo no alcanza: Number(null) y Number("") son 0, no NaN.
+  // Por eso se exige que el campo sea un numero (o un texto numerico no vacio)
+  // antes de convertirlo. Un 0 EXPLICITO si es un cero legitimo y pasa.
+  const crudo = cap.usedQuota;
+  const usados =
+    typeof crudo === "number" ? crudo
+    : typeof crudo === "string" && crudo.trim() !== "" ? Number(crudo)
+    : NaN;
+  if (!Number.isFinite(usados)) return null;
   return { usados, total, fraccion: usados / total };
 }
 

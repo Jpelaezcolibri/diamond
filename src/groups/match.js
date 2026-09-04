@@ -400,6 +400,9 @@ function evaluarCandidata(p, c, fuente) {
   // como `flexible_habitaciones`). Sin la señal, siguen exigiendo el minimo
   // exacto — de ahi que baños/garajes NO llevaran margen antes de hoy.
   const flexible = Boolean(c.flexible_habitaciones);
+  // La apertura de alcobas hacia arriba (mas abajo) esta CONDICIONADA a esto:
+  // sin banda de precio no hay nada que acote el tamaño de lo que se ofrece.
+  const conPresupuesto = c.precio_max > 0 || c.precio_min > 0;
   const exigencias = [
     // Puntaje distinto para el exacto (t===q) y el "uno de mas/menos" que
     // igual pasa la compuerta: antes valian lo mismo. Caso real (Juan,
@@ -409,10 +412,25 @@ function evaluarCandidata(p, c, fuente) {
     // -por eso la compuerta la deja pasar- pero no tan bien como la exacta.
     {
       pide: c.habitaciones, tiene: p.habitaciones,
-      // SIN TOPE SUPERIOR (Juan, 2026-09-04). Antes era `t <= q + 1`, y eso
-      // descartaba en silencio una propiedad de 4 alcobas ante un pedido de 2
-      // aunque calzara en zona y precio. Medido sobre 664 demandas reales: el
-      // tope aplicaba a 499 (75%).
+      // SIN TOPE SUPERIOR, PERO SOLO SI EL PEDIDO TRAE PRESUPUESTO (Juan,
+      // 2026-09-04). Antes era `t <= q + 1` siempre, y eso descartaba en
+      // silencio una propiedad de 4 alcobas ante un pedido de 2 aunque calzara
+      // en zona y precio. Medido sobre 664 demandas reales: el tope aplicaba a
+      // 499 (75%).
+      //
+      // La condicion NO es un agregado nuestro, esta en la frase misma del
+      // pedido: "si necesita 2 habitaciones y tiene 3 o 4 o 5 POR EL MISMO
+      // PRECIO O SOBRE EL RANGO QUE DEFINIMOS". Lo que hace segura la apertura
+      // es la banda de precio: mientras haya techo (con su margen) y piso
+      // (BANDA_INFERIOR), una propiedad mucho mas grande no puede colarse
+      // porque su precio la delata y el bloque de precio la corta.
+      //
+      // Cuando el pedido NO trae ni precio_max ni precio_min, ese bloque no
+      // corre: no queda ni banda ni tope, y una casa de 9 alcobas de $2.500M
+      // pasaba con puntaje 81 ante un pedido de 2 alcobas en Laureles (repro
+      // de la revision final, hoy fijado en test/group-match.test.js). Sin
+      // banda, el tope de alcobas es la unica compuerta de tamaño que queda,
+      // asi que se conserva.
       //
       // El orden NO cambia: `puntos` sigue dando 10 al exacto y 6 al que no lo
       // es, que es la decision del 2026-08-20 ("la que calza exacto deberia
@@ -422,7 +440,7 @@ function evaluarCandidata(p, c, fuente) {
       // Hacia ABAJO no se abre: las alcobas definen el producto, un 2 alcobas
       // no resuelve un pedido de 3. La gabela de una menos sigue siendo
       // exclusiva de flexible_habitaciones, declarado por el colega.
-      ok: (t, q) => t >= q - (flexible ? 1 : 0),
+      ok: (t, q) => t >= q - (flexible ? 1 : 0) && (conPresupuesto || t <= q + 1),
       texto: (t) => `${t} alcobas`, puntos: (t, q) => (t === q ? 10 : 6),
       castigo: CASTIGO_CORTO.habitaciones,
     },
