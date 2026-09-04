@@ -237,3 +237,27 @@ test("apruebaAviso: ni utiles ni dudosas -- no aprueba", () => {
   };
   assert.strictEqual(revalidar.apruebaAviso(veredicto), false);
 });
+
+// LO QUE NO PODEMOS EVALUAR VA A NATALIA (Juan, 2026-09-04): "no quiero que
+// dejemos propiedades por fuera sin saber si hay match, entonces (...) las que
+// tengan esas salvedades enviala a natalia cosas como el numero del piso
+// especifico o unidad cerrada o jardin privado".
+//
+// Ni `properties` ni classify.js tienen piso, orientacion ni unidad cerrada.
+// Sin dato de los dos lados no se puede declarar un hueco honesto, asi que
+// esos pedidos no se responden solos: los mira una persona.
+test("el prompt le ordena a Sofi mandar a dudosas lo que no se puede evaluar", () => {
+  const s = require("../src/groups/revalidar").SISTEMA;
+  assert.match(s, /piso/i);
+  assert.match(s, /unidad cerrada/i);
+  assert.match(s, /jard[ií]n privado/i);
+  assert.match(s, /refs_dudosas/);
+});
+
+// El ruteo ya existe y no se toca: solo dudosas => no hay DM, hay aviso.
+test("un veredicto con solo dudosas se aprueba (va a la asesora) pero no trae utiles", () => {
+  const { apruebaAviso } = require("../src/groups/revalidar");
+  const v = { es_pedido_real: true, refs_utiles: [], refs_dudosas: ["9944723"] };
+  assert.strictEqual(apruebaAviso(v), true);
+  assert.strictEqual(v.refs_utiles.length, 0, "sin utiles no hay DM automatico");
+});
