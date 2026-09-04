@@ -964,9 +964,25 @@ async function aprobarManual(org, signalId) {
       console.warn("[radar] No se pudo resolver el telefono del colega para la aprobacion manual:", e.message);
       return null;
     });
-  if (!telefonoColega) return { resultado: "sin_telefono", texto, publicables };
 
-  const envio = await waha.enviarDm(activas[0].nombre, telefonoColega, texto);
+  // EL LID COMO DESTINO DE RESPALDO, TAMBIEN EN EL CAMINO MANUAL (Juan,
+  // 2026-09-04): "que yo pueda aprobarlo de manera manual [...] que se
+  // responda de manera automatica" no puede ser MAS restrictivo que el
+  // camino 100% automatico (asistir, mas arriba en este archivo) -- hasta
+  // hoy esta funcion exigia telefono y devolvia `sin_telefono` sin siquiera
+  // intentar el lid, asi que un pedido que el radar habria respondido solo
+  // por lid quedaba sin salida si una persona lo aprobaba a mano. Mismo
+  // criterio que asistir: si telefonoDe SI resolvio un numero real, ese
+  // numero ya paso por esCelularColombiano (ver directorio.js#telefonoDe) y
+  // se prefiere; solo cuando no hay telefono se usa `signal.autor_telefono`
+  // (el @lid crudo) como via de respaldo -- si ese lid tuviera forma de
+  // celular colombiano real, telefonoDe ya lo habria devuelto arriba, asi
+  // que aca nunca compite con un telefono ya resuelto.
+  const lidColega = !telefonoColega ? signal.autor_telefono || null : null;
+  if (!telefonoColega && !lidColega) return { resultado: "sin_telefono", texto, publicables };
+
+  const opcionesDm = lidColega ? { lid: lidColega } : {};
+  const envio = await waha.enviarDm(activas[0].nombre, telefonoColega, texto, opcionesDm);
   if (!envio || !envio.ok) return { resultado: "error_envio", error: envio && envio.error };
 
   const refs = publicables.map((m) => m.ref).filter(Boolean);
@@ -1061,9 +1077,19 @@ async function responderPorDmManual(org, signalId, { sesion = null, refs = null 
       console.warn("[radar] No se pudo resolver el telefono del colega para el DM manual:", e.message);
       return null;
     });
-  // Nunca se inventa un envio: sin telefono resuelto, el resultado lo dice
-  // clarito para que el CRM lo muestre, en vez de quedarse en silencio.
-  if (!telefonoColega) return { resultado: "sin_telefono" };
+
+  // EL LID COMO DESTINO DE RESPALDO, TAMBIEN ACA (Juan, 2026-09-04): mismo
+  // hueco y mismo arreglo que aprobarManual, en este archivo -- este camino
+  // exigia telefono y devolvia `sin_telefono` sin intentar el lid, mas
+  // restrictivo que el camino automatico (asistir), que desde
+  // 38a2606/7022830 SI manda por `<lid>@lid` cuando no hay telefono. Si
+  // telefonoDe SI resolvio un numero real, se prefiere (mismo motivo que
+  // arriba: ya paso por esCelularColombiano); solo sin telefono se usa el
+  // @lid crudo de la señal como respaldo.
+  const lidColega = !telefonoColega ? signal.autor_telefono || null : null;
+  // Nunca se inventa un envio: sin telefono NI lid resueltos, el resultado lo
+  // dice clarito para que el CRM lo muestre, en vez de quedarse en silencio.
+  if (!telefonoColega && !lidColega) return { resultado: "sin_telefono" };
 
   if (!sesion) return { resultado: "sin_sesion" };
 
@@ -1115,7 +1141,8 @@ async function responderPorDmManual(org, signalId, { sesion = null, refs = null 
   // esperando a la asesora igual que antes.
   if (await cuotaAgotada(sesion)) return { resultado: "cuota_whatsapp_agotada" };
 
-  const envioDm = await waha.enviarDm(sesion, telefonoColega, texto).catch((e) => ({ ok: false, error: e.message }));
+  const opcionesDm = lidColega ? { lid: lidColega } : {};
+  const envioDm = await waha.enviarDm(sesion, telefonoColega, texto, opcionesDm).catch((e) => ({ ok: false, error: e.message }));
   if (!envioDm || !envioDm.ok) return { resultado: "error_envio", error: envioDm && envioDm.error };
 
   // Mismo modo 'auto' que usa el DM automatico (ver la nota en asistir, mas

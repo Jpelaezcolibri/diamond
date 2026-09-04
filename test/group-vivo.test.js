@@ -148,8 +148,12 @@ function instalarDobles() {
         enviadosManual.push({ sesion, chatId, texto, replyTo: opts && opts.replyTo });
         return envioResultado;
       },
-      enviarDm: async (sesion, telefono, texto) => {
-        enviosDmManual.push({ sesion, telefono, texto });
+      // `opciones` se registra desde el 2026-09-04 (mismo criterio que
+      // group-asistido.test.js): es donde viaja { lid }, la via por la que
+      // sale el DM manual cuando no hay telefono. Sin capturarlo, un test no
+      // puede distinguir un envio al numero de uno al identificador oculto.
+      enviarDm: async (sesion, telefono, texto, opciones) => {
+        enviosDmManual.push({ sesion, telefono, texto, opciones: opciones || {} });
         return envioDmManualResultado;
       },
       cuotaDeLinea: async (sesion) => {
@@ -615,6 +619,45 @@ test("aprobarManual: marcarRespondida queda con destinoTelefono y destinoLid del
   assert.strictEqual(marcadas[0].destinoLid, "141746805670125");
 });
 
+// SE SIGUE PREFIRIENDO EL TELEFONO cuando hay los dos (Juan, 2026-09-04):
+// misma regla que asistir (el camino automatico) — el telefono es el destino
+// verificado, el lid es el respaldo. Si telefonoDe SI resuelve un numero, el
+// lid crudo que tambien viaja en la señal no se usa para nada mas que el
+// registro de auditoria (destinoLid).
+test("aprobarManual: con telefono Y lid disponibles, sigue prefiriendo el telefono", async () => {
+  señalParaAprobar = señalCallada({ autor_telefono: "141746805670125" });
+  grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = "573001234567";
+
+  const r = await vivo.aprobarManual({ id: "org-1" }, "sig-callada");
+
+  assert.strictEqual(r.resultado, "publicado");
+  assert.strictEqual(enviosDmManual.length, 1);
+  assert.strictEqual(enviosDmManual[0].telefono, "573001234567");
+  assert.deepStrictEqual(enviosDmManual[0].opciones, {});
+});
+
+// EL HUECO QUE ESTE CAMBIO CIERRA (Juan, 2026-09-04): "un pedido que el radar
+// habria respondido solo por lid, si una persona lo aprueba a mano, no
+// sale". Antes de esto, aprobarManual exigia telefono y devolvia
+// `sin_telefono` sin intentar el lid -- mas restrictivo que el camino
+// automatico (asistir), que desde 38a2606/7022830 SI manda por
+// `<lid>@lid` cuando no hay telefono. Misma regla ahora en los dos caminos.
+test("aprobarManual: sin telefono pero con lid, manda por lid — igual que el camino automatico", async () => {
+  señalParaAprobar = señalCallada({ autor_telefono: "141746805670125" });
+  grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = null;
+
+  const r = await vivo.aprobarManual({ id: "org-1" }, "sig-callada");
+
+  assert.strictEqual(r.resultado, "publicado");
+  assert.strictEqual(enviosDmManual.length, 1, "salio por DM, por la via del lid");
+  assert.deepStrictEqual(enviosDmManual[0].opciones, { lid: "141746805670125" });
+  assert.strictEqual(marcadas.length, 1);
+  assert.strictEqual(marcadas[0].destinoTelefono, null);
+  assert.strictEqual(marcadas[0].destinoLid, "141746805670125");
+});
+
 // LA REGLA (Juan, 2026-09-02): "necesito que me asegures que las respuestas no
 // van al grupo si no al dm". Hasta este cambio, aprobar a mano publicaba EN EL
 // GRUPO gremial citando el pedido — la unica via del radar que escribia en un
@@ -630,10 +673,12 @@ test("aprobarManual: NUNCA escribe en el grupo", async () => {
   assert.strictEqual(enviadosManual.length, 0, "no se publico nada en el grupo");
 });
 
-// Falla cerrado: sin telefono NO se cae de vuelta al grupo. El pedido queda
-// para la asesora, que decide a mano.
-test("aprobarManual: sin telefono del colega no publica en el grupo ni marca respondida", async () => {
-  señalParaAprobar = señalCallada();
+// Falla cerrado: sin telefono NI lid (ninguna de las dos vias tiene destino)
+// NO se cae de vuelta al grupo. El pedido queda para la asesora, que decide a
+// mano — `sin_telefono` sigue siendo el resultado SOLO cuando de verdad no
+// hay ningun destino, ya no simplemente cuando falta el telefono.
+test("aprobarManual: sin telefono NI lid del colega no publica en el grupo ni marca respondida", async () => {
+  señalParaAprobar = señalCallada({ autor_telefono: null });
   grupoParaAprobar = grupoHabilitado();
   telefonoColegaManual = null;
 
@@ -854,10 +899,39 @@ test("responderPorDmManual: manda el DM cuando hay telefono y la señal pasa la 
       destinoTelefono: "573001234567", destinoLid: "141746805670125",
     },
   ]);
+  // SE SIGUE PREFIRIENDO EL TELEFONO cuando hay los dos disponibles (Juan,
+  // 2026-09-04) -- mismo criterio que aprobarManual y que asistir: el
+  // telefono es el destino verificado, el lid solo entra cuando no hay otra
+  // via.
+  assert.deepStrictEqual(enviosDmManual[0].opciones, {});
 });
 
-test("responderPorDmManual: sin telefono resuelto, lo dice y no inventa un envio", async () => {
+// EL HUECO QUE ESTE CAMBIO CIERRA (Juan, 2026-09-04): "un pedido que el radar
+// habria respondido solo por lid, si una persona lo aprueba a mano, no
+// sale". Hasta hoy esta funcion exigia telefono y devolvia `sin_telefono`
+// SIN intentar el lid -- este mismo test, antes de esta revision, afirmaba
+// exactamente esa conducta vieja con un lid disponible sin usarlo. Ahora
+// sigue la misma regla que el camino automatico (asistir, desde
+// 38a2606/7022830): sin telefono pero con lid, manda por `<lid>@lid`.
+test("responderPorDmManual: sin telefono resuelto pero con lid, manda por lid — igual que el camino automatico", async () => {
   señalParaAprobar = señalCallada({ autor_telefono: "141746805670125" });
+  grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = null;
+
+  const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
+
+  assert.strictEqual(r.resultado, "dm_enviado");
+  assert.strictEqual(enviosDmManual.length, 1, "salio por DM, por la via del lid");
+  assert.deepStrictEqual(enviosDmManual[0].opciones, { lid: "141746805670125" });
+  assert.strictEqual(marcadas.length, 1);
+  assert.strictEqual(marcadas[0].destinoTelefono, null);
+  assert.strictEqual(marcadas[0].destinoLid, "141746805670125");
+});
+
+// Falla cerrado SOLO cuando de verdad no hay ningun destino: ni telefono
+// resuelto ni lid crudo en la señal.
+test("responderPorDmManual: sin telefono NI lid, lo dice y no inventa un envio", async () => {
+  señalParaAprobar = señalCallada({ autor_telefono: null });
   grupoParaAprobar = grupoHabilitado();
   telefonoColegaManual = null;
 
