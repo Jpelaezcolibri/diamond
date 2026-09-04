@@ -893,7 +893,15 @@ async function aprobarManual(org, signalId) {
   if (!envio || !envio.ok) return { resultado: "error_envio", error: envio && envio.error };
 
   const refs = publicables.map((m) => m.ref).filter(Boolean);
-  await groupSignals.marcarRespondida(org.id, signal.id, { texto, wamid: envio.wamid, modo: "auto", refs });
+  // A QUIEN salio (Juan, 2026-09-04). Mismo patron que asistir/
+  // responderPorDmManual en este archivo: signal.autor_telefono es el @lid
+  // crudo (no un telefono pese al nombre), y telefonoColega (resuelto arriba
+  // por el directorio) es el numero real.
+  await groupSignals.marcarRespondida(org.id, signal.id, {
+    texto, wamid: envio.wamid, modo: "auto", refs,
+    destinoTelefono: telefonoColega || null,
+    destinoLid: signal.autor_telefono || null,
+  });
 
   // `destino` para que quien lo muestre no tenga que adivinar: el CRM y Sofi
   // decian "publicado" y de ahi salio que Sofi le contara a Juan que la

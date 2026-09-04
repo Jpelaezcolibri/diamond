@@ -493,8 +493,15 @@ test("con telefono, pedido reciente, cupo libre y sesion, se manda el DM y NO se
   assert.match(enviosDm[0].texto, /Ref 9780079/);
   assert.strictEqual(enviadosPorSofi.length, 0, "la asesora no recibe nada: no tiene nada que hacer");
   assert.strictEqual(avisosMarcados.length, 0, "marcarAvisoEnviado es del camino de la asesora, no de este");
+  // destinoTelefono/destinoLid: registro de a quien salio el DM, para poder
+  // contactarlo a futuro (Juan, 2026-09-04). autorTelefono de mensaje() es el
+  // @lid crudo (destinoLid); telefonoColegaResuelto es el numero real
+  // (destinoTelefono).
   assert.deepStrictEqual(marcadasRespondidas, [
-    { id: "sig-1", texto: enviosDm[0].texto, wamid: "wm-dm-1", modo: "auto", refs: ["9780079"] },
+    {
+      id: "sig-1", texto: enviosDm[0].texto, wamid: "wm-dm-1", modo: "auto", refs: ["9780079"],
+      destinoTelefono: "573001234567", destinoLid: "141746805670125",
+    },
   ]);
 });
 

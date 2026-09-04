@@ -576,6 +576,24 @@ test("aprobarManual: responde al PRIVADO del colega y lo marca respondido", asyn
   assert.strictEqual(marcadas[0].modo, "auto");
 });
 
+// El hueco que quedaba (Juan, 2026-09-04): un DM aprobado a mano desde el CRM
+// tambien tiene que dejar constancia de a quien salio, igual que el DM
+// automatico (asistir) y el DM manual posterior (responderPorDmManual) --
+// las otras dos vias de este archivo. señal.autor_telefono es el @lid crudo
+// (destinoLid), nunca un telefono pese al nombre; telefonoColegaManual es el
+// numero real que resuelve el directorio (destinoTelefono).
+test("aprobarManual: marcarRespondida queda con destinoTelefono y destinoLid del colega", async () => {
+  señalParaAprobar = señalCallada({ autor_telefono: "141746805670125" });
+  grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = "573001234567";
+
+  await vivo.aprobarManual({ id: "org-1" }, "sig-callada");
+
+  assert.strictEqual(marcadas.length, 1);
+  assert.strictEqual(marcadas[0].destinoTelefono, "573001234567");
+  assert.strictEqual(marcadas[0].destinoLid, "141746805670125");
+});
+
 // LA REGLA (Juan, 2026-09-02): "necesito que me asegures que las respuestas no
 // van al grupo si no al dm". Hasta este cambio, aprobar a mano publicaba EN EL
 // GRUPO gremial citando el pedido — la unica via del radar que escribia en un
@@ -724,8 +742,14 @@ test("responderPorDmManual: manda el DM cuando hay telefono y la señal pasa la 
   assert.strictEqual(enviosDmManual[0].sesion, "RADA-NATALIA");
   assert.strictEqual(enviosDmManual[0].telefono, "573001234567");
   assert.match(enviosDmManual[0].texto, /Ref AP004/);
+  // destinoTelefono/destinoLid: registro de a quien salio el DM, para poder
+  // contactarlo a futuro (Juan, 2026-09-04). señal.autor_telefono es el @lid
+  // crudo (destinoLid); telefonoColegaManual es el numero real (destinoTelefono).
   assert.deepStrictEqual(marcadas, [
-    { id: "sig-callada", texto: enviosDmManual[0].texto, wamid: "wm-dm-manual", modo: "auto", refs: ["AP004"] },
+    {
+      id: "sig-callada", texto: enviosDmManual[0].texto, wamid: "wm-dm-manual", modo: "auto", refs: ["AP004"],
+      destinoTelefono: "573001234567", destinoLid: "141746805670125",
+    },
   ]);
 });
 
