@@ -169,15 +169,30 @@ export default async function CalendarioPage({
                     // "lo marcas para yo hacerle seguimiento" (mismo dia) —
                     // 🤖 marca la que Sofi agendó sola, sin que nadie la revisara.
                     const contenido = `${ev.autoAgendada ? "🤖 " : ""}${horaBogota(ev.fechaHora)} ${ev.titulo}`;
-                    const titulo = `${horaBogota(ev.fechaHora)} · ${ev.titulo}${ev.advisorNombre ? ` · ${ev.advisorNombre}` : ""}${ev.linkChat ? " · ver chat" : ""}${ev.autoAgendada ? " · agendada sola por Sofi, revisar" : ""}`;
+                    const titulo = `${horaBogota(ev.fechaHora)} · ${ev.titulo}${ev.advisorNombre ? ` · ${ev.advisorNombre}` : ""}${ev.linkChat ? " · ver chat" : ""}${ev.autoAgendada ? " · agendada sola por Sofi, revisar" : ""}${ev.estado === "propuesta" ? " · propuesta, sin confirmar" : ""}`;
                     const clase = `block truncate rounded-md border px-1.5 py-0.5 text-[11px] font-medium ${colorFor(ev.advisorId)}${ev.linkChat ? " hover:brightness-95" : ""}`;
-                    return ev.linkChat ? (
-                      <Link key={ev.id} href={ev.linkChat} title={titulo} className={clase}>
+                    const chip = ev.linkChat ? (
+                      <Link href={ev.linkChat} title={titulo} className={clase}>
                         {contenido}
                       </Link>
                     ) : (
-                      <div key={ev.id} title={titulo} className={clase}>
+                      <div title={titulo} className={clase}>
                         {contenido}
+                      </div>
+                    );
+                    // Una "propuesta" la pidió un colega y NADIE la confirmó
+                    // todavía (Juan, 2026-09-04): ocupa la hora, pero no es un
+                    // compromiso y el calendario tiene que decirlo. El rótulo
+                    // va aparte del chip porque el chip ya está truncado y su
+                    // color es el del asesor, no el del estado.
+                    return (
+                      <div key={ev.id} className="space-y-0.5">
+                        {chip}
+                        {ev.estado === "propuesta" && (
+                          <span className="block truncate rounded-md border border-amber-200 bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-800">
+                            propuesta — sin confirmar
+                          </span>
+                        )}
                       </div>
                     );
                   })}
