@@ -141,3 +141,40 @@ test("resolver un lid NO abre una segunda via de envio", () => {
     );
   }
 });
+
+// EL FALLBACK SOLO ES PARA UN 404 (Juan, 2026-09-04).
+//
+// participantesDeGrupo intenta /participants/v2 y cae al endpoint viejo si
+// falla. Ese fallback existe para una version de WAHA sin /v2 — o sea un 404.
+// Pero el catch se tragaba CUALQUIER error y reintentaba igual: un 429 de
+// WhatsApp ("rate-overlimit") disparaba una segunda peticion en el mismo
+// instante. Medido en produccion: 62 peticiones por vuelta en vez de 31, y el
+// calentamiento termino con CERO participantes resueltos.
+test("un error que NO es 404 corta: no se reintenta contra el endpoint viejo", async () => {
+  process.env.WAHA_URL = "http://waha.test";
+  process.env.WAHA_API_KEY = "k";
+  const rutas = [];
+  globalThis.fetch = async (url) => {
+    rutas.push(String(url));
+    return { ok: false, status: 500, text: async () => JSON.stringify({ message: "rate-overlimit" }) };
+  };
+  const waha = require("../src/lib/waha");
+  const r = await waha.participantesDeGrupo("S", "123@g.us");
+  assert.deepStrictEqual(r, []);
+  assert.strictEqual(rutas.length, 1, `con un 500 se pide UNA sola vez, se pidieron ${rutas.length}: ${rutas.join(" ")}`);
+});
+
+test("un 404 SI cae al endpoint viejo: es para eso que existe el fallback", async () => {
+  process.env.WAHA_URL = "http://waha.test";
+  process.env.WAHA_API_KEY = "k";
+  const rutas = [];
+  globalThis.fetch = async (url) => {
+    rutas.push(String(url));
+    if (rutas.length === 1) return { ok: false, status: 404, text: async () => "{}" };
+    return { ok: true, status: 200, text: async () => JSON.stringify([{ id: "123@lid", pn: "573001234567" }]) };
+  };
+  const waha = require("../src/lib/waha");
+  const r = await waha.participantesDeGrupo("S", "123@g.us");
+  assert.strictEqual(rutas.length, 2, "el 404 tiene que probar el endpoint viejo");
+  assert.strictEqual(r[0].telefono, "573001234567");
+});

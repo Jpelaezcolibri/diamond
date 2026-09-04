@@ -162,17 +162,32 @@ async function refrescarGrupo(orgId, sesion, jid, { forzar = false } = {}) {
  * llamada a WAHA en el momento del pedido (src/scheduler/radar-directorio.js).
  * `forzar` salta el throttle: es el calentamiento programado, no un pedido.
  */
-async function calentar(orgId, sesion, jids, { forzar = true } = {}) {
+// PAUSA ENTRE GRUPOS (Juan, 2026-09-04). Sin esto el calentamiento pedia los
+// 31 grupos de corrido —1,3 peticiones por segundo— y WhatsApp respondia
+// `rate-overlimit` (429) a todas: 31/31 grupos con CERO participantes.
+//
+// No es una optimizacion: es lo que separa "leer despacio" de "golpear". La
+// linea ya fue baneada una vez y un 429 sostenido es de la misma familia que
+// el 503 que precedio a aquello. 1,5 s por grupo deja la pasada en ~47 s, que
+// para un trabajo que corre una vez por hora no le cuesta nada a nadie.
+const MS_ENTRE_GRUPOS = Number(process.env.RADAR_DIRECTORIO_PAUSA_MS || 1500);
+const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function calentar(orgId, sesion, jids, { forzar = true, pausaMs = MS_ENTRE_GRUPOS } = {}) {
   let refrescados = 0;
   let pares = 0;
-  for (const jid of jids || []) {
-    const n = await refrescarGrupo(orgId, sesion, jid, { forzar });
+  const lista = jids || [];
+  for (let i = 0; i < lista.length; i++) {
+    const n = await refrescarGrupo(orgId, sesion, lista[i], { forzar });
     if (n !== null && n !== undefined) {
       refrescados++;
       pares += n;
     }
+    // Despues de cada grupo menos el ultimo: la pausa es para no encadenar
+    // peticiones, no para demorar el final de la pasada.
+    if (pausaMs > 0 && i < lista.length - 1) await dormir(pausaMs);
   }
-  return { grupos: (jids || []).length, refrescados, pares, indice: tamanoIndice(orgId) };
+  return { grupos: lista.length, refrescados, pares, indice: tamanoIndice(orgId) };
 }
 
 /**

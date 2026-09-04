@@ -439,3 +439,22 @@ test("un `pn` con basura NUNCA entra a la cache: de ahi sale a que numero se esc
   waha.participantesDeGrupo = participantesReal;
   waha.telefonoDeLid = telefonoDelIdReal;
 });
+
+// PAUSA ENTRE GRUPOS (Juan, 2026-09-04): sin esto el calentamiento pedia los
+// 31 grupos de corrido y WhatsApp respondia rate-overlimit (429) a todas.
+test("calentar espera entre grupos y no encadena las peticiones", async () => {
+  const directorio = require("../src/groups/directorio");
+  const t0 = Date.now();
+  await directorio.calentar("org-pausa", "S", ["a@g.us", "b@g.us", "c@g.us"], { pausaMs: 40 });
+  const ms = Date.now() - t0;
+  // 3 grupos = 2 pausas. Se compara contra un piso holgado para no depender
+  // de la precision del reloj.
+  assert.ok(ms >= 60, `tres grupos con pausa de 40 ms tienen que tardar >= 60 ms, tardaron ${ms}`);
+});
+
+test("calentar con pausa en 0 no espera nada (para los tests y el arranque)", async () => {
+  const directorio = require("../src/groups/directorio");
+  const t0 = Date.now();
+  await directorio.calentar("org-sin-pausa", "S", ["a@g.us", "b@g.us"], { pausaMs: 0 });
+  assert.ok(Date.now() - t0 < 40);
+});

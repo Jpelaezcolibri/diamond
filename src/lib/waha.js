@@ -585,7 +585,25 @@ async function participantesDeGrupo(sesion, jid) {
         return { id, esLid: id.includes("@lid"), telefono, rol: p?.role || null };
       });
     } catch (e) {
-      if (e.status !== 404) console.warn(`[waha] No se pudieron listar participantes de ${jid}: ${e.message}`);
+      // SOLO SE CAE AL ENDPOINT VIEJO ANTE UN 404 (Juan, 2026-09-04).
+      //
+      // El fallback existe para una version de WAHA sin /v2, y eso es un 404.
+      // Pero el catch se tragaba CUALQUIER error y reintentaba igual, asi que
+      // un 429 de WhatsApp ("rate-overlimit") disparaba una segunda peticion
+      // en el mismo instante — duplicando la presion justo cuando WhatsApp
+      // pedia parar. Medido en produccion hoy: cada grupo aparecia DOS veces
+      // en el log, 62 peticiones por vuelta en vez de 31, y el calentamiento
+      // termino en 31/31 grupos con CERO participantes resueltos.
+      //
+      // Es la secuencia de julio de 2026 en miniatura y por eso no se deja:
+      // 503 -> reintentos -> sesion trabada -> baneo. El error llega primero,
+      // pero el reintento lo empeora. Con cualquier cosa que no sea 404 se
+      // corta: sin telefono el pedido sale por el camino manual, que es una
+      // degradacion prevista.
+      if (e.status !== 404) {
+        console.warn(`[waha] No se pudieron listar participantes de ${jid}: ${e.message}`);
+        return [];
+      }
     }
   }
   return [];
