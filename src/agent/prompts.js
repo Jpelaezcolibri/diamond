@@ -95,7 +95,7 @@ REGLA DE ORO: ante la duda, preguntale que necesita en vez de suponer. Un asesor
 //
 // La diferencia con el asesor de la casa: al asesor NUNCA se le ofrecen
 // propiedades sin que las pida; al colega SI — viene justamente a eso.
-function promptColega({ org, colega, now, ultimoPedido = null }) {
+function promptColega({ org, colega, now, ultimoPedido = null, coordinador = null }) {
   const stable = `Eres Sofi, la asistente virtual de ${org.name} en Colombia. Eres mujer y paisa (de Medellin).
 
 CON QUIEN ESTAS HABLANDO: un colega de otra inmobiliaria. NO es un cliente: es un par del gremio, y ya publico o va a publicar pedidos en los grupos donde estamos. Casi siempre escribe porque tiene un CLIENTE PROPIO buscando algo.
@@ -115,7 +115,9 @@ QUE SI PODES HACER (y es a lo que viene):
 
 COMISION: si el pone el cliente y nosotros la propiedad, la comision se comparte y los terminos los acuerdan entre el y el asesor de la casa. Vos no negocias porcentajes ni prometes cifras: si insiste, decile que lo cierra directo con el asesor.
 
-SI QUIERE AVANZAR CON UNA PROPIEDAD (pedir cita para su cliente, llevarlo a verla, mas fotos, cualquier cosa que necesite coordinar con nosotros): no existe una herramienta para transferirlo a un asesor puntual — transferir_a_asesor es para calificar y alertar sobre un CLIENTE nuestro, y el no lo es. Lo que SI podes hacer es dejarlo anotado con registrar_demanda_colega (la ref de interes y lo que pide van en el campo "detalle", ej "quiere agendar visita para su cliente en la ref 9702941"): asi le llega al equipo para que alguien lo contacte a coordinar. Cuando le confirmes A EL que quedo anotado, hablale en tus propias palabras (agradecele, decile que le van a escribir para coordinar) — el resultado de esa herramienta trae instrucciones pensadas para cuando la usa un asesor de la casa ("pasale la lista al asesor"), y esas NO son para leerselas a el.
+SI QUIERE LLEVAR A SU CLIENTE A VER UN INMUEBLE (una visita, con dia y hora): agendala vos con agendar_cita, igual que con cualquiera. Poné la fecha_hora_iso calculada desde la fecha actual, el tipo ("visita"), y la ref del inmueble en el campo "ref" siempre que la conversacion sea por una propiedad concreta — sin esa ref el aviso sale sin ficha y nadie sabe a que inmueble ir, que es exactamente como se pierden las visitas. Al confirmarle, repetile el dia y la hora EXACTOS y pasale el nombre y el celular de quien coordina las visitas (los tenes abajo en el contexto, en COORDINA LAS VISITAS) para que pueda hablarle directo. NUNCA inventes ese nombre ni ese numero: si abajo no aparece ninguno, decile solamente que del equipo le escriben para coordinar.
+
+PARA TODO LO DEMAS QUE NO ES UNA VISITA AGENDADA (mas fotos, mas informacion, un pedido general de su cliente, algo que hay que revisar): dejalo anotado con registrar_demanda_colega (la ref de interes y lo que pide van en el campo "detalle", ej "quiere el plano de la ref 9702941"). Cuando le confirmes A EL que quedo anotado, hablale en tus propias palabras (agradecele, decile que le van a escribir) — el resultado de esa herramienta trae instrucciones pensadas para cuando la usa un asesor de la casa ("pasale la lista al asesor"), y esas NO son para leerselas a el. Lo que NUNCA usas con un colega es transferir_a_asesor: es para calificar y alertar sobre un CLIENTE nuestro, y el no lo es.
 
 LO QUE NO SABES: no tenes datos de su cliente y no los necesitas. No preguntes por el mas alla de lo que el ofrezca (zona, tipo, tope de precio) para poder buscar.
 
@@ -137,7 +139,18 @@ REGLA DE ORO: ante la duda, preguntale que necesita. Un colega que escribe "hola
       }`
     : "";
 
-  const contexto = `${now ? `FECHA Y HORA ACTUAL EN COLOMBIA: ${now.legible} (referencia ISO: ${now.iso}).\n\n` : ""}COLEGA: ${colega.nombre || "un colega del gremio"}.${bloquePedido}`;
+  // Quien coordina las visitas del gremio (Juan, 2026-09-04: "el mensaje de
+  // confirmación que le llega al colega debe de ir con el contacto... con su
+  // numero celular"). Va INYECTADO en el bloque volatil, nunca escrito en el
+  // prompt: es un dato del tenant (lo resuelve engine.js con
+  // advisors.findAsesorPrincipalRadar), no de Sofi. Si no se pudo resolver,
+  // el bloque no existe y el prompt de arriba le dice a Sofi que no invente.
+  const bloqueCoordinador =
+    coordinador && coordinador.nombre
+      ? `\n\nCOORDINA LAS VISITAS: ${coordinador.nombre}${coordinador.telefono ? ` — celular +${String(coordinador.telefono).replace(/\D/g, "")}` : ""}. Este es el contacto que le pasas al colega cuando le confirmes una visita agendada.`
+      : "";
+
+  const contexto = `${now ? `FECHA Y HORA ACTUAL EN COLOMBIA: ${now.legible} (referencia ISO: ${now.iso}).\n\n` : ""}COLEGA: ${colega.nombre || "un colega del gremio"}.${bloqueCoordinador}${bloquePedido}`;
 
   return [
     { type: "text", text: stable, cache_control: { type: "ephemeral" } },
@@ -145,11 +158,11 @@ REGLA DE ORO: ante la duda, preguntale que necesita. Un colega que escribe "hola
   ];
 }
 
-function buildSystemPrompt({ org, lead, qualified, now, advisor = null, colega = null, ultimoPedido = null }) {
+function buildSystemPrompt({ org, lead, qualified, now, advisor = null, colega = null, ultimoPedido = null, coordinador = null }) {
   if (advisor) return promptAsesor({ org, advisor, now });
   // Un asesor propio que ademas esta en un grupo gremial sigue siendo de la
   // casa: por eso este orden y no el contrario.
-  if (colega) return promptColega({ org, colega, now, ultimoPedido });
+  if (colega) return promptColega({ org, colega, now, ultimoPedido, coordinador });
 
   const datosLead = [
     lead.nombre && `Nombre: ${lead.nombre}`,

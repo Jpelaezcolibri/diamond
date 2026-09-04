@@ -239,8 +239,26 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
       })
     : null;
 
+  // Quien coordina las visitas del gremio, para que Sofi pueda pasarle el
+  // contacto al colega al confirmarle una cita (Juan, 2026-09-04: "el mensaje
+  // de confirmación que le llega al colega debe de ir con el contacto... con
+  // su numero celular"). Se resuelve aca y NO se hardcodea en el prompt: es
+  // un dato del tenant. Es la misma persona a la que le llega el aviso de la
+  // cita (ver resolveLeadAdvisor en tools.js), asi que el colega y el asesor
+  // no pueden quedar apuntando a numeros distintos. Best-effort: si falla,
+  // Sofi confirma la cita sin contacto en vez de inventarlo.
+  const coordinador = colega
+    ? await advisors
+        .findAsesorPrincipalRadar(org)
+        .then((a) => (a ? { nombre: a.name, telefono: a.phone } : null))
+        .catch((e) => {
+          console.warn("[engine] No se pudo resolver quien coordina las visitas del colega:", e.message);
+          return null;
+        })
+    : null;
+
   const system = buildSystemPrompt({
-    org, lead, qualified: isQualified(lead), now: nowInBogota(), advisor, colega, ultimoPedido,
+    org, lead, qualified: isQualified(lead), now: nowInBogota(), advisor, colega, ultimoPedido, coordinador,
   });
 
   const extractText = (r) =>
