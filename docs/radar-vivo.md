@@ -228,6 +228,83 @@ Los avisos salen por la **línea oficial de Sofi**, nunca por la vinculada: si l
 que se cayó es esa línea, avisar por ahí sería pedirle al muerto que avise de su
 muerte.
 
+## El servicio WAHA en Railway (memoria y costo)
+
+WAHA corre como servicio propio en el proyecto `serene-tenderness`
+(`devlikeapro/waha`, imagen oficial, motor NOWEB, tier CORE). No se despliega
+desde este repo, así que su configuración **solo vive en las variables de
+Railway** — de ahí esta sección: sin ella el ajuste más caro del ecosistema
+queda sin registro en ningún lado.
+
+**El 2026-09-04 WAHA era el 83% de toda la memoria de la cuenta de Railway**:
+3.19 GB de promedio contra 0.22 GB de bot + DMAP + Redis juntos. A $10 por
+GB-mes eso son ~$29/mes de un total proyectado de ~$36. La factura de agosto
+($20.33) estaba subestimada porque WAHA solo se desplegó el 18-ago.
+
+Dos causas, las dos medidas:
+
+1. **Multimedia que nadie usa.** WAHA bajaba a memoria y a disco cada foto,
+   audio y video de cada grupo. El radar nunca los abre: lee `hasMedia` como
+   booleano (`whatsapp-group.js#normalizar` → `esMultimedia`) y ahí muere.
+   Además `WHATSAPP_FILES_LIFETIME=0` desactiva la limpieza, así que lo
+   descargado no se borraba nunca.
+2. **El heap de V8 sin tope.** La memoria hacía una sierra de 1.75 a 4.4 GB
+   durante 14 días **sin un solo reinicio del contenedor**. No era una fuga:
+   era Node dejando crecer el heap hasta su límite por defecto (~4 GB, el que
+   calcula solo según la RAM de la máquina) antes de recolectar. Esos ~2.5 GB
+   de arriba eran basura sin recolectar, facturada igual.
+
+Las cuatro variables que lo arreglan:
+
+```
+WAHA_EVENTS_DOWNLOAD_MEDIA=false     # el webhook no baja multimedia
+WAHA_API_DOWNLOAD_MEDIA=false        # el API tampoco
+WHATSAPP_FILES_LIFETIME=3600         # 0 = no borrar nunca; el disco crecía sin techo
+NODE_OPTIONS=--max-old-space-size=2048
+```
+
+Apagar la multimedia **no le quita nada al radar**: el payload sigue trayendo
+`hasMedia: true` y `mimetype`, que es todo lo que el código mira. Si algún día
+hiciera falta guardar la foto de una oferta, se prende con filtro por mimetype
+en vez de todo.
+
+Resultado medido: **3.19 GB → 0.28 GB** (dos lecturas, a los 5 y a los 30
+minutos: 0.45 y 0.28 GB). El piso de 1.75 GB bajó a 0.28 — o sea que ese piso
+no era la sesión, era multimedia retenida en memoria. Falta confirmarlo con
+24-48 h de operación real antes de darlo por firme.
+
+**El disco es otra cosa y no lo arregla esto.** El volumen facturado monta en
+`/local/.sessions` (el store de NOWEB), mientras que la multimedia va a
+`/app/.media`, que está en el disco efímero del contenedor. O sea que el
+crecimiento del volumen de 0.39 a 0.70 GB en 14 días **no era multimedia**:
+es el store de sesión de NOWEB creciendo por su cuenta. Son ~$0.07/mes, así
+que no urge, pero si algún día llega al tope del volumen la sesión se cae —
+conviene mirarlo antes de que eso pase, no después.
+
+Con el piso en 0.44 GB, **apretar el tope por debajo de 2048 MB no ahorraría
+nada** y sí agregaría riesgo de OOM. Y un WAHA que se cae solo es el escenario
+que precedió al baneo de julio: no vale los $2 que ahorraría.
+
+### Reiniciar WAHA es seguro, pero no gratis
+
+Cambiar cualquier variable dispara un redeploy. Lo verificado el 2026-09-04:
+la sesión se restauró sola desde el volumen (`/local/.sessions`) en ~10 s,
+**sin pedir QR** — `Restarting STOPPED session... → logging in... → opened
+connection to WA → Transitioning to Online` — y a los 2 minutos ya reenviaba
+webhooks al bot. Aun así, antes de tocarlo conviene tener presente que el
+botón **"Reintentar una vez"** del CRM (`crm/components/vincular-linea.tsx`,
+solo admin) hace `restart` conservando credenciales, por si no vuelve sola.
+
+Ojo con una variable muerta: **`WAHA_RESTART_ALL_SESSIONS` no existe**. El
+nombre real lleva prefijo `WHATSAPP_`, no `WAHA_`. Se nota en el log del
+2026-09-04: dice `STOPPED sessions have been restarted` *a pesar* de que la
+variable está en `False`. No hace daño, pero da una sensación de control que
+no se tiene.
+
+El NOWEB store está **deshabilitado** (es el default). Encenderlo permitiría
+leer historial y ACKs de entrega por API, pero vuelve a inflar la RAM: no se
+enciende solo para diagnosticar.
+
 ## Límites que aplica solo
 
 | Control | Variable | Default |
