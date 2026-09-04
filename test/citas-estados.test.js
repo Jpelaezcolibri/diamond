@@ -19,8 +19,19 @@ test("un estado desconocido tampoco rompe: se lee como confirmada", () => {
   assert.strictEqual(citas.estadoDe({ estado: "cualquier-cosa" }), "confirmada");
 });
 
+// LA LISTA VA LITERAL, NO citas.ESTADOS (review 2026-09-04). Antes este test
+// iteraba sobre la constante del propio modulo: si alguien reducia ESTADOS a
+// ["confirmada"], o si estadoDe pasaba a `return e` sin validar, el test
+// seguia verde. Un test que no puede fallar no prueba nada. Escribir los
+// cuatro a mano es justamente lo que hace que sacar uno rompa aca.
+const LOS_CUATRO = ["propuesta", "confirmada", "cancelada", "reprogramada"];
+
 test("los cuatro estados validos se leen tal cual", () => {
-  for (const e of citas.ESTADOS) assert.strictEqual(citas.estadoDe({ estado: e }), e);
+  for (const e of LOS_CUATRO) assert.strictEqual(citas.estadoDe({ estado: e }), e);
+});
+
+test("ESTADOS son exactamente esos cuatro, ni uno mas ni uno menos", () => {
+  assert.deepStrictEqual([...citas.ESTADOS].sort(), [...LOS_CUATRO].sort());
 });
 
 // `estaViva` es lo que van a consultar el calendario y el anti-choque de la
