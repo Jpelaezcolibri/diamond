@@ -5,21 +5,34 @@
 // manda un LID. Lo que el radar venia guardando en group_signals.autor_telefono
 // son LIDs (14-17 digitos), no telefonos (12 en Colombia).
 //
-// DE DONDE SALE EL NUMERO (medido en produccion el 2026-08-22, 12 grupos):
+// DE DONDE SALE EL NUMERO, HOY (Juan, 2026-09-04): de la tabla
+// `directorio_lids` y de la pista que a veces viaja en el propio mensaje. De
+// ningun lado mas. `telefonoDe` es una consulta LOCAL y no toca la red.
+//
+// COMO SE LLEGO ACA. Medido en produccion el 2026-08-22 (12 grupos):
 //   · Lids API de WAHA (/lids/{lid}): resolvio 0 de 45 y /lids/count no
-//     responde. Inservible en esta version, queda como segundo intento por si
-//     una version futura la arregla.
-//   · Lista de participantes: trae `pn` para ~80% de la gente y resuelve 30 de
-//     45 colegas reales (67%).
+//     responde. Inservible.
+//   · Lista de participantes: `pn` para ~80% de la gente, 30 de 45 colegas
+//     reales (67%).
+// El 2026-09-04 esa segunda fuente tambien se cayo: WhatsApp empezo a
+// responder rate-overlimit (429) y el calentamiento termino "31/31 grupos, 0
+// pares, 0 colegas completados". Ese mismo dia se midio que 9 de cada 10
+// colegas no exponen telefono, y se confirmo con una entrega real que un DM a
+// `<lid>@lid` SI llega. Juan: "quiero es que lo apaguemos, no quiero nada que
+// genere riesgo, todo lo que se pueda resolver con el lids lo hacemos por
+// ahi". La linea ya fue baneada una vez (2026-07-30); insistir con peticiones
+// que WhatsApp esta rechazando es el camino corto a la segunda.
 //
-// El 33% que no resuelve NO es un error: es el caso normal, y lo atiende una
-// persona (ver el spec, §4.4).
+// Que un lid no resuelva a un telefono ya no cuesta un pedido: se responde por
+// el lid (src/groups/politica.js#decidirDm). El telefono quedo para lo que
+// necesita un numero de verdad — el link wa.me del aviso a la asesora.
 //
-// COSTO. Refrescar un grupo son cientos de participantes por HTTP — el mas
-// grande tiene 878. Por eso: indice en memoria, respaldo en la base para
-// sobrevivir un reinicio, y como maximo UN refresco por grupo cada
-// MS_ENTRE_REFRESCOS. Un lid sin `pn` ahora tampoco lo va a tener en cinco
-// minutos.
+// LO QUE SIGUE HABLANDO CON WAHA: `refrescarGrupo` y `calentar`, que NO estan
+// en el camino de un pedido. Su scheduler arranca apagado
+// (RADAR_DIRECTORIO_CALENTAR_ENABLED, src/scheduler/radar-directorio.js) y el
+// codigo queda por si WhatsApp afloja. Su costo es el de siempre: cientos de
+// participantes por HTTP — el grupo mas grande tiene 878 — y por eso como
+// maximo UN refresco por grupo cada MS_ENTRE_REFRESCOS.
 
 const colegas = require("../data/colegas");
 const lidsGuardados = require("../data/directorio-lids");
@@ -157,10 +170,14 @@ async function refrescarGrupo(orgId, sesion, jid, { forzar = false } = {}) {
 }
 
 /**
- * Calienta el indice con TODOS los grupos escuchados, uno por uno, para que
- * la busqueda en vivo sea un acierto en memoria y nunca dependa de una
- * llamada a WAHA en el momento del pedido (src/scheduler/radar-directorio.js).
+ * Calienta el indice con TODOS los grupos escuchados, uno por uno.
  * `forzar` salta el throttle: es el calentamiento programado, no un pedido.
+ *
+ * APAGADO POR DEFECTO desde el 2026-09-04 (ver la cabecera de este archivo y
+ * src/scheduler/radar-directorio.js): esta es la unica funcion del modulo que
+ * genera trafico contra WhatsApp, y es justo el que empezo a devolver 429.
+ * Se conserva entera —con su pausa entre grupos y su throttle— porque la
+ * decision se puede revertir con una variable de entorno.
  */
 // PAUSA ENTRE GRUPOS (Juan, 2026-09-04). Sin esto el calentamiento pedia los
 // 31 grupos de corrido —1,3 peticiones por segundo— y WhatsApp respondia
@@ -219,10 +236,32 @@ function tamanoIndice(orgId) {
 /**
  * El telefono de ese lid, o null.
  *
- * Con `jid` intenta refrescar ese grupo si no lo tiene (resolucion perezosa);
- * sin `jid` solo consulta lo que ya sabe.
+ * 100% LOCAL, SIN RED (Juan, 2026-09-04). Literal: "armas la base de datos con
+ * los lids mas los telefonos en un tabla y cada vez que querramos generar una
+ * respuesta consultamos esa tabla, directamente desde el lid que es lo que
+ * esta visible y si necesitamos el telefono lo buscamos desde la tabla".
+ *
+ * Hasta ese dia, un lid que no estuviera en el indice disparaba un
+ * refrescarGrupo (cientos de participantes por HTTP) y, si eso no alcanzaba,
+ * un intento por la Lids API. Las dos vias se fueron:
+ *   · WhatsApp empezo a responder rate-overlimit (429) a la lista de
+ *     participantes -- el calentamiento del 2026-09-04 termino "31/31 grupos,
+ *     0 pares" -- y la linea del radar ya fue baneada una vez (2026-07-30).
+ *     Preguntar en el momento del pedido es exactamente el trafico que la
+ *     expone, y por uno solo de los lids de la lista.
+ *   · Se midio que 9 de cada 10 colegas no exponen telefono: aunque
+ *     respondiera, la respuesta seria null casi siempre.
+ *
+ * Quedan las dos fuentes locales: la `pista` que viaja en el propio mensaje y
+ * el indice sembrado desde `directorio_lids` (2.261 pares ya guardados). Si no
+ * esta, devuelve null -- y el pedido NO se pierde ni se responde menos: sale
+ * igual por `<lid>@lid` (ver src/groups/politica.js#decidirDm, mismo dia).
+ *
+ * `sesion` y `jid` ya no se usan; quien llama los sigue teniendo a mano y
+ * pasandolos, y se aceptan en silencio para no obligar a tocar cinco llamados
+ * por una opcion que hoy no habilita nada.
  */
-async function telefonoDe(orgId, lid, { sesion = null, jid = null, pista = null } = {}) {
+async function telefonoDe(orgId, lid, { pista = null } = {}) {
   const clave = soloDigitos(lid);
   if (!orgId || !clave) return null;
 
@@ -257,31 +296,18 @@ async function telefonoDe(orgId, lid, { sesion = null, jid = null, pista = null 
   const enIndice = indice.get(`${orgId}:${clave}`);
   if (enIndice) return enIndice;
 
-  // Con el indice sembrado desde la base, llegar hasta WAHA es ahora la
-  // excepcion —un lid que nunca se vio en ninguna pasada— y no el camino
-  // normal de cada pedido.
-  if (sesion && jid) {
-    await refrescarGrupo(orgId, sesion, jid);
-    const despues = indice.get(`${orgId}:${clave}`);
-    if (despues) return despues;
-
-    // Ultimo intento por la Lids API: hoy no resuelve nada (0 de 45 el
-    // 2026-08-22) pero es barato y una version futura de WAHA podria arreglarla.
-    const porApi = await waha.telefonoDeLid(sesion, clave).catch(() => null);
-    if (porApi) {
-      indice.set(`${orgId}:${clave}`, porApi);
-      return porApi;
-    }
-  }
-
+  // Y hasta aca llega la resolucion. No hay plan B por la red: un lid que no
+  // esta en el indice se responde por lid (ver la nota de arriba).
   return null;
 }
 
 /**
  * Deja constancia del colega y devuelve su telefono si se pudo resolver.
  *
- * Se guarda SIEMPRE, con telefono o sin el: el 33% sin numero es justamente la
- * lista de a quienes hay que responderle a mano.
+ * TAMPOCO SALE A LA RED (Juan, 2026-09-04): resuelve con telefonoDe, que hoy
+ * es 100% local. Se guarda SIEMPRE, con telefono o sin el — hoy la mayoria es
+ * sin el (9 de cada 10 colegas no exponen numero), y a esos se les responde
+ * por su lid, no a mano.
  *
  * Si el guardado en si mismo falla (colegas.upsert devuelve false), esto
  * devuelve null en vez del telefono resuelto — Juan, revision 2026-08-24: antes
@@ -292,7 +318,9 @@ async function registrar(orgId, { lid, nombre = null, grupo = null, sesion = nul
   const clave = soloDigitos(lid);
   if (!orgId || !clave) return null;
 
-  const telefono = await telefonoDe(orgId, clave, { sesion, jid, pista });
+  // `sesion` y `jid` se siguen aceptando (vivo.js los pasa) pero ya no se
+  // reenvian: no habilitan nada, y pasarlos sugeriria que si.
+  const telefono = await telefonoDe(orgId, clave, { pista });
   const guardado = await colegas.upsert(orgId, { lid: clave, telefono, nombre, grupo });
   return guardado ? telefono : null;
 }
