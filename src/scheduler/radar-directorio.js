@@ -14,6 +14,30 @@
 // el boot) y se refresca cada hora. Son ~31 llamadas de ~3 s a WAHA por la
 // red interna de Railway: sin costo de IA ni de Meta. Ademas rellena el
 // telefono de los colegas ya registrados que no lo tenian.
+//
+// ═══ APAGADO POR DEFECTO (Juan, 2026-09-04) ═══
+//
+// "quiero es que lo apaguemos, no quiero nada que genere riesgo, todo lo que
+// se pueda resolver con el lids lo hacemos por ahi".
+//
+// Que paso ese dia:
+//   · WhatsApp empezo a responder rate-overlimit (429) a la lista de
+//     participantes. El calentamiento termino "31/31 grupos, 0 pares, 0
+//     colegas completados": todo el trafico, cero resultado.
+//   · Se midio que 9 de cada 10 colegas no exponen telefono, asi que ni
+//     funcionando del todo resolvia a la mayoria.
+//   · Se confirmo con una entrega REAL que un DM a `<lid>@lid` llega. El
+//     telefono dejo de ser un requisito para responder
+//     (src/groups/politica.js#decidirDm).
+// La linea del radar ya fue baneada una vez (2026-07-30). Este es el unico
+// trabajo del bot que genera trafico sostenido contra WhatsApp sin que nadie
+// lo pida, y estaba generandolo justo contra el endpoint que lo esta
+// rechazando.
+//
+// El modulo NO se borra: la decision se puede revertir con
+// RADAR_DIRECTORIO_CALENTAR_ENABLED=true, sin tocar codigo, si algun dia
+// WhatsApp afloja. El interruptor se lee en cada llamada (no al cargar el
+// modulo) para que encenderlo no dependa del orden de los requires.
 
 const organizations = require("../data/organizations");
 const whatsappGroups = require("../data/whatsapp-groups");
@@ -22,6 +46,15 @@ const waha = require("../lib/waha");
 
 const INTERVALO_MIN = Number(process.env.RADAR_DIRECTORIO_CALENTAR_MIN || 60);
 const ESPERA_INICIAL_MS = 20 * 1000;
+
+// Solo un SI explicito enciende: cualquier otra cosa (vacio, "0", "false", una
+// variable mal escrita en Railway) deja el calentamiento apagado. Es la
+// direccion segura del default — equivocarse hacia "apagado" no le cuesta
+// nada a nadie, equivocarse hacia "encendido" le cuesta trafico a una linea
+// que ya fue baneada.
+function calentamientoHabilitado() {
+  return /^(1|true|si|sí|yes|on)$/i.test(String(process.env.RADAR_DIRECTORIO_CALENTAR_ENABLED || "").trim());
+}
 
 let timer = null;
 let inicial = null;
@@ -62,6 +95,10 @@ async function calentarOrg(org) {
 }
 
 async function tick() {
+  // Tambien aca, no solo en start(): tick() esta exportado y cualquiera puede
+  // forzar una pasada. Con el calentamiento apagado no puede salir trafico
+  // contra WhatsApp por ninguna de las dos puertas.
+  if (!calentamientoHabilitado()) return;
   if (corriendo) return; // una pasada tarda ~90 s; nunca dos a la vez
   if (!waha.configurado()) return;
   corriendo = true;
@@ -77,6 +114,19 @@ async function tick() {
 }
 
 function start() {
+  // Primero el interruptor, antes que cualquier otra guarda: si esta apagado,
+  // la razon que se loguea tiene que ser la decision (Juan, 2026-09-04) y no
+  // un efecto colateral de que falte WAHA. Un apagado silencioso es como se
+  // pierde una funcion sin que nadie se entere (informe de arranque,
+  // 2026-09-02, hallazgo #4).
+  if (!calentamientoHabilitado()) {
+    console.log(
+      "[directorio] calentamiento APAGADO por decision (Juan, 2026-09-04): WhatsApp respondia rate-overlimit " +
+        "y el DM ahora sale por <lid>@lid. Se resuelve solo con directorio_lids. " +
+        "Para reactivarlo: RADAR_DIRECTORIO_CALENTAR_ENABLED=true"
+    );
+    return null;
+  }
   if (!waha.configurado()) {
     console.log("[directorio] sin WAHA configurado: no se calienta el directorio.");
     return null;
