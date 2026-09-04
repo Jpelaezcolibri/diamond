@@ -46,10 +46,28 @@ function esColumnaFaltante(error) {
 // find the 'x' column of ...", Postgres dice: column "x" of relation ... Se
 // acepta solo si es una de las nuestras — nunca se borra a ciegas un campo
 // que el error nombro por otra razon.
-function columnaDelError(error) {
+//
+// `aceptadas` existe porque el alta no es el unico camino que degrada: la
+// marca de respuesta (marcarRespondida) suelta otras columnas, de otras
+// migraciones, y necesita identificar CUAL le falta con la misma regla.
+function columnaDelError(error, aceptadas = COLUMNAS_NUEVAS) {
   const m = String(error?.message || "").match(/'([a-z_]+)'|"([a-z_]+)"/);
   const nombre = m && (m[1] || m[2]);
-  return nombre && COLUMNAS_NUEVAS.includes(nombre) ? nombre : null;
+  return nombre && aceptadas.includes(nombre) ? nombre : null;
+}
+
+// Un aviso por columna y por proceso, no uno por llamada. Mientras la
+// migracion este pendiente, `marcarRespondida` corre en cada DM: sin esto el
+// log queda tapado por la misma linea repetida y deja de leerse.
+//
+// Reusa `columnasAusentes` (el registro de "esta columna no existe" que ya
+// tiene el archivo) en vez de otro Set: es el mismo hecho. El unico cruce con
+// el alta es `sinColumnasNuevas`, que borraria del row una columna
+// `respuesta_*` -- que el row de insert no tiene, asi que es un no-op.
+function avisarUnaVez(clave, mensaje) {
+  if (columnasAusentes.has(clave)) return;
+  columnasAusentes.add(clave);
+  console.warn(mensaje);
 }
 
 // Alta con deduplicacion. El mismo mensaje visto por dos asesores del mismo
@@ -584,6 +602,23 @@ const MODOS_RESPUESTA = ["sombra", "auto", "humano"];
 // migracion de respuesta_refs no corrio todavia, se reintenta sin esa columna
 // en vez de perder el resto del registro (texto/wamid/modo) — mismo criterio
 // que el resto de este archivo (ver esColumnaFaltante).
+// Lo que `marcarRespondida` puede sacrificar, EN ORDEN, cuando una migracion
+// no corrio todavia. `respondida_at` no esta aca a proposito: no se suelta
+// nunca (ver la nota de la degradacion mas abajo).
+const DEGRADACION_RESPUESTA = [
+  {
+    columnas: ["respuesta_destino_telefono", "respuesta_destino_lid"],
+    aviso:
+      "[grupos] Falta la migracion 2026-09-04_dm_destinatario.sql: la respuesta se marca, pero sin decir a quien salio.",
+  },
+  {
+    columnas: ["respuesta_refs"],
+    aviso:
+      "[grupos] Falta la migracion de group_signals.respuesta_refs: la respuesta se marca, pero sin las refs que iban en el texto.",
+  },
+];
+const COLUMNAS_RESPUESTA = DEGRADACION_RESPUESTA.flatMap((paso) => paso.columnas);
+
 async function marcarRespondida(
   orgId,
   signalId,
@@ -608,21 +643,24 @@ async function marcarRespondida(
 
   let { error } = await supabase.from("group_signals").update(patch).eq("org_id", orgId).eq("id", signalId);
 
-  // Degradacion, en el orden en que importa: primero se sueltan los campos de
-  // AUDITORIA (2026-09-04_dm_destinatario.sql), que se pueden perder; despues
-  // respuesta_refs. Marcar la respuesta es lo ultimo que se sacrifica: sin esa
-  // marca el colega recibe el MISMO DM dos veces, que es peor que cualquier
-  // dato de auditoria perdido.
-  if (error && esColumnaFaltante(error)) {
-    console.warn(
-      "[grupos] Falta la migracion 2026-09-04_dm_destinatario.sql: la respuesta se marca, pero sin decir a quien salio."
-    );
-    delete patch.respuesta_destino_telefono;
-    delete patch.respuesta_destino_lid;
-    ({ error } = await supabase.from("group_signals").update(patch).eq("org_id", orgId).eq("id", signalId));
-  }
-  if (error && esColumnaFaltante(error)) {
-    delete patch.respuesta_refs;
+  // Degradacion, en el orden en que importa (ver DEGRADACION_RESPUESTA): primero
+  // se sueltan los campos de AUDITORIA, despues respuesta_refs. Marcar la
+  // respuesta es lo ultimo que se sacrifica: sin esa marca el colega recibe el
+  // MISMO DM dos veces, que es peor que cualquier dato de auditoria perdido.
+  //
+  // Se identifica CUAL columna falta (columnaDelError) en vez de asumir que es
+  // la primera migracion de la lista. Con `esColumnaFaltante` a secas, un error
+  // por respuesta_refs imprimia el nombre de migracion equivocado y borraba los
+  // dos campos de destino sin necesidad -- perdiendo auditoria que la base SI
+  // podia guardar, y pagando un update de mas. Si el error no nombra ninguna
+  // columna conocida se cae al comportamiento historico: soltar por pasos, en
+  // orden, hasta que entre.
+  for (const paso of DEGRADACION_RESPUESTA) {
+    if (!error || !esColumnaFaltante(error)) break;
+    const columna = columnaDelError(error, COLUMNAS_RESPUESTA);
+    if (columna && !paso.columnas.includes(columna)) continue; // falta otra: este paso no ayuda
+    avisarUnaVez(paso.columnas[0], paso.aviso);
+    for (const c of paso.columnas) delete patch[c];
     ({ error } = await supabase.from("group_signals").update(patch).eq("org_id", orgId).eq("id", signalId));
   }
   if (error) {
