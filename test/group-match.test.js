@@ -372,9 +372,14 @@ test("un dato que el inventario no tiene NO descalifica la propiedad", () => {
   assert.ok(!m.razones.join(" ").includes("m²"), "pero tampoco puede alegar un área que no conoce");
 });
 
-test("un dato que el inventario SÍ tiene y no cumple, descalifica", () => {
+// ACOTADO (Juan, 2026-09-04): "si no tiene si no un parqueadero o no esta
+// registrado si tiene o no parqueadero, envialo con la observacion". El
+// principio sigue vivo, pero ya no vale para baños ni garajes -- esos ahora
+// entran igual, con la aclaracion (ver los tests "BAÑOS Y GARAJES YA NO
+// DESCARTAN" mas abajo). Se saca esa aserción de aca y se deja el test
+// afirmando el principio en area y estrato, donde SÍ sigue valiendo.
+test("un dato que el inventario SÍ tiene y no cumple descalifica — salvo baños y garajes, que ahora entran con aclaración", () => {
   assert.strictEqual(evaluarCandidata(apto({ area: "60 m²" }), pide({ area_min: 90 }), "diamond"), null);
-  assert.strictEqual(evaluarCandidata(apto({ banos: 1 }), pide({ banos: 3 }), "diamond"), null);
   assert.strictEqual(evaluarCandidata(apto({ estrato: 3 }), pide({ estrato: 5 }), "diamond"), null);
 });
 
@@ -450,15 +455,17 @@ test("MARGEN: area hasta 10% por debajo de lo pedido entra, mas abajo se descart
   assert.strictEqual(muyChico, null, "mas alla del margen se sigue rechazando");
 });
 
-test("MARGEN: alcobas, banos, garajes y estrato NO llevan margen — siguen exactos", () => {
+// ACOTADO (Juan, 2026-09-04): "si no tiene si no un parqueadero o no esta
+// registrado si tiene o no parqueadero, envialo con la observacion". Baños y
+// garajes dejaron de ser exactos -- ya entran cortos, con margen de facto
+// (ver los tests "BAÑOS Y GARAJES YA NO DESCARTAN" mas abajo), asi que ya no
+// pertenecen aca. Lo que de verdad sigue exacto: estrato (siempre, no lleva
+// gabela de flexibilidad) y alcobas hacia abajo cuando el pedido NO trae
+// flexible_habitaciones.
+test("MARGEN: estrato, y alcobas hacia abajo sin flexible_habitaciones, NO llevan margen — siguen exactos", () => {
   // Estas si le cambian lo que puede hacer con la propiedad al cliente: no se
   // relajan aunque precio y area si lo hagan.
   assert.strictEqual(evaluarCandidata(apto({ habitaciones: 1 }), pide({ habitaciones: 2 }), "diamond"), null);
-  assert.strictEqual(evaluarCandidata(apto({ banos: 1 }), pide({ banos: 2 }), "diamond"), null);
-  // garaje: 0 no sirve para esta asercion — el codigo lo trata como "sin
-  // dato" (no distingue "confirmado sin garaje" de "no sincronizado"), asi
-  // que no descalifica. Se usa un valor con dato real e insuficiente.
-  assert.strictEqual(evaluarCandidata(apto({ garaje: 1 }), pide({ garajes: 2 }), "diamond"), null);
   assert.strictEqual(evaluarCandidata(apto({ estrato: 4 }), pide({ estrato: 5 }), "diamond"), null);
 });
 
