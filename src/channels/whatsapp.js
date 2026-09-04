@@ -414,6 +414,18 @@ router.post("/webhook", async (req, res) => {
       if (appointmentAlert) {
         const r = await sendWhatsApp(org, appointmentAlert.advisorPhone, appointmentAlert.advisorAlert, { fromPhoneId: phoneNumberId });
         if (!r.ok) console.error(`[whatsapp] Aviso de cita a ${appointmentAlert.advisorPhone} NO se pudo enviar:`, r.error);
+        // COPIAS (Juan, 2026-09-04): "que todo llegue a Natalia con una alerta
+        // enorme con la hora y el dia de la visita y copia a catherine". Es el
+        // MISMO texto a otro telefono, y va DESPUES del principal a proposito:
+        // una copia que no se puede mandar no puede tumbar el aviso que si.
+        // Un appointmentAlert sin `copias` (el de un cliente final) no entra.
+        for (const copia of appointmentAlert.copias || []) {
+          const rc = await sendWhatsApp(org, copia, appointmentAlert.advisorAlert, { fromPhoneId: phoneNumberId }).catch((e) => ({
+            ok: false,
+            error: e.message,
+          }));
+          if (!rc.ok) console.error(`[whatsapp] Copia del aviso de cita a ${copia} NO se pudo enviar:`, rc.error);
+        }
       }
       if (captadorAlert) {
         const r = await sendWhatsApp(org, captadorAlert.advisorPhone, captadorAlert.advisorAlert, { fromPhoneId: phoneNumberId });

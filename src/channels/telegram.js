@@ -70,6 +70,12 @@ router.post("/telegram", async (req, res) => {
       }
       if (appointmentAlert) {
         await sendTelegram(chatId, `🔔 [ALERTA DE CITA AGENDADA]\n\n${appointmentAlert.advisorAlert}`);
+        // Las copias del aviso (Juan, 2026-09-04, para las citas de colega).
+        // En demo se muestran en el mismo chat, marcadas con su destinatario,
+        // igual que el resto de las alertas. Un aviso sin `copias` no entra.
+        for (const copia of appointmentAlert.copias || []) {
+          await sendTelegram(chatId, `🔔 [COPIA DEL AVISO DE CITA → ${copia}]\n\n${appointmentAlert.advisorAlert}`);
+        }
       }
     });
   } catch (e) {
