@@ -271,6 +271,92 @@ function buildAppointmentAlert(advisor, lead, cita) {
   return `Nueva cita agendada!\nTienes ${tipoLabel} con ${clienteNombre}${clienteTelefono} ${cuando}.${inmueble}${idioma}${cal}`;
 }
 
+// Aviso de una visita que pidio un COLEGA de otra inmobiliaria — hermano de
+// buildAppointmentAlert, aparte a proposito.
+//
+// Caso real 2026-09-03: un colega pidio ver un inmueble, Sofi le agendo las
+// 4pm y el aviso que salio decia "Tienes una visita con Fulano (+57...) el
+// jueves a las 4:00 p.m." y nada mas. Sin ref, sin direccion, sin precio y
+// sin decir que quien pedia era un colega: con eso la visita se pierde. La
+// razon estructural es que un colega NO tiene property_ref_origen ni
+// ctx.propertyInteres (ambos estan bloqueados a proposito, ver engine.js:218),
+// asi que la unica forma de saber que inmueble se visita es la ref que anota
+// Sofi al agendar.
+//
+// Juan, 2026-09-04: "que todo llegue a Natalia con una alerta enorme con la
+// hora y el dia de la visita y copia a catherine" y, antes, "el mensaje que va
+// a catherine debe de ir con todos los datos de la propiedad y del colega que
+// esta buscando la propiedad, esto con el fin de que no se pierdan las citas".
+//
+// Async porque resuelve la ficha del inmueble. Si no hay ref, si la ref no
+// existe o si la consulta revienta, el aviso SALE IGUAL y lo dice: una visita
+// sin ficha sigue siendo mejor que ninguna visita, y nunca se inventan datos.
+async function buildColegaAppointmentAlert({ org, colega, lead, cita, ref }) {
+  const tipoLabel = { visita: "VISITA", llamada: "LLAMADA", asesoria: "ASESORÍA" }[cita.tipo] || "CITA";
+  const fechaHora = formatCitaFechaHora(cita.fecha_hora);
+  const colegaNombre = colega?.nombre || "Un colega del gremio";
+  const colegaTelefono = colega?.telefono || lead?.phone || null;
+
+  let property = null;
+  if (ref) {
+    // Require tardio: advisor.js lo cargan tambien procesos que no tocan la
+    // base (ver src/groups/*), y esta es la unica funcion del archivo que
+    // necesita el inventario.
+    const properties = require("../data/properties");
+    property = await properties.findByRef(org, ref).catch((e) => {
+      console.warn("[advisor] No se pudo resolver la propiedad de la cita del colega:", e.message);
+      return null;
+    });
+  }
+
+  const ficha = property
+    ? [
+        "PROPIEDAD DE LA VISITA:",
+        `Ref: ${property.ref}`,
+        property.titulo && `Titulo: ${property.titulo}`,
+        property.zona && `Zona: ${[property.zona, property.ciudad].filter(Boolean).join(", ")}`,
+        property.precio && `Precio: ${property.precio}${property.operacion ? ` (${property.operacion})` : ""}`,
+        property.area && `Area: ${property.area}`,
+        property.habitaciones !== undefined && property.habitaciones !== null && `Alcobas: ${property.habitaciones}`,
+        property.link && `Ficha: ${property.link}`,
+      ].filter(Boolean)
+    : [
+        ref
+          ? `PROPIEDAD: sin propiedad indicada — la ref ${ref} no la pude resolver en el inventario.`
+          : "PROPIEDAD: sin propiedad indicada — el colega no dijo cual inmueble.",
+        "Confirmá con él cuál inmueble va a ver ANTES de la visita.",
+      ];
+
+  // El link de calendario reusa buildCalendarLink con un lead "de fachada":
+  // quien va a la agenda es el colega, y la ref de la visita es la de arriba
+  // (no property_ref_origen, que un colega nunca tiene).
+  const calLink = buildCalendarLink(cita, {
+    nombre: colega?.nombre ? `${colega.nombre} (colega)` : "Colega",
+    phone: colegaTelefono,
+    property_ref_origen: property?.ref || ref || null,
+  });
+
+  return [
+    `🚨🚨 ${tipoLabel} AGENDADA POR UN COLEGA 🚨🚨`,
+    "",
+    fechaHora ? `📅 ${fechaHora.fecha.toUpperCase()}` : `📅 ${cita.descripcion || "sin dia definido"}`,
+    fechaHora ? `🕐 ${fechaHora.hora.toUpperCase()}` : null,
+    "",
+    "Quien pide es un COLEGA de otra inmobiliaria, no un cliente nuestro: el cliente que va a ver el inmueble es de ÉL.",
+    "",
+    `Colega: ${colegaNombre}`,
+    `Celular: ${colegaTelefono ? `+${colegaTelefono}` : "sin telefono"}`,
+    cita.descripcion ? `Lo pidio asi: "${cita.descripcion}"` : null,
+    "",
+    ...ficha,
+    "",
+    calLink ? `Agendar en tu calendario: ${calLink}` : null,
+    "Coordinala vos con el colega. Si se cierra, la comision se comparte y los terminos los acuerdan entre ustedes.",
+  ]
+    .filter((l) => l !== null)
+    .join("\n");
+}
+
 // Mensaje de alerta que recibe el asesor cuando un lead es transferido.
 function buildAdvisorAlert(org, lead, motivo, propertyInteres, especialidad, cita, allyMatch) {
   const intencion = lead.intencion;
@@ -313,4 +399,4 @@ function buildAdvisorAlert(org, lead, motivo, propertyInteres, especialidad, cit
   return lines.join("\n");
 }
 
-module.exports = { buildClientLink, buildAdvisorAlert, buildAllyClientMatchAlert, buildAllyOfferMatchAlert, buildGroupDemandAlert, buildAppointmentAlert, buildCaptadorInterestAlert, formatCitaFechaHora };
+module.exports = { buildClientLink, buildAdvisorAlert, buildAllyClientMatchAlert, buildAllyOfferMatchAlert, buildGroupDemandAlert, buildAppointmentAlert, buildColegaAppointmentAlert, buildCaptadorInterestAlert, formatCitaFechaHora };

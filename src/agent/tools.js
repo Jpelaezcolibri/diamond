@@ -6,7 +6,7 @@ const propertyContext = require("../data/property-context");
 const appointments = require("../data/appointments");
 const { computeScore, isQualified } = require("./qualification");
 const propertyOwnerAlerts = require("../data/property-owner-alerts");
-const { buildClientLink, buildAllyClientMatchAlert, buildAppointmentAlert, buildCaptadorInterestAlert, formatCitaFechaHora } = require("../notifications/advisor");
+const { buildClientLink, buildAllyClientMatchAlert, buildAppointmentAlert, buildColegaAppointmentAlert, buildCaptadorInterestAlert, formatCitaFechaHora } = require("../notifications/advisor");
 const { LEGAL_TOPICS, LEGAL_DISCLAIMER } = require("./knowledge");
 const crypto = require("node:crypto");
 const groupSignals = require("../data/group-signals");
@@ -100,6 +100,11 @@ const TOOL_DEFINITIONS = [
           enum: ["llamada", "visita", "asesoria"],
           description:
             "llamada: el asesor lo contacta por telefono/WhatsApp. visita: ir a ver un inmueble. asesoria: reunion para vender o recibir asesoria.",
+        },
+        ref: {
+          type: "string",
+          description:
+            "Referencia del inmueble de la cita (ej '9702941'), cuando la conversacion es sobre una propiedad concreta. Anotala SIEMPRE que la cita sea por un inmueble puntual: es el unico dato con el que el asesor sabe a que propiedad ir, y sin ella el aviso sale sin ficha. Omitila solo si la cita es de asesoria general y no hay ningun inmueble de por medio. Nunca la inventes: usa la ref exacta que viste en la conversacion o en buscar_propiedades.",
         },
       },
       required: ["descripcion"],
@@ -292,6 +297,15 @@ async function maybeCaptadorAlert(ctx, property) {
 // 3. Rotacion por especialidad (findForTransfer).
 // Lo usan agendar_cita y transferir_a_asesor para no divergir entre si.
 async function resolveLeadAdvisor(ctx, especialidad) {
+  // COLEGA (Juan, 2026-09-04): "que todo llegue a Natalia... natalia sera la
+  // encargada de todo en esa linea". Una visita que pide un colega de otra
+  // inmobiliaria no entra a la rotacion de leads propios: la atiende siempre
+  // la asesora principal del radar, que es la misma persona que ya recibe
+  // todo lo que viene del gremio (findAsesorPrincipalRadar resuelve por
+  // RADAR_REVISOR_PHONE y cae a la rotacion si no esta configurada, asi que
+  // nunca se queda sin nadie). Asi la cita ademas queda estampada en SU
+  // agenda, que es contra la que se valida el choque de horarios.
+  if (ctx.colega) return advisors.findAsesorPrincipalRadar(ctx.org);
   const intencion = ctx.lead.intencion;
   const sigueFlujoEspecial = intencion === "vender" || intencion === "vehiculos" || especialidad === "vehiculos";
   if (!sigueFlujoEspecial && ctx.propertyInteres?.captador_id) {
@@ -312,6 +326,29 @@ async function resolveLeadAdvisor(ctx, especialidad) {
     }
   }
   return advisors.findForTransfer(ctx.org, especialidad);
+}
+
+// El aviso de una cita que pidio un COLEGA (Juan, 2026-09-04): va a la
+// asesora principal de la linea del gremio, con copia al escalado. Devuelve el
+// mismo shape de siempre ({advisorPhone, advisorAlert}) mas `copias`, para que
+// un canal que no conozca el campo siga funcionando igual.
+//
+// RADAR_ESCALADO_PHONE se lee en cada llamada, no al cargar el modulo: los
+// telefonos de la linea se configuran en Railway y este archivo se carga una
+// sola vez por proceso. Si esta vacia, el aviso principal sale igual — una
+// copia que no se puede mandar nunca puede tumbar el aviso.
+async function armarAvisoCitaColega(ctx, advisor, cita, ref) {
+  const escalado = String(process.env.RADAR_ESCALADO_PHONE || "").replace(/\D/g, "");
+  const copias =
+    escalado && !advisors.mismoTelefono(escalado, advisor.phone) ? [escalado] : [];
+  const advisorAlert = await buildColegaAppointmentAlert({
+    org: ctx.org,
+    colega: ctx.colega,
+    lead: ctx.lead,
+    cita,
+    ref,
+  });
+  return { advisorPhone: advisor.phone, advisorAlert, copias };
 }
 
 // ALERTA DE CITA AUTO-AGENDADA (Juan, 2026-08-21): "me lo pones en el super
@@ -564,6 +601,11 @@ async function executeTool(name, input, ctx) {
       estado: "solicitada",
       creada_at: new Date().toISOString(),
     };
+    // La ref del inmueble de la cita, cuando la hay (Juan, 2026-09-04). Es el
+    // unico camino por el que la propiedad llega al aviso de un COLEGA: el no
+    // tiene property_ref_origen ni ctx.propertyInteres (ver engine.js). Se
+    // guarda solo si vino, para no cambiarle el shape a las citas de siempre.
+    if (input.ref) cita.ref = String(input.ref).trim();
 
     // PROXIMO DISPONIBLE (Juan, 2026-08-21): "todo lo que digan que cuando se
     // puede ver inmediatamente se agenda... si el calendario esta todo
@@ -630,8 +672,24 @@ async function executeTool(name, input, ctx) {
         // Estampa el asesor dueno de la agenda (para el calendario grupal y el
         // anti-choque) y prepara el aviso inmediato de la cita.
         if (advisor.auth_user_id) cita.advisor_id = advisor.auth_user_id;
-        ctx.appointmentAlert = { advisorPhone: advisor.phone, advisorAlert: buildAppointmentAlert(advisor, ctx.lead, cita) };
+        ctx.appointmentAlert = ctx.colega
+          ? await armarAvisoCitaColega(ctx, advisor, cita, cita.ref)
+          : { advisorPhone: advisor.phone, advisorAlert: buildAppointmentAlert(advisor, ctx.lead, cita) };
       }
+    } else if (ctx.colega) {
+      // Un colega que no fijo dia/hora ("la otra semana lo llevo") tampoco
+      // puede quedar sin aviso: a diferencia de un cliente, a el NUNCA se lo
+      // transfiere (transferir_a_asesor esta bloqueado para colegas), asi que
+      // no hay un segundo momento en el que esta cita le llegue a alguien —
+      // se perderia entera. Sin fecha_hora no hay agenda que validar: solo se
+      // resuelve a quien avisarle. (Juan, 2026-09-04)
+      let advisor = null;
+      try {
+        advisor = await resolveLeadAdvisor(ctx, especialidad);
+      } catch (e) {
+        console.warn("[tools] No se pudo resolver a quien avisarle la cita del colega:", e.message);
+      }
+      if (advisor) ctx.appointmentAlert = await armarAvisoCitaColega(ctx, advisor, cita, cita.ref);
     }
 
     // En memoria: la cita viaja al asesor en la alerta aunque la persistencia falle.
