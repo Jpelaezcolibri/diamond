@@ -198,6 +198,9 @@ const LIMITES_DM_DEFAULT = {
  *
  * @param telefono        el telefono YA RESUELTO del colega, o null/undefined
  *                         si el directorio no lo pudo resolver.
+ * @param lid              el identificador oculto con el que WhatsApp presenta
+ *                         al colega en el grupo (solo digitos), o null. Es el
+ *                         destino de respaldo cuando no hay telefono.
  * @param fechaMensajeIso  la fecha REAL del mensaje en el grupo (nunca la de
  *                         creacion de la fila — ver la nota del limite arriba).
  * @param ahora            reloj inyectado, para poder probarlo.
@@ -212,12 +215,14 @@ const LIMITES_DM_DEFAULT = {
  *                         null si no se pudo leer. `null` NO frena (ver la
  *                         nota mas abajo).
  *
- * Devuelve { enviarDm, motivo, traza }. Ante cualquier duda (un dato que no
- * se pudo verificar) el resultado es NO enviar — el mismo principio que
- * `decidir`: callar es gratis, un DM de mas no lo es.
+ * Devuelve { enviarDm, motivo, via, traza }, donde `via` es "telefono" | "lid"
+ * | null: por cual de los dos destinos sale el mensaje. Ante cualquier duda
+ * (un dato que no se pudo verificar) el resultado es NO enviar — el mismo
+ * principio que `decidir`: callar es gratis, un DM de mas no lo es.
  */
 function decidirDm({
   telefono = null,
+  lid = null,
   fechaMensajeIso = null,
   ahora = new Date(),
   dmsHoyColega = null,
@@ -226,10 +231,40 @@ function decidirDm({
   limites = LIMITES_DM_DEFAULT,
 } = {}) {
   const traza = [];
-  const no = (motivo) => ({ enviarDm: false, motivo, traza: [...traza, `NO:${motivo}`] });
+  const no = (motivo) => ({ enviarDm: false, motivo, via: null, traza: [...traza, `NO:${motivo}`] });
 
-  if (!telefono) return no("sin_telefono");
-  traza.push("telefono:resuelto");
+  // EL DESTINO: TELEFONO, Y SI NO, EL LID (Juan, 2026-09-04). Literal: "todo
+  // lo que se pueda resolver con el lids lo hacemos por ahi (...) y si
+  // necesitamos el telefono lo buscamos desde la tabla".
+  //
+  // Ese mismo dia pasaron las dos cosas que lo habilitan y lo obligan:
+  //   · se confirmo con una entrega REAL que WhatsApp entrega un DM a
+  //     <lid>@lid cuando el destinatario comparte un grupo con la linea
+  //     (waha.enviarDm ya lo soporta con { lid });
+  //   · WhatsApp empezo a responder rate-overlimit (429) a la lista de
+  //     participantes, que era la unica forma de descubrir telefonos nuevos,
+  //     y se apago (la linea ya fue baneada una vez, el 2026-07-30). Ademas
+  //     se midio que 9 de cada 10 colegas no exponen numero.
+  // Sin esta regla, apagar el descubrimiento significaria responderle a
+  // MENOS colegas; con ella, la unica diferencia es por que via sale el
+  // mismo mensaje, a la misma persona que acaba de publicar el pedido.
+  //
+  // El telefono va primero porque es el destino verificado: paso por
+  // esCelularColombiano y ademas es el que sirve para el link wa.me del
+  // aviso a la asesora. El lid es respaldo, no reemplazo.
+  //
+  // El minimo de 10 digitos es el mismo que exige waha.enviarDm para armar
+  // el chatId: un lid mas corto no es un destino, y aceptarlo aca daria un
+  // pedido por respondido sin que salga nada.
+  const lidDigitos = String(lid || "").replace(/\D/g, "");
+  const via = telefono ? "telefono" : lidDigitos.length >= 10 ? "lid" : null;
+  // El motivo sigue llamandose `sin_telefono` aunque ahora signifique "sin
+  // ningun destino": es la clave que ya leen alerta-asesor.js (el texto que
+  // le explica a la asesora por que no salio solo), digest-avisos.js y la
+  // consulta de src/api/crm.js. Renombrarlo dejaria esos tres mudos sin que
+  // nadie se entere; lo que cambio es CUANDO se emite, no como se llama.
+  if (!via) return no("sin_telefono");
+  traza.push(`destino:${via}`);
 
   if (!fechaMensajeIso) return no("sin_fecha_mensaje");
   const edadMs = ahora.getTime() - new Date(fechaMensajeIso).getTime();
@@ -254,7 +289,7 @@ function decidirDm({
   }
   if (cuotaLinea) traza.push(`cuota_wa:${cuotaLinea.usados}/${cuotaLinea.total}`);
 
-  return { enviarDm: true, motivo: "ok", traza };
+  return { enviarDm: true, motivo: "ok", via, traza };
 }
 
 module.exports = { decidir, LIMITES_DEFAULT, MODOS, decidirDm, LIMITES_DM_DEFAULT };

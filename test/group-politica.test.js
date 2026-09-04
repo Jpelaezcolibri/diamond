@@ -162,13 +162,60 @@ test("con todo en orden (telefono, pedido reciente, cupo libre), se manda el DM"
   const d = politica.decidirDm(escenarioDm());
   assert.strictEqual(d.enviarDm, true);
   assert.strictEqual(d.motivo, "ok");
-  assert.ok(d.traza.includes("telefono:resuelto"));
+  // `destino:telefono` reemplazo a `telefono:resuelto` (Juan, 2026-09-04):
+  // ahora hay DOS vias posibles y la traza tiene que decir cual se uso, no
+  // solo que habia telefono. Es lo que permite medir cuantos DMs salen por
+  // numero y cuantos por identificador oculto.
+  assert.ok(d.traza.includes("destino:telefono"), d.traza.join(","));
 });
 
-test("sin telefono resuelto, se calla (y vivo.js cae a la asesora)", () => {
-  const d = politica.decidirDm(escenarioDm({ telefono: null }));
+// ── EL LID COMO DESTINO VALIDO (Juan, 2026-09-04) ────────────────────────
+//
+// "todo lo que se pueda resolver con el lids lo hacemos por ahi". Ese mismo
+// dia se confirmo con una entrega real que WhatsApp SI entrega un DM a
+// <lid>@lid cuando el destinatario comparte un grupo con la linea, y se
+// apago el descubrimiento de telefonos contra WAHA (rate-overlimit, y 9 de
+// cada 10 colegas no exponen numero). Sin esta regla, apagar el
+// descubrimiento significaria responderle a menos colegas.
+test("sin telefono pero con lid, el DM sale igual por el identificador oculto", () => {
+  const d = politica.decidirDm(escenarioDm({ telefono: null, lid: "141746805670125" }));
+  assert.strictEqual(d.enviarDm, true);
+  assert.strictEqual(d.motivo, "ok");
+  assert.strictEqual(d.via, "lid");
+  assert.ok(d.traza.includes("destino:lid"), d.traza.join(","));
+});
+
+test("con telefono Y lid se prefiere el telefono: es el destino verificado", () => {
+  // El lid resuelve al mismo chat, pero el numero es el dato que ya se
+  // confirmo (esCelularColombiano) y el que despues sirve para el link
+  // wa.me del aviso a la asesora.
+  const d = politica.decidirDm(escenarioDm({ lid: "141746805670125" }));
+  assert.strictEqual(d.enviarDm, true);
+  assert.strictEqual(d.via, "telefono");
+  assert.ok(!d.traza.includes("destino:lid"), d.traza.join(","));
+});
+
+test("sin telefono y sin lid no hay a quien escribirle: se calla (y vivo.js cae a la asesora)", () => {
+  // El motivo sigue llamandose `sin_telefono` a proposito: es la clave que
+  // leen alerta-asesor.js (el texto que explica por que no salio solo),
+  // digest-avisos.js y la consulta de src/api/crm.js. Lo que cambio es
+  // cuando se emite -- ahora solo cuando NO hay ningun destino, no cada vez
+  // que falta el numero.
+  const d = politica.decidirDm(escenarioDm({ telefono: null, lid: null }));
   assert.strictEqual(d.enviarDm, false);
   assert.strictEqual(d.motivo, "sin_telefono");
+  assert.strictEqual(d.via, null);
+});
+
+test("un lid con forma de basura no es un destino: se calla", () => {
+  // waha.enviarDm exige >= 10 digitos para armar el chatId; un lid mas corto
+  // (o vacio, o no numerico) no puede pasar por destino valido aca y hacer
+  // que el pedido se de por respondido sin que salga nada.
+  for (const basura of ["", "  ", "123", "abc", null, undefined]) {
+    const d = politica.decidirDm(escenarioDm({ telefono: null, lid: basura }));
+    assert.strictEqual(d.enviarDm, false, `el lid ${basura} no puede ser destino`);
+    assert.strictEqual(d.motivo, "sin_telefono");
+  }
 });
 
 test("sin la fecha del mensaje, no se puede medir la antiguedad -- se calla", () => {
@@ -256,7 +303,7 @@ test("los defaults del DM, y de quien es cada uno", () => {
 });
 
 test("la traza de decidirDm tambien termina en NO: cuando se calla", () => {
-  const d = politica.decidirDm(escenarioDm({ telefono: null }));
+  const d = politica.decidirDm(escenarioDm({ telefono: null, lid: null }));
   assert.strictEqual(d.enviarDm, false);
   assert.ok(d.traza.at(-1).startsWith("NO:"));
 });
