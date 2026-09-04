@@ -126,6 +126,30 @@ test("busca el lead con (orgId, leadId)", async () => {
   assert.deepStrictEqual(busquedas, [{ orgId: "org-1", id: "lead-1" }]);
 });
 
+// EL FALLBACK EXISTE PARA ESTE CASO (medicion de produccion, 2026-09-04): 9 de
+// cada 10 colegas de los grupos no exponen telefono, WhatsApp los presenta con
+// un @lid. Sin pasarle { lid } a WAHA, el chatId sale como `<lid>@c.us` y el
+// aviso no llega justo a la mayoria — el fallback quedaba decorativo.
+test("si el phone del lead es un lid, el fallback sale por lid y no como telefono", async () => {
+  oficialFalla = true;
+  const mod = instalar(CITA, { telefono: "126493275858472" }); // 15 digitos: no es un celular colombiano
+  const r = await mod.cancelar(ORG, "lead-1", { motivo: "x", sesion: "RADA-NATALIA" });
+  assert.strictEqual(r.aviso, "linea_natalia");
+  assert.strictEqual(enviosWaha.length, 1);
+  assert.strictEqual(enviosWaha[0].lid, "126493275858472");
+  // No se mandan los dos: la guarda de waha.js exige que un lid entre SOLO por
+  // la opcion explicita, nunca por `telefono` (mismo criterio que vivo.js).
+  assert.ok(!enviosWaha[0].telefono, `no puede ir tambien como telefono: ${enviosWaha[0].telefono}`);
+});
+
+test("con un celular colombiano real el fallback sigue saliendo por telefono", async () => {
+  oficialFalla = true;
+  const mod = instalar(CITA, { telefono: "573147815403" });
+  await mod.cancelar(ORG, "lead-1", { motivo: "x", sesion: "RADA-NATALIA" });
+  assert.strictEqual(enviosWaha[0].telefono, "573147815403");
+  assert.strictEqual(enviosWaha[0].lid, undefined, "un telefono real no viaja como lid");
+});
+
 // Regla del mensaje blanqueado: al colega nunca se le nombra a Diamond.
 test("el mensaje al colega no nombra a Diamond", async () => {
   const mod = instalar(CITA);

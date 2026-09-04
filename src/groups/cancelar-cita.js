@@ -18,6 +18,7 @@ const citas = require("../data/citas");
 const canalWhatsapp = require("../channels/whatsapp");
 const waha = require("../lib/waha");
 const mensajeAsesor = require("../lib/mensaje-asesor");
+const contacto = require("../lib/contacto");
 
 const ALERTA_TO = () => (process.env.RADAR_WATCHDOG_TO || "").split(",").map((t) => t.trim()).filter(Boolean);
 
@@ -60,7 +61,22 @@ async function cancelar(org, leadId, { motivo = null, sesion = null } = {}) {
   const oficial = await canalWhatsapp.sendWhatsApp(org, lead.phone, texto).catch((e) => ({ ok: false, error: e.message }));
   if (oficial && oficial.ok) aviso = "oficial";
   else if (sesion) {
-    const porWaha = await waha.enviarDm(sesion, lead.phone, texto).catch((e) => ({ ok: false, error: e.message }));
+    // POR CUAL VIA SALE EL FALLBACK (Juan, 2026-09-04). El unico identificador
+    // que tenemos en este camino es `lead.phone` — y el nombre engaña: se
+    // confirmo en produccion que 9 de cada 10 colegas de los grupos NO exponen
+    // telefono, WhatsApp los presenta con un @lid, y eso es lo que termina
+    // guardado ahi. Sin pasarle { lid } a WAHA el chatId se arma como
+    // `<lid>@c.us` y el mensaje no llega justo a la mayoria: el fallback
+    // quedaba decorativo para el caso que existe para cubrir.
+    //
+    // El criterio es el mismo que usa src/groups/vivo.js: si tiene forma de
+    // celular colombiano real (esCelularColombiano, 3 + 9 digitos con o sin
+    // 57) va como telefono; si no, es un lid. Y NO se mandan los dos — la
+    // guarda de waha.js exige que un lid entre solo por la opcion explicita.
+    const esTelefono = contacto.esCelularColombiano(lead.phone);
+    const destino = esTelefono ? lead.phone : null;
+    const opcionesDm = esTelefono ? {} : { lid: lead.phone };
+    const porWaha = await waha.enviarDm(sesion, destino, texto, opcionesDm).catch((e) => ({ ok: false, error: e.message }));
     if (porWaha && porWaha.ok) aviso = "linea_natalia";
   }
 
