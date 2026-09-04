@@ -38,6 +38,13 @@ export type CalendarEvent = {
    *  Una cita vieja sin estado se lee como "confirmada": es lo que el equipo
    *  asumió todo este tiempo. */
   estado: "propuesta" | "confirmada";
+  /** Lead dueño de la cita, para poder cancelarla desde el calendario (Juan,
+   *  2026-09-04). Solo lo trae "cita_cliente": el recordatorio de un asesor y
+   *  el avance de un colega no son citas del bot y no se cancelan por acá.
+   *  Va como campo propio y no parseando `id` ("lead:<uuid>"): el prefijo del
+   *  id es un detalle de presentación para las keys de React, y sacarle el
+   *  leadId a mano ataría la cancelación a que ese formato nunca cambie. */
+  leadId: string | null;
 };
 
 type Cita = {
@@ -171,6 +178,7 @@ export async function getCalendarEvents(supabase: any): Promise<{
       // "reprogramada" ya trae la fecha nueva: es un compromiso vigente, se
       // pinta igual que una confirmada.
       estado: estado === "propuesta" ? "propuesta" : "confirmada",
+      leadId: l.id,
     });
   }
 
@@ -189,6 +197,7 @@ export async function getCalendarEvents(supabase: any): Promise<{
       autoAgendada: false,
       // Un recordatorio no tiene ciclo de vida propio: si existe, va.
       estado: "confirmada" as const,
+      leadId: null,
     }));
 
   const avanceEvents: CalendarEvent[] = ((dmRes.data as LineaDmAvance[]) || [])
@@ -208,6 +217,7 @@ export async function getCalendarEvents(supabase: any): Promise<{
       autoAgendada: false,
       // El colega ya confirmó fecha/hora por la línea: tampoco tiene estados.
       estado: "confirmada" as const,
+      leadId: null,
     }));
 
   const events = [...citaEvents, ...reminderEvents, ...avanceEvents].sort(
