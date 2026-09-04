@@ -412,8 +412,23 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
     );
   }
 
+  // EL LID COMO DESTINO DE RESPALDO (Juan, 2026-09-04): "todo lo que se pueda
+  // resolver con el lids lo hacemos por ahi". `mensaje.autorTelefono` es
+  // soloDigitos(autorId) — el nombre engaña: para un autor que entra por @lid
+  // (el caso normal, 9 de cada 10) NO es un telefono, es el identificador
+  // oculto, y es justo lo que waha.enviarDm necesita para armar `<lid>@lid`.
+  // Si el autor entro por @c.us esos digitos SI son un numero, pero entonces
+  // telefonoDe ya lo devolvio arriba (esCelularColombiano) y esta via no se
+  // usa.
+  const lidColega = mensaje.autorTelefono || null;
+
+  // Se cuenta el volumen SIEMPRE que haya a quien escribirle, no solo con
+  // telefono: sin este cambio, un DM por lid llegaba a decidirDm con
+  // dmsHoyLinea en null y se frenaba por `limite_linea_no_verificable` — o
+  // sea que la via nueva habria estado muerta al nacer. El eje que protege a
+  // la linea se mide igual por las dos vias.
   const desdeIso = new Date((ahora || new Date()).getTime() - VENTANA_LIMITE_HORAS * 3600 * 1000).toISOString();
-  const [dmsColegaHoy, dmsLineaHoy] = telefonoColega
+  const [dmsColegaHoy, dmsLineaHoy] = telefonoColega || lidColega
     ? await Promise.all([
         groupSignals.dmsHoyPorColega(org.id, mensaje.autorTelefono, desdeIso),
         groupSignals.dmsHoyLinea(org.id, desdeIso),
@@ -431,6 +446,7 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
 
   const decisionDm = politica.decidirDm({
     telefono: telefonoColega,
+    lid: lidColega,
     fechaMensajeIso: mensaje.instanteIso,
     ahora: ahora || new Date(),
     dmsHoyColega: dmsColegaHoy,
@@ -453,7 +469,13 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
       veredicto.le_falta || []
     );
     if (textoDm) {
-      let envioDm = await waha.enviarDm(sesion, telefonoColega, textoDm).catch((e) => ({ ok: false, error: e.message }));
+      // POR CUAL VIA SALE. `decidirDm` ya eligio (prefiere el telefono, que es
+      // el destino verificado); aca solo se traduce a lo que espera
+      // waha.enviarDm: con { lid } el chatId es `<lid>@lid`, sin el es
+      // `<telefono>@c.us`. No se pasan los dos: la guarda de waha.js exige que
+      // un lid entre SOLO por la opcion explicita, nunca por `telefono`.
+      const opcionesDm = decisionDm.via === "lid" ? { lid: lidColega } : {};
+      let envioDm = await waha.enviarDm(sesion, telefonoColega, textoDm, opcionesDm).catch((e) => ({ ok: false, error: e.message }));
       // UN solo reintento, y solo si el fallo fue ANTES de que el mensaje
       // saliera (WAHA lo rechazo, o la conexion ni se establecio -- ver
       // `previoAlEnvio` en waha.js#enviarDm). Un timeout NO se reintenta: el
@@ -464,7 +486,7 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
       if (envioDm && !envioDm.ok && envioDm.previoAlEnvio) {
         console.warn(`[radar] El DM no llego a salir (${envioDm.error}); un reintento en 3 s.`);
         await new Promise((r) => setTimeout(r, 3000));
-        envioDm = await waha.enviarDm(sesion, telefonoColega, textoDm).catch((e) => ({ ok: false, error: e.message }));
+        envioDm = await waha.enviarDm(sesion, telefonoColega, textoDm, opcionesDm).catch((e) => ({ ok: false, error: e.message }));
       }
       if (envioDm && envioDm.ok) {
         // Se registra con modo 'auto' — igual que el camino que publica DENTRO
@@ -997,8 +1019,10 @@ async function responderPorDmManual(org, signalId, { sesion = null, refs = null 
   if (signal.respondida_at) return { resultado: "ya_respondida" };
   if (signal.clase !== "demanda") return { resultado: "no_es_demanda" };
 
-  // El grupo se usa SOLO por su `jid`, para que directorio.telefonoDe pueda
-  // refrescar la lista de participantes si el lid todavia no esta resuelto.
+  // El grupo ya no se usa para resolver el telefono: desde el 2026-09-04
+  // directorio.telefonoDe es 100% local (directorio_lids + la pista del
+  // mensaje) y no refresca nada. Se sigue leyendo porque su `jid` viaja en el
+  // resultado y en los avisos.
   // A diferencia de aprobarManual, aca NO se exige grupo.modo !== "ignorar":
   // esa compuerta protege que el radar siga ESCUCHANDO ese grupo, algo que
   // no tiene nada que ver con escribirle al privado a un colega que ya

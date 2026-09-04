@@ -53,8 +53,10 @@ async function cruzarOfertaConMandatos(org, oferta, opts = {}) {
   }
   if (cruces.length === 0) return { resultado: "sin_match", avisados: [], matches: 0 };
 
-  // El telefono del colega se resuelve UNA vez por oferta, no una por mandato:
-  // refrescar el padron de un grupo puede ser un HTTP de cientos de participantes.
+  // El telefono del colega se resuelve UNA vez por oferta, no una por mandato.
+  // Desde el 2026-09-04 esa resolucion ya no cuesta un HTTP (directorio.telefonoDe
+  // es una consulta local contra directorio_lids), pero sigue haciendose una sola
+  // vez: no hay ninguna razon para repetirla por cada mandato.
   //
   // Se rompe aca a proposito la decision de ofertas.js de no tocar el directorio
   // (ese modulo solo archiva y no debe cargar con esa dependencia). Sin telefono,

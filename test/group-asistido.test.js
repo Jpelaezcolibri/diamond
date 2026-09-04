@@ -124,8 +124,12 @@ function instalar() {
   };
   require.cache[RUTA("lib/waha.js")] = {
     exports: {
-      enviarDm: async (sesion, telefono, texto) => {
-        enviosDm.push({ sesion, telefono, texto });
+      // `opciones` se registra desde el 2026-09-04: es donde viaja { lid }, o
+      // sea la via por la que sale el DM cuando no hay telefono. Un mock que
+      // lo ignora no puede distinguir un envio al numero de uno al
+      // identificador oculto.
+      enviarDm: async (sesion, telefono, texto, opciones = {}) => {
+        enviosDm.push({ sesion, telefono, texto, opciones });
         return envioDmResultado;
       },
       // Por defecto null: "no se pudo leer" es el caso que no frena (ver la
@@ -612,9 +616,58 @@ test("la decision (DM u asesora) queda guardada en la señal, igual que el resto
   assert.ok(Array.isArray(politicasGuardadas[0].traza));
 });
 
-test("sin telefono resuelto, se avisa a la asesora de siempre -- ningun pedido se pierde", async () => {
+// ── SIN TELEFONO, SE MANDA POR EL LID (Juan, 2026-09-04) ────────────────
+//
+// Antes, este bloque afirmaba que sin telefono resuelto el pedido se desviaba
+// SIEMPRE a la asesora (motivo sin_telefono). Cambio el mismo dia que se
+// apago el descubrimiento de telefonos contra WAHA: "todo lo que se pueda
+// resolver con el lids lo hacemos por ahi". Se confirmo con una entrega real
+// que WhatsApp entrega un DM a <lid>@lid cuando el destinatario comparte un
+// grupo con la linea, y 9 de cada 10 colegas no exponen numero -- sin esta
+// via, apagar el descubrimiento habria significado responderle a casi nadie.
+//
+// A quien se le escribe no cambia: sigue siendo el colega que ACABA de
+// publicar el pedido. Cambia por que via sale.
+test("sin telefono pero con el lid del autor, el DM sale igual por <lid>@lid", async () => {
   telefonoColegaResuelto = null;
   const r = await vivo.procesarMensaje(ORG, mensaje(), {
+    grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA",
+  });
+
+  assert.strictEqual(r.resultado, "dm_enviado");
+  assert.strictEqual(enviosDm.length, 1);
+  assert.strictEqual(enviosDm[0].telefono, null, "no hay numero: el destino es el lid");
+  assert.strictEqual(enviosDm[0].opciones.lid, "141746805670125");
+  assert.match(enviosDm[0].texto, /Ref 9780079/);
+  assert.strictEqual(enviadosPorSofi.length, 0, "el DM salio: la asesora no tiene nada que hacer");
+  assert.strictEqual(politicasGuardadas[0].motivo, "ok");
+  assert.ok(politicasGuardadas[0].traza.includes("destino:lid"), politicasGuardadas[0].traza.join(","));
+  assert.deepStrictEqual(marcadasRespondidas, [
+    {
+      id: "sig-1", texto: enviosDm[0].texto, wamid: "wm-dm-1", modo: "auto", refs: ["9780079"],
+      destinoTelefono: null, destinoLid: "141746805670125@lid",
+    },
+  ]);
+});
+
+test("con telefono resuelto se prefiere el telefono: el lid no viaja como destino", async () => {
+  telefonoColegaResuelto = "573001234567";
+  await vivo.procesarMensaje(ORG, mensaje(), {
+    grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA",
+  });
+
+  assert.strictEqual(enviosDm[0].telefono, "573001234567");
+  assert.ok(!enviosDm[0].opciones.lid, "con numero no se manda por el identificador oculto");
+  assert.ok(politicasGuardadas[0].traza.includes("destino:telefono"), politicasGuardadas[0].traza.join(","));
+});
+
+test("sin telefono Y sin lid no hay a quien escribirle: se avisa a la asesora -- ningun pedido se pierde", async () => {
+  // El caso que queda derivando a la persona: un autor del que WhatsApp no
+  // entrego ningun identificador. Es raro, y es exactamente donde el respaldo
+  // humano tiene que seguir estando.
+  telefonoColegaResuelto = null;
+  const anonimo = { ...mensaje(), autorId: null, autorTelefono: null };
+  const r = await vivo.procesarMensaje(ORG, anonimo, {
     grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA",
   });
 
@@ -622,6 +675,21 @@ test("sin telefono resuelto, se avisa a la asesora de siempre -- ningun pedido s
   assert.strictEqual(enviosDm.length, 0);
   assert.strictEqual(enviadosPorSofi.length, 1);
   assert.strictEqual(politicasGuardadas[0].motivo, "sin_telefono");
+});
+
+test("por lid, el tope de volumen de la linea se sigue midiendo y sigue frenando", async () => {
+  // El destino cambio; los frenos no. Si el conteo de la linea no se pudiera
+  // hacer sin telefono, un DM por lid saldria sin ninguna medicion de volumen
+  // -- justo el eje que protege a la linea que ya fue baneada.
+  telefonoColegaResuelto = null;
+  dmsHoyLineaMock = 150;
+  const r = await vivo.procesarMensaje(ORG, mensaje(), {
+    grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA",
+  });
+
+  assert.strictEqual(r.resultado, "avisada");
+  assert.strictEqual(enviosDm.length, 0);
+  assert.strictEqual(politicasGuardadas[0].motivo, "limite_linea_alcanzado");
 });
 
 test("sin sesion de WAHA, no se puede intentar el DM -- se avisa a la asesora", async () => {

@@ -509,17 +509,19 @@ router.post("/api/grupos/probar-dm", async (req, res) => {
   }
 });
 
-// Diagnostico del CAMINO REAL (2026-09-02). El diagnostico-lids de abajo
-// resolvio el 80% de los colegas (74 de 93) el mismo dia en que el directorio
-// en vivo llevaba 0 telefonos guardados desde el 25-ago (6 de 85 en total).
-// Mismo WAHA, misma sesion, mismo codigo de participantes: la diferencia
-// tiene que estar en el camino que corre en vivo -- src/groups/directorio.js
-// con su indice en memoria, su siembra y su throttle de un refresco por
-// grupo cada RADAR_DIRECTORIO_REFRESCO_MIN. Este endpoint corre ESE modulo
-// tal cual sobre los ultimos lids que quedaron en `sin_telefono`, y mide
-// aparte cuanto tarda la lista de participantes de cada grupo (el timeout de
-// waha.js es de 20 s; un grupo de 900 personas bajo una sesion inestable
-// puede pasarse, y el throttle convierte un timeout en 10 min de silencio).
+// Diagnostico del CAMINO REAL (2026-09-02, revisado el 2026-09-04). Nacio
+// para explicar por que el directorio en vivo llevaba 0 telefonos guardados
+// mientras el diagnostico-lids resolvia el 80% en frio.
+//
+// Lo que mide HOY es otra cosa, y por eso sigue sirviendo: desde el
+// 2026-09-04 directorio.telefonoDe es 100% local (directorio_lids + la pista
+// del mensaje) y no sale a la red, asi que `casos` responde cuanta cobertura
+// da la tabla sobre los lids que quedaron en `sin_telefono`. La medicion de
+// participantes de abajo SI habla con WAHA, a mano y solo cuando un admin
+// abre este endpoint -- es la unica forma de comprobar si WhatsApp sigue
+// respondiendo rate-overlimit antes de decidir volver a encender el
+// calentamiento (RADAR_DIRECTORIO_CALENTAR_ENABLED).
+//
 // Solo lectura: no escribe en colegas_grupos ni manda nada.
 router.get("/api/grupos/diagnostico-directorio", async (req, res) => {
   if (!waha.configurado()) return res.status(501).json({ error: "WAHA no configurado" });
