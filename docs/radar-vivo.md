@@ -209,6 +209,21 @@ contadores del proceso: `recibidos`, `prefiltrados`, `difundidos`, `publicados`,
 Los contadores viven en memoria y se reinician con cada deploy. Lo que sí
 persiste es `group_signals`: ahí está el texto de todo lo que se publicó.
 
+### Los dos relojes del volumen de DMs
+
+El endpoint devuelve además dos números que **no son comparables**, y por eso
+cada uno lleva su ventana en el nombre:
+
+- `dmsUltimas24h` (con `dmsVentanaDesde`): los DMs que salió la línea en una
+  ventana móvil de 24 h — la **misma** que usa el tope que de verdad frena
+  (`politica.js#decidirDm`). Hasta el 2026-09-04 se contaba desde la medianoche
+  local del servidor, que en un contenedor UTC son las 19:00 hora Colombia del
+  día anterior: el tablero mostraba un número que no era el que frenaba.
+- `cuotaWhatsapp`: la cuota que **WhatsApp** le impone a la línea, leída de la
+  sesión de WAHA. Es un contador de **ciclo mensual**, por eso viene con
+  `cycleStart` y `cycleEnd` — sin ellos, "240/300" no dice si se gastaron hoy o
+  en tres semanas.
+
 ### El watchdog
 
 Revisa cada 30 minutos y avisa por WhatsApp a los números de

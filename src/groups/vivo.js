@@ -420,12 +420,22 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
       ])
     : [null, null];
 
+  // Best-effort: si WAHA no contesta, `null` y el tope diario propio sigue
+  // cubriendo el eje de volumen (ver la nota en politica.js#decidirDm).
+  const cuotaLinea = sesion
+    ? await waha.cuotaDeLinea(sesion).catch((e) => {
+        console.warn("[radar] No se pudo leer la cuota de WhatsApp de la linea:", e.message);
+        return null;
+      })
+    : null;
+
   const decisionDm = politica.decidirDm({
     telefono: telefonoColega,
     fechaMensajeIso: mensaje.instanteIso,
     ahora: ahora || new Date(),
     dmsHoyColega: dmsColegaHoy,
     dmsHoyLinea: dmsLineaHoy,
+    cuotaLinea,
   });
 
   // Auditable igual que el resto de las decisiones del radar (mismo llamado
@@ -463,7 +473,21 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
         // que es el UNICO que llega hasta aca, 'auto' solo puede significar
         // "el sistema lo mando solo por DM", nunca "lo publico en el grupo".
         const refsDm = utiles.map((m) => m.ref).filter(Boolean);
-        await groupSignals.marcarRespondida(org.id, signal.id, { texto: textoDm, wamid: envioDm.wamid, modo: "auto", refs: refsDm });
+        // A QUIEN salio el DM (Juan, 2026-09-04). Dos identificadores, no uno:
+        // `telefonoColega` es el numero real que el directorio resolvio y por
+        // el que salio el mensaje; `mensaje.autorId` es como WhatsApp presento
+        // al autor en el grupo.
+        //
+        // Va el autorId CRUDO y no `mensaje.autorTelefono` (revision final,
+        // 2026-09-04): autorTelefono es soloDigitos(autorId), y esos digitos
+        // sueltos son indistinguibles entre un @lid y un telefono real -- para
+        // un autor que entra por un JID @c.us son literalmente un telefono. El
+        // sufijo del JID es lo unico que lo dice, asi que se guarda entero.
+        await groupSignals.marcarRespondida(org.id, signal.id, {
+          texto: textoDm, wamid: envioDm.wamid, modo: "auto", refs: refsDm,
+          destinoTelefono: telefonoColega || null,
+          destinoLid: mensaje.autorId || mensaje.autorTelefono || null,
+        });
 
         // Aviso post-DM (Juan, 2026-09-01): "no tiene nada que hacer" solo es
         // cierto si no queda nada pendiente -- si el pedido tenia dudosas,
@@ -875,7 +899,16 @@ async function aprobarManual(org, signalId) {
   if (!envio || !envio.ok) return { resultado: "error_envio", error: envio && envio.error };
 
   const refs = publicables.map((m) => m.ref).filter(Boolean);
-  await groupSignals.marcarRespondida(org.id, signal.id, { texto, wamid: envio.wamid, modo: "auto", refs });
+  // A QUIEN salio (Juan, 2026-09-04). Mismo patron que asistir /
+  // responderPorDmManual en este archivo. Aca NO hay identificador crudo: la
+  // columna group_signals.autor_telefono guarda soloDigitos(autorId), o sea
+  // que el sufijo (@lid o @c.us) ya se perdio al dar de alta la señal. Se
+  // guarda lo que hay, y por eso la migracion no promete que sea un lid.
+  await groupSignals.marcarRespondida(org.id, signal.id, {
+    texto, wamid: envio.wamid, modo: "auto", refs,
+    destinoTelefono: telefonoColega || null,
+    destinoLid: signal.autor_telefono || null,
+  });
 
   // `destino` para que quien lo muestre no tenga que adivinar: el CRM y Sofi
   // decian "publicado" y de ahi salio que Sofi le contara a Juan que la
@@ -1012,7 +1045,14 @@ async function responderPorDmManual(org, signalId, { sesion = null, refs = null 
   // enviado, que puede ser un subconjunto de lo elegido si algo no paso la
   // compuerta (ver `descartados` mas abajo).
   const refsEnviadas = publicables.map((m) => m.ref).filter(Boolean);
-  await groupSignals.marcarRespondida(org.id, signal.id, { texto, wamid: envioDm.wamid, modo: "auto", refs: refsEnviadas });
+  // A QUIEN salio (Juan, 2026-09-04). signal.autor_telefono son los digitos del
+  // identificador del autor sin su sufijo (ver la nota en aprobarManual): puede
+  // ser un lid o un telefono y desde aca no hay como distinguirlos.
+  await groupSignals.marcarRespondida(org.id, signal.id, {
+    texto, wamid: envioDm.wamid, modo: "auto", refs: refsEnviadas,
+    destinoTelefono: telefonoColega || null,
+    destinoLid: signal.autor_telefono || null,
+  });
   // Distingue en la señal misma que esto lo mando una PERSONA desde el CRM
   // (auditoria 2026-09-02): respuesta_modo='auto' lo comparten el DM
   // automatico, este DM manual y la publicacion en el grupo de agosto, y el

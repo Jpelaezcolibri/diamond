@@ -39,7 +39,7 @@ test("dmsHoyLinea sin supabase (modo memoria/test) devuelve 0", async () => {
 function construirQuery(resultado) {
   const llamadas = [];
   const q = {};
-  for (const metodo of ["select", "eq", "gte", "order", "limit"]) {
+  for (const metodo of ["select", "eq", "gte", "order", "limit", "update"]) {
     q[metodo] = (...args) => { llamadas.push([metodo, ...args]); return q; };
   }
   // El builder real de supabase-js es "thenable": awaitarlo dispara la query.
@@ -108,4 +108,123 @@ test("dmsHoyLinea: un fallo de la base tambien devuelve null, no un cero optimis
   const { mod } = instalarConSupabase({ data: null, error: { code: "500", message: "boom" } });
   const n = await mod.dmsHoyLinea("org-9", "2026-08-24T00:00:00.000Z");
   assert.strictEqual(n, null);
+});
+
+// AUDITORIA DEL DESTINATARIO (Juan, 2026-09-04). Sin esto, "a quien le
+// escribimos" solo se podia reconstruir cruzando contra el directorio, que
+// cambia con el tiempo -- o sea que no se podia reconstruir.
+test("marcarRespondida guarda el telefono y el lid del destinatario", async () => {
+  const { mod, llamadasPorTabla } = instalarConSupabase({ data: null, error: null });
+
+  await mod.marcarRespondida("org-9", "sig-1", {
+    texto: "hola", wamid: "wm-1", modo: "auto", refs: ["9944723"],
+    destinoTelefono: "573001234567", destinoLid: "184564139970806",
+  });
+
+  const [, patch] = llamadasPorTabla[0].llamadas.find(([m]) => m === "update");
+  assert.strictEqual(patch.respuesta_destino_telefono, "573001234567");
+  assert.strictEqual(patch.respuesta_destino_lid, "184564139970806");
+});
+
+// Degradacion limpia: si la migracion no corrio, la respuesta se marca igual.
+// Perder la marca de "ya respondido" duplicaria el DM al colega, que es MUCHO
+// peor que perder el dato de auditoria.
+test("sin la migracion corrida, se marca igual y sin los campos nuevos", async () => {
+  // PGRST204 = PostgREST no encuentra la columna. Falla la primera vez y
+  // acierta la segunda, que es como se comporta una migracion sin correr.
+  let intentos = 0;
+  const supabasePath = require.resolve("../src/data/supabase");
+  const groupSignalsPath = require.resolve("../src/data/group-signals");
+  const updates = [];
+  delete require.cache[supabasePath];
+  require.cache[supabasePath] = {
+    id: supabasePath, filename: supabasePath, loaded: true,
+    exports: {
+      from: () => {
+        const q = {};
+        for (const m of ["select", "eq", "gte", "order", "limit", "update"]) {
+          q[m] = (...args) => { if (m === "update") updates.push(args[0]); return q; };
+        }
+        q.then = (resolve) =>
+          resolve(intentos++ === 0 ? { error: { code: "PGRST204", message: "respuesta_destino_lid" } } : { error: null });
+        return q;
+      },
+    },
+  };
+  delete require.cache[groupSignalsPath];
+  const mod = require("../src/data/group-signals");
+
+  const ok = await mod.marcarRespondida("org-9", "sig-1", {
+    texto: "hola", wamid: "wm-1", modo: "auto", destinoTelefono: "573001234567",
+  });
+
+  assert.strictEqual(ok, true, "la señal tiene que quedar marcada igual");
+  assert.ok(updates[1].respondida_at, "el segundo intento sigue marcando la respuesta");
+  assert.strictEqual(updates[1].respuesta_destino_telefono, undefined, "sin las columnas nuevas");
+});
+
+// LA DEGRADACION TIENE QUE SABER QUE COLUMNA FALTA (revision final,
+// 2026-09-04). Con `esColumnaFaltante` a secas, un error por respuesta_refs
+// entraba por el primer paso: imprimia "falta 2026-09-04_dm_destinatario.sql"
+// (falso) y borraba respuesta_destino_telefono/lid, perdiendo auditoria que la
+// base SI podia guardar, mas un update de mas.
+function instalarConErroresEnCola(errores) {
+  const supabasePath = require.resolve("../src/data/supabase");
+  const groupSignalsPath = require.resolve("../src/data/group-signals");
+  const updates = [];
+  let i = 0;
+  delete require.cache[supabasePath];
+  require.cache[supabasePath] = {
+    id: supabasePath, filename: supabasePath, loaded: true,
+    exports: {
+      from: () => {
+        const q = {};
+        for (const m of ["select", "eq", "gte", "order", "limit", "update"]) {
+          q[m] = (...args) => { if (m === "update") updates.push({ ...args[0] }); return q; };
+        }
+        q.then = (resolve) => resolve({ error: errores[i++] || null });
+        return q;
+      },
+    },
+  };
+  delete require.cache[groupSignalsPath];
+  return { mod: require("../src/data/group-signals"), updates };
+}
+
+test("si la columna que falta es respuesta_refs, los campos de destino NO se pierden", async () => {
+  const { mod, updates } = instalarConErroresEnCola([
+    { code: "PGRST204", message: "Could not find the 'respuesta_refs' column of 'group_signals'" },
+  ]);
+
+  const ok = await mod.marcarRespondida("org-9", "sig-1", {
+    texto: "hola", modo: "auto", refs: ["9944723"],
+    destinoTelefono: "573001234567", destinoLid: "184564139970806",
+  });
+
+  assert.strictEqual(ok, true);
+  assert.strictEqual(updates.length, 2, "un solo reintento: el que suelta respuesta_refs");
+  assert.strictEqual(updates[1].respuesta_refs, undefined, "la columna que falta si se suelta");
+  assert.strictEqual(updates[1].respuesta_destino_telefono, "573001234567", "auditoria que si se podia guardar");
+  assert.strictEqual(updates[1].respuesta_destino_lid, "184564139970806");
+});
+
+// El aviso es de migracion pendiente, no de esta llamada: repetirlo en cada DM
+// tapa el log. El plan lo pide explicito ("se avisa una vez").
+test("el aviso de migracion pendiente se emite UNA sola vez, no en cada DM", async () => {
+  const faltaDestino = { code: "PGRST204", message: "Could not find the 'respuesta_destino_lid' column of 'group_signals'" };
+  const { mod } = instalarConErroresEnCola([faltaDestino, null, faltaDestino, null, faltaDestino, null]);
+
+  const original = console.warn;
+  const avisos = [];
+  console.warn = (m) => avisos.push(String(m));
+  try {
+    for (let i = 0; i < 3; i++) {
+      await mod.marcarRespondida("org-9", `sig-${i}`, { texto: "hola", modo: "auto", destinoTelefono: "573001234567" });
+    }
+  } finally {
+    console.warn = original;
+  }
+
+  const delDestino = avisos.filter((a) => a.includes("2026-09-04_dm_destinatario.sql"));
+  assert.strictEqual(delDestino.length, 1, `se aviso ${delDestino.length} veces: ${avisos.join(" / ")}`);
 });

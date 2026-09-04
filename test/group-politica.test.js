@@ -189,23 +189,37 @@ test("un pedido mas viejo que el limite de antiguedad no se manda por DM", () =>
   assert.strictEqual(politica.decidirDm(justo).enviarDm, true);
 });
 
-test("un colega ya contactado dos veces hoy (tope 2) no recibe un tercer DM; con uno, si", () => {
-  const d = politica.decidirDm(escenarioDm({ dmsHoyColega: 2 }));
-  assert.strictEqual(d.enviarDm, false);
-  assert.strictEqual(d.motivo, "limite_colega_alcanzado");
-
-  // Juan, 2026-09-02: dos pedidos distintos del mismo colega en la manana
-  // merecen dos respuestas; el dedup por contenido ya evita el pedido repetido.
-  const conCupo = politica.decidirDm(escenarioDm({ dmsHoyColega: 1 }));
-  assert.strictEqual(conCupo.enviarDm, true);
+// TOPE POR COLEGA QUITADO (Juan, 2026-09-04): "quita la restriccion de la
+// cantidad de mensajes a un mismo colega ya que vamos a tener respuestas
+// directas a mensajes enviados por ellos, entonces no veo el problema de que
+// respondamos a mas de 2 mensajes en un dia".
+//
+// Lo que sigue protegiendo contra el spam NO es este tope: es el dedup por
+// contenido (el mismo pedido difundido a cinco grupos manda UN solo DM) y la
+// antiguedad maxima. Los dos siguen en pie.
+test("un colega con tres pedidos distintos en el dia recibe los tres", () => {
+  assert.strictEqual(politica.decidirDm(escenarioDm({ dmsHoyColega: 2 })).enviarDm, true);
+  assert.strictEqual(politica.decidirDm(escenarioDm({ dmsHoyColega: 9 })).enviarDm, true);
 });
 
-test("si no se puede contar cuantos DMs recibio el colega hoy, se calla -- ante la duda, no", () => {
+// No poder contar los DMs del colega ya no puede frenar nada: sin tope, el
+// numero es informacion para medir, no una compuerta.
+test("no poder contar los DMs del colega ya no frena el envio", () => {
   const d = politica.decidirDm(escenarioDm({ dmsHoyColega: null }));
-  assert.strictEqual(d.enviarDm, false);
-  assert.strictEqual(d.motivo, "limite_colega_no_verificable");
+  assert.strictEqual(d.enviarDm, true);
 });
 
+// Se sigue registrando para poder medir el volumen por colega.
+test("el conteo por colega sigue quedando en la traza", () => {
+  const d = politica.decidirDm(escenarioDm({ dmsHoyColega: 4 }));
+  assert.ok(d.traza.some((t) => t.includes("dms_colega_hoy:4")), d.traza.join(","));
+});
+
+// El tope de LA LINEA no se toca: es cortacircuitos, no cuota.
+//
+// (Aca vivia "el tope diario de la linea sigue frenando", borrado en la
+// revision final del 2026-09-04: su unica asercion era la misma del test de
+// abajo, que ademas prueba el borde con cupo.)
 test("al tope diario de la linea (150), se calla -- es cortacircuito, no cuota", () => {
   assert.strictEqual(politica.LIMITES_DM_DEFAULT.topeDiarioLinea, 150);
   const d = politica.decidirDm(escenarioDm({ dmsHoyLinea: 150 }));
@@ -222,14 +236,56 @@ test("si no se puede contar el volumen de la linea, se calla", () => {
   assert.strictEqual(d.motivo, "limite_linea_no_verificable");
 });
 
-test("los tres defaults son los pedidos: 2 DM/colega/dia, 30 min de antiguedad, 150/dia la linea", () => {
-  assert.strictEqual(politica.LIMITES_DM_DEFAULT.dmsPorColegaDia, 2);
+// LOS DEFAULTS, Y QUE RIGE CADA UNO (renombrado en la revision final,
+// 2026-09-04). El nombre viejo decia "2 DM/colega/dia" como si fuera un limite
+// de decidirDm, y desde el 2026-09-04 no lo es: decidirDm no lo aplica. La
+// propiedad sigue existiendo porque vivo.js#responderPorDmManual -- el DM que
+// dispara un HUMANO desde el CRM -- la lee directo, y ese camino si conserva
+// el tope ("LIMITES QUE SI SE RESPETAN... siguen firmes aunque decida un
+// humano", Juan, 2026-08-24). Borrarla habria vuelto ese chequeo un
+// `>= undefined` -- siempre false -- apagando la proteccion en silencio.
+test("los defaults del DM, y de quien es cada uno", () => {
+  // Estos tres SI son compuertas de decidirDm.
   assert.strictEqual(politica.LIMITES_DM_DEFAULT.antiguedadMaximaMin, 30);
   assert.strictEqual(politica.LIMITES_DM_DEFAULT.topeDiarioLinea, 150);
+  // La perilla del cortacircuitos por la cuota de WhatsApp (RADAR_DM_CUOTA_MAX):
+  // 0.8 de 300 = 240, con 60 de colchon. No tenia ninguna asercion, y es la
+  // proteccion mas nueva de la linea -- la que ya fue baneada una vez.
+  assert.strictEqual(politica.LIMITES_DM_DEFAULT.fraccionCuotaMaxima, 0.8);
+  // Este NO lo aplica decidirDm: hoy solo rige la via manual del CRM
+  // (vivo.js#responderPorDmManual, ver test/group-vivo.test.js).
+  assert.strictEqual(politica.LIMITES_DM_DEFAULT.dmsPorColegaDia, 2);
 });
 
 test("la traza de decidirDm tambien termina en NO: cuando se calla", () => {
   const d = politica.decidirDm(escenarioDm({ telefono: null }));
   assert.strictEqual(d.enviarDm, false);
   assert.ok(d.traza.at(-1).startsWith("NO:"));
+});
+
+// CORTACIRCUITOS POR LA CUOTA DE WHATSAPP (2026-09-04). Es la unica adicion al
+// pedido literal de Juan, y la aprobo: sin esto, abrir la manguera agota los
+// 300 mensajes del ciclo cerca del dia 18 y el radar queda mudo el resto del
+// mes. FRENA, NO DESCARTA: el pedido sigue llegando a Natalia.
+const CUOTA_OK = { usados: 100, total: 300, fraccion: 100 / 300 };
+const CUOTA_ALTA = { usados: 240, total: 300, fraccion: 0.8 };
+
+test("con la cuota de WhatsApp al 80% no sale ningun DM", () => {
+  const d = politica.decidirDm(escenarioDm({ cuotaLinea: CUOTA_ALTA }));
+  assert.strictEqual(d.enviarDm, false);
+  assert.strictEqual(d.motivo, "cuota_whatsapp_alta");
+});
+
+test("con cuota holgada el DM sale y queda registrada en la traza", () => {
+  const d = politica.decidirDm(escenarioDm({ cuotaLinea: CUOTA_OK }));
+  assert.strictEqual(d.enviarDm, true);
+  assert.ok(d.traza.some((t) => t.includes("cuota_wa:100/300")), d.traza.join(","));
+});
+
+// DECISION DELIBERADA, distinta al resto del archivo: no poder leer la cuota
+// NO frena. El principio "ante la duda, no" se aplica a los datos que son la
+// unica proteccion; aca queda `topeDiarioLinea` cubriendo el mismo eje. Callar
+// el radar entero por un hipo de WAHA es peor que el riesgo que evita.
+test("no poder leer la cuota no frena el DM: queda el tope diario de la linea", () => {
+  assert.strictEqual(politica.decidirDm(escenarioDm({ cuotaLinea: null })).enviarDm, true);
 });

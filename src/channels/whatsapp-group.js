@@ -55,6 +55,7 @@ const { esCelularColombiano } = require("../lib/contacto");
 const vivo = require("../groups/vivo");
 const waha = require("../lib/waha");
 const dm = require("../groups/dm");
+const groupSignals = require("../data/group-signals");
 
 const router = express.Router();
 
@@ -237,6 +238,14 @@ async function procesar(org, ev, grupo, sesion) {
     grupo: grupo.nombre || ev.chatId,
     groupId: grupo.id,
     autor: ev.autorNombre,
+    // El identificador del autor TAL COMO LLEGO: `<digitos>@lid` cuando
+    // WhatsApp oculta el numero, `<digitos>@c.us` cuando lo expone. El sufijo
+    // es el unico dato que distingue los dos casos, y `soloDigitos` lo borra
+    // -- por eso `autorTelefono` (abajo) no puede decir si es un lid o un
+    // telefono, pese al nombre. Se conserva crudo para la auditoria del DM
+    // (revision final, 2026-09-04): sin el, group_signals.respuesta_destino_lid
+    // guardaba numeros de telefono bajo un nombre que dice "lid".
+    autorId: ev.autorId || null,
     autorTelefono: soloDigitos(ev.autorId),
     autorTelefonoVisible: ev.autorTelefonoVisible || null,
     texto: ev.texto,
@@ -401,7 +410,36 @@ router.post("/webhook/grupos", async (req, res) => {
 router.get("/webhook/grupos/estado", async (req, res) => {
   if (!autorizado(req)) return res.status(401).json({ ok: false });
   const org = await organizations.getDefault().catch(() => null);
-  res.json({ ok: true, modo: organizations.modoDeRespuesta(org), metricas });
+
+  // Sesion activa de la linea, mismo criterio de "una sola" que usa vivo.js
+  // (aprobarManual): con 0 o mas de una, no hay como saber por cual linea
+  // consultar la cuota de WhatsApp.
+  const sesiones = org ? await whatsappGroups.listSessions(org.id).catch(() => []) : [];
+  const activas = sesiones.filter((s) => s.estado === "activa");
+  const sesionActiva = activas.length === 1 ? activas[0].nombre : null;
+
+  // LA MISMA VENTANA QUE EL ENFORCEMENT (revision final, 2026-09-04). Antes se
+  // contaba desde la medianoche LOCAL DEL SERVIDOR, que en un contenedor UTC
+  // son las 19:00 hora Colombia del dia anterior; el tope que de verdad frena
+  // (politica.js#decidirDm, via vivo.js) usa ventana movil de 24 h. Los dos
+  // numeros no eran el mismo numero, y el tablero mostraba el que no manda.
+  // El nombre del campo dice la ventana, para que nadie tenga que adivinarla.
+  const desde24h = new Date(Date.now() - vivo.VENTANA_LIMITE_HORAS * 3600 * 1000).toISOString();
+
+  res.json({
+    ok: true,
+    modo: organizations.modoDeRespuesta(org),
+    metricas,
+    // Volumen de DMs de la linea (Juan, 2026-09-04: "tratemos de medir los
+    // mensajes que enviamos a colegas desde la linea de natalia por dia").
+    // Junto a la cuota de WhatsApp a proposito, pero NO son comparables y por
+    // eso van con nombre propio: este es una ventana movil de 24 h y el de
+    // WhatsApp es un contador de CICLO MENSUAL (de ahi cycleStart/cycleEnd:
+    // sin el ciclo, 240/300 no dice si se gastaron hoy o en tres semanas).
+    dmsUltimas24h: org ? await groupSignals.dmsHoyLinea(org.id, desde24h).catch(() => null) : null,
+    dmsVentanaDesde: desde24h,
+    cuotaWhatsapp: sesionActiva ? await waha.cuotaDeLinea(sesionActiva).catch(() => null) : null,
+  });
 });
 
 module.exports = router;

@@ -128,6 +128,10 @@ function instalar() {
         enviosDm.push({ sesion, telefono, texto });
         return envioDmResultado;
       },
+      // Por defecto null: "no se pudo leer" es el caso que no frena (ver la
+      // nota deliberada en politica.js#decidirDm) y es el que no debe romper
+      // ningun test existente de esta suite.
+      cuotaDeLinea: async () => null,
     },
   };
   require.cache[RUTA("channels/whatsapp.js")] = {
@@ -169,7 +173,10 @@ function mensaje() {
     // aprendio a usar autor_telefono como ultimo intento cuando el directorio
     // no resuelve (ver ese archivo), y un default con forma de telefono se
     // colaba como si fuera un numero real resuelto en vez de un LID crudo.
-    autor: "Patricia Gomez", autorTelefono: "141746805670125",
+    // autorId es el JID CRUDO (con sufijo) y autorTelefono sus digitos, igual
+    // que en whatsapp-group.js#procesar. El sufijo importa: es lo unico que
+    // distingue un @lid de un telefono real (revision final, 2026-09-04).
+    autor: "Patricia Gomez", autorId: "141746805670125@lid", autorTelefono: "141746805670125",
     instanteIso: new Date().toISOString(), esSistema: false, esMultimedia: false,
   };
 }
@@ -489,8 +496,17 @@ test("con telefono, pedido reciente, cupo libre y sesion, se manda el DM y NO se
   assert.match(enviosDm[0].texto, /Ref 9780079/);
   assert.strictEqual(enviadosPorSofi.length, 0, "la asesora no recibe nada: no tiene nada que hacer");
   assert.strictEqual(avisosMarcados.length, 0, "marcarAvisoEnviado es del camino de la asesora, no de este");
+  // destinoTelefono/destinoLid: registro de a quien salio el DM, para poder
+  // contactarlo a futuro (Juan, 2026-09-04). destinoTelefono es el numero real
+  // que resolvio el directorio; destinoLid es el identificador del autor TAL
+  // COMO LLEGO, con su sufijo -- sin el sufijo, "141746805670125" a secas no
+  // se distingue de un telefono y la columna termina mintiendo (revision
+  // final, 2026-09-04).
   assert.deepStrictEqual(marcadasRespondidas, [
-    { id: "sig-1", texto: enviosDm[0].texto, wamid: "wm-dm-1", modo: "auto", refs: ["9780079"] },
+    {
+      id: "sig-1", texto: enviosDm[0].texto, wamid: "wm-dm-1", modo: "auto", refs: ["9780079"],
+      destinoTelefono: "573001234567", destinoLid: "141746805670125@lid",
+    },
   ]);
 });
 
@@ -627,14 +643,22 @@ test("un pedido fuera de ventana (mas de 30 min desde el mensaje del grupo) se a
   assert.strictEqual(politicasGuardadas[0].motivo, "pedido_vencido");
 });
 
-test("un colega ya contactado hoy (tope 1) no recibe un segundo DM -- se avisa a la asesora", async () => {
+// TOPE POR COLEGA QUITADO en este camino (Juan, 2026-09-04): "quita la
+// restriccion de la cantidad de mensajes a un mismo colega ya que vamos a
+// tener respuestas directas a mensajes enviados por ellos, entonces no veo el
+// problema de que respondamos a mas de 2 mensajes en un dia". Antes esto
+// esperaba que el tercer DM del dia se desviara a la asesora (motivo
+// limite_colega_alcanzado); ahora el DM automatico sale igual, sin importar
+// cuantos van en el dia -- ver src/groups/politica.js#decidirDm.
+test("un colega ya contactado varias veces hoy sigue recibiendo el DM -- ya no hay tope por colega", async () => {
   telefonoColegaResuelto = "573001234567";
-  dmsHoyColegaMock = 2;
+  dmsHoyColegaMock = 9;
   const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
 
-  assert.strictEqual(r.resultado, "avisada");
-  assert.strictEqual(enviosDm.length, 0);
-  assert.strictEqual(politicasGuardadas[0].motivo, "limite_colega_alcanzado");
+  assert.strictEqual(r.resultado, "dm_enviado");
+  assert.strictEqual(enviosDm.length, 1);
+  assert.strictEqual(enviadosPorSofi.length, 0, "la asesora no recibe nada: el DM automatico salio");
+  assert.strictEqual(politicasGuardadas[0].motivo, "ok");
 });
 
 test("al tope diario de la linea, se avisa a la asesora -- es cortacircuito, no descarte", async () => {

@@ -210,6 +210,31 @@ test("banos, garajes y estrato viajan en el match, no solo en el puntaje", () =>
   assert.strictEqual(m.estrato, 5);
 });
 
+// FLEXIBILIDAD HACIA ARRIBA (Juan, 2026-09-04): "si necesita 2 habitaciones y
+// tiene 3 o 4 o 5 por el mismo precio o sobre el rango que definimos, envialo".
+// Hasta hoy `ok` cortaba en q+1, asi que un pedido de 2 alcobas descartaba en
+// silencio una propiedad de 4 que calzaba en zona y precio. Medido: el tope
+// aplicaba a 499 de 664 demandas reales (75%).
+test("un pedido de 2 alcobas acepta una propiedad de 4", () => {
+  const m = evaluarCandidata(apto({ habitaciones: 4 }), pide({ habitaciones: 2 }), "diamond");
+  assert.ok(m, "una propiedad con alcobas de sobra no se puede descartar");
+  assert.match(m.razones.join(" | "), /4 alcobas/);
+});
+
+// La decision del 2026-08-20 sigue viva: abrir la compuerta no puede cambiar
+// el orden. "la que calza exacto deberia tener el puntaje mayor" (Juan).
+test("la que calza exacto puntua mas alto que la que tiene alcobas de sobra", () => {
+  const exacta = evaluarCandidata(apto({ habitaciones: 2 }), pide({ habitaciones: 2 }), "diamond");
+  const sobra = evaluarCandidata(apto({ habitaciones: 4 }), pide({ habitaciones: 2 }), "diamond");
+  assert.ok(exacta.puntaje > sobra.puntaje, `exacta ${exacta.puntaje} debe superar a sobra ${sobra.puntaje}`);
+});
+
+// Hacia ABAJO no se abre nada: las alcobas definen el producto. Quien acepte
+// una menos lo sigue diciendo con flexible_habitaciones.
+test("un pedido de 3 alcobas sigue descartando una propiedad de 2", () => {
+  assert.strictEqual(evaluarCandidata(apto({ habitaciones: 2 }), pide({ habitaciones: 3 }), "diamond"), null);
+});
+
 // PRIORIDAD DE VENTA (Juan, 2026-08-21): ref 8989725 registrada por Catherine
 // con "urgencia de venta" — el pedido fue que ESA propiedad puntualmente
 // sume puntaje extra, sin tocar el resto del inventario.
@@ -248,8 +273,14 @@ test("BUG: la zona se compara contra la zona, no contra la ciudad", () => {
   assert.strictEqual(evaluarCandidata(enEnvigado, pide({ zona: "Envigado" }), "diamond"), null);
 });
 
-test("BUG: pedir 3 alcobas no puede traer una de 6", () => {
-  assert.strictEqual(evaluarCandidata(apto({ habitaciones: 6 }), pide(), "diamond"), null);
+// SUPERADO por FLEXIBILIDAD HACIA ARRIBA (Juan, 2026-09-04): el tope de
+// "3 alcobas no puede traer una de 6" era la regla del 2026-08-20. Juan la
+// revirtió explícitamente: "si necesita 2 habitaciones y tiene 3 o 4 o 5 por
+// el mismo precio o sobre el rango que definimos, envialo". Ver los tests
+// "FLEXIBILIDAD HACIA ARRIBA" más abajo — este solo confirma que 4 sigue
+// sirviendo, ya sin el tope que antes rechazaba a partir de 6.
+test("una alcoba de sobra, aunque sean varias de más, ya no descarta la propiedad", () => {
+  assert.ok(evaluarCandidata(apto({ habitaciones: 6 }), pide(), "diamond"), "6 alcobas ante un pedido de 3 ya no se descarta");
   assert.ok(evaluarCandidata(apto({ habitaciones: 4 }), pide(), "diamond"), "una de más sí sirve");
 });
 
@@ -270,17 +301,69 @@ test("FLEXIBLE: sigue sin aceptar DOS de menos, ni con la señal activa", () => 
   assert.strictEqual(evaluarCandidata(apto({ habitaciones: 1 }), pide({ habitaciones: 3, flexible_habitaciones: true }), "diamond"), null);
 });
 
-test("FLEXIBLE: baños y garajes reciben el MISMO margen que alcobas — antes eran estrictos", () => {
-  // garaje:0/banos:0 en el inventario se leen como "sin dato" (no
-  // descalifica, pero tampoco entra en esta prueba) — se usa 1 real contra
-  // un pedido de 2, que es justo el caso "una de menos" que se esta probando.
-  assert.strictEqual(evaluarCandidata(apto({ banos: 1 }), pide({ banos: 2 }), "diamond"), null, "sin la señal, sigue exigiendo exacto");
-  assert.strictEqual(evaluarCandidata(apto({ garaje: 1 }), pide({ garajes: 2 }), "diamond"), null, "lo mismo para garajes");
+// RENOMBRADO Y REESCRITO (revision final, 2026-09-04). Se llamaba "baños y
+// garajes reciben el MISMO margen que alcobas", y eso ya era falso: alcobas
+// aflojan UNA (y solo con flexible_habitaciones), baños y garajes no tienen
+// tope por abajo. Ademas, con `ok: () => true` la señal no influye en
+// baños/garajes, asi que las aserciones "con la señal" no podian fallar por la
+// razon que el nombre enunciaba. Lo que se afirma ahora es la regla vigente, y
+// discrimina: DOS de menos entra igual -- bajo la regla de alcobas ("una de
+// menos") esto devolveria null.
+test("baños y garajes no tienen tope por abajo: no es el margen de alcobas, es ilimitado", () => {
+  // REVERTIDO (Juan, 2026-09-04): "si no tiene si no un parqueadero o no esta
+  // registrado si tiene o no parqueadero, envialo con la observacion".
+  //
+  // garaje:0/banos:0 en el inventario se leen como "sin dato" (no descalifica,
+  // pero tampoco entra en esta prueba) — se usan valores reales.
+  assert.ok(
+    evaluarCandidata(apto({ banos: 1 }), pide({ banos: 3 }), "diamond"),
+    "DOS baños de menos, sin la señal: con el margen de alcobas esto seria null"
+  );
+  assert.ok(
+    evaluarCandidata(apto({ garaje: 1 }), pide({ garajes: 3 }), "diamond"),
+    "lo mismo para garajes"
+  );
 
-  const conBanos = evaluarCandidata(apto({ banos: 1 }), pide({ banos: 2, flexible_habitaciones: true }), "diamond");
-  const conGarajes = evaluarCandidata(apto({ garaje: 1 }), pide({ garajes: 2, flexible_habitaciones: true }), "diamond");
-  assert.ok(conBanos, "con la señal, un baño menos tiene que servir");
-  assert.ok(conGarajes, "con la señal, un garaje menos tiene que servir");
+  // El contraste que le da sentido: las alcobas SI conservan su tope de una.
+  assert.strictEqual(
+    evaluarCandidata(apto({ habitaciones: 1 }), pide({ habitaciones: 3 }), "diamond"),
+    null,
+    "las alcobas definen el producto: dos de menos sigue descartando"
+  );
+});
+
+// EL RESCATE DEL 24-AGO, DESBLOQUEADO (Juan, 2026-09-04). revalidar.js tiene
+// `le_falta` desde el caso Edwin Ramirez -- "al menos el apartamento de el
+// portal si se podia enviar con la aclaracion de que solo le falta un
+// parqueadero de todo el pedido". Pero match.js descartaba la propiedad ANTES
+// de que Sofi la viera: `ok: t >= q` solo aflojaba con flexible_habitaciones,
+// true en 49 de 664 demandas (7,4%). Como `corto` exige que ok() haya pasado,
+// CASTIGO_CORTO.garajes era codigo inalcanzable.
+test("un pedido de 2 garajes acepta una propiedad de 1, y lo dice", () => {
+  const m = evaluarCandidata(apto({ garaje: 1 }), pide({ garajes: 2 }), "diamond");
+  assert.ok(m, "quedarse corto en un garaje no puede descartar la propiedad");
+  assert.match(m.razones.join(" | "), /1 garaje \(pediste 2\)/);
+});
+
+test("un pedido de 3 banos acepta una propiedad de 2, y lo dice", () => {
+  const m = evaluarCandidata(apto({ banos: 2 }), pide({ banos: 3 }), "diamond");
+  assert.ok(m, "quedarse corto en un bano no puede descartar la propiedad");
+  assert.match(m.razones.join(" | "), /2 baños \(pediste 3\)/);
+});
+
+// El castigo deja de ser codigo muerto: quedarse corto entra, pero nunca
+// puede empatar con la que cumple.
+test("la que cumple los garajes puntua mas que la que se queda corta", () => {
+  const cumple = evaluarCandidata(apto({ garaje: 2 }), pide({ garajes: 2 }), "diamond");
+  const corta = evaluarCandidata(apto({ garaje: 1 }), pide({ garajes: 2 }), "diamond");
+  assert.ok(cumple.puntaje > corta.puntaje, `cumple ${cumple.puntaje} debe superar a corta ${corta.puntaje}`);
+});
+
+// Sin dato sigue siendo neutro, no un descarte: el hueco lo declara Sofi en
+// sin_confirmar. Una propiedad sin garaje registrado no puede desaparecer.
+test("una propiedad sin garaje registrado sigue entrando", () => {
+  assert.ok(evaluarCandidata(apto({ garaje: null }), pide({ garajes: 2 }), "diamond"));
+  assert.ok(evaluarCandidata(apto({ garaje: 0 }), pide({ garajes: 2 }), "diamond"));
 });
 
 test("FLEXIBLE: estrato NO es flexible — no es una preferencia de espacio, es la clasificacion del sector", () => {
@@ -301,9 +384,14 @@ test("un dato que el inventario no tiene NO descalifica la propiedad", () => {
   assert.ok(!m.razones.join(" ").includes("m²"), "pero tampoco puede alegar un área que no conoce");
 });
 
-test("un dato que el inventario SÍ tiene y no cumple, descalifica", () => {
+// ACOTADO (Juan, 2026-09-04): "si no tiene si no un parqueadero o no esta
+// registrado si tiene o no parqueadero, envialo con la observacion". El
+// principio sigue vivo, pero ya no vale para baños ni garajes -- esos ahora
+// entran igual, con la aclaracion (ver los tests "BAÑOS Y GARAJES YA NO
+// DESCARTAN" mas abajo). Se saca esa aserción de aca y se deja el test
+// afirmando el principio en area y estrato, donde SÍ sigue valiendo.
+test("un dato que el inventario SÍ tiene y no cumple descalifica — salvo baños y garajes, que ahora entran con aclaración", () => {
   assert.strictEqual(evaluarCandidata(apto({ area: "60 m²" }), pide({ area_min: 90 }), "diamond"), null);
-  assert.strictEqual(evaluarCandidata(apto({ banos: 1 }), pide({ banos: 3 }), "diamond"), null);
   assert.strictEqual(evaluarCandidata(apto({ estrato: 3 }), pide({ estrato: 5 }), "diamond"), null);
 });
 
@@ -379,15 +467,17 @@ test("MARGEN: area hasta 10% por debajo de lo pedido entra, mas abajo se descart
   assert.strictEqual(muyChico, null, "mas alla del margen se sigue rechazando");
 });
 
-test("MARGEN: alcobas, banos, garajes y estrato NO llevan margen — siguen exactos", () => {
+// ACOTADO (Juan, 2026-09-04): "si no tiene si no un parqueadero o no esta
+// registrado si tiene o no parqueadero, envialo con la observacion". Baños y
+// garajes dejaron de ser exactos -- ya entran cortos, con margen de facto
+// (ver los tests "BAÑOS Y GARAJES YA NO DESCARTAN" mas abajo), asi que ya no
+// pertenecen aca. Lo que de verdad sigue exacto: estrato (siempre, no lleva
+// gabela de flexibilidad) y alcobas hacia abajo cuando el pedido NO trae
+// flexible_habitaciones.
+test("MARGEN: estrato, y alcobas hacia abajo sin flexible_habitaciones, NO llevan margen — siguen exactos", () => {
   // Estas si le cambian lo que puede hacer con la propiedad al cliente: no se
   // relajan aunque precio y area si lo hagan.
   assert.strictEqual(evaluarCandidata(apto({ habitaciones: 1 }), pide({ habitaciones: 2 }), "diamond"), null);
-  assert.strictEqual(evaluarCandidata(apto({ banos: 1 }), pide({ banos: 2 }), "diamond"), null);
-  // garaje: 0 no sirve para esta asercion — el codigo lo trata como "sin
-  // dato" (no distingue "confirmado sin garaje" de "no sincronizado"), asi
-  // que no descalifica. Se usa un valor con dato real e insuficiente.
-  assert.strictEqual(evaluarCandidata(apto({ garaje: 1 }), pide({ garajes: 2 }), "diamond"), null);
   assert.strictEqual(evaluarCandidata(apto({ estrato: 4 }), pide({ estrato: 5 }), "diamond"), null);
 });
 
@@ -736,4 +826,32 @@ test("un dato que el inventario no tiene no se castiga -- lo desconocido no desc
     "pedir un area que no tenemos registrada no cambia el puntaje en ninguna direccion"
   );
   assert.ok(!conExigencia.razones.join(" | ").includes("pediste"));
+});
+
+// LA APERTURA HACIA ARRIBA ESTA CONDICIONADA AL PRESUPUESTO (revision final,
+// 2026-09-04). El pedido de Juan fue "si necesita 2 habitaciones y tiene 3 o 4
+// o 5 POR EL MISMO PRECIO O SOBRE EL RANGO QUE DEFINIMOS" — la banda de precio
+// no es un detalle de la frase, es lo que hace segura la apertura.
+//
+// Sin `precio_max` ni `precio_min` el bloque de precio de evaluarCandidata no
+// corre: no queda ni banda ni tope de alcobas, y la propiedad pasa sin NINGUNA
+// compuerta de tamaño. Medido antes del fix: este mismo caso devolvia puntaje
+// 81 con ubicacion exacta, o sea candidata a DM.
+test("sin presupuesto, un pedido de 2 alcobas NO acepta una de 9", () => {
+  const sinPrecio = {
+    operacion: "venta", tipo: "apartamento", zona: "Laureles",
+    precio_min: 0, precio_max: 0, habitaciones: 2,
+  };
+  const mansion = apto({ habitaciones: 9, area: "600 m²", precio: "$2.500.000.000" });
+  assert.strictEqual(
+    evaluarCandidata(mansion, sinPrecio, "diamond"),
+    null,
+    "sin banda de precio, el tope de alcobas es la unica compuerta de tamaño que queda"
+  );
+});
+
+test("CON presupuesto, un pedido de 2 alcobas SI acepta una de 5 (lo que Juan pidio)", () => {
+  const m = evaluarCandidata(apto({ habitaciones: 5 }), pide({ habitaciones: 2 }), "diamond");
+  assert.ok(m, "dentro de la banda de precio, tres alcobas de mas no pueden descartar");
+  assert.match(m.razones.join(" | "), /5 alcobas/);
 });

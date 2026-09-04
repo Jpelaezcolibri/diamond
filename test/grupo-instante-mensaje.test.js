@@ -29,3 +29,18 @@ test("sin timestamp queda null, no una fecha inventada", () => {
   // Falla cerrada: decidirDm no manda nada sin fecha, que es lo correcto.
   assert.match(mensaje, /instanteIso:\s*typeof ev\.tsMs === "number"[\s\S]*?:\s*null/);
 });
+
+// EL IDENTIFICADOR CRUDO DEL AUTOR (revision final, 2026-09-04). autorTelefono
+// es soloDigitos(autorId): unos digitos sueltos que no dicen si vienen de un
+// @lid o de un telefono real -- para un autor que entra por un JID @c.us son
+// literalmente un telefono. Es lo que hacia que
+// group_signals.respuesta_destino_lid guardara numeros bajo un nombre que dice
+// "lid" (ver db/migrations/2026-09-04_dm_destinatario.sql).
+test("el mensaje de grupo lleva el autorId crudo, con su sufijo", () => {
+  assert.match(mensaje, /autorId:\s*ev\.autorId/, "sin el JID entero se pierde el sufijo @lid / @c.us");
+  assert.doesNotMatch(
+    mensaje,
+    /autorId:\s*soloDigitos/,
+    "soloDigitos borra justo el sufijo que distingue un lid de un telefono"
+  );
+});

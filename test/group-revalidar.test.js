@@ -237,3 +237,40 @@ test("apruebaAviso: ni utiles ni dudosas -- no aprueba", () => {
   };
   assert.strictEqual(revalidar.apruebaAviso(veredicto), false);
 });
+
+// LO QUE NO PODEMOS EVALUAR VA A NATALIA (Juan, 2026-09-04): "no quiero que
+// dejemos propiedades por fuera sin saber si hay match, entonces (...) las que
+// tengan esas salvedades enviala a natalia cosas como el numero del piso
+// especifico o unidad cerrada o jardin privado".
+//
+// Ni `properties` ni classify.js tienen piso, orientacion ni unidad cerrada.
+// Sin dato de los dos lados no se puede declarar un hueco honesto, asi que
+// esos pedidos no se responden solos: los mira una persona.
+//
+// LAS ASERCIONES TIENEN QUE DISCRIMINAR (revision final, 2026-09-04). Antes
+// este test buscaba /piso/i y /refs_dudosas/ sueltos, y las dos ya pasaban
+// ANTES del cambio: /piso/i matchea el ejemplo "piso bajo" de la seccion
+// `sin_confirmar`, que es el ruteo OPUESTO (la propiedad se manda igual, con
+// la salvedad). O sea que borrar la instruccion nueva no habria roto nada.
+// Ahora se exige la frase entera de la regla, con su destino.
+test("el prompt le ordena a Sofi mandar a dudosas lo que no se puede evaluar", () => {
+  // Se normalizan los saltos de linea: el prompt esta envuelto a 80 columnas y
+  // las frases que este test exige cruzan renglones. Lo que importa es la
+  // regla, no donde cae el corte.
+  const s = require("../src/groups/revalidar").SISTEMA.replace(/\s+/g, " ");
+  assert.match(s, /ATRIBUTOS QUE NO PODEMOS EVALUAR/, "el bloque de la regla nueva");
+  assert.match(s, /N[UÚ]MERO DE PISO espec[ií]fico/, "no basta con la palabra 'piso': 'piso bajo' es otra cosa");
+  assert.match(s, /UNIDAD CERRADA/);
+  assert.match(s, /JARD[IÍ]N PRIVADO/);
+  assert.match(s, /ORIENTACI[OÓ]N/);
+  // El destino es la mitad de la regla: sin esto, mencionarlos y mandarlos
+  // igual seguiria pasando el test.
+  assert.match(s, /esas refs van en 'refs_dudosas', NUNCA en 'refs_utiles'/);
+});
+
+// El test que estaba aca ("un veredicto con solo dudosas se aprueba (va a la
+// asesora) pero no trae utiles") se borro en la revision final del 2026-09-04:
+// su unica asercion propia era `v.refs_utiles.length === 0` sobre el literal
+// declarado dos lineas antes -- tautologica, no podia fallar -- y el resto ya
+// lo cubre "apruebaAviso: SOLO refs_dudosas (refs_utiles vacio) SI aprueba el
+// aviso", mas arriba en este archivo.

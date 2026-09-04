@@ -112,6 +112,12 @@ function mismaOperacion(propiedad, c) {
 //   3. La zona se comparaba tambien contra `ciudad`: pedir un barrio de
 //      Envigado devolvia el municipio entero.
 //   4. `habitaciones_min` es >=: pedir 3 alcobas traia una de 6.
+//      YA NO ES UN DEFECTO (Juan, 2026-09-04): mientras el pedido traiga
+//      presupuesto, traer una de 6 es conducta deliberada -- "si necesita 2
+//      habitaciones y tiene 3 o 4 o 5 por el mismo precio o sobre el rango que
+//      definimos". Lo que lo vuelve seguro es la banda de precio, no el tope de
+//      alcobas; por eso, sin presupuesto, el tope sigue vigente. Ver la nota
+//      completa en la exigencia de habitaciones, mas abajo.
 //
 // Principio para los datos que faltan: **lo desconocido no descalifica**. Si el
 // inventario no tiene el area cargada no podemos culpar a la propiedad por una
@@ -128,7 +134,14 @@ const PUNTAJE_BASE = 55;
 // $20M casi seguro sean negociables. El pedido explicito fue "capturar la
 // mayor cantidad de ofertas posible" dandole margen al bot en las variables
 // que NO son criticas para el cliente (precio, metros) sin tocar las que si
-// lo son (alcobas, banos, garajes, estrato: estas siguen exactas).
+// lo son (alcobas, banos, garajes, estrato: estas seguian exactas).
+//
+// DE LAS CUATRO "EXACTAS", HOY QUEDAN DOS (Juan, 2026-09-04). Baños y garajes
+// dejaron de descartar: "si no tiene si no un parqueadero (...) envialo con la
+// observacion" -- quedarse corto entra con su castigo y su razon, y Sofi lo
+// declara en `le_falta`. Alcobas se abrieron hacia ARRIBA, y solo cuando el
+// pedido trae presupuesto. Siguen siendo compuertas duras: el estrato, la
+// banda de precio, la zona, y las alcobas hacia abajo.
 //
 // El margen relaja la compuerta, no la borra: mas alla de el, se sigue
 // rechazando igual que antes. Configurable sin redesplegar, mismo patron que
@@ -400,6 +413,9 @@ function evaluarCandidata(p, c, fuente) {
   // como `flexible_habitaciones`). Sin la señal, siguen exigiendo el minimo
   // exacto — de ahi que baños/garajes NO llevaran margen antes de hoy.
   const flexible = Boolean(c.flexible_habitaciones);
+  // La apertura de alcobas hacia arriba (mas abajo) esta CONDICIONADA a esto:
+  // sin banda de precio no hay nada que acote el tamaño de lo que se ofrece.
+  const conPresupuesto = c.precio_max > 0 || c.precio_min > 0;
   const exigencias = [
     // Puntaje distinto para el exacto (t===q) y el "uno de mas/menos" que
     // igual pasa la compuerta: antes valian lo mismo. Caso real (Juan,
@@ -409,7 +425,35 @@ function evaluarCandidata(p, c, fuente) {
     // -por eso la compuerta la deja pasar- pero no tan bien como la exacta.
     {
       pide: c.habitaciones, tiene: p.habitaciones,
-      ok: (t, q) => t >= q - (flexible ? 1 : 0) && t <= q + 1,
+      // SIN TOPE SUPERIOR, PERO SOLO SI EL PEDIDO TRAE PRESUPUESTO (Juan,
+      // 2026-09-04). Antes era `t <= q + 1` siempre, y eso descartaba en
+      // silencio una propiedad de 4 alcobas ante un pedido de 2 aunque calzara
+      // en zona y precio. Medido sobre 664 demandas reales: el tope aplicaba a
+      // 499 (75%).
+      //
+      // La condicion NO es un agregado nuestro, esta en la frase misma del
+      // pedido: "si necesita 2 habitaciones y tiene 3 o 4 o 5 POR EL MISMO
+      // PRECIO O SOBRE EL RANGO QUE DEFINIMOS". Lo que hace segura la apertura
+      // es la banda de precio: mientras haya techo (con su margen) y piso
+      // (BANDA_INFERIOR), una propiedad mucho mas grande no puede colarse
+      // porque su precio la delata y el bloque de precio la corta.
+      //
+      // Cuando el pedido NO trae ni precio_max ni precio_min, ese bloque no
+      // corre: no queda ni banda ni tope, y una casa de 9 alcobas de $2.500M
+      // pasaba con puntaje 81 ante un pedido de 2 alcobas en Laureles (repro
+      // de la revision final, hoy fijado en test/group-match.test.js). Sin
+      // banda, el tope de alcobas es la unica compuerta de tamaño que queda,
+      // asi que se conserva.
+      //
+      // El orden NO cambia: `puntos` sigue dando 10 al exacto y 6 al que no lo
+      // es, que es la decision del 2026-08-20 ("la que calza exacto deberia
+      // tener el puntaje mayor"). Abrir la compuerta solo deja de tirarla a la
+      // basura; no la asciende.
+      //
+      // Hacia ABAJO no se abre: las alcobas definen el producto, un 2 alcobas
+      // no resuelve un pedido de 3. La gabela de una menos sigue siendo
+      // exclusiva de flexible_habitaciones, declarado por el colega.
+      ok: (t, q) => t >= q - (flexible ? 1 : 0) && (conPresupuesto || t <= q + 1),
       texto: (t) => `${t} alcobas`, puntos: (t, q) => (t === q ? 10 : 6),
       castigo: CASTIGO_CORTO.habitaciones,
     },
@@ -420,15 +464,26 @@ function evaluarCandidata(p, c, fuente) {
       ok: (t, q) => t >= q * (1 - MARGEN_AREA),
       texto: (t) => `${t} m²`, puntos: 8, castigo: CASTIGO_CORTO.area,
     },
+    // BAÑOS Y GARAJES YA NO DESCARTAN (Juan, 2026-09-04): "si no tiene si no
+    // un parqueadero (...) envialo con la observacion".
+    //
+    // `ok` solo se evalua cuando `e.tiene > 0` (ver el `continue` del bucle de
+    // abajo), asi que devolver true no significa "cualquier cosa entra":
+    // significa que una propiedad que SI tiene el dato y se queda corta entra
+    // con su castigo y su razon, en vez de desaparecer. Sin dato sigue siendo
+    // neutro y el hueco lo declara Sofi en `sin_confirmar`.
+    //
+    // Esto es lo que desbloquea `le_falta` de revalidar.js: hasta hoy la
+    // propiedad se descartaba aca y Sofi nunca llegaba a verla.
     {
       pide: c.banos, tiene: p.banos,
-      ok: (t, q) => t >= q - (flexible ? 1 : 0),
+      ok: () => true,
       texto: (t) => `${t} baños`, puntos: (t, q) => (t >= q ? 6 : 4),
       castigo: CASTIGO_CORTO.banos,
     },
     {
       pide: c.garajes, tiene: p.garaje,
-      ok: (t, q) => t >= q - (flexible ? 1 : 0),
+      ok: () => true,
       texto: (t) => `${t} garaje${t > 1 ? "s" : ""}`, puntos: (t, q) => (t >= q ? 6 : 4),
       castigo: CASTIGO_CORTO.garajes,
     },
