@@ -209,10 +209,47 @@ CORE. `POST /api/sendText` con `chatId: 269230108872829@lid` (Catherine,
 desde la linea de Natalia) devolvio `ok: true` con wamid
 `3EB0DF3CC0083932561D07` — el mismo formato de los DMs por numero que
 salieron ese dia. WhatsApp acepto el destino @lid. Entrega confirmada por
-Catherine: PENDIENTE de que Juan lo verifique con ella.
+Catherine: nunca se verifico — quedo abierto.
 
-Si se confirma, el bloque 2 cambia de forma: el boton verde de la pagina
-puede mandar el DM desde la linea de Natalia **tambien sin numero**, con un
+**ENTREGA CONFIRMADA (2026-09-04).** Se cerro el pendiente con una prueba
+controlada contra un destinatario del equipo, Juan, en vez de contra
+Catherine. WAHA 2026.8.2, motor NOWEB, tier CORE.
+
+Montaje: Juan creo un grupo nuevo (`PRUEBA LID`,
+`120363409014849869@g.us`) con solo el y la linea del radar. Un grupo sin
+registrar en `whatsapp_groups` no entra al pipeline, asi que la prueba no
+disparo nada del radar. Su @lid salio de
+`GET /api/RADA-NATALIA/groups/<jid>/participants`.
+
+Envio por el camino REAL de produccion —
+`POST /api/grupos/waha/prueba-lid`, que llama a `waha.enviarDm` con la
+opcion `{ lid }`, no un curl suelto contra WAHA. Respuesta `ok: true`,
+wamid `3EB0ED97D95C5CD37801CC`, destino `184564139970806@lid`.
+**Juan confirmo que el mensaje llego a su WhatsApp.**
+
+El DM de control por numero (`@c.us`) se descarto por innecesario: que
+llegara el @lid ya prueba las dos cosas que el control iba a separar (que
+la linea entrega y que el destino @lid no se descarta en silencio). Un
+mensaje menos desde un cliente no oficial.
+
+**Alcance exacto de lo probado, para no estirarlo:** lo verificado es
+*@lid + grupo compartido con la linea → entrega*. Juan comparte grupo con
+la linea, igual que un colega del gremio — o sea que la condicion de la
+prueba SI reproduce el caso de produccion. Lo que NO se probo es un @lid
+sin grupo en comun, que es justamente la situacion de Catherine (ver
+"Verdad tecnica 2" abajo) y la explicacion mas probable de por que aquel
+envio del 03-09 nunca se pudo confirmar.
+
+Hallazgo lateral, y es el que mas pesa: la lista de participantes devolvio
+a Juan **sin telefono** —
+`{"id":"184564139970806@lid","username":"verticestudioweb"}` — mientras
+que la linea si expone el suyo. Una cuenta con direccionamiento @lid
+simplemente no publica su numero al grupo. Eso es el cuello del 7% de
+telefonos resueltos medido el 2026-09-02, visto de frente: para esos
+colegas el @lid no es un atajo comodo, es la UNICA via de escritura.
+
+Con esto el bloque 2 cambia de forma: el boton verde de la pagina puede
+mandar el DM desde la linea de Natalia **tambien sin numero**, con un
 toque y sin copiar/pegar, con los mismos topes de politica.js (2 por colega
 por dia, tope de la linea). El camino "copiar y abrir WhatsApp" queda como
 respaldo si WAHA esta caida.
