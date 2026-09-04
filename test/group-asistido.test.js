@@ -128,6 +128,10 @@ function instalar() {
         enviosDm.push({ sesion, telefono, texto });
         return envioDmResultado;
       },
+      // Por defecto null: "no se pudo leer" es el caso que no frena (ver la
+      // nota deliberada en politica.js#decidirDm) y es el que no debe romper
+      // ningun test existente de esta suite.
+      cuotaDeLinea: async () => null,
     },
   };
   require.cache[RUTA("channels/whatsapp.js")] = {

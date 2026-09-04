@@ -247,3 +247,30 @@ test("la traza de decidirDm tambien termina en NO: cuando se calla", () => {
   assert.strictEqual(d.enviarDm, false);
   assert.ok(d.traza.at(-1).startsWith("NO:"));
 });
+
+// CORTACIRCUITOS POR LA CUOTA DE WHATSAPP (2026-09-04). Es la unica adicion al
+// pedido literal de Juan, y la aprobo: sin esto, abrir la manguera agota los
+// 300 mensajes del ciclo cerca del dia 18 y el radar queda mudo el resto del
+// mes. FRENA, NO DESCARTA: el pedido sigue llegando a Natalia.
+const CUOTA_OK = { usados: 100, total: 300, fraccion: 100 / 300 };
+const CUOTA_ALTA = { usados: 240, total: 300, fraccion: 0.8 };
+
+test("con la cuota de WhatsApp al 80% no sale ningun DM", () => {
+  const d = politica.decidirDm(escenarioDm({ cuotaLinea: CUOTA_ALTA }));
+  assert.strictEqual(d.enviarDm, false);
+  assert.strictEqual(d.motivo, "cuota_whatsapp_alta");
+});
+
+test("con cuota holgada el DM sale y queda registrada en la traza", () => {
+  const d = politica.decidirDm(escenarioDm({ cuotaLinea: CUOTA_OK }));
+  assert.strictEqual(d.enviarDm, true);
+  assert.ok(d.traza.some((t) => t.includes("cuota_wa:100/300")), d.traza.join(","));
+});
+
+// DECISION DELIBERADA, distinta al resto del archivo: no poder leer la cuota
+// NO frena. El principio "ante la duda, no" se aplica a los datos que son la
+// unica proteccion; aca queda `topeDiarioLinea` cubriendo el mismo eje. Callar
+// el radar entero por un hipo de WAHA es peor que el riesgo que evita.
+test("no poder leer la cuota no frena el DM: queda el tope diario de la linea", () => {
+  assert.strictEqual(politica.decidirDm(escenarioDm({ cuotaLinea: null })).enviarDm, true);
+});

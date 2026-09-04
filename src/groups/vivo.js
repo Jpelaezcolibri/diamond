@@ -420,12 +420,22 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
       ])
     : [null, null];
 
+  // Best-effort: si WAHA no contesta, `null` y el tope diario propio sigue
+  // cubriendo el eje de volumen (ver la nota en politica.js#decidirDm).
+  const cuotaLinea = sesion
+    ? await waha.cuotaDeLinea(sesion).catch((e) => {
+        console.warn("[radar] No se pudo leer la cuota de WhatsApp de la linea:", e.message);
+        return null;
+      })
+    : null;
+
   const decisionDm = politica.decidirDm({
     telefono: telefonoColega,
     fechaMensajeIso: mensaje.instanteIso,
     ahora: ahora || new Date(),
     dmsHoyColega: dmsColegaHoy,
     dmsHoyLinea: dmsLineaHoy,
+    cuotaLinea,
   });
 
   // Auditable igual que el resto de las decisiones del radar (mismo llamado

@@ -178,6 +178,10 @@ const LIMITES_DM_DEFAULT = {
   // (un bucle, una clasificacion desbocada) y hay que frenar antes de gastar
   // la reputacion de la linea entera, no solo la de un colega.
   topeDiarioLinea: Number(process.env.RADAR_DM_TOPE_DIA || 150),
+  // Fraccion de la cuota de WhatsApp a partir de la cual se dejan de mandar
+  // DMs. 0.8 de 300 = 240: quedan 60 de colchon para lo que de verdad no
+  // puede esperar. Se sube o baja con RADAR_DM_CUOTA_MAX sin redesplegar.
+  fraccionCuotaMaxima: Number(process.env.RADAR_DM_CUOTA_MAX || 0.8),
 };
 
 /**
@@ -194,6 +198,10 @@ const LIMITES_DM_DEFAULT = {
  *                         2026-09-04) — solo queda en la traza, para medir.
  * @param dmsHoyLinea       cuantos DMs mando la linea HOY en total, o null si
  *                         no se pudo contar.
+ * @param cuotaLinea        cuota de mensajes de WhatsApp de la linea:
+ *                         { usados, total, fraccion } (waha.cuotaDeLinea), o
+ *                         null si no se pudo leer. `null` NO frena (ver la
+ *                         nota mas abajo).
  *
  * Devuelve { enviarDm, motivo, traza }. Ante cualquier duda (un dato que no
  * se pudo verificar) el resultado es NO enviar — el mismo principio que
@@ -205,6 +213,7 @@ function decidirDm({
   ahora = new Date(),
   dmsHoyColega = null,
   dmsHoyLinea = null,
+  cuotaLinea = null,
   limites = LIMITES_DM_DEFAULT,
 } = {}) {
   const traza = [];
@@ -227,6 +236,14 @@ function decidirDm({
   if (dmsHoyLinea === null || dmsHoyLinea === undefined) return no("limite_linea_no_verificable");
   if (dmsHoyLinea >= limites.topeDiarioLinea) return no("limite_linea_alcanzado");
   traza.push(`dms_linea_hoy:${dmsHoyLinea}/${limites.topeDiarioLinea}`);
+
+  // La cuota de WhatsApp va DESPUES del tope propio a proposito: si los dos
+  // frenan, el motivo que queda escrito es el nuestro, que es el que podemos
+  // cambiar. `null` = no se pudo leer, y eso NO frena (ver el test).
+  if (cuotaLinea && cuotaLinea.fraccion >= limites.fraccionCuotaMaxima) {
+    return no("cuota_whatsapp_alta");
+  }
+  if (cuotaLinea) traza.push(`cuota_wa:${cuotaLinea.usados}/${cuotaLinea.total}`);
 
   return { enviarDm: true, motivo: "ok", traza };
 }
