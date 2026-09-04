@@ -238,6 +238,14 @@ async function procesar(org, ev, grupo, sesion) {
     grupo: grupo.nombre || ev.chatId,
     groupId: grupo.id,
     autor: ev.autorNombre,
+    // El identificador del autor TAL COMO LLEGO: `<digitos>@lid` cuando
+    // WhatsApp oculta el numero, `<digitos>@c.us` cuando lo expone. El sufijo
+    // es el unico dato que distingue los dos casos, y `soloDigitos` lo borra
+    // -- por eso `autorTelefono` (abajo) no puede decir si es un lid o un
+    // telefono, pese al nombre. Se conserva crudo para la auditoria del DM
+    // (revision final, 2026-09-04): sin el, group_signals.respuesta_destino_lid
+    // guardaba numeros de telefono bajo un nombre que dice "lid".
+    autorId: ev.autorId || null,
     autorTelefono: soloDigitos(ev.autorId),
     autorTelefonoVisible: ev.autorTelefonoVisible || null,
     texto: ev.texto,

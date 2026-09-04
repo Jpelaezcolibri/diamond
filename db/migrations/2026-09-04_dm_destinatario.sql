@@ -37,5 +37,16 @@ alter table group_signals
 comment on column group_signals.respuesta_destino_telefono is
   'Telefono al que salio el DM. Auditoria de una respuesta que el colega inicio, NO una lista de contactos para prospectar.';
 
+-- OJO CON EL NOMBRE (corregido en la revision final, 2026-09-04). La columna
+-- NO guarda "el lid por el que se enruto el DM": hoy ninguna via de envio pasa
+-- la opcion `lid` a waha.enviarDm, asi que el chatId real siempre termina en
+-- `<telefono>@c.us`. Lo que se guarda es el identificador del AUTOR en el
+-- grupo, que segun como WhatsApp lo presente puede ser un @lid o un telefono.
+-- El DM automatico lo guarda crudo (con su sufijo, que es lo que distingue los
+-- dos casos); los dos caminos manuales solo tienen los digitos, porque
+-- group_signals.autor_telefono ya guardo el identificador sin sufijo.
+--
+-- Un comentario que miente sobre una columna de auditoria es peor que no
+-- tenerlo: quien la lea manana tiene que poder confiar en lo que dice.
 comment on column group_signals.respuesta_destino_lid is
-  'El @lid con el que se enruto el DM. Para cuentas con direccionamiento @lid es la unica via: WhatsApp no expone su telefono.';
+  'Identificador del autor en el grupo al que se le respondio: un @lid o un telefono, segun como lo presente WhatsApp. NO es necesariamente un lid ni la via de enrutamiento del DM.';

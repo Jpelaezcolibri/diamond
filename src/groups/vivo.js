@@ -473,14 +473,20 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
         // que es el UNICO que llega hasta aca, 'auto' solo puede significar
         // "el sistema lo mando solo por DM", nunca "lo publico en el grupo".
         const refsDm = utiles.map((m) => m.ref).filter(Boolean);
-        // A QUIEN salio el DM (Juan, 2026-09-04). mensaje.autorTelefono NO es
-        // un telefono pese al nombre -- es el @lid crudo (soloDigitos(ev.autorId)
-        // en whatsapp-group.js) -- por eso va como destinoLid, y telefonoColega
-        // (el numero real ya resuelto por el directorio) como destinoTelefono.
+        // A QUIEN salio el DM (Juan, 2026-09-04). Dos identificadores, no uno:
+        // `telefonoColega` es el numero real que el directorio resolvio y por
+        // el que salio el mensaje; `mensaje.autorId` es como WhatsApp presento
+        // al autor en el grupo.
+        //
+        // Va el autorId CRUDO y no `mensaje.autorTelefono` (revision final,
+        // 2026-09-04): autorTelefono es soloDigitos(autorId), y esos digitos
+        // sueltos son indistinguibles entre un @lid y un telefono real -- para
+        // un autor que entra por un JID @c.us son literalmente un telefono. El
+        // sufijo del JID es lo unico que lo dice, asi que se guarda entero.
         await groupSignals.marcarRespondida(org.id, signal.id, {
           texto: textoDm, wamid: envioDm.wamid, modo: "auto", refs: refsDm,
           destinoTelefono: telefonoColega || null,
-          destinoLid: mensaje.autorTelefono || null,
+          destinoLid: mensaje.autorId || mensaje.autorTelefono || null,
         });
 
         // Aviso post-DM (Juan, 2026-09-01): "no tiene nada que hacer" solo es
@@ -893,10 +899,11 @@ async function aprobarManual(org, signalId) {
   if (!envio || !envio.ok) return { resultado: "error_envio", error: envio && envio.error };
 
   const refs = publicables.map((m) => m.ref).filter(Boolean);
-  // A QUIEN salio (Juan, 2026-09-04). Mismo patron que asistir/
-  // responderPorDmManual en este archivo: signal.autor_telefono es el @lid
-  // crudo (no un telefono pese al nombre), y telefonoColega (resuelto arriba
-  // por el directorio) es el numero real.
+  // A QUIEN salio (Juan, 2026-09-04). Mismo patron que asistir /
+  // responderPorDmManual en este archivo. Aca NO hay identificador crudo: la
+  // columna group_signals.autor_telefono guarda soloDigitos(autorId), o sea
+  // que el sufijo (@lid o @c.us) ya se perdio al dar de alta la señal. Se
+  // guarda lo que hay, y por eso la migracion no promete que sea un lid.
   await groupSignals.marcarRespondida(org.id, signal.id, {
     texto, wamid: envio.wamid, modo: "auto", refs,
     destinoTelefono: telefonoColega || null,
@@ -1038,8 +1045,9 @@ async function responderPorDmManual(org, signalId, { sesion = null, refs = null 
   // enviado, que puede ser un subconjunto de lo elegido si algo no paso la
   // compuerta (ver `descartados` mas abajo).
   const refsEnviadas = publicables.map((m) => m.ref).filter(Boolean);
-  // A QUIEN salio (Juan, 2026-09-04). signal.autor_telefono, igual que
-  // mensaje.autorTelefono en asistir, es el @lid -- no el telefono real.
+  // A QUIEN salio (Juan, 2026-09-04). signal.autor_telefono son los digitos del
+  // identificador del autor sin su sufijo (ver la nota en aprobarManual): puede
+  // ser un lid o un telefono y desde aca no hay como distinguirlos.
   await groupSignals.marcarRespondida(org.id, signal.id, {
     texto, wamid: envioDm.wamid, modo: "auto", refs: refsEnviadas,
     destinoTelefono: telefonoColega || null,

@@ -173,7 +173,10 @@ function mensaje() {
     // aprendio a usar autor_telefono como ultimo intento cuando el directorio
     // no resuelve (ver ese archivo), y un default con forma de telefono se
     // colaba como si fuera un numero real resuelto en vez de un LID crudo.
-    autor: "Patricia Gomez", autorTelefono: "141746805670125",
+    // autorId es el JID CRUDO (con sufijo) y autorTelefono sus digitos, igual
+    // que en whatsapp-group.js#procesar. El sufijo importa: es lo unico que
+    // distingue un @lid de un telefono real (revision final, 2026-09-04).
+    autor: "Patricia Gomez", autorId: "141746805670125@lid", autorTelefono: "141746805670125",
     instanteIso: new Date().toISOString(), esSistema: false, esMultimedia: false,
   };
 }
@@ -494,13 +497,15 @@ test("con telefono, pedido reciente, cupo libre y sesion, se manda el DM y NO se
   assert.strictEqual(enviadosPorSofi.length, 0, "la asesora no recibe nada: no tiene nada que hacer");
   assert.strictEqual(avisosMarcados.length, 0, "marcarAvisoEnviado es del camino de la asesora, no de este");
   // destinoTelefono/destinoLid: registro de a quien salio el DM, para poder
-  // contactarlo a futuro (Juan, 2026-09-04). autorTelefono de mensaje() es el
-  // @lid crudo (destinoLid); telefonoColegaResuelto es el numero real
-  // (destinoTelefono).
+  // contactarlo a futuro (Juan, 2026-09-04). destinoTelefono es el numero real
+  // que resolvio el directorio; destinoLid es el identificador del autor TAL
+  // COMO LLEGO, con su sufijo -- sin el sufijo, "141746805670125" a secas no
+  // se distingue de un telefono y la columna termina mintiendo (revision
+  // final, 2026-09-04).
   assert.deepStrictEqual(marcadasRespondidas, [
     {
       id: "sig-1", texto: enviosDm[0].texto, wamid: "wm-dm-1", modo: "auto", refs: ["9780079"],
-      destinoTelefono: "573001234567", destinoLid: "141746805670125",
+      destinoTelefono: "573001234567", destinoLid: "141746805670125@lid",
     },
   ]);
 });
