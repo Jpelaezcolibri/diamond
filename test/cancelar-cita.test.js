@@ -19,6 +19,8 @@ let enviosWaha = [];
 let alertas = [];
 let oficialFalla = false;
 let wahaFalla = false;
+let horaOcupada = false;
+let disponibilidades = [];
 
 // El doble de `leads` esconde por construccion si la funcion real existe y con
 // que firma — de ahi que test/leads-find-by-id.test.js cargue el modulo de
@@ -39,6 +41,7 @@ function instalar(citaInicial, { telefono = "573147815403", nombre = "Miguel" } 
   enviosOficial = [];
   enviosWaha = [];
   alertas = [];
+  disponibilidades = [];
 
   require.cache[RUTA("data/leads.js")] = {
     exports: {
@@ -65,6 +68,17 @@ function instalar(citaInicial, { telefono = "573147815403", nombre = "Miguel" } 
       },
     },
   };
+  // La hora nueva pasa por el MISMO anti-choque que una cita puesta a mano
+  // (src/data/appointments.js). El doble devuelve disponible por defecto y
+  // solo bloquea cuando el test lo pide con `horaOcupada`.
+  require.cache[RUTA("data/appointments.js")] = {
+    exports: {
+      checkAvailability: async (orgId, advisor, fechaHoraIso, opts) => {
+        disponibilidades.push({ orgId, advisor, fechaHoraIso, opts });
+        return horaOcupada ? { disponible: false, motivo: "choque" } : { disponible: true };
+      },
+    },
+  };
   require.cache[RUTA("lib/mensaje-asesor.js")] = {
     exports: { enviarYRegistrar: async (org, to, texto) => { alertas.push({ to, texto }); return { ok: true }; } },
   };
@@ -73,10 +87,20 @@ function instalar(citaInicial, { telefono = "573147815403", nombre = "Miguel" } 
   return require("../src/groups/cancelar-cita");
 }
 
-beforeEach(() => { oficialFalla = false; wahaFalla = false; });
+beforeEach(() => { oficialFalla = false; wahaFalla = false; horaOcupada = false; });
 
 const ORG = { id: "org-1", name: "Diamond" };
-const CITA = { fecha_hora: "2026-09-10T15:00:00-05:00", tipo: "visita", estado: "confirmada", ref: "9702941" };
+// `advisor_id` va en la ficha porque asi la escribe agendar_cita
+// (src/agent/tools.js le estampa el uuid del auth.users del asesor): es lo que
+// permite atribuir la cita a UNA agenda y, al reprogramar, preguntarle al
+// anti-choque por esa agenda y no por el aire.
+const CITA = {
+  fecha_hora: "2026-09-10T15:00:00-05:00",
+  tipo: "visita",
+  estado: "confirmada",
+  ref: "9702941",
+  advisor_id: "adv-uuid-1",
+};
 
 test("cancela, deja el estado en cancelada y avisa por la linea oficial", async () => {
   const mod = instalar(CITA);
@@ -186,4 +210,98 @@ test("con un lid en el phone, se saltea la linea oficial y va directo a la de Na
   assert.strictEqual(enviosOficial.length, 0, "no tiene sentido llamar a la linea oficial con un lid");
   assert.strictEqual(r.aviso, "linea_natalia");
   assert.strictEqual(enviosWaha.length, 1);
+});
+
+// ---------------------------------------------------------------------------
+// REPROGRAMAR (Juan, 2026-09-04). `leads.cita` es UN objeto, no una lista: no
+// existe "la vieja" y "la nueva". Se mueve la hora en el mismo objeto y se
+// guarda de donde venia en `reprogramada_desde`.
+// ---------------------------------------------------------------------------
+
+test("reprogramar mueve la hora, deja la anterior y avisa al colega", async () => {
+  const mod = instalar(CITA);
+  const r = await mod.reprogramar(ORG, "lead-1", { nuevaFechaHora: "2026-09-11T10:00:00-05:00" });
+  assert.strictEqual(r.resultado, "reprogramada");
+  assert.strictEqual(leadGuardado.cita.estado, "reprogramada");
+  assert.strictEqual(leadGuardado.cita.fecha_hora, "2026-09-11T10:00:00-05:00");
+  assert.strictEqual(leadGuardado.cita.reprogramada_desde, CITA.fecha_hora);
+  assert.strictEqual(enviosOficial.length, 1);
+});
+
+// La hora nueva pasa por la MISMA validacion que una cita puesta a mano: si el
+// asesor ya tiene algo ahi, no se mueve nada y se lo dice a quien la mueve.
+test("una hora ocupada no mueve la cita", async () => {
+  horaOcupada = true;
+  const mod = instalar(CITA);
+  const r = await mod.reprogramar(ORG, "lead-1", { nuevaFechaHora: "2026-09-11T10:00:00-05:00" });
+  assert.strictEqual(r.resultado, "hora_ocupada");
+  assert.strictEqual(leadGuardado, null, "no se toca el registro");
+  assert.strictEqual(enviosOficial.length, 0, "y no se le avisa nada al colega");
+});
+
+test("una fecha invalida se rechaza antes de tocar nada", async () => {
+  const mod = instalar(CITA);
+  const r = await mod.reprogramar(ORG, "lead-1", { nuevaFechaHora: "mañana por la tarde" });
+  assert.strictEqual(r.resultado, "fecha_invalida");
+  assert.strictEqual(leadGuardado, null);
+  assert.strictEqual(disponibilidades.length, 0, "ni se le pregunta a la agenda por una fecha que no existe");
+});
+
+// El anti-choque tiene que mirar la agenda DE ESE asesor y excluir al propio
+// lead: una cita no choca consigo misma (misma regla que hayChoque).
+test("le pregunta a la agenda del asesor de la cita, excluyendo al propio lead", async () => {
+  const mod = instalar(CITA);
+  await mod.reprogramar(ORG, "lead-1", { nuevaFechaHora: "2026-09-11T10:00:00-05:00" });
+  assert.strictEqual(disponibilidades.length, 1);
+  assert.strictEqual(disponibilidades[0].orgId, "org-1");
+  assert.strictEqual(disponibilidades[0].advisor.auth_user_id, "adv-uuid-1");
+  assert.strictEqual(disponibilidades[0].fechaHoraIso, "2026-09-11T10:00:00-05:00");
+  assert.strictEqual(disponibilidades[0].opts.excludeLeadId, "lead-1");
+});
+
+test("reprogramar busca el lead con (orgId, leadId)", async () => {
+  const mod = instalar(CITA);
+  await mod.reprogramar(ORG, "lead-1", { nuevaFechaHora: "2026-09-11T10:00:00-05:00" });
+  assert.deepStrictEqual(busquedas, [{ orgId: "org-1", id: "lead-1" }]);
+});
+
+// Mismo camino de aviso que cancelar: con un lid, la linea oficial (Meta) no
+// entiende ese identificador, asi que se saltea y sale por WAHA con { lid }.
+test("reprogramar avisa por la misma via que cancelar: con lid, directo a WAHA", async () => {
+  const mod = instalar(CITA, { telefono: "126493275858472" });
+  const r = await mod.reprogramar(ORG, "lead-1", { nuevaFechaHora: "2026-09-11T10:00:00-05:00", sesion: "RADA-NATALIA" });
+  assert.strictEqual(r.aviso, "linea_natalia");
+  assert.strictEqual(enviosOficial.length, 0);
+  assert.strictEqual(enviosWaha.length, 1);
+  assert.strictEqual(enviosWaha[0].lid, "126493275858472");
+  assert.ok(!enviosWaha[0].telefono);
+});
+
+// Todo aviso es best-effort: la cita YA quedo movida, un canal caido no puede
+// devolverla a la hora vieja ni tumbar la operacion.
+test("si nadie recibe el aviso, la cita queda movida igual y se alerta al equipo", async () => {
+  oficialFalla = true;
+  wahaFalla = true;
+  const mod = instalar(CITA);
+  const r = await mod.reprogramar(ORG, "lead-1", { nuevaFechaHora: "2026-09-11T10:00:00-05:00", sesion: "RADA-NATALIA" });
+  assert.strictEqual(r.resultado, "reprogramada");
+  assert.strictEqual(r.aviso, "no_se_pudo");
+  assert.strictEqual(leadGuardado.cita.fecha_hora, "2026-09-11T10:00:00-05:00");
+  assert.strictEqual(alertas.length, 1);
+  assert.match(alertas[0].texto, /reprogram/i);
+});
+
+test("el mensaje de reprogramacion no nombra a Diamond ni lleva link", async () => {
+  const mod = instalar(CITA);
+  await mod.reprogramar(ORG, "lead-1", { nuevaFechaHora: "2026-09-11T10:00:00-05:00", motivo: "el asesor tuvo un imprevisto" });
+  const texto = enviosOficial[0].texto;
+  assert.ok(!/diamond/i.test(texto), texto);
+  assert.ok(!/https?:\/\//i.test(texto), texto);
+});
+
+test("sin cita no hay nada que reprogramar", async () => {
+  const mod = instalar(null);
+  const r = await mod.reprogramar(ORG, "lead-1", { nuevaFechaHora: "2026-09-11T10:00:00-05:00" });
+  assert.strictEqual(r.resultado, "no_encontrada");
+  assert.strictEqual(leadGuardado, null);
 });
