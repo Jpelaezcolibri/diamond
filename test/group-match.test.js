@@ -302,16 +302,56 @@ test("FLEXIBLE: sigue sin aceptar DOS de menos, ni con la señal activa", () => 
 });
 
 test("FLEXIBLE: baños y garajes reciben el MISMO margen que alcobas — antes eran estrictos", () => {
+  // REVERTIDO (Juan, 2026-09-04): "si no tiene si no un parqueadero o no esta
+  // registrado si tiene o no parqueadero, envialo con la observacion". Las dos
+  // aserciones de abajo afirmaban la regla vieja (sin flexible_habitaciones,
+  // quedarse corto en baños/garajes descartaba) -- esa regla es justo la que
+  // esta tarea elimina, asi que ahora SI entran, sin necesidad de la señal.
+  //
   // garaje:0/banos:0 en el inventario se leen como "sin dato" (no
   // descalifica, pero tampoco entra en esta prueba) — se usa 1 real contra
   // un pedido de 2, que es justo el caso "una de menos" que se esta probando.
-  assert.strictEqual(evaluarCandidata(apto({ banos: 1 }), pide({ banos: 2 }), "diamond"), null, "sin la señal, sigue exigiendo exacto");
-  assert.strictEqual(evaluarCandidata(apto({ garaje: 1 }), pide({ garajes: 2 }), "diamond"), null, "lo mismo para garajes");
+  assert.ok(evaluarCandidata(apto({ banos: 1 }), pide({ banos: 2 }), "diamond"), "sin la señal, un baño menos ya entra igual");
+  assert.ok(evaluarCandidata(apto({ garaje: 1 }), pide({ garajes: 2 }), "diamond"), "lo mismo para garajes");
 
   const conBanos = evaluarCandidata(apto({ banos: 1 }), pide({ banos: 2, flexible_habitaciones: true }), "diamond");
   const conGarajes = evaluarCandidata(apto({ garaje: 1 }), pide({ garajes: 2, flexible_habitaciones: true }), "diamond");
   assert.ok(conBanos, "con la señal, un baño menos tiene que servir");
   assert.ok(conGarajes, "con la señal, un garaje menos tiene que servir");
+});
+
+// EL RESCATE DEL 24-AGO, DESBLOQUEADO (Juan, 2026-09-04). revalidar.js tiene
+// `le_falta` desde el caso Edwin Ramirez -- "al menos el apartamento de el
+// portal si se podia enviar con la aclaracion de que solo le falta un
+// parqueadero de todo el pedido". Pero match.js descartaba la propiedad ANTES
+// de que Sofi la viera: `ok: t >= q` solo aflojaba con flexible_habitaciones,
+// true en 49 de 664 demandas (7,4%). Como `corto` exige que ok() haya pasado,
+// CASTIGO_CORTO.garajes era codigo inalcanzable.
+test("un pedido de 2 garajes acepta una propiedad de 1, y lo dice", () => {
+  const m = evaluarCandidata(apto({ garaje: 1 }), pide({ garajes: 2 }), "diamond");
+  assert.ok(m, "quedarse corto en un garaje no puede descartar la propiedad");
+  assert.match(m.razones.join(" | "), /1 garaje \(pediste 2\)/);
+});
+
+test("un pedido de 3 banos acepta una propiedad de 2, y lo dice", () => {
+  const m = evaluarCandidata(apto({ banos: 2 }), pide({ banos: 3 }), "diamond");
+  assert.ok(m, "quedarse corto en un bano no puede descartar la propiedad");
+  assert.match(m.razones.join(" | "), /2 baños \(pediste 3\)/);
+});
+
+// El castigo deja de ser codigo muerto: quedarse corto entra, pero nunca
+// puede empatar con la que cumple.
+test("la que cumple los garajes puntua mas que la que se queda corta", () => {
+  const cumple = evaluarCandidata(apto({ garaje: 2 }), pide({ garajes: 2 }), "diamond");
+  const corta = evaluarCandidata(apto({ garaje: 1 }), pide({ garajes: 2 }), "diamond");
+  assert.ok(cumple.puntaje > corta.puntaje, `cumple ${cumple.puntaje} debe superar a corta ${corta.puntaje}`);
+});
+
+// Sin dato sigue siendo neutro, no un descarte: el hueco lo declara Sofi en
+// sin_confirmar. Una propiedad sin garaje registrado no puede desaparecer.
+test("una propiedad sin garaje registrado sigue entrando", () => {
+  assert.ok(evaluarCandidata(apto({ garaje: null }), pide({ garajes: 2 }), "diamond"));
+  assert.ok(evaluarCandidata(apto({ garaje: 0 }), pide({ garajes: 2 }), "diamond"));
 });
 
 test("FLEXIBLE: estrato NO es flexible — no es una preferencia de espacio, es la clasificacion del sector", () => {

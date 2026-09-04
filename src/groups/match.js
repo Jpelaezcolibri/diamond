@@ -433,15 +433,26 @@ function evaluarCandidata(p, c, fuente) {
       ok: (t, q) => t >= q * (1 - MARGEN_AREA),
       texto: (t) => `${t} m²`, puntos: 8, castigo: CASTIGO_CORTO.area,
     },
+    // BAÑOS Y GARAJES YA NO DESCARTAN (Juan, 2026-09-04): "si no tiene si no
+    // un parqueadero (...) envialo con la observacion".
+    //
+    // `ok` solo se evalua cuando `e.tiene > 0` (ver el `continue` del bucle de
+    // abajo), asi que devolver true no significa "cualquier cosa entra":
+    // significa que una propiedad que SI tiene el dato y se queda corta entra
+    // con su castigo y su razon, en vez de desaparecer. Sin dato sigue siendo
+    // neutro y el hueco lo declara Sofi en `sin_confirmar`.
+    //
+    // Esto es lo que desbloquea `le_falta` de revalidar.js: hasta hoy la
+    // propiedad se descartaba aca y Sofi nunca llegaba a verla.
     {
       pide: c.banos, tiene: p.banos,
-      ok: (t, q) => t >= q - (flexible ? 1 : 0),
+      ok: () => true,
       texto: (t) => `${t} baños`, puntos: (t, q) => (t >= q ? 6 : 4),
       castigo: CASTIGO_CORTO.banos,
     },
     {
       pide: c.garajes, tiene: p.garaje,
-      ok: (t, q) => t >= q - (flexible ? 1 : 0),
+      ok: () => true,
       texto: (t) => `${t} garaje${t > 1 ? "s" : ""}`, puntos: (t, q) => (t >= q ? 6 : 4),
       castigo: CASTIGO_CORTO.garajes,
     },
