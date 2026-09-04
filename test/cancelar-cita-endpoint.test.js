@@ -100,6 +100,28 @@ test("una cita que no existe responde 404", async (t) => {
   assert.strictEqual(res.codigo, 404);
 });
 
+// HALLAZGO 4 (review 2026-09-04): reprogramar no tenia la guarda simetrica a
+// la de cancelar y revivia una cita cancelada. Ahora el modulo devuelve
+// `esta_cancelada`; la ruta tiene que traducirlo a un 409 con un mensaje que
+// se entienda, no dejarlo caer al 200 generico como si se hubiera movido.
+test("reprogramar una cita cancelada responde 409 y no dice que se movio", async (t) => {
+  t.mock.method(organizations, "getDefault", async () => ORG);
+  t.mock.method(whatsappGroups, "listSessions", async () => []);
+  t.mock.method(cancelarCita, "reprogramar", async () => ({
+    ok: false, resultado: "esta_cancelada", aviso: null,
+  }));
+
+  const res = respuestaFalsa();
+  await rutaDe("/api/citas/reprogramar")(
+    { body: { leadId: "lead-1", nuevaFechaHora: "2026-09-11T10:00:00-05:00" } },
+    res
+  );
+
+  assert.strictEqual(res.codigo, 409);
+  assert.match(res.cuerpo.error, /cancelada/i);
+  assert.ok(!res.cuerpo.ok, "no puede parecer un exito");
+});
+
 test("exige la x-api-key como el resto de /api", async (t) => {
   config.botApiKey = "clave-de-prueba";
   t.mock.method(organizations, "getDefault", async () => ORG);

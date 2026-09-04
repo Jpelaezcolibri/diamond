@@ -21,6 +21,12 @@ let oficialFalla = false;
 let wahaFalla = false;
 let horaOcupada = false;
 let disponibilidades = [];
+let advisorBuscados = [];
+// La fila REAL de `advisors` que devuelve el doble. Katherine Uribe existe asi
+// en produccion (db/migrations/2026-08-14_venta_catherine.sql): trabaja los 7
+// dias, sabado incluido. Es justo el asesor con el que se rompe el hallazgo 2.
+let asesorFila = null;
+let advisorRevienta = false;
 
 // El doble de `leads` esconde por construccion si la funcion real existe y con
 // que firma — de ahi que test/leads-find-by-id.test.js cargue el modulo de
@@ -42,6 +48,21 @@ function instalar(citaInicial, { telefono = "573147815403", nombre = "Miguel" } 
   enviosWaha = [];
   alertas = [];
   disponibilidades = [];
+  advisorBuscados = [];
+
+  // HALLAZGO 2 (review 2026-09-04): reprogramar le pasaba a checkAvailability
+  // un asesor SINTETICO ({ auth_user_id }), sin `horario`. Sin esa columna
+  // dentroDeHorario cae al DEFAULT_HORARIO (L-V 8-18) y le niega el sabado a
+  // quien si trabaja el sabado. Hay que resolver la fila de verdad.
+  require.cache[RUTA("data/advisors.js")] = {
+    exports: {
+      findByAuthUserId: async (orgId, authUserId) => {
+        advisorBuscados.push({ orgId, authUserId });
+        if (advisorRevienta) throw new Error("la base de advisors no responde");
+        return asesorFila;
+      },
+    },
+  };
 
   require.cache[RUTA("data/leads.js")] = {
     exports: {
@@ -87,7 +108,22 @@ function instalar(citaInicial, { telefono = "573147815403", nombre = "Miguel" } 
   return require("../src/groups/cancelar-cita");
 }
 
-beforeEach(() => { oficialFalla = false; wahaFalla = false; horaOcupada = false; });
+const HORARIO_KATHERINE = { dias: [0, 1, 2, 3, 4, 5, 6], desde: "08:00", hasta: "18:00" };
+
+beforeEach(() => {
+  oficialFalla = false;
+  wahaFalla = false;
+  horaOcupada = false;
+  advisorRevienta = false;
+  asesorFila = {
+    id: "adv-row-1",
+    org_id: "org-1",
+    auth_user_id: "adv-uuid-1",
+    name: "Katherine Uribe",
+    phone: "573001234567",
+    horario: HORARIO_KATHERINE,
+  };
+});
 
 const ORG = { id: "org-1", name: "Diamond" };
 // `advisor_id` va en la ficha porque asi la escribe agendar_cita
@@ -304,4 +340,76 @@ test("sin cita no hay nada que reprogramar", async () => {
   const r = await mod.reprogramar(ORG, "lead-1", { nuevaFechaHora: "2026-09-11T10:00:00-05:00" });
   assert.strictEqual(r.resultado, "no_encontrada");
   assert.strictEqual(leadGuardado, null);
+});
+
+// ---------------------------------------------------------------------------
+// HALLAZGOS 2, 3 y 4 (review 2026-09-04): tres formas de que reprogramar
+// mienta. La rama hizo respetar la maquina de estados en tres lugares y se
+// olvido de este.
+// ---------------------------------------------------------------------------
+
+// HALLAZGO 2: se le pasaba a checkAvailability un asesor SINTETICO, solo con
+// `auth_user_id`. Sin `horario`, dentroDeHorario cae al DEFAULT_HORARIO
+// (L-V 8-18) y le niega el sabado a Katherine Uribe, que segun
+// db/migrations/2026-08-14_venta_catherine.sql trabaja los 7 dias. El unico
+// otro llamador (src/agent/tools.js:654) pasa la fila entera de `advisors`.
+test("reprogramar valida contra el horario REAL del asesor, no contra el default", async () => {
+  const mod = instalar(CITA);
+  await mod.reprogramar(ORG, "lead-1", { nuevaFechaHora: "2026-09-12T10:00:00-05:00" }); // sabado
+  assert.deepStrictEqual(advisorBuscados, [{ orgId: "org-1", authUserId: "adv-uuid-1" }]);
+  assert.strictEqual(disponibilidades.length, 1);
+  assert.deepStrictEqual(
+    disponibilidades[0].advisor.horario,
+    HORARIO_KATHERINE,
+    "sin el horario de la fila, el sabado de Katherine se rechaza con un 409 falso"
+  );
+  assert.strictEqual(disponibilidades[0].advisor.auth_user_id, "adv-uuid-1");
+});
+
+// Si el asesor no esta en `advisors` (cita vieja, uuid huerfano) se sigue
+// validando con el stub: peor es no validar nada.
+test("si el asesor no aparece en advisors, se valida igual con el stub", async () => {
+  asesorFila = null;
+  const mod = instalar(CITA);
+  const r = await mod.reprogramar(ORG, "lead-1", { nuevaFechaHora: "2026-09-11T10:00:00-05:00" });
+  assert.strictEqual(r.resultado, "reprogramada");
+  assert.strictEqual(disponibilidades.length, 1);
+  assert.strictEqual(disponibilidades[0].advisor.auth_user_id, "adv-uuid-1");
+});
+
+// Misma regla que la agenda caida: consultar quien es el asesor es best-effort,
+// no puede tumbar al humano que esta moviendo la cita.
+test("si la consulta de advisors revienta, reprogramar sigue con el stub", async () => {
+  advisorRevienta = true;
+  const mod = instalar(CITA);
+  const r = await mod.reprogramar(ORG, "lead-1", { nuevaFechaHora: "2026-09-11T10:00:00-05:00" });
+  assert.strictEqual(r.resultado, "reprogramada");
+  assert.strictEqual(disponibilidades.length, 1);
+  assert.strictEqual(disponibilidades[0].advisor.auth_user_id, "adv-uuid-1");
+});
+
+// HALLAZGO 3: el objeto nuevo se arma con `{ ...lead.cita }`, asi que si el
+// recordatorio de la hora VIEJA ya salio, `recordatorio_enviado: true`
+// sobrevivia al spread — y el asesor nunca recibia el recordatorio de la hora
+// nueva. Es el mismo campo que reminders.js ya sabe resetear cuando el envio
+// falla.
+test("reprogramar resetea recordatorio_enviado: la hora nueva se recuerda de nuevo", async () => {
+  const mod = instalar({ ...CITA, recordatorio_enviado: true });
+  await mod.reprogramar(ORG, "lead-1", { nuevaFechaHora: "2026-09-11T10:00:00-05:00" });
+  assert.strictEqual(leadGuardado.cita.recordatorio_enviado, false);
+});
+
+// HALLAZGO 4: `cancelar()` tenia la guarda `ya_cancelada` y `reprogramar()` no
+// tenia la simetrica: movia la fecha de una cita cancelada y la revivia como
+// "reprogramada". El colega que ya la dio por muerta recibia "la visita quedo
+// reprogramada" sobre algo que enterro.
+test("no se reprograma una cita cancelada: ni se mueve ni se le avisa a nadie", async () => {
+  const mod = instalar({ ...CITA, estado: "cancelada" });
+  const r = await mod.reprogramar(ORG, "lead-1", { nuevaFechaHora: "2026-09-11T10:00:00-05:00", sesion: "RADA-NATALIA" });
+  assert.strictEqual(r.ok, false);
+  assert.strictEqual(r.resultado, "esta_cancelada");
+  assert.strictEqual(leadGuardado, null, "una cancelada no revive");
+  assert.strictEqual(enviosOficial.length, 0);
+  assert.strictEqual(enviosWaha.length, 0);
+  assert.strictEqual(disponibilidades.length, 0, "ni se le pregunta a la agenda por una cita muerta");
 });

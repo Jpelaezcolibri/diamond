@@ -845,6 +845,12 @@ router.post("/api/citas/reprogramar", async (req, res) => {
     });
     if (r.resultado === "no_encontrada") return res.status(404).json({ error: "No se encontro esa cita" });
     if (r.resultado === "fecha_invalida") return res.status(400).json({ error: "Fecha u hora invalida" });
+    // Cancelar es terminal (Juan, 2026-09-04): una cita cancelada no se
+    // reprograma, se agenda una nueva. Sin este 409 la respuesta caia al 200
+    // generico y quien la movio creia que si se habia movido.
+    if (r.resultado === "esta_cancelada") {
+      return res.status(409).json({ error: "Esa cita esta cancelada: no se reprograma, hay que agendar una nueva" });
+    }
     if (r.resultado === "hora_ocupada") {
       // checkAvailability distingue "choque" de "fuera_de_horario" y quien
       // mueve la cita necesita saber cual de los dos es: decirle "ya tiene

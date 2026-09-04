@@ -16,6 +16,7 @@
 const leads = require("../data/leads");
 const citas = require("../data/citas");
 const appointments = require("../data/appointments");
+const advisors = require("../data/advisors");
 const canalWhatsapp = require("../channels/whatsapp");
 const waha = require("../lib/waha");
 const mensajeAsesor = require("../lib/mensaje-asesor");
@@ -154,14 +155,35 @@ async function reprogramar(org, leadId, { nuevaFechaHora, motivo = null, sesion 
   const lead = await buscarLead(org && org.id, leadId);
   if (!lead || !lead.cita) return { ok: false, resultado: "no_encontrada", aviso: null };
 
+  // UNA CANCELADA NO REVIVE (Juan, 2026-09-04). Guarda simetrica a la de
+  // `cancelar()`: cancelar es un estado terminal. Sin esto, mover la fecha de
+  // una cita cancelada la ponia en "reprogramada" y le mandaba al colega "la
+  // visita quedo reprogramada" sobre algo que el ya enterro. Se pone ahora,
+  // antes de que el endpoint tenga UI y alguien lo dispare sin mirar.
+  if (citas.estadoDe(lead.cita) === "cancelada") {
+    return { ok: false, resultado: "esta_cancelada", aviso: null };
+  }
+
   // La hora nueva pasa por la MISMA validacion que una cita puesta a mano
   // (appointments.checkAvailability), con `excludeLeadId` porque una cita no
   // choca consigo misma. Sin `advisor_id` no hay agenda a la cual preguntarle:
   // la cita no esta atribuida a nadie y no puede chocar con nadie.
   const advisorId = lead.cita.advisor_id || null;
   if (advisorId) {
+    // CON LA FILA DE VERDAD, NO UN STUB (Juan, 2026-09-04). checkAvailability
+    // resuelve el horario laboral con `advisor.horario`; un objeto sintetico
+    // `{ auth_user_id }` no la trae y cae al DEFAULT_HORARIO (L-V 8-18), que
+    // le niega el sabado a quien si trabaja el sabado — Katherine Uribe tiene
+    // dias [0..6] desde db/migrations/2026-08-14_venta_catherine.sql, y mover
+    // una cita suya al sabado devolvia un 409 "fuera del horario" que es
+    // falso. El otro llamador (src/agent/tools.js) ya pasa la fila entera.
+    // Best-effort: si el asesor no existe o la base no responde, se valida con
+    // el stub — peor seria no validar nada.
+    const advisor =
+      (await advisors.findByAuthUserId(org && org.id, advisorId).catch(() => null)) ||
+      { auth_user_id: advisorId };
     const dispo = await appointments
-      .checkAvailability(org && org.id, { auth_user_id: advisorId }, nuevaFechaHora, { excludeLeadId: leadId })
+      .checkAvailability(org && org.id, advisor, nuevaFechaHora, { excludeLeadId: leadId })
       .catch(() => ({ disponible: true })); // la agenda caida no puede bloquear al humano que mueve la cita
     if (!dispo.disponible) return { ok: false, resultado: "hora_ocupada", aviso: null, motivo: dispo.motivo || null };
   }
@@ -170,6 +192,11 @@ async function reprogramar(org, leadId, { nuevaFechaHora, motivo = null, sesion 
     ...lead.cita,
     fecha_hora: nuevaFechaHora,
     estado: "reprogramada",
+    // EL SPREAD ARRASTRABA EL FLAG (Juan, 2026-09-04): si el recordatorio de la
+    // hora VIEJA ya salio, `recordatorio_enviado: true` sobrevivia y el asesor
+    // nunca recibia el de la hora nueva (isReminderDue lo descarta). Es el
+    // mismo campo que src/scheduler/reminders.js resetea cuando el envio falla.
+    recordatorio_enviado: false,
     reprogramada_desde: lead.cita.fecha_hora || null,
     reprogramada_at: new Date().toISOString(),
     reprogramada_motivo: motivo,
