@@ -21,7 +21,19 @@ beforeEach(() => {
 test("lee usados, total y fraccion de messageCapping", async () => {
   respuesta = { name: "RADA-NATALIA", status: "WORKING", me: { messageCapping: { totalQuota: 300, usedQuota: 240 } } };
   const c = await waha.cuotaDeLinea("RADA-NATALIA");
-  assert.deepStrictEqual(c, { usados: 240, total: 300, fraccion: 0.8 });
+  assert.deepStrictEqual(c, { usados: 240, total: 300, fraccion: 0.8, cycleStart: null, cycleEnd: null });
+});
+
+// EL CICLO ES PARTE DE LA MEDICION (revision final, 2026-09-04). 240/300 sin
+// las fechas del ciclo no dice si se gastaron hoy o en tres semanas -- y eso es
+// justo lo que hay que poder mirar en el endpoint de salud.
+test("devuelve tambien el ciclo que reporta WhatsApp, sin reinterpretarlo", async () => {
+  respuesta = {
+    me: { messageCapping: { totalQuota: 300, usedQuota: 12, cycleStart: "2026-09-01", cycleEnd: "2026-10-01" } },
+  };
+  const c = await waha.cuotaDeLinea("RADA-NATALIA");
+  assert.strictEqual(c.cycleStart, "2026-09-01");
+  assert.strictEqual(c.cycleEnd, "2026-10-01");
 });
 
 // Sin el campo NO se inventa un numero: devolver 0 usados seria decirle al

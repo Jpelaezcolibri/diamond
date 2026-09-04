@@ -187,7 +187,18 @@ async function cuotaDeLinea(nombre) {
     : typeof crudo === "string" && crudo.trim() !== "" ? Number(crudo)
     : NaN;
   if (!Number.isFinite(usados)) return null;
-  return { usados, total, fraccion: usados / total };
+  // EL CICLO, NO SOLO EL CONTADOR (revision final, 2026-09-04). "240/300" no
+  // dice si se acumularon hoy o en tres semanas, y esa es exactamente la
+  // pregunta que hay que poder responder mirando el endpoint de salud. Se
+  // pasan TAL COMO los manda WAHA, sin parsear: el formato es suyo y adivinarlo
+  // es como se terminan inventando fechas en un tablero.
+  return {
+    usados,
+    total,
+    fraccion: usados / total,
+    cycleStart: cap.cycleStart ?? null,
+    cycleEnd: cap.cycleEnd ?? null,
+  };
 }
 
 // Reintento MANUAL, una sola vez. No hay bucle, no hay backoff, no hay
