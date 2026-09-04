@@ -239,6 +239,20 @@ dejar de preocuparse, y termina ignorándolas.
 `reintentarUnaVez`, `revincular`, `crearSesion` ni `restart`. Detecta y avisa;
 levantar la sesión es decisión de una persona.
 
+**PENDIENTE (anotado 2026-09-04, decisión de Juan: se ve después).** Falta que
+vigile una tercera cosa: **la cuota de WhatsApp**. Hoy, cuando `usedQuota`
+cruza el 80% de `totalQuota`, el radar automático deja de mandar DMs y deriva
+todo a la asesora — **sin avisarle a nadie**. Entre 240 y 300 mensajes del
+ciclo el radar se calla solo: Natalia no sabe que dejó de responder y nadie
+sabe que los pedidos que entran ya no salen. Es exactamente el modo de falla
+que este proyecto trata como el peor, fallar callado, y encima corrompe la
+medición con la que se decide si el tope tiene que volver.
+
+El arreglo es chico y va acá: `waha.cuotaDeLinea(sesion)` ya devuelve
+`{usados, total, fraccion, cycleStart, cycleEnd}`, y este worker ya tiene el
+mecanismo de avisar una sola vez por problema y otra al normalizarse. Es
+agregar una clave más a ese mapa.
+
 Los avisos salen por la **línea oficial de Sofi**, nunca por la vinculada: si lo
 que se cayó es esa línea, avisar por ahí sería pedirle al muerto que avise de su
 muerte.
