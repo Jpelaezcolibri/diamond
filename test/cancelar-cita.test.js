@@ -13,13 +13,18 @@ const path = require("node:path");
 const RUTA = (m) => require.resolve(path.join("..", "src", m));
 
 let leadGuardado = null;
+let busquedas = [];
 let enviosOficial = [];
 let enviosWaha = [];
 let alertas = [];
 let oficialFalla = false;
 let wahaFalla = false;
 
-function instalar(citaInicial) {
+// El doble de `leads` esconde por construccion si la funcion real existe y con
+// que firma — de ahi que test/leads-find-by-id.test.js cargue el modulo de
+// verdad. Aca solo se verifica lo que ESTE modulo controla: que llame con las
+// dos partes (orgId, leadId).
+function instalar(citaInicial, { telefono = "573147815403" } = {}) {
   // La alerta al equipo sale a RADAR_WATCHDOG_TO — el mismo canal que ya usan
   // src/lib/mensaje-asesor.js y src/scheduler/radar-watchdog.js. Bajo `node
   // --test` nadie carga el .env (config.js, que es quien llama a dotenv, no
@@ -30,13 +35,17 @@ function instalar(citaInicial) {
   process.env.RADAR_WATCHDOG_TO = "573001112233";
 
   leadGuardado = null;
+  busquedas = [];
   enviosOficial = [];
   enviosWaha = [];
   alertas = [];
 
   require.cache[RUTA("data/leads.js")] = {
     exports: {
-      findById: async () => ({ id: "lead-1", nombre: "Miguel", phone: "573147815403", cita: citaInicial }),
+      findById: async (orgId, id) => {
+        busquedas.push({ orgId, id });
+        return { id: "lead-1", nombre: "Miguel", phone: telefono, cita: citaInicial };
+      },
       update: async (id, patch) => { leadGuardado = patch; return { id, ...patch }; },
     },
   };
@@ -107,6 +116,14 @@ test("una cita ya cancelada no se vuelve a cancelar ni se reavisa", async () => 
   const r = await mod.cancelar(ORG, "lead-1", { motivo: "x" });
   assert.strictEqual(r.resultado, "ya_cancelada");
   assert.strictEqual(enviosOficial.length, 0);
+});
+
+// Multi-tenant: el lead se busca dentro de la org que pidio la cancelacion,
+// nunca por id suelto (misma convencion que el resto de src/data).
+test("busca el lead con (orgId, leadId)", async () => {
+  const mod = instalar(CITA);
+  await mod.cancelar(ORG, "lead-1", { motivo: "x" });
+  assert.deepStrictEqual(busquedas, [{ orgId: "org-1", id: "lead-1" }]);
 });
 
 // Regla del mensaje blanqueado: al colega nunca se le nombra a Diamond.

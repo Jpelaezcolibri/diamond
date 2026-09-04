@@ -32,29 +32,18 @@ function textoParaColega(cita, motivo) {
   ].filter(Boolean).join("\n\n");
 }
 
-// DEPENDENCIA QUE TODAVIA NO EXISTE (2026-09-04). `src/data/leads.js` exporta
-// hoy findOrCreate/update/claimFollowup/claimAppointmentReminder — NO exporta
-// findById, y este modulo no tiene permitido tocar ese archivo. Los tests la
-// mockean, asi que el hueco no se ve ahi; en produccion `leads.findById(...)`
-// tira un TypeError sincrono que ni siquiera cae en el `.catch` de abajo.
+// `leads.findById(orgId, id)` existe desde 2026-09-04 — se agrego en
+// src/data/leads.js justo para este camino. Se llama con las dos partes, como
+// TODOS los findById de src/data (advisors.js, mandatos.js): el repo es
+// multi-tenant y un id sin org_id podria traer la cita de otra organizacion.
 //
-// Se falla de frente en vez de devolver "no_encontrada": esa respuesta seria
-// otra agenda que miente —diria que no hay cita cuando lo que pasa es que no
-// pudimos leerla— y mentir es justo lo que este modulo viene a arreglar.
-// Cuando se agregue findById a leads.js, este guard deja de disparar solo.
-async function buscarLead(leadId) {
-  if (typeof leads.findById !== "function") {
-    throw new Error(
-      "cancelar-cita: src/data/leads.js no exporta findById todavia, no se puede leer la cita del lead " +
-        `${leadId}. Agregar findById(leadId) a src/data/leads.js antes de cablear este modulo.`
-    );
-  }
-  // Un error real de la base si se traga: sin fila, no hay nada que cancelar.
-  return leads.findById(leadId).catch(() => null);
+// Un error real de la base si se traga: sin fila, no hay nada que cancelar.
+async function buscarLead(orgId, leadId) {
+  return leads.findById(orgId, leadId).catch(() => null);
 }
 
 async function cancelar(org, leadId, { motivo = null, sesion = null } = {}) {
-  const lead = await buscarLead(leadId);
+  const lead = await buscarLead(org && org.id, leadId);
   if (!lead || !lead.cita) return { ok: false, resultado: "no_encontrada", aviso: null };
   if (citas.estadoDe(lead.cita) === "cancelada") {
     return { ok: true, resultado: "ya_cancelada", aviso: null };

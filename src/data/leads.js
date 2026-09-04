@@ -39,6 +39,26 @@ async function findOrCreate(orgId, phone, source = "whatsapp") {
   return data;
 }
 
+// Lead por id (Juan, 2026-09-04). Nace para src/groups/cancelar-cita.js, que
+// necesita leer la cita del lead antes de cancelarla; hasta hoy este modulo
+// solo sabia encontrar un lead por telefono (findOrCreate), y el que tenia el
+// id en la mano no tenia como leerlo.
+//
+// Firma (orgId, id) como TODOS los findById de src/data (advisors.js,
+// mandatos.js, ally-properties.js) y no (id) a secas: el repo es multi-tenant
+// y un id filtrado sin org_id devolveria la fila de otra organizacion — el
+// unico costo de pedir el orgId es un argumento que el llamador ya tiene.
+async function findById(orgId, id) {
+  if (!id) return null;
+  if (!supabase) {
+    return memory.leads.find((l) => l.org_id === orgId && l.id === id) || null;
+  }
+  const { data, error } = await supabase
+    .from("leads").select("*").eq("org_id", orgId).eq("id", id).maybeSingle();
+  if (error) throw error;
+  return data || null;
+}
+
 async function update(leadId, fields) {
   if (!supabase) {
     const lead = memory.leads.find((l) => l.id === leadId);
@@ -89,4 +109,4 @@ async function claimAppointmentReminder(leadId) {
   return data === true;
 }
 
-module.exports = { findOrCreate, update, claimFollowup, claimAppointmentReminder };
+module.exports = { findOrCreate, findById, update, claimFollowup, claimAppointmentReminder };
