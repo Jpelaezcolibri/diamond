@@ -24,7 +24,7 @@ let wahaFalla = false;
 // que firma — de ahi que test/leads-find-by-id.test.js cargue el modulo de
 // verdad. Aca solo se verifica lo que ESTE modulo controla: que llame con las
 // dos partes (orgId, leadId).
-function instalar(citaInicial, { telefono = "573147815403" } = {}) {
+function instalar(citaInicial, { telefono = "573147815403", nombre = "Miguel" } = {}) {
   // La alerta al equipo sale a RADAR_WATCHDOG_TO — el mismo canal que ya usan
   // src/lib/mensaje-asesor.js y src/scheduler/radar-watchdog.js. Bajo `node
   // --test` nadie carga el .env (config.js, que es quien llama a dotenv, no
@@ -44,7 +44,7 @@ function instalar(citaInicial, { telefono = "573147815403" } = {}) {
     exports: {
       findById: async (orgId, id) => {
         busquedas.push({ orgId, id });
-        return { id: "lead-1", nombre: "Miguel", phone: telefono, cita: citaInicial };
+        return { id: "lead-1", nombre, phone: telefono, cita: citaInicial };
       },
       update: async (id, patch) => { leadGuardado = patch; return { id, ...patch }; },
     },
@@ -155,4 +155,35 @@ test("el mensaje al colega no nombra a Diamond", async () => {
   const mod = instalar(CITA);
   await mod.cancelar(ORG, "lead-1", { motivo: "x" });
   assert.ok(!/diamond/i.test(enviosOficial[0].texto), enviosOficial[0].texto);
+});
+
+// PROBLEMA 1 (review 2026-09-04): un colega sin nombre y con un lid en
+// `lead.phone` hacia que la alerta armara `+126493275858472` como si fuera un
+// telefono marcable. src/lib/contacto.js lo dice explicito: mostrar un LID
+// como si fuera un telefono es peor que no mostrarlo, quien lee la alerta va
+// a intentar marcarlo. La alerta tiene que ser honesta cuando no hay ni
+// nombre ni telefono real.
+test("sin nombre y con lid, la alerta no muestra el lid como si fuera telefono", async () => {
+  oficialFalla = true;
+  wahaFalla = true;
+  const mod = instalar(CITA, { telefono: "126493275858472", nombre: null }); // 15 digitos: lid, no celular
+  const r = await mod.cancelar(ORG, "lead-1", { motivo: "x", sesion: "RADA-NATALIA" });
+  assert.strictEqual(r.aviso, "no_se_pudo");
+  assert.strictEqual(alertas.length, 1);
+  assert.ok(!alertas[0].texto.includes("+126493275858472"), alertas[0].texto);
+  assert.match(alertas[0].texto, /sin tel[eé]fono visible/i);
+});
+
+// PROBLEMA 2 (review 2026-09-04): la cascada siempre intentaba primero la
+// linea oficial con `lead.phone`, aun cuando ese identificador es un lid.
+// Meta no entiende un lid: esa llamada esta garantizada a fallar. Si no tiene
+// forma de celular colombiano real, hay que saltar el paso oficial e ir
+// directo al fallback por WAHA -- no es un cambio de semantica, es no hacer
+// una llamada que ya sabemos que va a fallar.
+test("con un lid en el phone, se saltea la linea oficial y va directo a la de Natalia", async () => {
+  const mod = instalar(CITA, { telefono: "126493275858472" }); // 15 digitos: lid, no celular
+  const r = await mod.cancelar(ORG, "lead-1", { motivo: "x", sesion: "RADA-NATALIA" });
+  assert.strictEqual(enviosOficial.length, 0, "no tiene sentido llamar a la linea oficial con un lid");
+  assert.strictEqual(r.aviso, "linea_natalia");
+  assert.strictEqual(enviosWaha.length, 1);
 });

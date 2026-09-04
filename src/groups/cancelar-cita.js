@@ -58,22 +58,31 @@ async function cancelar(org, leadId, { motivo = null, sesion = null } = {}) {
   const texto = textoParaColega(cita, motivo);
   let aviso = "no_se_pudo";
 
-  const oficial = await canalWhatsapp.sendWhatsApp(org, lead.phone, texto).catch((e) => ({ ok: false, error: e.message }));
+  // El unico identificador que tenemos en este camino es `lead.phone` — y el
+  // nombre engaña: se confirmo en produccion que 9 de cada 10 colegas de los
+  // grupos NO exponen telefono, WhatsApp los presenta con un @lid, y eso es
+  // lo que termina guardado ahi. El criterio es el mismo que usa
+  // src/groups/vivo.js: si tiene forma de celular colombiano real
+  // (esCelularColombiano, 3 + 9 digitos con o sin 57) es un telefono; si no,
+  // es un lid. Se calcula una sola vez y se reusa en los tres lugares de
+  // abajo que necesitan distinguirlo (Juan, 2026-09-04).
+  const esTelefono = contacto.esCelularColombiano(lead.phone);
+
+  // PROBLEMA 2 (review 2026-09-04): la linea oficial es Meta Cloud API — no
+  // entiende un lid, un lid ahi esta GARANTIZADO a fallar. Llamarla igual no
+  // es "intentar por si acaso", es gastar una llamada a la Graph API que ya
+  // sabemos inutil y demorar la caida al fallback que si puede funcionar.
+  // Si no tiene forma de celular colombiano, se saltea directo a WAHA.
+  const oficial = esTelefono
+    ? await canalWhatsapp.sendWhatsApp(org, lead.phone, texto).catch((e) => ({ ok: false, error: e.message }))
+    : null;
   if (oficial && oficial.ok) aviso = "oficial";
   else if (sesion) {
-    // POR CUAL VIA SALE EL FALLBACK (Juan, 2026-09-04). El unico identificador
-    // que tenemos en este camino es `lead.phone` — y el nombre engaña: se
-    // confirmo en produccion que 9 de cada 10 colegas de los grupos NO exponen
-    // telefono, WhatsApp los presenta con un @lid, y eso es lo que termina
-    // guardado ahi. Sin pasarle { lid } a WAHA el chatId se arma como
-    // `<lid>@c.us` y el mensaje no llega justo a la mayoria: el fallback
-    // quedaba decorativo para el caso que existe para cubrir.
-    //
-    // El criterio es el mismo que usa src/groups/vivo.js: si tiene forma de
-    // celular colombiano real (esCelularColombiano, 3 + 9 digitos con o sin
-    // 57) va como telefono; si no, es un lid. Y NO se mandan los dos — la
-    // guarda de waha.js exige que un lid entre solo por la opcion explicita.
-    const esTelefono = contacto.esCelularColombiano(lead.phone);
+    // POR CUAL VIA SALE EL FALLBACK (Juan, 2026-09-04). Sin pasarle { lid } a
+    // WAHA el chatId se arma como `<lid>@c.us` y el mensaje no llega justo a
+    // la mayoria: el fallback quedaba decorativo para el caso que existe para
+    // cubrir. Y NO se mandan los dos — la guarda de waha.js exige que un lid
+    // entre solo por la opcion explicita.
     const destino = esTelefono ? lead.phone : null;
     const opcionesDm = esTelefono ? {} : { lid: lead.phone };
     const porWaha = await waha.enviarDm(sesion, destino, texto, opcionesDm).catch((e) => ({ ok: false, error: e.message }));
@@ -81,7 +90,11 @@ async function cancelar(org, leadId, { motivo = null, sesion = null } = {}) {
   }
 
   if (aviso === "no_se_pudo") {
-    const quien = lead.nombre || `+${lead.phone}`;
+    // PROBLEMA 1 (review 2026-09-04): src/lib/contacto.js lo dice explicito —
+    // mostrar un LID como si fuera un telefono es peor que no mostrarlo, quien
+    // lee la alerta va a intentar marcarlo. Sin nombre y sin forma de celular
+    // colombiano real, hay que decir la verdad en vez de armar un `+<lid>`.
+    const quien = lead.nombre || (esTelefono ? `+${lead.phone}` : "un colega del grupo (sin teléfono visible)");
     const alerta = `⚠️ Cita cancelada y NO le pudimos avisar a ${quien}. Escribile vos: la ventana de 24 h esta cerrada y la linea del radar tampoco pudo.`;
     for (const to of ALERTA_TO()) {
       await mensajeAsesor.enviarYRegistrar(org, to, alerta).catch((e) =>
