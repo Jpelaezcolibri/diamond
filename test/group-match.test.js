@@ -210,6 +210,31 @@ test("banos, garajes y estrato viajan en el match, no solo en el puntaje", () =>
   assert.strictEqual(m.estrato, 5);
 });
 
+// FLEXIBILIDAD HACIA ARRIBA (Juan, 2026-09-04): "si necesita 2 habitaciones y
+// tiene 3 o 4 o 5 por el mismo precio o sobre el rango que definimos, envialo".
+// Hasta hoy `ok` cortaba en q+1, asi que un pedido de 2 alcobas descartaba en
+// silencio una propiedad de 4 que calzaba en zona y precio. Medido: el tope
+// aplicaba a 499 de 664 demandas reales (75%).
+test("un pedido de 2 alcobas acepta una propiedad de 4", () => {
+  const m = evaluarCandidata(apto({ habitaciones: 4 }), pide({ habitaciones: 2 }), "diamond");
+  assert.ok(m, "una propiedad con alcobas de sobra no se puede descartar");
+  assert.match(m.razones.join(" | "), /4 alcobas/);
+});
+
+// La decision del 2026-08-20 sigue viva: abrir la compuerta no puede cambiar
+// el orden. "la que calza exacto deberia tener el puntaje mayor" (Juan).
+test("la que calza exacto puntua mas alto que la que tiene alcobas de sobra", () => {
+  const exacta = evaluarCandidata(apto({ habitaciones: 2 }), pide({ habitaciones: 2 }), "diamond");
+  const sobra = evaluarCandidata(apto({ habitaciones: 4 }), pide({ habitaciones: 2 }), "diamond");
+  assert.ok(exacta.puntaje > sobra.puntaje, `exacta ${exacta.puntaje} debe superar a sobra ${sobra.puntaje}`);
+});
+
+// Hacia ABAJO no se abre nada: las alcobas definen el producto. Quien acepte
+// una menos lo sigue diciendo con flexible_habitaciones.
+test("un pedido de 3 alcobas sigue descartando una propiedad de 2", () => {
+  assert.strictEqual(evaluarCandidata(apto({ habitaciones: 2 }), pide({ habitaciones: 3 }), "diamond"), null);
+});
+
 // PRIORIDAD DE VENTA (Juan, 2026-08-21): ref 8989725 registrada por Catherine
 // con "urgencia de venta" — el pedido fue que ESA propiedad puntualmente
 // sume puntaje extra, sin tocar el resto del inventario.
@@ -248,8 +273,14 @@ test("BUG: la zona se compara contra la zona, no contra la ciudad", () => {
   assert.strictEqual(evaluarCandidata(enEnvigado, pide({ zona: "Envigado" }), "diamond"), null);
 });
 
-test("BUG: pedir 3 alcobas no puede traer una de 6", () => {
-  assert.strictEqual(evaluarCandidata(apto({ habitaciones: 6 }), pide(), "diamond"), null);
+// SUPERADO por FLEXIBILIDAD HACIA ARRIBA (Juan, 2026-09-04): el tope de
+// "3 alcobas no puede traer una de 6" era la regla del 2026-08-20. Juan la
+// revirtió explícitamente: "si necesita 2 habitaciones y tiene 3 o 4 o 5 por
+// el mismo precio o sobre el rango que definimos, envialo". Ver los tests
+// "FLEXIBILIDAD HACIA ARRIBA" más abajo — este solo confirma que 4 sigue
+// sirviendo, ya sin el tope que antes rechazaba a partir de 6.
+test("una alcoba de sobra, aunque sean varias de más, ya no descarta la propiedad", () => {
+  assert.ok(evaluarCandidata(apto({ habitaciones: 6 }), pide(), "diamond"), "6 alcobas ante un pedido de 3 ya no se descarta");
   assert.ok(evaluarCandidata(apto({ habitaciones: 4 }), pide(), "diamond"), "una de más sí sirve");
 });
 

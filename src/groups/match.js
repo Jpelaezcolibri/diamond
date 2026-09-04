@@ -409,7 +409,20 @@ function evaluarCandidata(p, c, fuente) {
     // -por eso la compuerta la deja pasar- pero no tan bien como la exacta.
     {
       pide: c.habitaciones, tiene: p.habitaciones,
-      ok: (t, q) => t >= q - (flexible ? 1 : 0) && t <= q + 1,
+      // SIN TOPE SUPERIOR (Juan, 2026-09-04). Antes era `t <= q + 1`, y eso
+      // descartaba en silencio una propiedad de 4 alcobas ante un pedido de 2
+      // aunque calzara en zona y precio. Medido sobre 664 demandas reales: el
+      // tope aplicaba a 499 (75%).
+      //
+      // El orden NO cambia: `puntos` sigue dando 10 al exacto y 6 al que no lo
+      // es, que es la decision del 2026-08-20 ("la que calza exacto deberia
+      // tener el puntaje mayor"). Abrir la compuerta solo deja de tirarla a la
+      // basura; no la asciende.
+      //
+      // Hacia ABAJO no se abre: las alcobas definen el producto, un 2 alcobas
+      // no resuelve un pedido de 3. La gabela de una menos sigue siendo
+      // exclusiva de flexible_habitaciones, declarado por el colega.
+      ok: (t, q) => t >= q - (flexible ? 1 : 0),
       texto: (t) => `${t} alcobas`, puntos: (t, q) => (t === q ? 10 : 6),
       castigo: CASTIGO_CORTO.habitaciones,
     },
