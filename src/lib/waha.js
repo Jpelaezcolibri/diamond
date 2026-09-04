@@ -153,6 +153,28 @@ async function estadoSesion(nombre) {
   return pedir(`/api/sessions/${encodeURIComponent(nombre)}`);
 }
 
+// LA CUOTA DE WHATSAPP, QUE NO PONEMOS NOSOTROS (2026-09-04).
+//
+// La sesion reporta `me.messageCapping`: un tope de mensajes por ciclo de mes
+// calendario que impone WhatsApp sobre la linea. Medido el 2026-09-04 en la
+// linea del radar: 300 por ciclo, 12 usados, ciclo 01-sep a 01-oct.
+//
+// Se lee de aca y no de un contador propio a proposito: el numero de WhatsApp
+// es el que manda, y ademas resuelve por observacion la duda que quedo abierta
+// en el spec (si esos 300 cuentan mensajes o personas nuevas contactadas).
+//
+// Devuelve null cuando no se puede saber -- NUNCA un cero optimista. Un cero
+// le diria al cortacircuitos que hay cuota de sobra justo cuando no sabemos si
+// la hay, que es el modo de falla exacto que este archivo evita en todos lados.
+async function cuotaDeLinea(nombre) {
+  const s = await estadoSesion(nombre);
+  const cap = s && s.me && s.me.messageCapping;
+  const total = Number(cap && cap.totalQuota);
+  if (!(total > 0)) return null;
+  const usados = Number(cap.usedQuota) || 0;
+  return { usados, total, fraccion: usados / total };
+}
+
 // Reintento MANUAL, una sola vez. No hay bucle, no hay backoff, no hay
 // programador que lo llame: lo dispara una persona desde el CRM y si falla,
 // falla.
@@ -566,7 +588,7 @@ async function contarLids(sesion) {
 }
 
 module.exports = {
-  configurado, crearSesion, estadoSesion, reintentarUnaVez, revincular, qr,
+  configurado, crearSesion, estadoSesion, cuotaDeLinea, reintentarUnaVez, revincular, qr,
   listarGrupos, nombresPorJid, enviarTexto, enviarDm, telefonoDeLid, contarLids, participantesDeGrupo,
   versionInfo,
 };
