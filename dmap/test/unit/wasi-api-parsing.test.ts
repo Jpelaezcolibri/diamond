@@ -290,3 +290,48 @@ describe("garaje y estrato", () => {
     expect(p.estrato).toBe(0);
   });
 });
+
+/**
+ * `features` (2026-09-05). Forma real verificada contra produccion con
+ * dmap/scripts/wasi-features-crudo.ts: `features.internal` y
+ * `features.external`, arrays de {id, nombre, name, own}. Wasi trae dobles
+ * espacios ("Urbanización  cerrada") y a veces `name` vacio con `nombre`
+ * lleno. 43 de 112 propiedades las traian; el sync no las guardaba y para el
+ * radar "unidad cerrada" o "terraza" eran datos que "no registramos".
+ */
+describe("extractFeatures / caracteristicas", () => {
+  const conFeatures = {
+    id_property: 1,
+    reference: "F1",
+    features: {
+      internal: [
+        { id: 104, nombre: "Admite mascotas", name: "", own: false },
+        { id: 12, nombre: "Balcón", name: "", own: false },
+        { id: 13, nombre: "", name: "Vista panorámica", own: false }
+      ],
+      external: [
+        { id: 55, nombre: "Urbanización  cerrada", name: "", own: false },
+        { id: 56, nombre: "Terraza", name: "", own: false },
+        { id: 57, nombre: "balcón", name: "", own: false }
+      ]
+    }
+  };
+
+  it("aplana internas y externas en un texto, en orden, sin dobles espacios ni repetidos", async () => {
+    const { extractFeatures } = await import("../../src/sync/wasi-api.source.js");
+    const parsed = wasiApiPropertySchema.parse(conFeatures);
+    expect(extractFeatures(parsed)).toBe("Admite mascotas, Balcón, Vista panorámica, Urbanización cerrada, Terraza");
+  });
+
+  it("sin features (o vacias) la propiedad canonica trae caracteristicas null, no un string vacio", async () => {
+    const { extractFeatures } = await import("../../src/sync/wasi-api.source.js");
+    expect(extractFeatures(wasiApiPropertySchema.parse({ id_property: 2 }))).toBeNull();
+    expect(extractFeatures(wasiApiPropertySchema.parse({ id_property: 3, features: { internal: [], external: [] } }))).toBeNull();
+    expect(extractFeatures(wasiApiPropertySchema.parse({ id_property: 4, features: "raro" }))).toBeNull();
+  });
+
+  it("toCanonicalProperty lleva las features a caracteristicas", () => {
+    const canonical = toCanonicalProperty(wasiApiPropertySchema.parse(conFeatures));
+    expect(canonical.caracteristicas).toBe("Admite mascotas, Balcón, Vista panorámica, Urbanización cerrada, Terraza");
+  });
+});

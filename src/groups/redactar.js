@@ -156,6 +156,17 @@ function ficha(match, indice, { detalleFalta = null } = {}) {
 
   const lineas = [`${indice}) ${titulo}`, `   ${identidad}`, `   ${medidas}`];
   if (detalles) lineas.push(`   ${detalles}`);
+  // Lo que Wasi registra como caracteristicas (2026-09-05): "Urbanizacion
+  // cerrada", "Terraza", "Vista panoramica"... Es justo lo que el colega
+  // pregunta despues del primer mensaje; si lo tenemos, va en la ficha. Hasta
+  // 6 para que una propiedad con 20 amenidades no se vuelva un muro; el link
+  // trae el resto. Solo si hay: la ausencia no es "no tiene nada".
+  const caracteristicas = String(match.caracteristicas || "")
+    .split(",")
+    .map((c) => c.trim())
+    .filter(Boolean)
+    .slice(0, 6);
+  if (caracteristicas.length) lineas.push(`   ${caracteristicas.join(" · ")}`);
   // Antes del link a proposito: el colega lee la aclaracion mientras todavia
   // esta mirando los datos de la propiedad, no despues de haberse ido al link.
   const falta = String(detalleFalta || "").trim();

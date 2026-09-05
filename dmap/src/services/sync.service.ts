@@ -92,7 +92,7 @@ async function processCandidate(orgId: string, syncRunId: string, candidate: Syn
       zona: data.zona,
       ciudad: data.ciudad,
       descripcion: data.descripcion,
-      caracteristicas: null,
+      caracteristicas: data.caracteristicas,
       link: data.link,
       disponible: true,
       images: data.imageUrls
@@ -165,6 +165,12 @@ async function processCandidate(orgId: string, syncRunId: string, candidate: Syn
   // 2026-07), en vez de borrarlo.
   if (data.garaje !== null) patch.garaje = data.garaje;
   if (data.estrato !== null) patch.estrato = data.estrato;
+  // Caracteristicas, con el mismo criterio (2026-09-05): se refrescan en cada
+  // corrida y solo cuando la fuente las trae. Las 33 filas con texto del
+  // import viejo no se borran si la API no manda features para esa propiedad;
+  // si las manda, la API gana, porque es la fuente activa y la que el asesor
+  // edita en Wasi.
+  if (data.caracteristicas !== null) patch.caracteristicas = data.caracteristicas;
 
   for (const event of diff.events) {
     if (event.changeType === "price_changed") patch.precio = data.precio;

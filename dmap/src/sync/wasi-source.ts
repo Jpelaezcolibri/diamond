@@ -20,6 +20,13 @@ export const canonicalPropertySchema = z.object({
   // sabemos menos.
   garaje: z.number().int().nullable().default(null),
   estrato: z.number().int().nullable().default(null),
+  // Caracteristicas (2026-09-05). La API oficial manda `features.internal` y
+  // `features.external` ("Urbanizacion cerrada", "Terraza", "Balcon", "Vista
+  // panoramica", "Garaje"...) para 43 de 112 propiedades y el sync no las
+  // guardaba: para el radar eran datos que "no registramos" aunque Wasi los
+  // tuviera. Texto plano separado por ", ", que es lo que properties.
+  // caracteristicas ya guardaba del import viejo. null si la fuente no trae.
+  caracteristicas: z.string().nullable().default(null),
   zona: z.string().nullable().default(null),
   ciudad: z.string().nullable().default(null),
   link: z.string().nullable().default(null),

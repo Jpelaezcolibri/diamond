@@ -303,3 +303,16 @@ test("una entrada de 'leFalta' sin detalle no imprime una aclaracion vacia", () 
   });
   assert.ok(!texto.includes("Aclaración:"));
 });
+
+// LO QUE WASI SI REGISTRA (2026-09-05): las caracteristicas sincronizadas van
+// en la ficha del colega, hasta 6, solo si las hay.
+test("la ficha lleva las caracteristicas registradas, hasta 6, y nada si no hay", () => {
+  const redactar = require("../src/groups/redactar");
+  const base = { ref: "10077063", titulo: "Apartamento en Envigado", operacion: "Venta", zona: "Envigado", area: "80m2", habitaciones: 3, precio: "$450.000.000", linkWasi: "https://info.wasi.co/x/10077063" };
+  const con = redactar.ficha({ ...base, caracteristicas: "Balcón, Urbanización cerrada, Terraza, Piscina, Gimnasio, Ascensor, Portería, Zona infantil" }, 1);
+  assert.match(con, /Balcón · Urbanización cerrada · Terraza · Piscina · Gimnasio · Ascensor/);
+  assert.ok(!/Portería/.test(con), "mas de 6 se corta: el link trae el resto");
+  const sin = redactar.ficha({ ...base, caracteristicas: null }, 1);
+  assert.ok(!/·  ·|caracteristicas/i.test(sin));
+  assert.strictEqual(sin.split("\n").length, con.split("\n").length - 1, "sin caracteristicas la ficha tiene una linea menos, no una vacia");
+});

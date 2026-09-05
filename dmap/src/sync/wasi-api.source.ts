@@ -62,7 +62,12 @@ export const wasiApiPropertySchema = z
     // numericas ("0","1",...) MEZCLADAS con metadata del album (`id`, etc.).
     // Por eso el valor es z.unknown(): la extraccion real (solo llaves
     // numericas) vive en extractImages().
-    galleries: z.array(z.record(z.string(), z.unknown())).optional()
+    galleries: z.array(z.record(z.string(), z.unknown())).optional(),
+    // `features` (verificado contra produccion el 2026-09-05): objeto con
+    // `internal` y `external`, cada uno un array de {id, nombre, name, own}.
+    // z.unknown() por la misma razon que galleries: la forma real se
+    // desarma en extractFeatures(), con tolerancia a que cambie.
+    features: z.unknown().optional()
   })
   .passthrough();
 
@@ -147,6 +152,36 @@ export function extractImages(p: WasiApiProperty): { imageKeys: string[]; imageU
 
 export type PropertyTypeMap = Map<number, string>;
 
+/**
+ * Aplana `features.internal` + `features.external` a un texto "A, B, C".
+ * Dedupe sin distinguir mayusculas, colapsa los dobles espacios que Wasi trae
+ * ("Urbanización  cerrada") y conserva el orden: primero internas, despues
+ * externas. null si no hay ninguna con nombre.
+ */
+export function extractFeatures(p: WasiApiProperty): string | null {
+  const features = (p as Record<string, unknown>).features;
+  if (!features || typeof features !== "object") return null;
+  const vistas = new Set<string>();
+  const nombres: string[] = [];
+  for (const grupo of ["internal", "external"]) {
+    const lista = (features as Record<string, unknown>)[grupo];
+    if (!Array.isArray(lista)) continue;
+    for (const item of lista) {
+      if (!item || typeof item !== "object") continue;
+      const it = item as Record<string, unknown>;
+      // `nombre` puede venir vacio con `name` lleno (y al reves): se toma el
+      // primero no vacio. Los dobles espacios de Wasi se colapsan.
+      const nombre = String(it.nombre || it.name || "").replace(/\s+/g, " ").trim();
+      if (!nombre) continue;
+      const clave = nombre.toLowerCase();
+      if (vistas.has(clave)) continue;
+      vistas.add(clave);
+      nombres.push(nombre);
+    }
+  }
+  return nombres.length > 0 ? nombres.join(", ") : null;
+}
+
 export function toCanonicalProperty(raw: WasiApiProperty, propertyTypes: PropertyTypeMap = new Map()): CanonicalProperty {
   const { operacion, precio } = normalizeOperacionYPrecio(raw);
   const { imageKeys, imageUrls } = extractImages(raw);
@@ -164,6 +199,7 @@ export function toCanonicalProperty(raw: WasiApiProperty, propertyTypes: Propert
     banos: toNumberOrNull(raw.bathrooms),
     garaje: toNumberOrNull(raw.garages),
     estrato: toNumberOrNull(raw.stratum),
+    caracteristicas: extractFeatures(raw),
     zona: raw.zone_label ?? null,
     ciudad: raw.city_label ?? null,
     link: raw.link ?? null,

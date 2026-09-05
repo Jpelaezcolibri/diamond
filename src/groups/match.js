@@ -404,6 +404,11 @@ function evaluarCandidata(p, c, fuente) {
     banos: p.banos ?? null,
     garajes: p.garaje ?? null,
     estrato: p.estrato ?? null,
+    // Lo que Wasi SI registra como caracteristicas (2026-09-05): "Urbanizacion
+    // cerrada", "Terraza", "Balcon", "Vista panoramica"... Viaja para que la
+    // ficha de Sofi pueda confirmar en positivo lo que antes era siempre
+    // "sin_confirmar". La ausencia sigue sin significar "no tiene".
+    caracteristicas: fuente === "diamond" ? p.caracteristicas || null : null,
     // El castigo se resta DESPUES del tope (ver CASTIGO_CORTO arriba): es lo
     // que hace que 100 vuelva a significar "cumple todo lo que se pudo
     // verificar". Piso en 0 porque una zona muy castigada mas dos huecos

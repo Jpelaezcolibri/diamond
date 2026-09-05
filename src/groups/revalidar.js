@@ -225,6 +225,11 @@ QUE TE LLEGA
   vecina / misma ciudad / fuera), las razones del motor y una linea
   "incumplimientos conocidos: N". En la ficha, "sin dato" significa que NO LO
   SABEMOS, nunca que no lo tiene: "garajes: sin dato" no es "sin garaje".
+- Algunas fichas traen "caracteristicas registradas" (lo que Wasi guarda:
+  unidad cerrada, terraza, balcon, vista, garaje...). Si el pedido pide algo
+  que aparece ahi, CUMPLE: decilo en 'por_que' y no lo pongas en
+  sin_confirmar. Si no aparece, sigue siendo "no lo sabemos": la ausencia
+  nunca es un "no tiene", y una ficha sin esa linea no dice nada.
 - El motor ya filtro operacion, tipo, zona (exacta o vecina), banda de precio
   y alcobas hacia abajo. Acepta hasta un ${PCT_PRECIO} % POR ENCIMA del presupuesto y
   hasta un ${PCT_AREA} % POR DEBAJO del area minima, y te lo dice en sus razones
@@ -425,10 +430,16 @@ function formatearCandidatas(matches) {
       const cuenta = cortos.length
         ? `   incumplimientos conocidos: ${cortos.length} (${cortos.join("; ")})`
         : `   incumplimientos conocidos: 0`;
+      // Lo que Wasi registra como caracteristicas (2026-09-05): si el pedido
+      // pide unidad cerrada o terraza y aca aparece, Sofi lo confirma en
+      // positivo en vez de mandarlo a sin_confirmar. Solo si hay: una linea
+      // "caracteristicas: ninguna" se leeria como "no tiene nada".
+      const caracteristicas = String(m.caracteristicas || "").trim();
       return [
         `${i + 1}. [puntaje ${m.puntaje}]${aliada ? " [DE UN ALIADO — no se le puede mandar al colega]" : ""} ${m.titulo || "Sin titulo"}`,
         `   ${datos}`,
         ubicacion ? `   ${ubicacion}` : null,
+        caracteristicas ? `   caracteristicas registradas: ${caracteristicas}` : null,
         `   el motor dice: ${razones}`,
         cuenta,
       ]

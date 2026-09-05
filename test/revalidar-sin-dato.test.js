@@ -74,3 +74,22 @@ test("el prompt le dice a Sofi que 'sin dato' es sin_confirmar, no dudosa, y que
   assert.ok(SISTEMA.includes("no esta en esa cuenta ni la sube"), "un sin dato no cuenta como incumplimiento");
   assert.ok(SISTEMA.includes("SOBRAR NO ES FALLAR"));
 });
+
+// LO QUE WASI SI REGISTRA (2026-09-05). La API manda `features` para 43 de 112
+// propiedades ("Urbanización cerrada" x16, "Terraza" x6, "Balcón" x32...) y
+// desde hoy el sync las guarda en properties.caracteristicas. La ficha de Sofi
+// las muestra para que "unidad cerrada" pueda confirmarse en positivo en vez
+// de ir siempre a sin_confirmar. Sin ellas, la linea no aparece: una ficha
+// "sin caracteristicas" se leeria como "no tiene nada".
+test("la ficha muestra las caracteristicas registradas solo cuando las hay", () => {
+  const con = formatearCandidatas([{ ...base, caracteristicas: "Balcón, Urbanización cerrada, Terraza" }]);
+  assert.ok(con.includes("caracteristicas registradas: Balcón, Urbanización cerrada, Terraza"), con);
+  const sin = formatearCandidatas([{ ...base, caracteristicas: null }]);
+  assert.ok(!sin.includes("caracteristicas"), sin);
+});
+
+test("el prompt le dice a Sofi que lo registrado cumple y que la ausencia no es un 'no'", () => {
+  const s = SISTEMA.replace(/\s+/g, " ");
+  assert.ok(s.includes("caracteristicas registradas"));
+  assert.ok(s.includes("la ausencia nunca es un \"no tiene\""));
+});
