@@ -400,7 +400,19 @@ function clamp(texto) {
 // fallback (tocar el nombre en el grupo) cuando no hay telefono resuelto:
 // nunca se pierde el lead por falta de un link.
 //
-// @param senal          autor_nombre, grupo_nombre y autor_telefono (los dos ultimos opcionales)
+// QUE PIDIO Y POR QUE NO SE MANDARON (Juan, 2026-09-05, sobre un aviso real
+// a Natalia por el pedido de Projency Inmobiliaria): "en este mensaje no le
+// estas diciendo que pedido esta haciendo el colega ni la explicacion de por
+// que no se le enviaron los otros". La asesora tenia que decidir si llamar
+// por una dudosa sin saber que buscaba el colega ni que le vio Sofi de raro.
+// Los dos datos ya existian: el pedido lo trae la señal (mismos campos que
+// construir() recibe, y el mismo queBusca() los resume) y la razon esta en
+// veredicto.por_que. Solo faltaba ponerlos en este mensaje.
+//
+// @param senal          autor_nombre, grupo_nombre, autor_telefono, texto_original
+//                       y los campos del clasificado (los mismos que construir()).
+//                       Todos opcionales menos autor_nombre: sin ellos el aviso
+//                       sale sin la linea correspondiente, nunca con un hueco.
 // @param veredicto      lo que devolvio revalidar.js
 // @param matches        las candidatas (para resolver las refs a fichas completas)
 // @param refsEnviadas   array de refs que SI se mandaron por DM (utiles.map(m => m.ref))
@@ -412,22 +424,40 @@ function construirAvisoPostDm(senal, veredicto, matches, refsEnviadas, telefonoC
     .filter(Boolean);
   if (dudosas.length === 0) return null;
 
-  const quien = (senal && senal.autor_nombre) || "un colega";
-  const grupo = (senal && senal.grupo_nombre) || "sin nombre";
-  const contactoTexto = contactoPara(telefonoColega, senal && senal.autor_telefono, quien, senal && senal.texto_original);
+  const s = senal || {};
+  const quien = s.autor_nombre || "un colega";
+  const grupo = s.grupo_nombre || "sin nombre";
+  const contactoTexto = contactoPara(telefonoColega, s.autor_telefono, quien, s.texto_original);
   const enviadas = (refsEnviadas || []).filter(Boolean);
   const detalleEnviadas = enviadas.length ? `: ${enviadas.map((r) => `Ref ${r}`).join(", ")}` : ".";
+
+  // El pedido, igual que en construir(): resumen del clasificador y, debajo,
+  // lo que escribio el colega tal cual. Cada linea solo si hay con que.
+  const busca = queBusca(s);
+  const textoOriginal = String(s.texto_original || "").trim();
+  const bloquePedido = [
+    ...(busca ? [``, `Busca: ${busca}`] : []),
+    ...(textoOriginal ? [``, busca ? `Lo escribió así:` : `Pidió:`, `"${textoOriginal}"`] : []),
+  ];
+
+  // Por que estas no salieron solas: es el veredicto de Sofi sobre el lote
+  // entero, la misma linea "Sofi dice" del aviso normal. Si algun dia el
+  // veredicto trae un motivo por ref, va aca; hoy por_que es lo que hay.
+  const porQue = String((veredicto && veredicto.por_que) || "").trim();
+  const bloquePorQue = porQue ? [``, `Por qué no se las mandé: ${porQue}`] : [];
 
   const lineas = [
     `✅ Ya le mandé por privado a ${quien}${detalleEnviadas}`,
     ``,
     `Grupo: ${grupo}`,
     `Contacto: ${contactoTexto}`,
+    ...bloquePedido,
     ``,
     `🔎 Esto otro quedó sin mandar (no confirmado) — decidí vos si vale la pena:`,
     dudosas.map(linea).join("\n"),
+    ...bloquePorQue,
   ];
-  return lineas.join("\n");
+  return clamp(lineas.join("\n"));
 }
 
 module.exports = { construir, construirAvisoPostDm, linea, porqueNoSalioSolo };

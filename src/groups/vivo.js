@@ -338,6 +338,30 @@ function pedidoDe(fuente) {
   };
 }
 
+// Lo que la asesora necesita saber del pedido, en un solo lugar: el aviso
+// normal (alertaAsesor.construir) y el aviso post-DM (construirAvisoPostDm)
+// reciben exactamente la misma señal. Antes cada llamada armaba la suya y el
+// post-DM se quedo sin el pedido ni el texto original (Juan, 2026-09-05).
+function senalParaAviso(c, mensaje, grupo) {
+  return {
+    grupo_nombre: grupo.nombre || grupo.jid,
+    autor_nombre: mensaje.autor,
+    autor_telefono: mensaje.autorTelefono,
+    texto_original: mensaje.texto,
+    operacion: c.operacion,
+    tipo: c.tipo,
+    zona: c.zona,
+    zonas: c.zonas,
+    precio_max: c.precio_max,
+    habitaciones: c.habitaciones,
+    flexible_habitaciones: c.flexible_habitaciones,
+    area_min: c.area_min,
+    banos: c.banos,
+    garajes: c.garajes,
+    estrato: c.estrato,
+  };
+}
+
 // Sofi da su veredicto y, si aprueba, le avisa a la asesora.
 //
 // Sofi ve TODAS las candidatas, tambien las de puntaje bajo: es la unica forma
@@ -564,8 +588,11 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
           // decide que SI vale la pena mandar una dudosa, no puede tener que
           // volver al grupo a buscar quien la pidio -- telefonoColega ya esta
           // resuelto aca mismo (es el que acaba de recibir el DM).
+          // La MISMA señal que recibe el aviso normal (Juan, 2026-09-05): el
+          // post-DM salia solo con el nombre y el grupo, y Natalia tenia que
+          // decidir sobre una dudosa sin saber que pedia el colega.
           avisoPostDm = alertaAsesor.construirAvisoPostDm(
-            { autor_nombre: mensaje.autor, grupo_nombre: grupo.nombre || grupo.jid, autor_telefono: mensaje.autorTelefono },
+            senalParaAviso(c, mensaje, grupo),
             veredicto,
             matches,
             refsDm,
@@ -615,23 +642,7 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
   // CRM_PUBLIC_URL queda null y el aviso sale como hoy.
   const linkAviso = linkAvisoLib.urlDeAviso(await groupSignals.asegurarToken(org.id, signal.id));
   const texto = alertaAsesor.construir(
-    {
-      grupo_nombre: grupo.nombre || grupo.jid,
-      autor_nombre: mensaje.autor,
-      autor_telefono: mensaje.autorTelefono,
-      texto_original: mensaje.texto,
-      operacion: c.operacion,
-      tipo: c.tipo,
-      zona: c.zona,
-      zonas: c.zonas,
-      precio_max: c.precio_max,
-      habitaciones: c.habitaciones,
-      flexible_habitaciones: c.flexible_habitaciones,
-      area_min: c.area_min,
-      banos: c.banos,
-      garajes: c.garajes,
-      estrato: c.estrato,
-    },
+    senalParaAviso(c, mensaje, grupo),
     veredicto,
     matches,
     telefonoColega,

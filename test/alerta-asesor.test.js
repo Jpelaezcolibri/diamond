@@ -554,3 +554,47 @@ test("con telefono resuelto, el contacto es el link directo al privado", () => {
   const texto = construir(senalCompleta, veredictoOk, [matchWasi], "573001234567");
   assert.match(texto, /Contacto: https:\/\/wa\.me\/573001234567/);
 });
+
+// QUE PIDIO Y POR QUE NO SE MANDARON (Juan, 2026-09-05). Aviso real a Natalia
+// por el pedido de Projency Inmobiliaria: decia que ya se mandaron dos refs y
+// que la 9472581 quedo sin mandar, pero no que buscaba el colega ni por que
+// Sofi la dejo afuera. Ahora el post-DM lleva el mismo pedido que el aviso
+// normal y la razon de Sofi.
+test("construirAvisoPostDm: dice que busca el colega, como lo escribio, y por que las dudosas no salieron", () => {
+  const { construirAvisoPostDm } = require("../src/groups/alerta-asesor");
+  const veredicto = {
+    ...VEREDICTO,
+    refs_dudosas: ["AP009"],
+    por_que: "La 9472581 es una casa lote y el colega pidió apartamento; el precio calza pero el producto no.",
+  };
+  const dudosa = matchUtil({ ref: "AP009", titulo: "Casa lote en Laureles", zona: "Laureles" });
+  const senal = {
+    autor_nombre: "Projency Inmobiliaria",
+    grupo_nombre: "SOLO POBLADO 7am 8pm",
+    texto_original: "Busco apto en Laureles, 3 alcobas, hasta 1.800 millones, con parqueadero",
+    operacion: "venta",
+    tipo: "apartamento",
+    zonas: ["Laureles"],
+    precio_max: 1800000000,
+    habitaciones: 3,
+    garajes: 1,
+  };
+  const texto = construirAvisoPostDm(senal, veredicto, [matchUtil(), dudosa], ["AP004"], "573108212294");
+
+  assert.match(texto, /Busca: venta · apartamento · Laureles · hasta \$1\.800\.000\.000 · 3 alcobas · 1 garaje/);
+  assert.match(texto, /Lo escribió así:\n"Busco apto en Laureles, 3 alcobas, hasta 1\.800 millones, con parqueadero"/);
+  assert.match(texto, /Por qué no se las mandé: La 9472581 es una casa lote/);
+  // El orden: contacto, pedido, lo que quedo sin mandar, la razon.
+  assert.ok(texto.indexOf("Busca:") < texto.indexOf("quedó sin mandar"));
+  assert.ok(texto.indexOf("quedó sin mandar") < texto.indexOf("Por qué no se las mandé"));
+});
+
+test("construirAvisoPostDm: sin campos del pedido ni por_que, sale como antes -- sin lineas vacias", () => {
+  const { construirAvisoPostDm } = require("../src/groups/alerta-asesor");
+  const veredicto = { ...VEREDICTO, refs_dudosas: ["AP009"], por_que: "" };
+  const texto = construirAvisoPostDm({ autor_nombre: "Patricia Gomez" }, veredicto, [matchUtil({ ref: "AP009" })], ["AP004"]);
+  assert.ok(!/Busca:/.test(texto));
+  assert.ok(!/Pidió:/.test(texto));
+  assert.ok(!/Por qué no se las mandé/.test(texto));
+  assert.ok(!/\n\n\n/.test(texto), "sin renglones vacios de mas");
+});
