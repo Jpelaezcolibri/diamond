@@ -6,18 +6,37 @@
 // acepta o devuelve 400 en TODAS las llamadas y el bot queda mudo. Correr
 // esto UNA vez antes de desplegar el cambio de TTL.
 //
-//   node scripts/smoke-cache.js
+//   railway run --service diamond node scripts/smoke-cache.js
+//
+// `railway run` inyecta las variables del servicio, asi que corre con la
+// clave de PRODUCCION sin copiarla a ningun lado ni dejarla en el disco.
+// Sin `railway run` usa la del .env local.
 //
 // Gasta menos de un centavo. No toca la base de datos ni le escribe a nadie.
-require("dotenv").config();
-const { getClient, CACHE_ESTABLE } = require("../src/lib/anthropic");
+
+// La clave se captura ANTES de requerir nada de src/: src/config.js corre
+// dotenv con `override: true`, que pisaria la clave inyectada por
+// `railway run` con la del .env local — que es justamente la que no sirve.
+const CLAVE_INYECTADA = process.env.ANTHROPIC_API_KEY;
+
+const Anthropic = require("@anthropic-ai/sdk");
+const { CACHE_ESTABLE } = require("../src/lib/anthropic");
+
+const clave = CLAVE_INYECTADA || process.env.ANTHROPIC_API_KEY;
+const getClient = () => new Anthropic({ apiKey: clave, timeout: 60 * 1000 });
 
 // Suficientemente largo para superar el minimo cacheable de Sonnet (1.024
 // tokens). El contenido da igual: solo tiene que ser identico en las dos.
 const RELLENO = "Regla de prueba sin efecto, solo para ocupar tokens. ".repeat(220);
 
 (async () => {
-  console.log(`TTL configurado: ${CACHE_ESTABLE.ttl}\n`);
+  if (!clave) {
+    console.error("No hay ANTHROPIC_API_KEY. Corré con: railway run --service diamond node scripts/smoke-cache.js");
+    process.exit(1);
+  }
+  const origen = CLAVE_INYECTADA ? "inyectada por railway run" : ".env local";
+  console.log(`TTL configurado: ${CACHE_ESTABLE.ttl}`);
+  console.log(`Clave: ...${clave.slice(-6)} — origen: ${origen}\n`);
   const cliente = getClient();
   const peticion = {
     model: process.env.CLAUDE_MODEL || "claude-sonnet-4-5",
