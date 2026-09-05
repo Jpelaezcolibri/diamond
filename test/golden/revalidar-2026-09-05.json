@@ -1,0 +1,54 @@
+{
+  "_que_es": "Golden set del veredicto de Sofi (src/groups/revalidar.js). Señales REALES de group_signals que motivaron la auditoria del 2026-09-05 (docs/superpowers/specs/auditoria-motor-match-2026-09-05.md). Se corre con `railway run --service diamond node scripts/golden-revalidar.js` -- llama a la API con la clave de produccion, asi que NO es parte de `npm test`. Un cambio al prompt tiene que pasar este set antes de desplegarse.",
+  "_como_leer": "utiles_esperadas es un CONJUNTO minimo: las refs que tienen que estar en refs_utiles (el orden no importa; puede haber mas). nunca_en_dudosas son refs que no pueden caer a refs_dudosas. sin_confirmar_menciona son palabras que tienen que aparecer en algun item de sin_confirmar (sin tildes, sin mayusculas).",
+  "casos": [
+    {
+      "id": "7dabfec7-93a7-4c18-b160-74ea2e441f38",
+      "nombre": "Deisy Marin -- +7% de precio (dentro del margen) + garaje sin dato + unidad cerrada",
+      "cubre": ["H1 unidad cerrada", "H2 margen de precio", "H3 caso mixto"],
+      "utiles_esperadas": ["10077063"],
+      "nunca_en_dudosas": ["10077063"],
+      "sin_confirmar_menciona": ["garaje", "unidad cerrada"]
+    },
+    {
+      "id": "4a2ef536-f67b-4e9a-b67f-570ec548adfd",
+      "nombre": "Mateo Narvaez 18:44 -- 60 de 65 m² (dentro del margen) + garaje sin dato",
+      "cubre": ["H2 margen de area", "H3 un corto conocido + un desconocido = 1, no 2"],
+      "utiles_esperadas": ["10328387"],
+      "nunca_en_dudosas": ["10328387"],
+      "sin_confirmar_menciona": ["parqueadero|garaje"]
+    },
+    {
+      "id": "2391db2f-e893-45a7-9b1b-e9746c5cca96",
+      "nombre": "Mateo Narvaez 18:53 -- +8% de precio + garaje deseable",
+      "cubre": ["H2 margen de precio"],
+      "utiles_esperadas": ["10207832"],
+      "nunca_en_dudosas": ["10207832"],
+      "sin_confirmar_menciona": ["garaje|parqueadero"]
+    },
+    {
+      "id": "cb2bac7b-d393-4f11-83d1-6aabdbba7a19",
+      "nombre": "Julissa -- piso alto/medio, que no registramos",
+      "cubre": ["H1 piso"],
+      "utiles_esperadas": ["9935585"],
+      "nunca_en_dudosas": ["9935585"],
+      "sin_confirmar_menciona": ["piso"]
+    },
+    {
+      "id": "eb3afbe4-54ae-49ca-8e9a-b3f6cbd40344",
+      "nombre": "Patricia Urreta -- SIN poniente + maximo 2 años (regla literal de Juan)",
+      "cubre": ["H1 orientacion", "H1 antiguedad"],
+      "utiles_esperadas": ["9806316", "9935585", "9785035"],
+      "nunca_en_dudosas": ["9806316", "9935585", "9785035"],
+      "sin_confirmar_menciona": ["poniente|orientacion", "antiguedad|años"]
+    },
+    {
+      "id": "aee38b76-ac33-4f85-a040-b746c7ff27c5",
+      "nombre": "Gustavo Arango -- terraza 'SI o SI' + piso bajo, que no registramos",
+      "cubre": ["H1 'innegociable' sobre un dato que no tenemos no descarta"],
+      "utiles_esperadas": ["9806316", "9935585"],
+      "nunca_en_dudosas": ["9806316", "9935585"],
+      "sin_confirmar_menciona": ["terraza", "piso"]
+    }
+  ]
+}
