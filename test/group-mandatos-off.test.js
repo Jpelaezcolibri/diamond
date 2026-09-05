@@ -96,3 +96,63 @@ test("APAGADO no borra nada: el mandato sigue vivo y prenderlo lo recupera", asy
   assert.notStrictEqual(r.resultado, "oferta_sin_match");
   assert.strictEqual(cruces.length, 1, "el carril volvio sin perder el mandato");
 });
+
+// ══ El hueco por el que se coló el diluvio ═════════════════════════════════
+//
+// Del 1 al 5 de septiembre de 2026 salieron 1.906 avisos a una sola asesora,
+// todos disparados por un lead de julio cuyo presupuesto ("500 a 600
+// millones") se leia como $500.600.000.000 y le ganaba a cualquier propiedad.
+// El interruptor estaba en `false` todo ese tiempo.
+//
+// POR QUE NO LO ATRAPARON LOS TESTS DE ARRIBA: stubean `leadsParaPropiedad` a
+// lista vacia, asi que `sirveAUnLead` siempre daba false y `manejarOferta`
+// salia por el return temprano ANTES de llegar al carril de leads. El carril
+// nunca se ejercito apagado.
+//
+// Decision de Juan (2026-09-05): "quiero que en este momento solo quede
+// funcionando un solo canal, mis propiedades frente a clientes que tienen los
+// colegas". Apagado significa apagado: ni mandatos, ni leads propios.
+// La implementacion REAL, capturada al cargar el modulo: el beforeEach de
+// arriba reemplaza cruceLeads.cruzarOfertaConLeads por un stub, asi que un
+// require() dentro del test devuelve el stub y el test pasaria en falso.
+const CRUZAR_REAL = cruceLeads.cruzarOfertaConLeads;
+
+const UN_LEAD_QUE_CALZA = [
+  { lead_id: "lead-1", phone: "573122950682", nombre: null, owner_id: null, coincide_en: ["presupuesto", "tipo"] },
+];
+
+test("APAGADO: aunque un lead propio calce, no se persiste ni se cruza", async () => {
+  command.leadsParaPropiedad = async () => UN_LEAD_QUE_CALZA;
+  const { manejarOferta } = require("../src/groups/vivo");
+  const r = await manejarOferta({ id: "org-1", mandatos_activos: false }, OFERTA, {});
+
+  assert.strictEqual(r.resultado, "oferta_sin_match");
+  assert.strictEqual(crucesLeads.length, 0, "no se cruzo contra los leads propios");
+  assert.strictEqual(guardadas.length, 0, "no se persistio la oferta");
+});
+
+test("PRENDIDO: el mismo lead si recibe el cruce — apagar no rompe la funcion", async () => {
+  command.leadsParaPropiedad = async () => UN_LEAD_QUE_CALZA;
+  const { manejarOferta } = require("../src/groups/vivo");
+  await manejarOferta({ id: "org-1", mandatos_activos: true }, OFERTA, {});
+
+  assert.strictEqual(crucesLeads.length, 1, "el carril de leads vuelve al prenderlo");
+});
+
+// Segunda puerta al mismo carril: el import de export .txt
+// (src/groups/importar-export.js:244) llama a cruzarOfertaConLeads sin pasar
+// por manejarOferta. Un gate solo en vivo.js dejaria esa puerta abierta, asi
+// que la guardia vive en el propio modulo del carril y cubre a todo el que lo
+// llame — hoy y mañana.
+test("el carril de leads se niega a correr apagado, lo llame quien lo llame", async () => {
+  let consulto = false;
+  command.leadsParaPropiedad = async () => {
+    consulto = true;
+    return UN_LEAD_QUE_CALZA;
+  };
+
+  const r = await CRUZAR_REAL({ id: "org-1", mandatos_activos: false }, { id: "ally-1" });
+
+  assert.strictEqual(consulto, false, "ni siquiera consulto los leads");
+  assert.deepStrictEqual(r.avisados, [], "no aviso a nadie");
+});

@@ -16,6 +16,7 @@
 // aviso al asesor por la otra via, esto no le manda un segundo mensaje.
 
 const command = require("../data/command");
+const organizations = require("../data/organizations");
 const allyProperties = require("../data/ally-properties");
 const advisors = require("../data/advisors");
 const { buildAllyOfferMatchAlert } = require("../notifications/advisor");
@@ -53,6 +54,26 @@ async function advisorParaAvisar(orgId, lead, allyProperty) {
  *                       no era utilizable — se ignora sin error)
  */
 async function cruzarOfertaConLeads(org, allyProperty) {
+  // EL INTERRUPTOR DEL CARRIL DE COMPRA MANDA ACA TAMBIEN (Juan, 2026-09-05).
+  //
+  // Hasta hoy este cruce estaba EXENTO del interruptor a proposito: el
+  // razonamiento era que los leads del embudo son otra poblacion que los
+  // mandatos curados, y Juan habia apagado los mandatos, no el embudo.
+  //
+  // Lo que ese razonamiento no vio es que quien apaga el carril no distingue
+  // poblaciones: apaga para dejar de recibir. Con el interruptor en `false`
+  // desde el 2026-09-02, entre el 1 y el 5 de septiembre salieron 1.906
+  // avisos a una sola asesora, todos por un lead de julio cuyo presupuesto
+  // ("500 a 600 millones") se leia como $500.600.000.000 y le ganaba a
+  // cualquier propiedad. El CRM decia "el carril de compra esta apagado"
+  // mientras el WhatsApp no paraba.
+  //
+  // La guardia va ACA y no solo en quien llama porque hay dos puertas a este
+  // carril —la escucha en vivo (vivo.js, manejarOferta) y el import de export
+  // .txt (importar-export.js)— y mañana puede haber una tercera.
+  if (!organizations.mandatosActivos(org)) {
+    return { resultado: "carril_apagado", avisados: [] };
+  }
   if (!allyProperty || !allyProperty.id) return { resultado: "sin_oferta", avisados: [] };
 
   const candidatos = await command.leadsParaPropiedad(scopeOrg(org.id), allyProperty, LIMITE_LEADS);

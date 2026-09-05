@@ -1238,12 +1238,19 @@ async function manejarOferta(org, c, grupo = {}, { advisorId = null, sesion = nu
   // Sondeo barato (limit 1): solo interesa saber si hay AL MENOS un candidato,
   // no la lista completa -- eso lo resuelve cruzarOfertaConLeads mas abajo,
   // ya con la fila persistida y su id real para el dedup.
-  const leadsCandidatos = await command
-    .leadsParaPropiedad({ orgId: org.id, viewerUid: null, isAdmin: true }, tanteo, 1)
-    .catch((e) => {
-      console.warn("[radar] no se pudieron leer los leads para el tanteo:", e.message);
-      return [];
-    });
+  //
+  // Apagado el carril, este sondeo NO corre (Juan, 2026-09-05): antes corria
+  // igual, `sirveAUnLead` daba true y la oferta se persistia y se cruzaba
+  // aunque el interruptor estuviera en `false`. La guardia dura vive en
+  // cruce-leads.js; esta de aca evita ademas escribir la fila.
+  const leadsCandidatos = conMandatos
+    ? await command
+        .leadsParaPropiedad({ orgId: org.id, viewerUid: null, isAdmin: true }, tanteo, 1)
+        .catch((e) => {
+          console.warn("[radar] no se pudieron leer los leads para el tanteo:", e.message);
+          return [];
+        })
+    : [];
   const sirveAUnLead = leadsCandidatos.length > 0;
 
   if (!sirveAAlguno && !sirveAUnLead) return { resultado: "oferta_sin_match" };
