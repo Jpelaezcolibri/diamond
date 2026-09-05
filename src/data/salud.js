@@ -217,11 +217,81 @@ async function senalesAtascadas(orgId, { ahora = new Date(), minutos = 15, horas
   }
 }
 
+// 6. El radar disparando avisos en volumen.
+//
+// EL INCIDENTE (1 al 5 de septiembre de 2026): 1.906 avisos de oferta a UNA
+// sola asesora —248, 664, 503, 362 y 129 por dia— y ninguna alarma. Peor: el
+// interruptor del carril de compra estaba en `false` todo ese tiempo y el CRM
+// mostraba "el carril de compra esta apagado" mientras el WhatsApp no paraba.
+// Juan lo descubrio abriendo el telefono.
+//
+// Las causas ya estan arregladas (el parser de presupuestos en rango, y el
+// interruptor que ahora si apaga el carril entero). Este chequeo es la RED:
+// mira el sintoma —cuantos avisos salieron— sin importar que bug nuevo lo
+// produzca. Una fila de ally_property_alerts es exactamente un aviso
+// disparado, asi que contarlas es contar mensajes.
+const UMBRAL_AVISOS_DIA = 40;
+
+async function avisosDeOfertaRecientes(orgId, { ahora = new Date(), horas = 24 } = {}) {
+  // Sin supabase no hay de donde contar: 0 y no molesta a nadie. Nunca
+  // inventa un numero, que es justo lo que este chequeo existe para evitar.
+  if (!supabase) return 0;
+  try {
+    const desde = new Date(ahora.getTime() - horas * HORA).toISOString();
+    const { count, error } = await supabase
+      .from("ally_property_alerts")
+      .select("*", { count: "exact", head: true })
+      .eq("org_id", orgId)
+      .gte("created_at", desde);
+    if (error) throw error;
+    return count || 0;
+  } catch (e) {
+    console.warn("[salud] avisosDeOfertaRecientes fallo:", e.message);
+    return 0;
+  }
+}
+
+// La decision, pura y testeable sin base. Dos alarmas distintas a proposito:
+//
+// - CONTRADICCION (sin umbral): el carril figura apagado y aun asi salio algo.
+//   Uno solo ya demuestra que el interruptor no manda —que es exactamente lo
+//   que paso— y esperar a un umbral seria repetir el error de septiembre.
+// - VOLUMEN: el carril esta prendido, pero esta disparando mas de lo que
+//   ningun dia normal justifica.
+function problemaDeVolumen({ avisos, carrilApagado, umbral = UMBRAL_AVISOS_DIA }) {
+  if (carrilApagado && avisos > 0) {
+    return {
+      clave: "avisos-carril-apagado",
+      texto:
+        `El carril de compra figura APAGADO y aun asi salieron ${avisos} aviso(s) de oferta en las ultimas 24 h. ` +
+        `Algo esta esquivando el interruptor: revisa CRM > Grupos y avisa antes de que se repita lo del 1 al 5 de septiembre.`,
+    };
+  }
+  if (!carrilApagado && avisos >= umbral) {
+    return {
+      clave: "avisos-volumen",
+      texto:
+        `El radar disparo ${avisos} avisos de oferta en las ultimas 24 h (lo normal es un puñado). ` +
+        `Puede ser un lead con el presupuesto mal leido calzando con todo: revisa CRM > Grupos y, si sobra, apaga el carril de compra.`,
+    };
+  }
+  return null;
+}
+
 // Todo junto, ya redactado como problemas para el vigilante: {clave, texto}.
 // La clave es estable por tipo para que el vigilante no repita el mismo aviso
 // cada media hora; el texto cambia cuando cambia lo que hay que decir.
-async function problemas(orgId, { ahora = new Date() } = {}) {
+async function problemas(orgId, { ahora = new Date(), org = null } = {}) {
   const p = [];
+
+  // Va PRIMERO: si el radar esta disparando avisos, eso es mas urgente que
+  // una ventana por cerrar. `org` es opcional — sin el no se puede saber si
+  // el carril figura apagado, asi que solo queda la alarma por volumen.
+  const problemaVolumen = problemaDeVolumen({
+    avisos: await avisosDeOfertaRecientes(orgId, { ahora }),
+    carrilApagado: org ? org.mandatos_activos === false : false,
+  });
+  if (problemaVolumen) p.push(problemaVolumen);
 
   for (const m of await conversacionesMudas(orgId, { ahora })) {
     p.push({
@@ -269,4 +339,4 @@ async function problemas(orgId, { ahora = new Date() } = {}) {
   return p;
 }
 
-module.exports = { conversacionesMudas, ventanasAsesoras, duplicadosRecientes, fallidosRecientes, senalesAtascadas, problemas };
+module.exports = { conversacionesMudas, ventanasAsesoras, duplicadosRecientes, fallidosRecientes, senalesAtascadas, avisosDeOfertaRecientes, problemaDeVolumen, UMBRAL_AVISOS_DIA, problemas };

@@ -99,7 +99,7 @@ async function revisar(ahora = new Date()) {
   // pedidos atascados. Cada uno nace de una falla real de ese dia; el detalle
   // vive en src/data/salud.js. Nunca lanza.
   try {
-    problemas.push(...(await salud.problemas(org.id, { ahora })));
+    problemas.push(...(await salud.problemas(org.id, { ahora, org })));
   } catch (e) {
     console.error("[watchdog] No se pudieron correr los chequeos de salud:", e.message);
   }
