@@ -129,6 +129,15 @@ function mensajeListoParaReenviar(senal, veredicto, utiles, org) {
     org,
     sinConfirmar: veredicto.sin_confirmar || [],
     leFalta: veredicto.le_falta || [],
+    // El borrador que la asesora reenvia lleva las MISMAS aclaraciones que el
+    // DM automatico: si el desvio de zona solo saliera por el camino del bot,
+    // el colega recibiria una version mas honesta cuando le escribe la maquina
+    // que cuando le escribe una persona.
+    pedido: {
+      zonas: Array.isArray(senal.zonas) && senal.zonas.length ? senal.zonas : null,
+      zona: senal.zona || null,
+      habitaciones: senal.habitaciones || null,
+    },
   });
 }
 

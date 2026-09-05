@@ -157,6 +157,53 @@ function ficha(match, indice, { detalleFalta = null } = {}) {
   return lineas.join("\n");
 }
 
+// EL DESVIO ENTRE LO QUE PIDIO Y LO QUE LE MANDAMOS (Juan, 2026-09-05).
+//
+// EL CASO: Marsh Jaramillo pidio "2 alcobas sector Envigado" y recibio una
+// propiedad en SABANETA con TRES alcobas, sin una palabra sobre ninguna de las
+// dos cosas. Sofi lo sabia —el veredicto guardado decia "queda en Sabaneta
+// (vecino a Envigado)... y tiene 3 alcobas (una mas de las pedidas)"— pero ese
+// razonamiento moria en la base. El colega abre el mensaje, ve otra zona, y
+// concluye que el bot no lee lo que le escriben. El dato no era falso; lo que
+// quema la credibilidad es la omision.
+//
+// SE CALCULA, NO SE PREGUNTA. Sale de comparar el pedido con la ficha —dos
+// datos que ya tenemos— en vez de confiar en que el modelo se acuerde de
+// mencionarlo en `le_falta`: en los dos casos auditados `le_falta` vino vacio.
+// Una regla que depende de que el modelo se acuerde no es una garantia.
+//
+// Solo habla de lo que puede comparar: sin zonas pedidas o sin habitaciones en
+// el pedido, no dice nada — nunca inventa un desvio por falta de dato.
+const sinTildes = (t) =>
+  String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").trim().toLocaleLowerCase("es-CO");
+
+function desvios(match, pedido) {
+  if (!pedido) return [];
+  const salida = [];
+
+  const zonasPedidas = (Array.isArray(pedido.zonas) ? pedido.zonas : [pedido.zona])
+    .map(sinTildes)
+    .filter(Boolean);
+  const zonaProp = String(match.zona || "").trim();
+  if (zonasPedidas.length > 0 && zonaProp) {
+    // Se compara en los dos sentidos: "El Poblado" pedido contra "Poblado"
+    // guardado (y al reves) es la misma zona, no un desvio.
+    const z = sinTildes(zonaProp);
+    const calza = zonasPedidas.some((p) => z.includes(p) || p.includes(z));
+    if (!calza) {
+      salida.push(`queda en ${zonaProp}, no en ${pedido.zonas ? pedido.zonas.join(" ni ") : pedido.zona}`);
+    }
+  }
+
+  const pedidas = Number(pedido.habitaciones) || 0;
+  const tiene = Number(match.habitaciones) || 0;
+  if (pedidas > 0 && tiene > 0 && tiene !== pedidas) {
+    salida.push(`${formato.pluralizar(tiene, "alcoba")} y pediste ${pedidas}`);
+  }
+
+  return salida;
+}
+
 // Junta una lista de datos faltantes en una frase natural: "terraza",
 // "terraza ni antigüedad", "terraza, antigüedad ni piso". Se conecta con "ni"
 // (no "y") porque es una lista de cosas que NO se sabe, no de cosas que si
@@ -203,7 +250,7 @@ function lineaSalvedad(sinConfirmar, cantidadPropiedades) {
 function mensajeGrupo(
   senal,
   publicables,
-  { maxPropiedades = MAX_PROPIEDADES, org = null, sinConfirmar = [], leFalta = [] } = {}
+  { maxPropiedades = MAX_PROPIEDADES, org = null, sinConfirmar = [], leFalta = [], pedido = null } = {}
 ) {
   const props = (publicables || []).slice(0, maxPropiedades);
   if (props.length === 0) return null;
@@ -226,7 +273,15 @@ function mensajeGrupo(
       .map((f) => [String(f.ref), String(f.detalle)])
   );
 
-  const bloques = props.map((m, i) => ficha(m, i + 1, { detalleFalta: faltaPorRef.get(String(m.ref)) || null }));
+  // El desvio calculado va PRIMERO en la aclaracion y la del modelo despues:
+  // "queda en Sabaneta, no en Envigado · no tiene garaje registrado". Una sola
+  // linea de Aclaración por ficha, no dos.
+  const bloques = props.map((m, i) => {
+    const detalle = [...desvios(m, pedido), faltaPorRef.get(String(m.ref)) || null]
+      .filter(Boolean)
+      .join(" · ");
+    return ficha(m, i + 1, { detalleFalta: detalle || null });
+  });
 
   const cierre = [
     "Comision compartida.",
@@ -259,4 +314,4 @@ function mensajeGrupo(
   return [...cabecera, "", bloques.join("\n\n"), "", cierre.join("\n")].join("\n");
 }
 
-module.exports = { mensajeGrupo, ficha, primerNombre, tituloUtil, lineaSalvedad, unirConNi, MAX_PROPIEDADES };
+module.exports = { mensajeGrupo, ficha, desvios, primerNombre, tituloUtil, lineaSalvedad, unirConNi, MAX_PROPIEDADES };

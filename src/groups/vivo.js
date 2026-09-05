@@ -320,8 +320,21 @@ function refsDelAviso(veredicto) {
 // que el veredicto de Sofi declara sobre estas mismas `utiles` -- lo que no
 // sabemos y lo que sabemos que no cumple (ver revalidar.js). Se pasan tal
 // cual a redactar.mensajeGrupo, que decide donde va cada uno.
-function textoParaColega(autorNombre, utiles, org, sinConfirmar = [], leFalta = []) {
-  return redactar.mensajeGrupo({ autor_nombre: autorNombre }, utiles, { org, sinConfirmar, leFalta });
+function textoParaColega(autorNombre, utiles, org, sinConfirmar = [], leFalta = [], pedido = null) {
+  return redactar.mensajeGrupo({ autor_nombre: autorNombre }, utiles, { org, sinConfirmar, leFalta, pedido });
+}
+
+// Lo que el colega pidio, en la forma que espera redactar.desvios: sirve tanto
+// para la clasificacion recien hecha (`c`) como para una señal releida de la
+// base, que guarda los mismos campos. Se comparte para que el DM automatico y
+// los dos caminos manuales no diverjan en lo que le aclaran al colega.
+function pedidoDe(fuente) {
+  if (!fuente) return null;
+  return {
+    zonas: Array.isArray(fuente.zonas) && fuente.zonas.length ? fuente.zonas : null,
+    zona: fuente.zona || null,
+    habitaciones: fuente.habitaciones || null,
+  };
 }
 
 // Sofi da su veredicto y, si aprueba, le avisa a la asesora.
@@ -466,7 +479,8 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
       utiles,
       org,
       veredicto.sin_confirmar || [],
-      veredicto.le_falta || []
+      veredicto.le_falta || [],
+      pedidoDe(c)
     );
     if (textoDm) {
       // POR CUAL VIA SALE. `decidirDm` ya eligio (prefiere el telefono, que es
@@ -910,7 +924,9 @@ async function aprobarManual(org, signalId) {
 
   if (!publicables.length) return { resultado: "sin_propiedades_publicables", descartados };
 
-  const texto = redactar.mensajeGrupo({ autor_nombre: signal.autor_nombre }, publicables);
+  const texto = redactar.mensajeGrupo({ autor_nombre: signal.autor_nombre }, publicables, {
+    pedido: pedidoDe(signal),
+  });
   if (!texto) return { resultado: "sin_texto" };
 
   // Una sola sesion vinculada por org en este piloto (Juan, 2026-08-16): si
@@ -1105,6 +1121,7 @@ async function responderPorDmManual(org, signalId, { sesion = null, refs = null 
     org,
     sinConfirmar,
     leFalta,
+    pedido: pedidoDe(signal),
   });
   if (!texto) return { resultado: "sin_texto" };
 
@@ -1328,6 +1345,7 @@ async function prepararAviso(org, signalId, { sesion = null } = {}) {
         org,
         sinConfirmar: rev.sin_confirmar || [],
         leFalta: rev.le_falta || [],
+        pedido: pedidoDe(signal),
       })
     : null;
 
