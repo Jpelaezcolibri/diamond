@@ -40,7 +40,7 @@ test("sin asesor, el prompt de cliente de siempre queda intacto", () => {
 
 test("el bloque estable sigue cacheado (el prompt de asesor no rompe el ahorro)", () => {
   const b = buildSystemPrompt({ org, lead, qualified: false, now: null, advisor: natalia });
-  assert.deepStrictEqual(b[0].cache_control, { type: "ephemeral" });
+  assert.deepStrictEqual(b[0].cache_control, { type: "ephemeral", ttl: "1h" });
 });
 
 // ── Reconocimiento del número ────────────────────────────────────────────

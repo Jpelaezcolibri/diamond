@@ -1,4 +1,5 @@
 const { GEOGRAFIA_MEDELLIN } = require("./geografia");
+const { CACHE_ESTABLE } = require("../lib/anthropic");
 
 const FICHA_FORMAT = `🏠 [Titulo atractivo de la propiedad]
 
@@ -75,7 +76,7 @@ REGLA DE ORO: ante la duda, preguntale que necesita en vez de suponer. Un asesor
   const contexto = `${now ? `FECHA Y HORA ACTUAL EN COLOMBIA: ${now.legible} (referencia ISO: ${now.iso}).\n\n` : ""}ASESOR: ${advisor.name}${advisor.especialidad ? ` — especialidad ${advisor.especialidad}` : ""}.`;
 
   return [
-    { type: "text", text: stable, cache_control: { type: "ephemeral" } },
+    { type: "text", text: stable, cache_control: CACHE_ESTABLE },
     { type: "text", text: contexto },
   ];
 }
@@ -153,7 +154,7 @@ REGLA DE ORO: ante la duda, preguntale que necesita. Un colega que escribe "hola
   const contexto = `${now ? `FECHA Y HORA ACTUAL EN COLOMBIA: ${now.legible} (referencia ISO: ${now.iso}).\n\n` : ""}COLEGA: ${colega.nombre || "un colega del gremio"}.${bloqueCoordinador}${bloquePedido}`;
 
   return [
-    { type: "text", text: stable, cache_control: { type: "ephemeral" } },
+    { type: "text", text: stable, cache_control: CACHE_ESTABLE },
     { type: "text", text: contexto },
   ];
 }
@@ -276,7 +277,7 @@ ${datosLead || "Ninguno todavia."}
 ESTADO DE CALIFICACION: ${qualified ? "CALIFICADO — ya conoces presupuesto, urgencia y preferencia. Ofrece activamente conectarlo con el asesor humano usando la herramienta transferir_a_asesor cuando acepte." : "EN CALIFICACION — te falta conocer presupuesto, urgencia o preferencia (zona/tipo). Averigua estos datos de forma natural durante la conversacion, UNA pregunta a la vez."}`;
 
   return [
-    { type: "text", text: stable, cache_control: { type: "ephemeral" } },
+    { type: "text", text: stable, cache_control: CACHE_ESTABLE },
     { type: "text", text: contexto },
   ];
 }

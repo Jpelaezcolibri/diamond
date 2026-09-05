@@ -46,7 +46,7 @@
 // garajes y otra no. Por eso viaja como {ref, detalle} y la aclaracion se
 // imprime dentro de la ficha de esa propiedad, no en el encabezado.
 const config = require("../config");
-const { getClient } = require("../lib/anthropic");
+const { getClient, CACHE_ESTABLE } = require("../lib/anthropic");
 
 // Sonnet y no Haiku a proposito: esto es juicio, no extraccion, y el volumen es
 // bajo (solo demandas que ya trajeron al menos una candidata). El clasificador
@@ -401,7 +401,10 @@ async function revalidar(clasificado, matches) {
     const res = await getClient().messages.create({
       model: MODELO,
       max_tokens: 1000,
-      system: SISTEMA,
+      // Cacheado: SISTEMA son ~2.250 tokens identicos en cada pedido, muy por
+      // encima del minimo cacheable de Sonnet (1.024). Lo que cambia es el
+      // `pedido` de abajo, que va en messages y no toca este prefijo.
+      system: [{ type: "text", text: SISTEMA, cache_control: CACHE_ESTABLE }],
       output_config: { format: { type: "json_schema", schema: ESQUEMA } },
       messages: [{ role: "user", content: pedido }],
     });
