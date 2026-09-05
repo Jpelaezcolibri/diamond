@@ -138,11 +138,15 @@ El prompt de `SISTEMA` se ajusta para que Sofi:
 - Use `le_falta` en vez de descartar cuando el incumplimiento es accesorio.
 - Use `sin_confirmar` para todo dato que el pedido menciona y el inventario no
   tiene.
-- **Devuelva a Natalia** (no apruebe DM) cuando el pedido menciona un atributo
+- ~~**Devuelva a Natalia** (no apruebe DM) cuando el pedido menciona un atributo
   que no podemos evaluar en ninguno de los dos lados: piso específico, unidad
-  cerrada, jardín privado, orientación. Decisión de Juan: nada se descarta por
-  no poder evaluarlo, se deriva a una persona con la nota de que hay que
-  analizarlo.
+  cerrada, jardín privado, orientación.~~ **REVOCADO el 2026-09-05** (Juan:
+  "no podemos dejar de avisar por no conocer el poniente ni los años de
+  construcción"; "valores que se pueden validar después de la primera
+  interacción"). Esos atributos se tratan como cualquier dato no registrado:
+  la ref va a `refs_utiles` y el dato a `sin_confirmar`; el colega decide si
+  le importa. El bloque del prompt que implementaba esta regla se retiró
+  (ver `docs/superpowers/specs/auditoria-motor-match-2026-09-05.md`, H1).
 
 `apruebaAviso` no cambia de forma.
 
@@ -229,8 +233,10 @@ cerrar según resultados.** El cortacircuitos de cuota (4.4) es lo que evita que
    **entra como candidata** (hoy se descarta).
 2. Un pedido de 2 garajes cruza contra una propiedad de 1 → **entra**, y el
    mensaje al colega dice qué le falta (hoy se descarta).
-3. Un pedido que menciona "piso 15", "unidad cerrada" o "jardín privado" →
-   **no sale por DM**, va a Natalia con la nota de análisis.
+3. ~~Un pedido que menciona "piso 15", "unidad cerrada" o "jardín privado" →
+   **no sale por DM**, va a Natalia con la nota de análisis.~~ **REVOCADO
+   2026-09-05:** sale por DM con esos datos en `sin_confirmar`, igual que
+   terraza o antigüedad.
 4. Un colega que publica tres pedidos distintos en un día → **recibe tres
    respuestas** (hoy dos).
 5. El MISMO pedido visto en tres grupos → **un solo DM**.

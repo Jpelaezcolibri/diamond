@@ -238,34 +238,24 @@ test("apruebaAviso: ni utiles ni dudosas -- no aprueba", () => {
   assert.strictEqual(revalidar.apruebaAviso(veredicto), false);
 });
 
-// LO QUE NO PODEMOS EVALUAR VA A NATALIA (Juan, 2026-09-04): "no quiero que
-// dejemos propiedades por fuera sin saber si hay match, entonces (...) las que
-// tengan esas salvedades enviala a natalia cosas como el numero del piso
-// especifico o unidad cerrada o jardin privado".
+// LO QUE NO REGISTRAMOS SE OFRECE IGUAL (Juan, 2026-09-05): "valores que se
+// pueden validar despues de la primera interaccion". Piso, unidad cerrada,
+// jardin privado y orientacion van a refs_utiles con el dato en sin_confirmar.
 //
-// Ni `properties` ni classify.js tienen piso, orientacion ni unidad cerrada.
-// Sin dato de los dos lados no se puede declarar un hueco honesto, asi que
-// esos pedidos no se responden solos: los mira una persona.
-//
-// LAS ASERCIONES TIENEN QUE DISCRIMINAR (revision final, 2026-09-04). Antes
-// este test buscaba /piso/i y /refs_dudosas/ sueltos, y las dos ya pasaban
-// ANTES del cambio: /piso/i matchea el ejemplo "piso bajo" de la seccion
-// `sin_confirmar`, que es el ruteo OPUESTO (la propiedad se manda igual, con
-// la salvedad). O sea que borrar la instruccion nueva no habria roto nada.
-// Ahora se exige la frase entera de la regla, con su destino.
-test("el prompt le ordena a Sofi mandar a dudosas lo que no se puede evaluar", () => {
-  // Se normalizan los saltos de linea: el prompt esta envuelto a 80 columnas y
-  // las frases que este test exige cruzan renglones. Lo que importa es la
-  // regla, no donde cae el corte.
+// Entre el 2026-09-04 y el 2026-09-05 el prompt tuvo la orden CONTRARIA
+// ("ATRIBUTOS QUE NO PODEMOS EVALUAR (...) esas refs van en 'refs_dudosas',
+// NUNCA en 'refs_utiles'") conviviendo con la regla de arriba, y un test que
+// exigia esa frase literal. Las dos ordenes pasaban la suite a la vez y Sofi
+// obedecia una u otra segun el pedido: los cuatro pedidos con parqueadero,
+// piso o unidad cerrada evaluados la tarde del 05-sep se fueron a dudosas con
+// sin_confirmar vacio (auditoria: docs/superpowers/specs/auditoria-motor-match-2026-09-05.md).
+// Este test existe para que la orden vieja no vuelva a entrar al lado de la nueva.
+test("el prompt NO vuelve a mandar a dudosas lo que simplemente no registramos", () => {
   const s = require("../src/groups/revalidar").SISTEMA.replace(/\s+/g, " ");
-  assert.match(s, /ATRIBUTOS QUE NO PODEMOS EVALUAR/, "el bloque de la regla nueva");
-  assert.match(s, /N[UÚ]MERO DE PISO espec[ií]fico/, "no basta con la palabra 'piso': 'piso bajo' es otra cosa");
-  assert.match(s, /UNIDAD CERRADA/);
-  assert.match(s, /JARD[IÍ]N PRIVADO/);
-  assert.match(s, /ORIENTACI[OÓ]N/);
-  // El destino es la mitad de la regla: sin esto, mencionarlos y mandarlos
-  // igual seguiria pasando el test.
-  assert.match(s, /esas refs van en 'refs_dudosas', NUNCA en 'refs_utiles'/);
+  assert.ok(!/ATRIBUTOS QUE NO PODEMOS EVALUAR/.test(s), "volvio el bloque del 04-sep que contradice la regla del 05-sep");
+  assert.ok(!/esas refs van en 'refs_dudosas', NUNCA en 'refs_utiles'/.test(s));
+  // La regla vigente, con su destino: lo que no registramos va a utiles.
+  assert.match(s, /eso NUNCA baja una propiedad a refs_dudosas\. Va a refs_utiles/);
 });
 
 // El test que estaba aca ("un veredicto con solo dudosas se aprueba (va a la

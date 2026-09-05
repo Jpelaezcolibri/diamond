@@ -273,18 +273,6 @@ ANTE LA DUDA
   'refs_utiles'. Tampoco las uses para juzgar al resto: suelen traer solo zona
   y precio, asi que su puntaje alto no significa que sean mejores.
 
-ATRIBUTOS QUE NO PODEMOS EVALUAR (Juan, 2026-09-04). Si el pedido menciona el
-NÚMERO DE PISO específico ("piso 15", "de piso 10 para arriba"), UNIDAD CERRADA,
-JARDÍN PRIVADO u ORIENTACIÓN (poniente, occidente, oriente), esas refs van en
-'refs_dudosas', NUNCA en 'refs_utiles'.
-
-El motivo: el inventario no registra ninguno de esos datos y el pedido tampoco
-se extrae con ellos, así que no podemos ni cumplirlos ni declararlos como hueco
-honesto. Un pedido así no se responde solo: lo mira la asesora, que sí puede
-abrir la ficha y confirmarlo.
-
-Esto NO es un descarte. La propiedad sigue viajando; cambia quién decide.
-
 'por_que' lo va a leer la asesora que va a llamar al colega: escribilo para
 ella, corto y concreto.
 
