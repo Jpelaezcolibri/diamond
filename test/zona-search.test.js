@@ -44,8 +44,44 @@ test("BUG: 'Tierra Firme San German' NO matchea 'Loma de San Julian' solo por 's
 test("distinctiveTokens descarta genericas si hay una distintiva", () => {
   assert.deepStrictEqual(distinctiveTokens(zonaTokens("loma del indio")), ["indio"]);
   assert.deepStrictEqual(distinctiveTokens(zonaTokens("loma de los balsos")), ["balsos"]);
-  assert.deepStrictEqual(distinctiveTokens(zonaTokens("San Joaquín")), ["joaquín"]);
-  assert.deepStrictEqual(distinctiveTokens(zonaTokens("Loma de San Julián")), ["julián"]);
+  // Sin tilde desde el 2026-09-05: los tokens se aplanan (ver sinAcentos).
+  assert.deepStrictEqual(distinctiveTokens(zonaTokens("San Joaquín")), ["joaquin"]);
+  assert.deepStrictEqual(distinctiveTokens(zonaTokens("Loma de San Julián")), ["julian"]);
+});
+
+// LAS TILDES NO DISTINGUEN BARRIOS (auditoria 2026-09-05). Medido contra
+// produccion: el inventario guarda "Belén" e "Itagüi"; los colegas piden
+// "Belén" (25 pedidos en 10 dias), "Itagüí" (12), "Belen", "Itagui". Con los
+// tokens con tilde, "Itagüí" no encontraba NINGUNA propiedad (la base dice
+// "Itagüi") y "Belen" encontraba 3 de 6.
+test("zonaTokens aplana tildes, dieresis y eñe: la misma zona da los mismos tokens", () => {
+  assert.deepStrictEqual(zonaTokens("Belén"), zonaTokens("Belen"));
+  assert.deepStrictEqual(zonaTokens("Itagüí"), ["itagui"]);
+  assert.deepStrictEqual(zonaTokens("Itagüi"), ["itagui"]);
+  assert.deepStrictEqual(zonaTokens("Zúñiga"), zonaTokens("Zuniga"));
+  assert.deepStrictEqual(zonaTokens("Ciudad del Río"), zonaTokens("ciudad del rio"));
+});
+
+test("matchesFilters encuentra la zona sin importar la tilde de ninguno de los dos lados", () => {
+  const belen = { ref: "1", zona: "Belén", ciudad: "Medellín", tipo: "Casa", habitaciones: 3, precio: "$400.000.000", disponible: true };
+  assert.strictEqual(matchesFilters(belen, { zona: "Belen" }), true);
+  assert.strictEqual(matchesFilters(belen, { zona: "Belén" }), true);
+  const itagui = { ref: "2", zona: "Itagüi", ciudad: "Medellín", tipo: "Apartamento", habitaciones: 3, precio: "$300.000.000", disponible: true };
+  assert.strictEqual(matchesFilters(itagui, { zona: "Itagüí" }), true);
+  assert.strictEqual(matchesFilters(itagui, { zona: "Itagui" }), true);
+});
+
+test("patronSinTildes arma el regex que la consulta SQL usa en vez de ilike", () => {
+  const { patronSinTildes } = require("../src/lib/zonas");
+  assert.strictEqual(patronSinTildes("belen"), "b[eéèëê]l[eéèëê][nñ]");
+  assert.strictEqual(patronSinTildes("itagui"), "[iíìïî]t[aáàäâ]g[uúùüû][iíìïî]");
+  // Un token que ya viene con tilde se aplana antes: mismo patron.
+  assert.strictEqual(patronSinTildes("belén"), patronSinTildes("belen"));
+  // Y el patron reconoce las formas reales del inventario.
+  assert.ok(new RegExp(patronSinTildes("belen"), "i").test("Belén"));
+  assert.ok(new RegExp(patronSinTildes("belen"), "i").test("Belen Rosales"));
+  assert.ok(new RegExp(patronSinTildes("itagui"), "i").test("Itagüi"));
+  assert.ok(!new RegExp(patronSinTildes("laureles"), "i").test("Laurel"), "sigue siendo token completo, no substring inverso");
 });
 
 test("distinctiveTokens usa las genericas como ultimo recurso si no hay distintivas", () => {

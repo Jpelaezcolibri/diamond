@@ -64,12 +64,15 @@ function resolveOrg(orgOrId) {
 // prefiltro de grupos las necesita SIN arrastrar Supabase (corre dentro del
 // navegador del asesor). Se re-exportan mas abajo porque src/groups/match.js
 // las consume como `properties.zonaTokens(...)`.
-const { zonaTokens, distinctiveTokens, sonVecinas, vecinosDe, subzonaCoincide } = require("../lib/zonas");
+const { zonaTokens, distinctiveTokens, sonVecinas, vecinosDe, subzonaCoincide, sinAcentos, patronSinTildes } = require("../lib/zonas");
 
 function matchesFilters(p, f) {
   if (f.ref && p.ref.toUpperCase() !== f.ref.toUpperCase()) return false;
   if (f.zona) {
-    const haystack = `${p.zona} ${p.ciudad}`.toLowerCase();
+    // Aplanado igual que los tokens (ver sinAcentos en src/lib/zonas.js): la
+    // misma regla que la consulta SQL de abajo, para que el camino en memoria
+    // (tests, sin Supabase) no se comporte distinto del de produccion.
+    const haystack = sinAcentos(`${p.zona} ${p.ciudad}`);
     const tokens = distinctiveTokens(zonaTokens(f.zona));
     if (tokens.length > 0 && !tokens.some((t) => haystack.includes(t))) return false;
   }
@@ -103,7 +106,14 @@ async function search(orgOrId, filters = {}, limit = 5) {
   if (filters.zona) {
     const tokens = distinctiveTokens(zonaTokens(filters.zona));
     if (tokens.length > 0) {
-      const ors = tokens.flatMap((t) => [`zona.ilike.%${t}%`, `ciudad.ilike.%${t}%`]);
+      // imatch (regex sin mayusculas) con clases de caracteres en vez de
+      // ilike: la base no tiene unaccent y guarda "Belén" e "Itagüi" mientras
+      // los colegas piden "Belen" e "Itagüí". Medido el 2026-09-05: ilike
+      // '%itagüí%' traia 0 filas; el patron trae las 2. Ver patronSinTildes.
+      const ors = tokens.flatMap((t) => {
+        const patron = patronSinTildes(t);
+        return [`zona.imatch.${patron}`, `ciudad.imatch.${patron}`];
+      });
       query = query.or(ors.join(","));
     }
   }

@@ -37,11 +37,49 @@ const GENERIC_GEO = new Set([
   "san", "santa", "santo",
 ]);
 
-function zonaTokens(zona) {
-  return String(zona)
+// SIN TILDES, EN LAS DOS PUNTAS (auditoria 2026-09-05). Hasta hoy los tokens
+// conservaban la tilde y la comparacion exacta de zonaCoincide era sensible a
+// ella. Medido contra produccion: el inventario guarda "Belén", "Itagüi",
+// "Velódromo", "La América"; los colegas piden "Belén" (25 pedidos en 10
+// dias), "Itagüí" (12), "Belen", "Itagui". Con "Itagüí" el prefiltro SQL
+// (ilike '%itagüí%') traia CERO filas porque la base dice "Itagüi"; con
+// "Belen" traia 3 de 6. Un tokenizador que distingue "belen" de "belén" no
+// distingue barrios, distingue teclados.
+//
+// La ñ tambien se aplana: los tokens son SOLO para comparar y para armar el
+// patron de la consulta (ver patronSinTildes), nunca se muestran, y "Zúñiga"
+// se pide como "Zuñiga" y como "Zuniga".
+const ACENTOS = {
+  á: "a", à: "a", ä: "a", â: "a",
+  é: "e", è: "e", ë: "e", ê: "e",
+  í: "i", ì: "i", ï: "i", î: "i",
+  ó: "o", ò: "o", ö: "o", ô: "o",
+  ú: "u", ù: "u", ü: "u", û: "u",
+  ñ: "n",
+};
+
+function sinAcentos(t) {
+  return String(t)
     .toLowerCase()
-    .split(/[^a-záéíóúñü]+/i)
+    .replace(/[áàäâéèëêíìïîóòöôúùüûñ]/g, (c) => ACENTOS[c] || c);
+}
+
+function zonaTokens(zona) {
+  return sinAcentos(zona)
+    .split(/[^a-z]+/)
     .filter((w) => w.length >= 3 && !STOPWORDS.has(w));
+}
+
+// El patron para la consulta SQL: la base NO tiene unaccent, y un ilike con
+// el token aplanado ('%belen%') no encuentra "Belén". Cada vocal y la n se
+// vuelven una clase que acepta todas sus variantes, y se consulta con imatch
+// (regex, sin distinguir mayusculas): "belen" -> "b[eéèëê]l[eéèëê][nñ]"
+// encuentra "Belén", "Belen Rosales" y "BELEN". Los tokens son letras a-z
+// (zonaTokens ya aplano y partio), asi que no hay nada que escapar.
+const CLASE = { a: "[aáàäâ]", e: "[eéèëê]", i: "[iíìïî]", o: "[oóòöô]", u: "[uúùüû]", n: "[nñ]" };
+
+function patronSinTildes(token) {
+  return sinAcentos(token).replace(/[a-z]/g, (c) => CLASE[c] || c);
 }
 
 // Tokens que SI identifican la zona. Si hay alguno distintivo (no generico), el
@@ -96,12 +134,12 @@ const VECINDAD = [
   ["rionegro", "retiro"], ["llanogrande", "retiro"],
 ];
 
-// Sin tildes, para comparar. `zonaTokens` las CONSERVA ("Belen" y "Belén" dan
-// tokens distintos), asi que el mapa se normaliza en las dos puntas: sin esto,
-// media tabla de vecindad no matcheaba nunca y fallaba en silencio — que es
-// exactamente el tipo de bug que este modulo existe para evitar.
+// Sin tildes, para comparar. Desde el 2026-09-05 `zonaTokens` ya las aplana
+// (ver sinAcentos arriba), asi que esto es un cinturon para tokens que
+// lleguen de otro lado; antes era lo unico que hacia que la tabla de vecindad
+// matcheara, porque los tokens conservaban la tilde.
 function sinTildes(t) {
-  return String(t).normalize("NFD").replace(/\p{M}/gu, "");
+  return sinAcentos(t);
 }
 
 // token -> Set de tokens vecinos. Se arma una vez al cargar el modulo.
@@ -184,4 +222,5 @@ function subzonaCoincide(tokensPedido, tokensPropiedad) {
 
 module.exports = {
   STOPWORDS, GENERIC_GEO, zonaTokens, distinctiveTokens, sonVecinas, vecinosDe, subzonaCoincide, VECINDAD, SUBZONA_DE,
+  sinAcentos, patronSinTildes,
 };
