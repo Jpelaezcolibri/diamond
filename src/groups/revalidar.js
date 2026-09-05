@@ -46,6 +46,7 @@
 // garajes y otra no. Por eso viaja como {ref, detalle} y la aclaracion se
 // imprime dentro de la ficha de esa propiedad, no en el encabezado.
 const config = require("../config");
+const formato = require("../lib/formato");
 const { getClient, CACHE_ESTABLE, registrarUso } = require("../lib/anthropic");
 // Los margenes del motor se interpolan en el prompt desde su unica fuente
 // (auditoria 2026-09-05, H2): el motor aceptaba +10 % de precio y -10 % de
@@ -386,7 +387,7 @@ function formatearCandidatas(matches) {
       // = sin dato) y el que esta linea ya aplicaba para estrato. Un cero deja
       // de significar "no tiene" porque en estos datos nunca lo significo.
       const dato = (valor, unidad) =>
-        Number(valor) > 0 ? `${valor} ${unidad}` : `${unidad}: sin dato`;
+        formato.datoCargado(valor) ? `${valor} ${unidad}` : `${unidad}: sin dato`;
       const datos = [
         `ref ${m.ref}`,
         m.operacion,
@@ -396,7 +397,7 @@ function formatearCandidatas(matches) {
         m.habitaciones ? `${m.habitaciones} alcobas` : null,
         dato(m.banos, "baños"),
         dato(m.garajes, "garajes"),
-        m.estrato > 0 ? `estrato ${m.estrato}` : "estrato: sin dato",
+        formato.datoCargado(m.estrato) ? `estrato ${m.estrato}` : "estrato: sin dato",
       ]
         .filter(Boolean)
         .join(" · ");

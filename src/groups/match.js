@@ -368,7 +368,7 @@ function evaluarCandidata(p, c, fuente) {
 
   for (const e of exigencias) {
     if (!(e.pide > 0)) continue;
-    if (e.tiene == null || !(e.tiene > 0)) continue; // sin dato: ni suma ni resta
+    if (!formato.datoCargado(e.tiene)) continue; // sin dato: ni suma ni resta
     if (!e.ok(e.tiene, e.pide)) return null;
     // Paso la compuerta PERO por debajo de lo pedido: entro por la gabela. La
     // razon lo dice —en el panel "2 alcobas" al lado de un 100% se leia como

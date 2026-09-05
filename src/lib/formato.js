@@ -81,11 +81,24 @@ function formatearArea(raw) {
   return `${numero.toLocaleString("es-CO")} m²`;
 }
 
+// "0 = SIN DATO", EN UN SOLO LUGAR (auditoria 2026-09-05, H6). Wasi manda 0
+// cuando el campo no se cargo (medido: garaje = 0 en 39 de 114 disponibles,
+// null en cero), asi que para baños, garajes, estrato y las exigencias del
+// pedido un 0 significa "no lo sabemos", nunca "no tiene". Esa regla vivia
+// repetida en match.js, revalidar.js, redactar.js, alerta-asesor.js y
+// cruce-mandatos.js con cinco expresiones distintas (`> 0`, `== null ||
+// !(x > 0)`, `Number(v) > 0`...). Un solo predicado para los cinco: si algun
+// dia Wasi distingue el 0 real, se cambia aca y no en cinco archivos.
+function datoCargado(valor) {
+  const n = Number(valor);
+  return Number.isFinite(n) && n > 0;
+}
+
 // "1 alcobas" era el bug: `${n} alcobas` sin singular, en senales-grupos.tsx y
 // en advisor.js. Se ve en el primer mensaje que lea un colega.
 function pluralizar(cantidad, singular, plural = null) {
+  if (!datoCargado(cantidad)) return null;
   const n = Number(cantidad);
-  if (!Number.isFinite(n) || n <= 0) return null;
   const palabra = n === 1 ? singular : plural || `${singular}s`;
   return `${n} ${palabra}`;
 }
@@ -124,6 +137,7 @@ module.exports = {
   formatearPrecioCorto,
   parsearArea,
   formatearArea,
+  datoCargado,
   pluralizar,
   normalizarTitulo,
 };

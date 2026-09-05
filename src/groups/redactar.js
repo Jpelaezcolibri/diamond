@@ -148,7 +148,7 @@ function ficha(match, indice, { detalleFalta = null } = {}) {
   const detalles = [
     formato.pluralizar(match.banos, "baño", "baños"),
     formato.pluralizar(match.garajes, "garaje"),
-    match.estrato > 0 ? `estrato ${match.estrato}` : null,
+    formato.datoCargado(match.estrato) ? `estrato ${match.estrato}` : null,
   ]
     .filter(Boolean)
     .join(" · ");

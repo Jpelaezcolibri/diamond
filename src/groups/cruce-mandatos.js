@@ -23,7 +23,9 @@ const formato = require("../lib/formato");
 const MARGEN_PRECIO_DEFAULT = Number(process.env.RADAR_MANDATO_MARGEN_PRECIO || 0.15);
 
 const lista = (v) => (Array.isArray(v) ? v.filter(Boolean) : []);
-const num = (v) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : 0);
+// "0 = sin dato" es la misma regla que en match.js, revalidar.js, redactar.js
+// y alerta-asesor.js: una sola definicion en formato.datoCargado.
+const num = (v) => (formato.datoCargado(v) ? Number(v) : 0);
 
 /**
  * Traduce un mandato al shape de criterio que espera evaluarCandidata.

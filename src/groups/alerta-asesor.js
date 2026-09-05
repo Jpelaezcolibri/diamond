@@ -205,14 +205,14 @@ function queBusca(senal) {
     senal.operacion,
     senal.tipo,
     zonas,
-    senal.precio_max > 0 ? `hasta ${formato.formatearPrecio(senal.precio_max)}` : null,
-    senal.habitaciones > 0
-      ? `${senal.habitaciones} alcoba${senal.habitaciones === 1 ? "" : "s"}${senal.flexible_habitaciones ? " (o una menos con estudio)" : ""}`
+    formato.datoCargado(senal.precio_max) ? `hasta ${formato.formatearPrecio(senal.precio_max)}` : null,
+    formato.datoCargado(senal.habitaciones)
+      ? `${formato.pluralizar(senal.habitaciones, "alcoba")}${senal.flexible_habitaciones ? " (o una menos con estudio)" : ""}`
       : null,
-    senal.area_min > 0 ? `desde ${senal.area_min} m²` : null,
-    senal.banos > 0 ? `${senal.banos} baños` : null,
-    senal.garajes > 0 ? `${senal.garajes} garaje${senal.garajes === 1 ? "" : "s"}` : null,
-    senal.estrato > 0 ? `estrato ${senal.estrato}` : null,
+    formato.datoCargado(senal.area_min) ? `desde ${senal.area_min} m²` : null,
+    formato.pluralizar(senal.banos, "baño", "baños"),
+    formato.pluralizar(senal.garajes, "garaje"),
+    formato.datoCargado(senal.estrato) ? `estrato ${senal.estrato}` : null,
   ].filter(Boolean);
   return partes.length ? partes.join(" · ") : null;
 }

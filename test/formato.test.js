@@ -88,3 +88,19 @@ test("un titulo bien escrito no se toca", () => {
   assert.strictEqual(f.normalizarTitulo(""), null);
   assert.strictEqual(f.normalizarTitulo(null), null);
 });
+
+// "0 = SIN DATO" EN UN SOLO LUGAR (auditoria 2026-09-05, H6). Wasi manda 0
+// cuando el campo no se cargo; la regla vivia repetida en cinco archivos con
+// cinco expresiones distintas. Ahora todos preguntan aca.
+test("datoCargado: solo un numero mayor que cero cuenta como dato", () => {
+  const { datoCargado } = require("../src/lib/formato");
+  assert.strictEqual(datoCargado(2), true);
+  assert.strictEqual(datoCargado("3"), true);
+  assert.strictEqual(datoCargado(0), false, "el 0 de Wasi es 'no se cargo'");
+  assert.strictEqual(datoCargado("0"), false);
+  assert.strictEqual(datoCargado(null), false);
+  assert.strictEqual(datoCargado(undefined), false);
+  assert.strictEqual(datoCargado(""), false);
+  assert.strictEqual(datoCargado("abc"), false);
+  assert.strictEqual(datoCargado(-1), false);
+});
