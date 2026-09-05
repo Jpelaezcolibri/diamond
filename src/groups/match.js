@@ -225,7 +225,28 @@ function zonasPedidas(c) {
 }
 
 function zonaCoincide(p, c) {
-  const tokensPropiedadArr = properties.zonaTokens(p.zona || "");
+  // CUANDO LA "ZONA" ES UN MUNICIPIO (caso Esteban Higuita, 2026-09-05).
+  //
+  // En el Valle de Aburra el colega nombra municipios —Sabaneta, Envigado,
+  // Itagui, La Estrella— como si fueran barrios, y Wasi los guarda en `ciudad`
+  // dejando `zona` vacia. Con la zona vacia esta funcion daba false, zonaVecina
+  // tambien, y ubicacionCoincide terminaba descartando la propiedad ENTERA en
+  // su `if (!ciudadCoincide) return null` — antes de que nadie mirara area,
+  // precio ni alcobas.
+  //
+  // El caso: Esteban pidio "Envigado y Sabaneta"; la ref 9776631 (Apartamento
+  // en Sabaneta, 77 m2, 3 alcobas, 2 baños, $470M, disponible) tiene `zona`
+  // vacia y `ciudad = Sabaneta`. Nunca salio. Con la zona cargada puntua 95.
+  // Medido ese dia: 17 de 122 propiedades sin zona, 3 invisibles para el
+  // municipio que las contiene.
+  //
+  // ANGOSTO A PROPOSITO: la ciudad se mira SOLO si `zona` esta vacia. Si
+  // valiera siempre, quien pide "El Poblado" empezaria a recibir cualquier
+  // cosa de Medellin — que es el bug de zona mal comparada que costo 656
+  // falsos positivos en julio.
+  const zonaCruda = String(p.zona || "").trim();
+  const ubicacion = zonaCruda || String(p.ciudad || "").trim();
+  const tokensPropiedadArr = properties.zonaTokens(ubicacion);
   const tokensPropiedad = new Set(tokensPropiedadArr);
   for (const z of zonasPedidas(c)) {
     const tokensPedido = properties.distinctiveTokens(properties.zonaTokens(z));
@@ -323,15 +344,20 @@ function ubicacionCoincide(p, c) {
 
   const pide = zonasPedidas(c).length > 0;
 
-  if (pide && zonaCoincide(p, c)) return { razon: `Zona: ${p.zona}`, puntos: 20, grado: "exacta" };
+  // La ubicacion que se MUESTRA: la zona si la hay, y si no la ciudad (que en
+  // ese caso es lo que hizo coincidir — ver la nota en zonaCoincide). Sin
+  // esto la asesora leia "Zona: " a secas, un dato vacio donde va el motivo.
+  const donde = String(p.zona || "").trim() || String(p.ciudad || "").trim();
+
+  if (pide && zonaCoincide(p, c)) return { razon: `Zona: ${donde}`, puntos: 20, grado: "exacta" };
   if (pide && zonaVecina(p, c)) {
-    return { razon: `${p.zona} (vecina de lo pedido)`, puntos: -5, grado: "vecina" };
+    return { razon: `${donde} (vecina de lo pedido)`, puntos: -5, grado: "vecina" };
   }
   if (pide) {
     // Zona distinta y no contigua. Entra, pero muy castigada y marcada: solo
     // llega a la asesora si TODO lo demas calza y Sofi lo aprueba.
     if (!ciudadCoincide(p, c)) return null;
-    return { razon: `${p.zona || p.ciudad} (fuera de la zona pedida)`, puntos: -35, grado: "otra_zona" };
+    return { razon: `${donde} (fuera de la zona pedida)`, puntos: -35, grado: "otra_zona" };
   }
   if (ciudadCoincide(p, c)) {
     return { razon: `Ciudad: ${p.ciudad} (sin barrio en el pedido)`, puntos: -15, grado: "ciudad" };
@@ -511,7 +537,11 @@ function evaluarCandidata(p, c, fuente) {
     fuente,
     ref: p.ref || null,
     titulo: p.titulo || null,
-    zona: p.zona || null,
+    // La ubicacion EFECTIVA: si `zona` esta vacia va la ciudad, que es lo que
+    // hizo coincidir (ver zonaCoincide). Sin esto la ficha que recibe el
+    // colega salia con "Ref 9776631 · Venta ·" y ninguna ubicacion, y el
+    // aviso a la asesora mostraba la propiedad sin decir donde queda.
+    zona: p.zona || p.ciudad || null,
     precio: p.precio || null,
     operacion: p.operacion || null,
     // El link SIEMPRE es el de la landing propia, nunca Wasi (ver
