@@ -54,7 +54,11 @@ const config = {
   // si falta, el worker se auto-desactiva con un warn.
   followups: {
     enabled: process.env.FOLLOWUPS_ENABLED !== "false",
-    silenceMin: parseInt(process.env.FOLLOWUP_SILENCE_MIN || "120", 10), // 2h de silencio del cliente
+    // 1h de silencio del cliente (Juan, 2026-09-05: "solo quiero que hagas uno
+    // solo despues de una hora de no respuesta del cliente"). Antes eran 2h.
+    // El toque SIGUE siendo uno solo por lead para siempre — lo garantiza el
+    // claim atomico de leads.claimFollowup, no este numero.
+    silenceMin: parseInt(process.env.FOLLOWUP_SILENCE_MIN || "60", 10),
     maxSilenceMin: parseInt(process.env.FOLLOWUP_MAX_SILENCE_MIN || "1200", 10), // tope 20h: margen antes del cierre de la ventana de 24h
     intervalMin: parseInt(process.env.FOLLOWUP_INTERVAL_MIN || "15", 10),
     quietStartHour: parseInt(process.env.FOLLOWUP_QUIET_START || "20", 10), // silencio 8pm...
