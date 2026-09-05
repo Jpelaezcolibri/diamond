@@ -187,7 +187,7 @@ LAS CUATRO SITUACIONES — confundirlas es el error mas caro que podes cometer
 | INCOMPATIBLE | NO, y tampoco a refs_dudosas | otra zona no vecina, otro municipio, otro tipo de propiedad, otra operacion, fuera de presupuesto, o algo innegociable que no cumple | nada: se descarta |
 | INCOMPLETO | SI | calza en todo lo verificable, pero el pedido menciona algo que el inventario NO REGISTRA (terraza, piso, antiguedad, vista) O que la ficha trae como "sin dato" (garajes: sin dato, baños: sin dato, estrato: sin dato) | listar ese dato en 'sin_confirmar' |
 | CASI | SI | SABEMOS el dato y NO cumple, pero es UNA SOLA cosa y es ACCESORIA | anotarlo en 'le_falta' con {ref, detalle} |
-| DUDOSA | NO, pero SI a 'refs_dudosas' | no es un descarte limpio y tampoco calza con confianza: DOS O MAS incumplimientos accesorios a la vez, o una zona vecina lejana que te genera dudas reales | nada mas: la asesora decide si llamar al colega |
+| DUDOSA | NO, pero SI a 'refs_dudosas' | no es un descarte limpio y tampoco calza con confianza: DOS O MAS incumplimientos accesorios CONOCIDOS a la vez (datos que tenemos y no alcanzan — NUNCA datos que no registramos), o una zona vecina lejana que te genera dudas reales | nada mas: la asesora decide si llamar al colega |
 
 ACCESORIO vs DE FONDO — es la linea que decide CASI contra INCOMPATIBLE
 - SOBRAR NO ES FALLAR. Todo esto habla de lo que FALTA. Una propiedad con MAS
@@ -205,8 +205,10 @@ ACCESORIO vs DE FONDO — es la linea que decide CASI contra INCOMPATIBLE
 - ACCESORIO, puede pasar con su aclaracion: un garaje de menos, el cuarto
   util, un baño de menos, unos pocos m² por debajo del minimo, un detalle de
   acabados o de piso.
-- DOS O MAS incumplimientos conocidos: NO pasa como CASI, aunque cada uno por
-  separado fuera accesorio. "Le falta un parqueadero" se le ofrece a un
+- DOS O MAS incumplimientos CONOCIDOS (datos que tenemos y no alcanzan): NO
+  pasa como CASI, aunque cada uno por separado fuera accesorio. Un dato que NO
+  registramos no cuenta aca — eso es INCOMPLETO, y va a refs_utiles con
+  sin_confirmar sin importar cuantos sean. "Le falta un parqueadero" se le ofrece a un
   colega; "le falta un parqueadero, un baño y 6 m²" es hacerle perder el
   tiempo — eso es DUDOSA.
 - LA LISTA DE "DE FONDO" ES CERRADA: zona, municipio, tipo, operacion,
@@ -230,6 +232,22 @@ ANTE LA DUDA
   el pedido exige garaje y la ficha dice "garajes: sin dato", la propiedad va
   en refs_utiles con "garaje" en sin_confirmar — nunca en refs_dudosas por
   eso solo.
+- NO SE CUENTAN LOS DATOS QUE NO TENEMOS. La regla de "DOS O MAS" cuenta
+  incumplimientos CONOCIDOS —datos que tenemos y no alcanzan—, jamas datos que
+  no registramos. Da igual que sean uno, dos o cinco: si lo unico que impide
+  aprobarlas es que no podemos VERIFICAR algo, todas van a refs_utiles con
+  esos datos listados en 'sin_confirmar'.
+  El caso que lo motivo (Patricia Urreta, 2026-09-05): pidio "SIN poniente" y
+  "maximo 2 años de construido". El inventario no registra orientacion ni
+  antiguedad, asi que las cuatro propiedades —que cumplian zona, precio, area
+  y alcobas— se fueron a refs_dudosas y al colega no le llego nada. Regla de
+  Juan, literal: "no podemos dejar de avisar por no conocer el poniente ni los
+  años de construccion". Lo que corresponde es ofrecerlas diciendo que esos
+  dos datos no los tenemos; el colega pregunta si le importan.
+  Decirlo en 'sin_confirmar' NO es una excusa para bajar el estandar: lo
+  verificable —zona, precio, area, alcobas, operacion— tiene que cumplir
+  igual. Lo unico que cambia es que la falta de un dato deja de ser un voto en
+  contra.
 - Todo lo que este dentro del presupuesto y tenga IGUAL O MAS de lo pedido
   en metros, alcobas, baños o garajes se manda. Nada que este por encima se
   niega.
