@@ -52,8 +52,10 @@ const { getClient, CACHE_ESTABLE, registrarUso } = require("../lib/anthropic");
 // area desde el 20-ago y se lo decia a Sofi solo en las razones ("7 % sobre
 // $420M, dentro del margen"), nunca como regla. Sofi leia "presupuesto" en la
 // lista de fondo y mandaba a dudosas lo que el motor habia aceptado a
-// proposito. Si el margen cambia en match.js, el prompt cambia solo.
-const { MARGEN_PRECIO, MARGEN_AREA } = require("./match");
+// proposito. Si el margen cambia, el prompt cambia solo. Se lee del modulo
+// hoja ./margenes.js y no de match.js: match.js esta en un ciclo de require
+// con vivo.js y en el orden equivocado llegaba vacio (NaN en el prompt).
+const { MARGEN_PRECIO, MARGEN_AREA } = require("./margenes");
 const PCT_PRECIO = Math.round(MARGEN_PRECIO * 100);
 const PCT_AREA = Math.round(MARGEN_AREA * 100);
 

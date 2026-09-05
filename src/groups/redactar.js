@@ -70,6 +70,12 @@
 
 const formato = require("../lib/formato");
 const { linkContactoOficial } = require("../lib/contacto");
+// Solo para ubicacionCoincide (ver gradoDeZona): la definicion de "misma
+// zona" vive en el motor y aca no se reimplementa. Se importa del modulo
+// hoja ./ubicacion.js y NO de ./match.js: match.js esta en un ciclo de
+// require con vivo.js y los tests de asistido lo pisan entero en
+// require.cache, asi que desde aca llegaba vacio.
+const ubicacion = require("./ubicacion");
 
 // SIN TOPE (Juan, 2026-08-20): "que no se restrinja a 3, que se envien los
 // que tengan un scoring alto" — se manda TODO lo que ya paso la compuerta de
@@ -174,25 +180,46 @@ function ficha(match, indice, { detalleFalta = null } = {}) {
 //
 // Solo habla de lo que puede comparar: sin zonas pedidas o sin habitaciones en
 // el pedido, no dice nada — nunca inventa un desvio por falta de dato.
-const sinTildes = (t) =>
-  String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").trim().toLocaleLowerCase("es-CO");
+// LA ZONA LA JUZGA EL MOTOR, NO ESTA FUNCION (auditoria 2026-09-05, H5). La
+// primera version comparaba por substring en los dos sentidos —el patron que
+// match.js abandono en julio por 656 falsos positivos— y no sabia de subzonas
+// ni de vecindad. Resultado medido: para San Joaquin pedido "Laureles" el
+// motor decia EXACTA y esta funcion escribia "queda en San Joaquin, no en
+// Laureles"; para Loma de los Balsos pedido "El Poblado", "no en El Poblado"
+// siendo vecina. El colega recibia una objecion sobre una propiedad que
+// estaba justo donde pidio.
+//
+// Ahora el grado sale de ubicacion.js#ubicacionCoincide (token exacto +
+// subzona + vecindad), la misma funcion que usa el motor: se usa el grado que
+// ya viaja en el match (`ubicacion`) y, si no viene
+// —matches guardados antes de que existiera, fixtures viejos—, se recalcula
+// con la misma funcion sobre los mismos datos. Una sola definicion de "misma
+// zona" para el puntaje, para Sofi y para el mensaje.
+const GRADOS = new Set(["exacta", "vecina", "otra_zona", "ciudad"]);
+
+function gradoDeZona(match, pedido) {
+  if (GRADOS.has(match.ubicacion)) return match.ubicacion;
+  const zonas = (Array.isArray(pedido.zonas) ? pedido.zonas : [pedido.zona]).map((z) => String(z || "").trim()).filter(Boolean);
+  if (!zonas.length) return null;
+  const grado = ubicacion.ubicacionCoincide({ zona: match.zona || "", ciudad: match.ciudad || "" }, { zonas, zona: zonas[0] });
+  return grado ? grado.grado : "otra_zona";
+}
 
 function desvios(match, pedido) {
   if (!pedido) return [];
   const salida = [];
 
   const zonasPedidas = (Array.isArray(pedido.zonas) ? pedido.zonas : [pedido.zona])
-    .map(sinTildes)
+    .map((z) => String(z || "").trim())
     .filter(Boolean);
   const zonaProp = String(match.zona || "").trim();
   if (zonasPedidas.length > 0 && zonaProp) {
-    // Se compara en los dos sentidos: "El Poblado" pedido contra "Poblado"
-    // guardado (y al reves) es la misma zona, no un desvio.
-    const z = sinTildes(zonaProp);
-    const calza = zonasPedidas.some((p) => z.includes(p) || p.includes(z));
-    if (!calza) {
-      salida.push(`queda en ${zonaProp}, no en ${pedido.zonas ? pedido.zonas.join(" ni ") : pedido.zona}`);
-    }
+    const grado = gradoDeZona(match, pedido);
+    const pedidas = zonasPedidas.join(" ni ");
+    // "vecina" se dice como vecina: es verdad y es la razon por la que el
+    // motor la dejo pasar. Solo "no en X" cuando de verdad esta en otro lado.
+    if (grado === "vecina") salida.push(`queda en ${zonaProp}, vecina de ${zonasPedidas.join(" y ")}`);
+    else if (grado !== "exacta") salida.push(`queda en ${zonaProp}, no en ${pedidas}`);
   }
 
   // SOBRAR NO ES FALLAR — la misma regla que el prompt de revalidar.js repite
