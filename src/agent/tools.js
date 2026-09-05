@@ -537,7 +537,22 @@ async function executeTool(name, input, ctx) {
       }
       return "No se encontraron propiedades con esos criterios en el inventario.";
     }
-    return JSON.stringify(results, null, 2);
+    // `images` NO se le manda al modelo. Es el campo mas pesado de la fila
+    // —2.907 chars de una propiedad de 4.748, el 61%— y Sofi no lo usa
+    // nunca: la ficha pide "📸 Ver fotos: [link exacto de la propiedad]" y la
+    // regla 16 habla de "link de fotos", que es `link` (la landing), no el
+    // array de URLs de Wasi. Ningun consumidor lee `.images` de este
+    // resultado.
+    //
+    // Y no se paga una vez: este texto entra a `messages` como tool_result y
+    // se REENVIA entero en cada vuelta del tool loop de engine.js. Medido
+    // sobre las 114 disponibles, una busqueda de 5 propiedades baja de ~9.600
+    // a ~7.600 tokens.
+    //
+    // ctx.propertyInteres y las alertas siguen recibiendo la fila COMPLETA:
+    // esto solo recorta lo que viaja al modelo.
+    const paraElModelo = results.map(({ images, ...resto }) => resto);
+    return JSON.stringify(paraElModelo, null, 2);
   }
 
   if (name === "registrar_dato_lead") {

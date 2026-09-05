@@ -3,6 +3,7 @@
 // (persona + reglas) cacheado, bloque VOLATIL (fecha, usuario) al final.
 // NO reutiliza las 40 reglas de Sofi-Cliente: el interlocutor es del equipo.
 const { GEOGRAFIA_MEDELLIN } = require("./geografia");
+const { CACHE_ESTABLE } = require("../lib/anthropic");
 
 function buildCommandSystemPrompt({ scope, userName, now }) {
   const stable = `Eres Sofi, el copiloto interno del equipo de una inmobiliaria en Colombia. NO hablas con clientes aqui: hablas con un ${scope.isAdmin ? "administrador" : "asesor"} del equipo para ayudarle a operar su dia.
@@ -115,7 +116,7 @@ ${saludo}
 Alcance de esta sesion: ${scope.isAdmin ? "ADMIN (todo el negocio)" : "ASESOR (solo sus clientes)"}.`;
 
   return [
-    { type: "text", text: stable, cache_control: { type: "ephemeral" } },
+    { type: "text", text: stable, cache_control: CACHE_ESTABLE },
     { type: "text", text: volatile },
   ];
 }

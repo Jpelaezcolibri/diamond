@@ -16,7 +16,7 @@ const { executeCommandTool, toolsForScope, MUTATING_TOOLS } = require("./sofi-co
 // docs/superpowers/specs/2026-09-01-sofi-comando-auditoria-honestidad-design.md#5.
 const { auditar } = require("./sofi-comando-auditoria");
 const { notificarFalloComando } = require("./notificar-fallo-comando");
-const { getClient } = require("../lib/anthropic");
+const { getClient, registrarUso } = require("../lib/anthropic");
 
 // 8, no 5: encontrado en produccion 2026-08-18 — Juan le pidio a Sofi mandarle
 // un WhatsApp a Catherine por cada uno de 6 pedidos pendientes (una tool por
@@ -246,6 +246,7 @@ async function processMessage(scope, sessionId, text, { userName } = {}) {
     messages,
     tools: toolsForScope(scope),
   });
+  registrarUso("comando", response.usage);
 
   const textParts = [];
   const llamadasMutantes = [];
@@ -284,6 +285,7 @@ async function processMessage(scope, sessionId, text, { userName } = {}) {
       messages,
       tools: toolsForScope(scope),
     });
+    registrarUso(`comando:tool_loop#${iterations}`, response.usage);
   }
 
   // El loop se corto por el tope de iteraciones mientras el modelo TODAVIA
