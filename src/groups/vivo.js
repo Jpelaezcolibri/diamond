@@ -334,6 +334,7 @@ function pedidoDe(fuente) {
     zonas: Array.isArray(fuente.zonas) && fuente.zonas.length ? fuente.zonas : null,
     zona: fuente.zona || null,
     habitaciones: fuente.habitaciones || null,
+    areaMin: fuente.area_min || null,
   };
 }
 

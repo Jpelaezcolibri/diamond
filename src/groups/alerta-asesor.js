@@ -157,6 +157,7 @@ function mensajeListoParaReenviar(senal, veredicto, utiles, org) {
       zonas: Array.isArray(senal.zonas) && senal.zonas.length ? senal.zonas : null,
       zona: senal.zona || null,
       habitaciones: senal.habitaciones || null,
+      areaMin: senal.area_min || null,
     },
   });
 }

@@ -116,3 +116,44 @@ test("desvios() detecta que sobra una alcoba y que falta", () => {
   const falta = redactar.desvios({ ...APTO_SABANETA, habitaciones: 1 }, { habitaciones: 3 });
   assert.match(falta.join(" "), /1 alcoba/);
 });
+
+// ── El área que se queda corta ────────────────────────────────────────────
+//
+// Faltaba (Juan, 2026-09-05, caso Esteban Higuita). Pidió "Área 80m2 en
+// adelante" y la ref 9776631 tiene 77 m². Entra por el margen del 10 %
+// (GRUPOS_MARGEN_AREA) y está bien que entre — pero el colega tiene que
+// leerlo, no descubrirlo abriendo el link. Es el mismo principio que la zona:
+// el dato no es falso, la omisión es lo que quema.
+const APTO_SABANETA_77 = {
+  ref: "9776631",
+  titulo: "Venta Apartamento en Sabaneta en Zona Plana",
+  operacion: "Venta", zona: "Sabaneta", area: "77m2",
+  habitaciones: 3, banos: 2, precio: "$470.000.000",
+  linkWasi: "https://info.wasi.co/x/9776631?shared=whatsapp",
+};
+
+test("área por debajo de la pedida: el mensaje lo aclara", () => {
+  const t = redactar.mensajeGrupo({ autor_nombre: "Esteban" }, [APTO_SABANETA_77], {
+    pedido: { zonas: ["Envigado", "Sabaneta"], habitaciones: 3, areaMin: 80 },
+  });
+  assert.match(t, /Aclaración/);
+  assert.match(t, /77/, "no dice el área real");
+  assert.match(t, /80/, "no dice la que pidió");
+});
+
+test("área que cumple: no inventa una aclaración", () => {
+  const t = redactar.mensajeGrupo({ autor_nombre: "Esteban" }, [{ ...APTO_SABANETA_77, area: "83m2" }], {
+    pedido: { zonas: ["Sabaneta"], habitaciones: 3, areaMin: 80 },
+  });
+  assert.ok(!t.includes("Aclaración"), `aclaró algo que no hacía falta:\n${t}`);
+});
+
+test("sin área mínima en el pedido no se dice nada", () => {
+  assert.deepStrictEqual(redactar.desvios(APTO_SABANETA_77, { zonas: ["Sabaneta"], habitaciones: 3 }), []);
+});
+
+test("el caso de Esteban completo: zona bien, alcobas bien, área corta", () => {
+  const d = redactar.desvios(APTO_SABANETA_77, { zonas: ["Envigado", "Sabaneta"], habitaciones: 3, areaMin: 80 });
+  assert.strictEqual(d.length, 1, `esperaba solo el desvío de área: ${JSON.stringify(d)}`);
+  assert.match(d[0], /77.*80|80.*77/);
+});

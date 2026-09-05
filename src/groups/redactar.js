@@ -201,6 +201,17 @@ function desvios(match, pedido) {
     salida.push(`${formato.pluralizar(tiene, "alcoba")} y pediste ${pedidas}`);
   }
 
+  // EL AREA QUE SE QUEDA CORTA (Juan, 2026-09-05, caso Esteban Higuita). Pidio
+  // "Area 80m2 en adelante" y la ref 9776631 tiene 77. Entra por el margen del
+  // 10 % de match.js (MARGEN_AREA) y esta bien que entre — pero el colega
+  // tiene que leerlo aca, no descubrirlo abriendo el link. Solo se avisa
+  // cuando FALTA: que sobre area nunca es un problema para quien compra.
+  const areaMin = Number(pedido.areaMin || pedido.area_min) || 0;
+  const areaTiene = formato.parsearArea(match.area) || 0;
+  if (areaMin > 0 && areaTiene > 0 && areaTiene < areaMin) {
+    salida.push(`${areaTiene} m² y pediste desde ${areaMin}`);
+  }
+
   return salida;
 }
 
