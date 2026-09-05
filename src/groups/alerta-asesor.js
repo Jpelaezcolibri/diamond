@@ -42,6 +42,7 @@ const formato = require("../lib/formato");
 const { normalizarTitulo } = require("../lib/formato");
 const { linkWhatsappEstricto, linkContactoOficial, tocarNombreEnGrupo, telefonoEnTexto } = require("../lib/contacto");
 const redactar = require("./redactar");
+const { REFS_BLOQUEADAS } = require("./publicable");
 
 // Una propiedad, corta: la asesora ya conoce el inventario, no necesita la
 // ficha entera. Necesita reconocerla y tener el link a mano.
@@ -238,16 +239,35 @@ function construir(senal, veredicto, matches, telefonoColega = null, org = null,
   const refsDudosas = veredicto && Array.isArray(veredicto.refs_dudosas) ? veredicto.refs_dudosas : [];
   if (!veredicto || (refsUtiles.length === 0 && refsDudosas.length === 0)) return null;
 
+  // REFS BLOQUEADAS (2026-09-05). Una ref en GRUPOS_REFS_BLOQUEADAS no sale a
+  // ningun colega porque tiene un dato mal cargado en Wasi —la 9921388 lleva
+  // semanas ahi por el precio. Pero refsDelAviso arma el aviso con las refs
+  // CRUDAS del veredicto, sin pasar por publicable.filtrar, asi que la asesora
+  // las veia listadas como ofrecibles: el 2026-09-05 el aviso de GUSTAVO
+  // ARANGO le mostro "Ref 9921388 · $1.550.000.000". Si ella la ofrece, el
+  // bloqueo no sirvio de nada — el precio equivocado sale igual, por su mano.
+  //
+  // Se APARTAN, no se ocultan: si la asesora ve un pedido sin propiedades no
+  // entiende por que le llego, y si la bloqueada era la unica tiene derecho a
+  // saber que existe y por que todavia no se puede ofrecer.
+  const bloqueada = (ref) => REFS_BLOQUEADAS.has(String(ref).trim().toUpperCase());
+  const refsApartadas = [...refsUtiles, ...refsDudosas].map(String).filter(bloqueada);
+
   const utiles = refsUtiles
+    .filter((ref) => !bloqueada(ref))
     .map((ref) => (matches || []).find((m) => String(m.ref) === String(ref)))
     .filter(Boolean);
   // Para revisar (Juan, 2026-09-01): refs_dudosas de revalidar.js -- Sofi no
   // las aprueba para el envio normal, pero tampoco las descarta del todo.
   // Van SOLO al asesor, nunca al colega.
   const dudosas = refsDudosas
+    .filter((ref) => !bloqueada(ref))
     .map((ref) => (matches || []).find((m) => String(m.ref) === String(ref)))
     .filter(Boolean);
-  if (utiles.length === 0 && dudosas.length === 0) return null;
+  // `refsApartadas.length` en la condicion: si TODO lo que habia estaba
+  // bloqueado, el aviso tiene que salir igual — es justo el caso en que la
+  // asesora necesita saber que teniamos algo y por que no se puede ofrecer.
+  if (utiles.length === 0 && dudosas.length === 0 && refsApartadas.length === 0) return null;
 
   const quien = senal.autor_nombre || "un colega";
   const contactoTexto = contactoPara(telefonoColega, senal.autor_telefono, quien, senal.texto_original);
@@ -299,6 +319,16 @@ function construir(senal, veredicto, matches, telefonoColega = null, org = null,
       ]
     : [];
 
+  // Lo apartado, con su razon. Va DESPUES de lo ofrecible y antes del veredicto
+  // de Sofi: la asesora primero ve con que puede trabajar, y despues por que
+  // una quedo afuera.
+  const bloqueApartadas = refsApartadas.length
+    ? [
+        ``,
+        `⛔ ${refsApartadas.map((r) => `Ref ${r}`).join(", ")} también calza, pero tiene un dato mal cargado en Wasi — no la ofrezcas hasta que se corrija.`,
+      ]
+    : [];
+
   const sofiDice = [``, `Sofi dice: ${veredicto.por_que}`];
 
   // Mensaje listo para reenviar (Juan, 2026-09-01): sin telefono resuelto,
@@ -333,7 +363,7 @@ function construir(senal, veredicto, matches, telefonoColega = null, org = null,
   const cierre = [``, `Contame en qué quedó (la llamaste, no servía, ya se vendió). Con eso el radar aprende.`];
 
   const armar = (compacto) =>
-    [...cabecera, ...bloqueUtiles(compacto), ...bloqueDudosas, ...sofiDice, ...bloqueReenviar, ...bloqueSofi, ...cierre].join("\n");
+    [...cabecera, ...bloqueUtiles(compacto), ...bloqueDudosas, ...bloqueApartadas, ...sofiDice, ...bloqueReenviar, ...bloqueSofi, ...cierre].join("\n");
 
   const completo = armar(false);
   // Margen de seguridad bajo el limite real de Meta (4096). Solo tiene
