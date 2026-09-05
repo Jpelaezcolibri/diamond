@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getCalendarEvents, bogotaDateKey, type CalendarEvent } from "@/lib/calendar-events";
 import ErrorBanner from "@/components/error-banner";
+import { CancelarCitaAvisos, BotonCancelarCita } from "@/components/cancelar-cita";
 
 export const dynamic = "force-dynamic";
 
@@ -136,60 +137,87 @@ export default async function CalendarioPage({
 
       {hasError && <ErrorBanner message={message} />}
 
-      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="grid min-w-[720px] grid-cols-7 border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
-          {DIAS_SEMANA.map((d) => (
-            <div key={d} className="px-3 py-2 text-center">
-              {d}
-            </div>
-          ))}
-        </div>
-        <div className="grid min-w-[720px] grid-cols-7">
-          {cells.map((cell) => {
-            const dayEvents = porDia.get(cell.iso) || [];
-            const esHoy = cell.iso === hoyKey;
-            return (
-              <div
-                key={cell.iso}
-                className={`min-h-[110px] border-b border-r border-slate-100 p-1.5 last:border-r-0 ${
-                  cell.inMonth ? "bg-white" : "bg-slate-50/60"
-                }`}
-              >
-                <span
-                  className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${
-                    esHoy ? "bg-[#c9a24b] text-white" : cell.inMonth ? "text-slate-700" : "text-slate-300"
+      {/* La grilla va envuelta porque el aviso de la cancelación NO puede vivir
+          dentro de la celda: al cancelar se refresca y la cita desaparece del
+          calendario, y con ella se iría el mensaje (Juan, 2026-09-04). */}
+      <CancelarCitaAvisos>
+        <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="grid min-w-[720px] grid-cols-7 border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            {DIAS_SEMANA.map((d) => (
+              <div key={d} className="px-3 py-2 text-center">
+                {d}
+              </div>
+            ))}
+          </div>
+          <div className="grid min-w-[720px] grid-cols-7">
+            {cells.map((cell) => {
+              const dayEvents = porDia.get(cell.iso) || [];
+              const esHoy = cell.iso === hoyKey;
+              return (
+                <div
+                  key={cell.iso}
+                  className={`min-h-[110px] border-b border-r border-slate-100 p-1.5 last:border-r-0 ${
+                    cell.inMonth ? "bg-white" : "bg-slate-50/60"
                   }`}
                 >
-                  {cell.day}
-                </span>
-                <div className="mt-1 space-y-1">
-                  {dayEvents.slice(0, 3).map((ev) => {
-                    // "que la agenda quede marcada con el link directo al
-                    // chat" (Juan, 2026-08-21) — solo avance_colega lo trae.
-                    // "lo marcas para yo hacerle seguimiento" (mismo dia) —
-                    // 🤖 marca la que Sofi agendó sola, sin que nadie la revisara.
-                    const contenido = `${ev.autoAgendada ? "🤖 " : ""}${horaBogota(ev.fechaHora)} ${ev.titulo}`;
-                    const titulo = `${horaBogota(ev.fechaHora)} · ${ev.titulo}${ev.advisorNombre ? ` · ${ev.advisorNombre}` : ""}${ev.linkChat ? " · ver chat" : ""}${ev.autoAgendada ? " · agendada sola por Sofi, revisar" : ""}`;
-                    const clase = `block truncate rounded-md border px-1.5 py-0.5 text-[11px] font-medium ${colorFor(ev.advisorId)}${ev.linkChat ? " hover:brightness-95" : ""}`;
-                    return ev.linkChat ? (
-                      <Link key={ev.id} href={ev.linkChat} title={titulo} className={clase}>
-                        {contenido}
-                      </Link>
-                    ) : (
-                      <div key={ev.id} title={titulo} className={clase}>
-                        {contenido}
-                      </div>
-                    );
-                  })}
-                  {dayEvents.length > 3 && (
-                    <div className="px-1.5 text-[11px] font-medium text-slate-400">+{dayEvents.length - 3} más</div>
-                  )}
+                  <span
+                    className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${
+                      esHoy ? "bg-[#c9a24b] text-white" : cell.inMonth ? "text-slate-700" : "text-slate-300"
+                    }`}
+                  >
+                    {cell.day}
+                  </span>
+                  <div className="mt-1 space-y-1">
+                    {dayEvents.slice(0, 3).map((ev) => {
+                      // "que la agenda quede marcada con el link directo al
+                      // chat" (Juan, 2026-08-21) — solo avance_colega lo trae.
+                      // "lo marcas para yo hacerle seguimiento" (mismo dia) —
+                      // 🤖 marca la que Sofi agendó sola, sin que nadie la revisara.
+                      const contenido = `${ev.autoAgendada ? "🤖 " : ""}${horaBogota(ev.fechaHora)} ${ev.titulo}`;
+                      const titulo = `${horaBogota(ev.fechaHora)} · ${ev.titulo}${ev.advisorNombre ? ` · ${ev.advisorNombre}` : ""}${ev.linkChat ? " · ver chat" : ""}${ev.autoAgendada ? " · agendada sola por Sofi, revisar" : ""}${ev.estado === "propuesta" ? " · propuesta, sin confirmar" : ""}`;
+                      const clase = `block truncate rounded-md border px-1.5 py-0.5 text-[11px] font-medium ${colorFor(ev.advisorId)}${ev.linkChat ? " hover:brightness-95" : ""}`;
+                      const chip = ev.linkChat ? (
+                        <Link href={ev.linkChat} title={titulo} className={clase}>
+                          {contenido}
+                        </Link>
+                      ) : (
+                        <div title={titulo} className={clase}>
+                          {contenido}
+                        </div>
+                      );
+                      // Una "propuesta" la pidió un colega y NADIE la confirmó
+                      // todavía (Juan, 2026-09-04): ocupa la hora, pero no es un
+                      // compromiso y el calendario tiene que decirlo. El rótulo
+                      // va aparte del chip porque el chip ya está truncado y su
+                      // color es el del asesor, no el del estado.
+                      return (
+                        <div key={ev.id} className="space-y-0.5">
+                          {chip}
+                          {ev.estado === "propuesta" && (
+                            <span className="block truncate rounded-md border border-amber-200 bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-800">
+                              propuesta — sin confirmar
+                            </span>
+                          )}
+                          {/* Solo las citas de cliente se cancelan: un
+                              recordatorio del equipo y un avance de un colega no
+                              son citas del bot, no hay a quién avisarle y no
+                              tienen leadId. */}
+                          {ev.origen === "cita_cliente" && ev.leadId && (
+                            <BotonCancelarCita leadId={ev.leadId} cliente={ev.clienteNombre} />
+                          )}
+                        </div>
+                      );
+                    })}
+                    {dayEvents.length > 3 && (
+                      <div className="px-1.5 text-[11px] font-medium text-slate-400">+{dayEvents.length - 3} más</div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
-      </div>
+      </CancelarCitaAvisos>
     </div>
   );
 }

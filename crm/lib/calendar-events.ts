@@ -32,6 +32,19 @@ export type CalendarEvent = {
    *  día/hora — nadie la revisó antes de confirmarla (Juan, 2026-08-21:
    *  "lo marcas para yo hacerle seguimiento"). Solo aplica a "cita_cliente". */
   autoAgendada: boolean;
+  /** Estado de la cita (Juan, 2026-09-04). Una "propuesta" la pidió un colega
+   *  y NADIE la confirmó todavía: no es un compromiso y el calendario tiene
+   *  que decirlo. Las canceladas no llegan hasta acá — se filtran antes.
+   *  Una cita vieja sin estado se lee como "confirmada": es lo que el equipo
+   *  asumió todo este tiempo. */
+  estado: "propuesta" | "confirmada";
+  /** Lead dueño de la cita, para poder cancelarla desde el calendario (Juan,
+   *  2026-09-04). Solo lo trae "cita_cliente": el recordatorio de un asesor y
+   *  el avance de un colega no son citas del bot y no se cancelan por acá.
+   *  Va como campo propio y no parseando `id` ("lead:<uuid>"): el prefijo del
+   *  id es un detalle de presentación para las keys de React, y sacarle el
+   *  leadId a mano ataría la cancelación a que ese formato nunca cambie. */
+  leadId: string | null;
 };
 
 type Cita = {
@@ -40,7 +53,17 @@ type Cita = {
   tipo?: string | null;
   advisor_id?: string | null;
   origen?: string | null;
+  estado?: string | null;
 };
+
+// Espejo de src/data/citas.js#estadoDe. Se duplica a propósito: el CRM no
+// comparte código con el bot, y una cita sin estado —todas las que ya
+// existen— tiene que leerse igual en los dos lados.
+function estadoDeCita(cita: Cita | null): "propuesta" | "confirmada" | "cancelada" | "reprogramada" {
+  const e = cita?.estado;
+  if (e === "propuesta" || e === "cancelada" || e === "reprogramada") return e;
+  return "confirmada";
+}
 
 type LeadConCita = {
   id: string;
@@ -134,11 +157,16 @@ export async function getCalendarEvents(supabase: any): Promise<{
 
   const hoyInicio = bogotaTodayStart();
 
-  const citaEvents: CalendarEvent[] = ((citasRes.data as LeadConCita[]) || [])
-    .filter((l) => l.cita?.fecha_hora && new Date(l.cita.fecha_hora) >= hoyInicio)
-    .map((l) => ({
+  // Un for en vez de filter+map: el estado se calcula una sola vez por lead y
+  // decide dos cosas distintas (si el evento entra, y cómo se pinta).
+  const citaEvents: CalendarEvent[] = [];
+  for (const l of ((citasRes.data as LeadConCita[]) || [])) {
+    if (!l.cita?.fecha_hora || new Date(l.cita.fecha_hora) < hoyInicio) continue;
+    const estado = estadoDeCita(l.cita);
+    if (estado === "cancelada") continue; // no se muestra: fue cancelada
+    citaEvents.push({
       id: `lead:${l.id}`,
-      fechaHora: l.cita!.fecha_hora!,
+      fechaHora: l.cita.fecha_hora,
       titulo: `${TIPO_LABEL[l.cita?.tipo || ""] || "Cita"} · ${l.nombre || `+${l.phone}`}`,
       advisorId: l.cita?.advisor_id ?? null,
       advisorNombre: l.cita?.advisor_id ? roster[l.cita.advisor_id]?.nombre ?? null : null,
@@ -147,7 +175,12 @@ export async function getCalendarEvents(supabase: any): Promise<{
       origen: "cita_cliente" as const,
       linkChat: null,
       autoAgendada: l.cita?.origen === "auto",
-    }));
+      // "reprogramada" ya trae la fecha nueva: es un compromiso vigente, se
+      // pinta igual que una confirmada.
+      estado: estado === "propuesta" ? "propuesta" : "confirmada",
+      leadId: l.id,
+    });
+  }
 
   const reminderEvents: CalendarEvent[] = ((remindersRes.data as AdvisorReminder[]) || [])
     .filter((r) => r.fecha_hora && new Date(r.fecha_hora) >= hoyInicio)
@@ -162,6 +195,9 @@ export async function getCalendarEvents(supabase: any): Promise<{
       linkChat: null,
       origen: "recordatorio_equipo" as const,
       autoAgendada: false,
+      // Un recordatorio no tiene ciclo de vida propio: si existe, va.
+      estado: "confirmada" as const,
+      leadId: null,
     }));
 
   const avanceEvents: CalendarEvent[] = ((dmRes.data as LineaDmAvance[]) || [])
@@ -179,6 +215,9 @@ export async function getCalendarEvents(supabase: any): Promise<{
       // si uno cambia, el otro tiene que cambiar igual.
       linkChat: `/grupos#dm-${m.remitente_telefono || "sin-telefono"}`,
       autoAgendada: false,
+      // El colega ya confirmó fecha/hora por la línea: tampoco tiene estados.
+      estado: "confirmada" as const,
+      leadId: null,
     }));
 
   const events = [...citaEvents, ...reminderEvents, ...avanceEvents].sort(

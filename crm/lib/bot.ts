@@ -4,9 +4,15 @@
 // components — nunca desde el browser (la key es server-side).
 // TODO(reuse): migrar send/modo/media a este helper cuando se toquen.
 
+// `timeout` distingue "se acabó el tiempo" de "el bot contestó que no"
+// (Juan, 2026-09-04). No es cosmético: en las operaciones que YA cambiaron el
+// registro antes de responder —cancelar una cita lo hace en el primer
+// instante, a propósito— un timeout NO significa que no pasó nada. Quien
+// pinta el mensaje necesita poder decir "no sabemos" en vez de afirmar lo
+// contrario de la verdad.
 type BotResult<T> =
   | { ok: true; data: T }
-  | { ok: false; error: string; status: number };
+  | { ok: false; error: string; status: number; timeout: boolean };
 
 // Cuanto se le da al bot para contestar. 60 s alcanza para todo lo que es una
 // consulta directa a la base.
@@ -51,6 +57,7 @@ export async function callBot<T = unknown>(
           ? `Sofi tardo mas de ${Math.round(timeoutMs / 1000)} s en responder. Volve a preguntarle.`
           : "El bot no respondió"),
       status: res?.status || 502,
+      timeout: abortado,
     };
   }
   const data = (await res.json().catch(() => ({}))) as T;

@@ -5,6 +5,7 @@
 // citas de la org y se filtran en JS, sin indice jsonb.
 const supabase = require("./supabase");
 const memory = require("./memory");
+const citasData = require("./citas");
 
 // Horario por defecto cuando el asesor no configuro el suyo: L-V 8am-6pm.
 const DEFAULT_HORARIO = { dias: [1, 2, 3, 4, 5], desde: "08:00", hasta: "18:00" };
@@ -60,6 +61,11 @@ function hayChoque(leadsConCita, advisorId, fechaHoraIso, excludeLeadId = null) 
   return leadsConCita.some((l) => {
     if (l.id === excludeLeadId) return false;
     if (!l.cita || l.cita.advisor_id !== advisorId || !l.cita.fecha_hora) return false;
+    // Una cancelada no ocupa espacio (Juan, 2026-09-04): si no se libera la
+    // hora, cancelar es cosmetico — el registro cambia y la agenda sigue
+    // bloqueada. Una PROPUESTA si ocupa: todavia puede confirmarse y dos
+    // personas no pueden reservar la misma hora.
+    if (!citasData.estaViva(l.cita)) return false;
     const otra = new Date(l.cita.fecha_hora).getTime();
     if (isNaN(otra)) return false;
     return Math.abs(otra - inicio) < ventanaMs;
@@ -137,6 +143,12 @@ async function checkAvailability(orgId, advisor, fechaHoraIso, { excludeLeadId =
 function isReminderDue(lead, nowMs, windowMin) {
   const c = lead && lead.cita;
   if (!c || !c.fecha_hora || !c.advisor_id || c.recordatorio_enviado) return false;
+  // Una cancelada no se recuerda (Juan, 2026-09-04). Sin esto, una cita que se
+  // cancelo ayer desde el CRM desaparecia del calendario pero al asesor le
+  // llegaba igual la plantilla `recordatorio_cita` una hora antes: la agenda
+  // que miente, entregada por WhatsApp. Es el incidente que origino la rama.
+  // Mismo criterio que hayChoque (linea 68) y que el calendario del CRM.
+  if (!citasData.estaViva(c)) return false;
   const t = new Date(c.fecha_hora).getTime();
   if (isNaN(t)) return false;
   return t > nowMs && t <= nowMs + windowMin * 60 * 1000;

@@ -806,6 +806,67 @@ router.post("/api/grupos/venta/estado", async (req, res) => {
   }
 });
 
+// CANCELAR UNA CITA (Juan, 2026-09-04). La dispara una persona desde el CRM:
+// Sofi nunca cancela sola. La sesion de WAHA viaja para que cancelar-cita
+// pueda caer a la linea de Natalia si la ventana de 24 h esta cerrada.
+router.post("/api/citas/cancelar", async (req, res) => {
+  const { leadId, motivo } = req.body || {};
+  if (!leadId) return res.status(400).json({ error: "Falta leadId" });
+  try {
+    const org = await organizations.getDefault();
+    const sesiones = await whatsappGroups.listSessions(org.id).catch(() => []);
+    const activa = sesiones.find((s) => s.estado === "activa") || (sesiones.length === 1 ? sesiones[0] : null);
+    const r = await require("../groups/cancelar-cita").cancelar(org, leadId, {
+      motivo: motivo || null,
+      sesion: activa ? activa.nombre : null,
+    });
+    if (r.resultado === "no_encontrada") return res.status(404).json({ error: "No se encontro esa cita" });
+    res.json(r);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// REPROGRAMAR UNA CITA (Juan, 2026-09-04). Misma puerta que cancelar: la
+// dispara una persona del CRM y la sesion de WAHA viaja para poder caer a la
+// linea de Natalia. La hora nueva se valida contra la agenda del asesor antes
+// de mover nada: si choca, esto responde 409 y el registro queda intacto.
+router.post("/api/citas/reprogramar", async (req, res) => {
+  const { leadId, nuevaFechaHora, motivo } = req.body || {};
+  if (!leadId || !nuevaFechaHora) return res.status(400).json({ error: "Falta leadId o nuevaFechaHora" });
+  try {
+    const org = await organizations.getDefault();
+    const sesiones = await whatsappGroups.listSessions(org.id).catch(() => []);
+    const activa = sesiones.find((s) => s.estado === "activa") || (sesiones.length === 1 ? sesiones[0] : null);
+    const r = await require("../groups/cancelar-cita").reprogramar(org, leadId, {
+      nuevaFechaHora,
+      motivo: motivo || null,
+      sesion: activa ? activa.nombre : null,
+    });
+    if (r.resultado === "no_encontrada") return res.status(404).json({ error: "No se encontro esa cita" });
+    if (r.resultado === "fecha_invalida") return res.status(400).json({ error: "Fecha u hora invalida" });
+    // Cancelar es terminal (Juan, 2026-09-04): una cita cancelada no se
+    // reprograma, se agenda una nueva. Sin este 409 la respuesta caia al 200
+    // generico y quien la movio creia que si se habia movido.
+    if (r.resultado === "esta_cancelada") {
+      return res.status(409).json({ error: "Esa cita esta cancelada: no se reprograma, hay que agendar una nueva" });
+    }
+    if (r.resultado === "hora_ocupada") {
+      // checkAvailability distingue "choque" de "fuera_de_horario" y quien
+      // mueve la cita necesita saber cual de los dos es: decirle "ya tiene
+      // algo a esa hora" cuando en realidad es un domingo lo manda a buscar
+      // una cita que no existe.
+      const error = r.motivo === "fuera_de_horario"
+        ? "Esa hora esta fuera del horario del asesor"
+        : "El asesor ya tiene algo a esa hora";
+      return res.status(409).json({ error, motivo: r.motivo || null });
+    }
+    res.json(r);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 async function getConversation(id) {
   const { data, error } = await supabase
     .from("conversations")
