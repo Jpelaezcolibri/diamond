@@ -50,12 +50,22 @@ test("zona distinta a la pedida: el mensaje lo aclara", () => {
   assert.match(t, /Aclaración/);
 });
 
-test("alcobas distintas a las pedidas: tambien se dice", () => {
-  const t = redactar.mensajeGrupo({ autor_nombre: "Marsh" }, [APTO_SABANETA], {
+test("alcobas de MENOS se aclaran; de más, no", () => {
+  // CORREGIDO el mismo día que se escribió. Este test pedía que se avisara
+  // también cuando SOBRAN alcobas, y eso contradice la regla que el prompt de
+  // revalidar.js repite en mayúsculas: SOBRAR NO ES FALLAR. Generando el
+  // mensaje real de Patricia Urreta salió "Aclaración: 4 alcobas y pediste 2"
+  // — el colega lo lee como una objeción a una propiedad que le da de más.
+  const sobran = redactar.mensajeGrupo({ autor_nombre: "Marsh" }, [APTO_SABANETA], {
     pedido: { zonas: ["Sabaneta"], habitaciones: 2 },
   });
-  assert.match(t, /3 alcobas/);
-  assert.match(t, /pediste 2|pediste dos/i, `no aclara la diferencia de alcobas:\n${t}`);
+  assert.ok(!sobran.includes("Aclaración"), `aclaró que sobran alcobas:\n${sobran}`);
+
+  const faltan = redactar.mensajeGrupo({ autor_nombre: "Marsh" }, [{ ...APTO_SABANETA, habitaciones: 2 }], {
+    pedido: { zonas: ["Sabaneta"], habitaciones: 3 },
+  });
+  assert.match(faltan, /2 alcobas/);
+  assert.match(faltan, /pediste 3/);
 });
 
 test("el caso exacto de Marsh: zona Y alcobas en la misma aclaracion", () => {
@@ -66,7 +76,9 @@ test("el caso exacto de Marsh: zona Y alcobas en la misma aclaracion", () => {
   assert.ok(linea, "no hay linea de aclaracion");
   assert.match(linea, /Sabaneta/);
   assert.match(linea, /Envigado/);
-  assert.match(linea, /alcoba/i);
+  // Las alcobas de MÁS ya no se mencionan (sobrar no es fallar): el desvío
+  // real de este caso siempre fue la zona.
+  assert.ok(!/alcoba/i.test(linea), `volvió a tratar las alcobas de más como defecto: ${linea}`);
 });
 
 test("si la zona SI es la pedida, no inventa una aclaracion", () => {
@@ -110,9 +122,9 @@ test("desvios() no inventa cuando falta el dato", () => {
   assert.deepStrictEqual(redactar.desvios(APTO_SABANETA, null), []);
 });
 
-test("desvios() detecta que sobra una alcoba y que falta", () => {
+test("desvios() solo habla de lo que FALTA", () => {
   const sobra = redactar.desvios(APTO_SABANETA, { habitaciones: 2 });
-  assert.match(sobra.join(" "), /3 alcobas/);
+  assert.deepStrictEqual(sobra, [], "tratar lo de más como defecto es una objeción, no un dato");
   const falta = redactar.desvios({ ...APTO_SABANETA, habitaciones: 1 }, { habitaciones: 3 });
   assert.match(falta.join(" "), /1 alcoba/);
 });
@@ -156,4 +168,42 @@ test("el caso de Esteban completo: zona bien, alcobas bien, área corta", () => 
   const d = redactar.desvios(APTO_SABANETA_77, { zonas: ["Envigado", "Sabaneta"], habitaciones: 3, areaMin: 80 });
   assert.strictEqual(d.length, 1, `esperaba solo el desvío de área: ${JSON.stringify(d)}`);
   assert.match(d[0], /77.*80|80.*77/);
+});
+
+// ── Sobrar no es fallar, y no se repite lo que el modelo ya dijo ──────────
+//
+// Los dos defectos aparecieron el 2026-09-05 generando el mensaje real para
+// Patricia Urreta:
+//
+//   "Aclaración: 4 alcobas y pediste 2"
+//   "Aclaración: 113 m² y pediste desde 120 · tiene 113 m² y pediste mínimo 120"
+//
+// El primero contradice la regla que el propio prompt de revalidar.js repite
+// en mayúsculas — SOBRAR NO ES FALLAR — y que el colega lee como una objeción:
+// quien pide 2 alcobas no se queja de que haya 4. El segundo es la misma frase
+// dos veces, la calculada y la del modelo.
+test("tener MÁS alcobas no se aclara: sobrar no es fallar", () => {
+  const d = redactar.desvios({ ...APTO_SABANETA, habitaciones: 4 }, { habitaciones: 2 });
+  assert.deepStrictEqual(d, [], `lo trató como un defecto: ${JSON.stringify(d)}`);
+});
+
+test("tener MENOS alcobas sí se aclara", () => {
+  const d = redactar.desvios({ ...APTO_SABANETA, habitaciones: 2 }, { habitaciones: 3 });
+  assert.match(d.join(" "), /2 alcobas/);
+});
+
+test("tener MÁS área tampoco se aclara", () => {
+  const d = redactar.desvios({ ...APTO_SABANETA, area: "160m2" }, { areaMin: 120 });
+  assert.deepStrictEqual(d, []);
+});
+
+test("no repite el desvío que el modelo ya escribió", () => {
+  const t = redactar.mensajeGrupo({ autor_nombre: "Patricia" }, [{ ...APTO_SABANETA, ref: "9785035", area: "113m2", habitaciones: 2 }], {
+    pedido: { zonas: ["El Poblado"], habitaciones: 2, areaMin: 120 },
+    leFalta: [{ ref: "9785035", detalle: "tiene 113 m² y pediste mínimo 120" }],
+  });
+  const linea = t.split("\n").find((l) => l.includes("Aclaración"));
+  assert.ok(linea, "no hay aclaración");
+  const veces = (linea.match(/113/g) || []).length;
+  assert.strictEqual(veces, 1, `dijo lo mismo dos veces: ${linea}`);
 });

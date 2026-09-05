@@ -195,9 +195,14 @@ function desvios(match, pedido) {
     }
   }
 
+  // SOBRAR NO ES FALLAR — la misma regla que el prompt de revalidar.js repite
+  // en mayusculas. Solo se aclara lo que FALTA: quien pide 2 alcobas no se
+  // queja de que haya 4, y decirselo se lee como una objecion. El caso que lo
+  // destapo (Patricia Urreta, 2026-09-05): "Aclaración: 4 alcobas y pediste 2"
+  // en un mensaje que le iba a un colega.
   const pedidas = Number(pedido.habitaciones) || 0;
   const tiene = Number(match.habitaciones) || 0;
-  if (pedidas > 0 && tiene > 0 && tiene !== pedidas) {
+  if (pedidas > 0 && tiene > 0 && tiene < pedidas) {
     salida.push(`${formato.pluralizar(tiene, "alcoba")} y pediste ${pedidas}`);
   }
 
@@ -288,9 +293,18 @@ function mensajeGrupo(
   // "queda en Sabaneta, no en Envigado · no tiene garaje registrado". Una sola
   // linea de Aclaración por ficha, no dos.
   const bloques = props.map((m, i) => {
-    const detalle = [...desvios(m, pedido), faltaPorRef.get(String(m.ref)) || null]
-      .filter(Boolean)
-      .join(" · ");
+    const delModelo = faltaPorRef.get(String(m.ref)) || null;
+    // SIN REPETIR (2026-09-05). El modelo tambien puede haber escrito el mismo
+    // desvio en 'le_falta', y la ficha salia con "113 m² y pediste desde 120 ·
+    // tiene 113 m² y pediste mínimo 120". Si su texto ya menciona los mismos
+    // numeros, el calculado sobra: el del modelo esta redactado para esa
+    // propiedad puntual y se lee mejor.
+    const numerosDelModelo = new Set(String(delModelo || "").match(/\d+/g) || []);
+    const calculados = desvios(m, pedido).filter((d) => {
+      const nums = d.match(/\d+/g) || [];
+      return !(nums.length && nums.every((n) => numerosDelModelo.has(n)));
+    });
+    const detalle = [...calculados, delModelo].filter(Boolean).join(" · ");
     return ficha(m, i + 1, { detalleFalta: detalle || null });
   });
 

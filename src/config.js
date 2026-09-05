@@ -1,4 +1,20 @@
-require("dotenv").config({ override: true });
+// `override: true` para que un .env local mande sobre lo que ya haya en el
+// ambiente. En produccion no cambia nada: Railway inyecta variables y no hay
+// archivo .env que cargar.
+//
+// LA EXCEPCION, y por que existe (2026-09-05). Con `railway run` —el patron
+// que usa este repo para probar contra produccion SIN copiar la clave— Railway
+// inyecta las variables reales y este override las pisaba con las locales, en
+// silencio. Resultado ese dia: una prueba de la API con "la clave de
+// produccion" fallo por saldo, se diagnostico una caida de Sofi que NO estaba
+// pasando, y hubo que rastrearlo hasta esta linea. scripts/smoke-cache.js ya
+// esquivaba la trampa a mano ("la clave se captura ANTES de requerir nada de
+// src/"), lo que confirma que muerde a cualquiera que la desconozca.
+//
+// Bajo `railway run` las variables inyectadas MANDAN: es exactamente lo que
+// alguien pide al escribir ese comando.
+const bajoRailway = Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_SERVICE_ID);
+require("dotenv").config({ override: !bajoRailway });
 
 const config = {
   port: process.env.PORT || 3000,

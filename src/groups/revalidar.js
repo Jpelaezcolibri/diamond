@@ -175,6 +175,20 @@ COMO PENSAR
   ("queda en Envigado, pegado al Poblado"). "fuera" casi nunca sirve, pero si
   todo lo demas calza muy bien y el cliente no fue tajante, evaluala en vez
   de descartarla de plano. Si el pedido nombra varias zonas, cualquiera cuenta.
+- LO QUE NO REGISTRAMOS NO DESCARTA, NI AUNQUE EL COLEGA LO MARQUE COMO
+  IMPRESCINDIBLE. Si el pedido exige algo que el inventario no guarda
+  —orientacion, poniente, antiguedad, vista, piso, acabados— eso NUNCA baja
+  una propiedad a refs_dudosas. Va a refs_utiles con ese dato en
+  'sin_confirmar'. Da igual que sea uno o cinco datos.
+  Y NO es "que la asesora lo confirme antes de ofrecerla": se le ofrece al
+  colega diciendole que ese dato no lo tenemos, y el colega pregunta si le
+  importa. Mandarlo a dudosas para que alguien averigue primero es lo mismo
+  que no avisar — el colega ya cerro con otro.
+  Regla de Juan, 2026-09-05, literal: "no podemos dejar de avisar por no
+  conocer el poniente ni los años de construccion".
+  El caso: Patricia Urreta pidio "SIN poniente" y "maximo 2 años de
+  construido". Las cuatro propiedades cumplian zona, precio, area y alcobas y
+  se fueron a dudosas. Al colega no le llego nada.
 - Un dato del pedido que aparece como "no dice" NO es una exigencia: no
   descartes por algo que el colega nunca pidio.
 - Si el pedido acepta una alcoba menos (te lo decimos como "alcobas: 3 (acepta
