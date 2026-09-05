@@ -159,10 +159,10 @@ test("el esquema exige los tres campos de honestidad, no solo los de veredicto",
 // notariamos: el sistema seguiria funcionando, solo callado.
 test("el prompt distingue las tres situaciones y nombra los innegociables", () => {
   const s = revalidar.SISTEMA || "";
-  for (const marca of ["INCOMPATIBLE", "INCOMPLETO", "CASI", "ACCESORIO", "de FONDO"]) {
+  for (const marca of ["INCOMPATIBLE", "INCOMPLETO", "CASI", "ACCESORIO", "DE FONDO"]) {
     assert.ok(s.includes(marca), `el prompt nombra ${marca}`);
   }
-  assert.ok(/DOS O MAS incumplimientos/.test(s), "dos huecos conocidos siguen siendo un NO");
+  assert.ok(/DOS o mas incumplimientos conocidos/i.test(s), "dos huecos conocidos siguen siendo un NO");
 });
 
 // DUDOSA (Juan, 2026-09-01) — hasta ahora Sofi decidia siempre en binario
@@ -255,8 +255,8 @@ test("el prompt NO vuelve a mandar a dudosas lo que simplemente no registramos",
   assert.ok(!/ATRIBUTOS QUE NO PODEMOS EVALUAR/.test(s), "volvio el bloque del 04-sep que contradice la regla del 05-sep");
   assert.ok(!/esas refs van en 'refs_dudosas', NUNCA en 'refs_utiles'/.test(s));
   // La regla vigente, con su destino: lo que no registramos va a utiles.
-  assert.match(s, /eso NUNCA baja una propiedad a refs_dudosas y NUNCA la vuelve INCOMPATIBLE/);
-  assert.match(s, /Va a refs_utiles con ese dato en 'sin_confirmar'/);
+  assert.match(s, /nada que no podemos ver puede ser un incumplimiento, ni volver una propiedad INCOMPATIBLE ni bajarla a refs_dudosas/);
+  assert.match(s, /van a 'sin_confirmar' y la propiedad se ofrece igual, en refs_utiles/);
 });
 
 // EL MARGEN DEL MOTOR LLEGA AL PROMPT CON LOS MISMOS NUMEROS (auditoria
@@ -271,9 +271,10 @@ test("el prompt le dice a Sofi el margen del motor, con los numeros de match.js"
   const s = require("../src/groups/revalidar").SISTEMA.replace(/\s+/g, " ");
   assert.match(s, new RegExp(`hasta un ${Math.round(MARGEN_PRECIO * 100)} % POR ENCIMA del presupuesto`));
   assert.match(s, new RegExp(`hasta un ${Math.round(MARGEN_AREA * 100)} % POR DEBAJO del area minima`));
-  // Y el destino: dentro del margen es CASI (le_falta), no INCOMPATIBLE.
-  assert.match(s, /Dentro de ese margen NO es "fuera de presupuesto" ni de fondo/);
-  assert.match(s, /fuera de presupuesto MAS ALLA del margen del motor/);
+  // Y el destino: dentro del margen es accesorio (CASI, le_falta); de fondo
+  // es solo lo que se pasa del margen, y eso el motor ya no lo manda.
+  assert.match(s, /precio mas alla del margen del motor/);
+  assert.match(s, /metros o precio dentro del margen/);
 });
 
 // El caso mixto (un corto conocido + datos no registrados) tiene su ejemplo:
@@ -321,10 +322,73 @@ test("un garaje real sigue saliendo con su numero", () => {
 // y descarto. El prompt tiene que cerrarle esa puerta.
 test("el prompt cierra la lista de 'de fondo' y deja el parqueadero como accesorio", () => {
   const s = require("../src/groups/revalidar").SISTEMA;
-  assert.match(s, /LISTA DE "DE FONDO" ES CERRADA/);
+  assert.match(s, /La lista de fondo es CERRADA/);
   // El prompt va envuelto a ~70 columnas, asi que la frase puede quedar
-  // partida por un salto de linea: se compara tolerando el corte.
-  assert.match(s.replace(/\s+/g, " "), /no podemos dejar de ofrecer un apartamento por un parqueadero/);
+  // partida por un salto de linea: se compara tolerando el corte. El
+  // parqueadero esta nombrado como accesorio, con los demas.
+  assert.match(s.replace(/\s+/g, " "), /accesorio —parqueadero, baños, estrato, cuarto util/);
   assert.ok(!/Si dudas si algo es accesorio o de fondo, tratalo como de FONDO/.test(s),
     "la regla vieja mandaba a de FONDO ante la duda: era el permiso para descartar");
+});
+
+// LA REGLA LA APLICA EL CODIGO (auditoria 2026-09-05, paso 5). Con la regla
+// "dos o mas incumplimientos CONOCIDOS; lo que no registramos no cuenta"
+// escrita de todas las formas posibles, Sofi siguio sumando "terraza sin
+// confirmar" + "piso sin confirmar" = "dos huecos" (Gustavo Arango, golden
+// set). Ahora declara el motivo por ref y, si el motivo es la cuenta y la
+// cuenta del motor dice N < 2, el codigo sube la ref a utiles.
+test("aplicarCuenta: una dudosa por 'dato_que_no_registramos' con N = 0 sube a utiles", () => {
+  const { aplicarCuenta } = require("../src/groups/revalidar");
+  const matches = [{ ref: "A", fuente: "diamond", razones: ["Zona: El Poblado", "$1.500M dentro de $1.700M", "3 alcobas", "180 m²"] }];
+  const v = aplicarCuenta(
+    { refs_utiles: [], refs_dudosas: ["A"], dudosas_motivo: [{ ref: "A", motivo: "dato_que_no_registramos" }], sin_confirmar: ["terraza"], le_falta: [] },
+    matches
+  );
+  assert.deepStrictEqual(v.refs_utiles, ["A"]);
+  assert.deepStrictEqual(v.refs_dudosas, []);
+  assert.deepStrictEqual(v.correccion_cuenta, ["A"]);
+  assert.strictEqual(v.sirve_alguna, true);
+  assert.deepStrictEqual(v.le_falta, [], "con N = 0 no hay nada que aclarar");
+});
+
+test("aplicarCuenta: N = 1 sube a utiles y el corto queda en le_falta", () => {
+  const { aplicarCuenta } = require("../src/groups/revalidar");
+  const matches = [{ ref: "B", fuente: "diamond", razones: ["Zona: El Poblado", "113 m² (pediste 120)"] }];
+  const v = aplicarCuenta(
+    { refs_utiles: ["X"], refs_dudosas: ["B"], dudosas_motivo: [{ ref: "B", motivo: "dos_o_mas_incumplimientos_conocidos" }], le_falta: [] },
+    matches
+  );
+  assert.deepStrictEqual(v.refs_utiles, ["X", "B"]);
+  assert.deepStrictEqual(v.le_falta, [{ ref: "B", detalle: "113 m² y pediste 120" }]);
+});
+
+test("aplicarCuenta: con N >= 2 la dudosa se respeta, y tambien los motivos que no decide la cuenta", () => {
+  const { aplicarCuenta } = require("../src/groups/revalidar");
+  const matches = [
+    { ref: "C", fuente: "diamond", razones: ["113 m² (pediste 120)", "1 garaje (pediste 2)"] },
+    { ref: "D", fuente: "diamond", razones: ["Zona: Sabaneta (vecina de lo pedido)"] },
+    { ref: "E", fuente: "aliado", razones: [] },
+  ];
+  const original = {
+    refs_utiles: [], refs_dudosas: ["C", "D", "E"],
+    dudosas_motivo: [
+      { ref: "C", motivo: "dos_o_mas_incumplimientos_conocidos" },
+      { ref: "D", motivo: "zona_vecina_y_colega_tajante" },
+      { ref: "E", motivo: "dato_que_no_registramos" },
+    ],
+  };
+  const v = aplicarCuenta(original, matches);
+  assert.strictEqual(v, original, "sin nada que subir, el veredicto vuelve intacto");
+});
+
+test("aplicarCuenta: un veredicto viejo sin dudosas_motivo no se toca", () => {
+  const { aplicarCuenta } = require("../src/groups/revalidar");
+  const original = { refs_utiles: [], refs_dudosas: ["F"] };
+  assert.strictEqual(aplicarCuenta(original, [{ ref: "F", fuente: "diamond", razones: [] }]), original);
+});
+
+test("el esquema exige dudosas_motivo y su enum nombra el motivo invalido a proposito", () => {
+  const revalidar = require("../src/groups/revalidar");
+  assert.ok(revalidar.ESQUEMA.required.includes("dudosas_motivo"));
+  assert.ok(revalidar.ESQUEMA.properties.dudosas_motivo.items.properties.motivo.enum.includes("dato_que_no_registramos"));
 });

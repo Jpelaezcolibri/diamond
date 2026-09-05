@@ -64,13 +64,13 @@ test("el precio dentro del margen cuenta como incumplimiento conocido; sin corto
 
 test("el prompt le ordena a Sofi usar la cuenta del motor tal cual", () => {
   const s = SISTEMA.replace(/\s+/g, " ");
-  assert.ok(s.includes("LA CUENTA YA ESTA HECHA"));
+  assert.ok(s.includes("LA CUENTA LA HACE EL MOTOR"));
   assert.ok(s.includes("N >= 2 -> DUDOSA"));
   assert.ok(s.includes('un area corta mas un "garajes: sin dato" es N = 1, no 2'));
 });
 
 test("el prompt le dice a Sofi que 'sin dato' es sin_confirmar, no dudosa, y que sobrar no se niega", () => {
-  assert.ok(SISTEMA.includes('"garajes: sin dato" NO significa'));
-  assert.ok(SISTEMA.includes("nunca en refs_dudosas por"));
-  assert.ok(SISTEMA.includes("Nada que este por encima se"));
+  assert.ok(SISTEMA.includes('"sin dato" significa que NO LO'), "sin dato = no lo sabemos");
+  assert.ok(SISTEMA.includes("no esta en esa cuenta ni la sube"), "un sin dato no cuenta como incumplimiento");
+  assert.ok(SISTEMA.includes("SOBRAR NO ES FALLAR"));
 });

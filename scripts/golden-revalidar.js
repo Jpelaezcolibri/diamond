@@ -104,6 +104,9 @@ function evaluar(caso, veredicto) {
     console.log(`${estado}  ${caso.nombre}`);
     console.log(`      utiles=${JSON.stringify(lista(veredicto.refs_utiles))} dudosas=${JSON.stringify(lista(veredicto.refs_dudosas))}`);
     console.log(`      sin_confirmar=${JSON.stringify(lista(veredicto.sin_confirmar))}`);
+    // El razonamiento SIEMPRE, tambien en PASS: es lo que dice por que el
+    // prompt acerto o fallo, y un PASS con un por_que raro tambien es dato.
+    console.log(`      por_que: ${String(veredicto.por_que || "").replace(/\s+/g, " ")}`);
     for (const f of fallas) console.log(`      -> ${f}`);
     console.log("");
   }

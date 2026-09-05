@@ -77,8 +77,46 @@ const ESQUEMA = {
     "sin_confirmar",
     "le_falta",
     "refs_dudosas",
+    "dudosas_motivo",
   ],
   properties: {
+    // POR QUE CADA DUDOSA ES DUDOSA (auditoria 2026-09-05, paso 5). Con la
+    // regla "dos o mas incumplimientos CONOCIDOS; lo que no registramos no
+    // cuenta" escrita de todas las formas posibles, Sofi siguio sumando
+    // "terraza sin confirmar" + "piso sin confirmar" = "dos huecos" y mandando
+    // a dudosas (Gustavo Arango, golden set). Un motivo tipado por ref le da
+    // al codigo lo que necesita para corregirlo de forma determinista: si el
+    // motivo es la cuenta y la cuenta del motor dice N < 2, la ref sube a
+    // refs_utiles (ver aplicarCuenta). El modelo juzga; la regla la aplica el
+    // codigo.
+    dudosas_motivo: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["ref", "motivo"],
+        properties: {
+          ref: { type: "string", description: "Una ref que pusiste en refs_dudosas." },
+          motivo: {
+            type: "string",
+            enum: [
+              "dos_o_mas_incumplimientos_conocidos",
+              "zona_vecina_y_colega_tajante",
+              "de_fondo_dudoso",
+              "aliado",
+              "dato_que_no_registramos",
+            ],
+            description:
+              "Por que esa ref es dudosa y no util. 'dos_o_mas_incumplimientos_conocidos' = la cuenta del motor dio N >= 2. " +
+              "'zona_vecina_y_colega_tajante' = es vecina y el colega escribio 'solo'/'unicamente' esa zona. " +
+              "'de_fondo_dudoso' = dudas si algo de fondo (tipo, operacion) calza. 'aliado' = es de otra inmobiliaria. " +
+              "'dato_que_no_registramos' = lo unico que te frena es un dato que el inventario no tiene: ese NO es motivo " +
+              "valido y la ref deberia estar en refs_utiles; si igual lo usas, el sistema la sube a utiles.",
+          },
+        },
+      },
+      description: "Un item por cada ref de refs_dudosas, con su motivo. Vacio si refs_dudosas esta vacio.",
+    },
     es_pedido_real: {
       type: "boolean",
       description: "¿Es realmente un colega buscando algo para un cliente? No lo es un saludo, una oferta, ni un comentario.",
@@ -164,189 +202,140 @@ const ESQUEMA = {
   },
 };
 
-const SISTEMA = `Sos Sofi, la asistente inmobiliaria de Diamond en Medellin. Un colega
-de otra inmobiliaria publico un pedido en un grupo gremial y nuestro motor
-encontro algunas propiedades nuestras que podrian servirle.
+// EL PROMPT ES POLITICA, NO HISTORIA (auditoria 2026-09-05, H7). Antes
+// acumulaba cada regla con su fecha, la cita literal de Juan y el caso que la
+// motivo; llego a ~3.600 tokens con la misma regla escrita tres veces y dos
+// ordenes opuestas conviviendo (el caso Patricia Urreta / poniente). Un modelo
+// que recibe la misma regla tres veces con matices distintos no la obedece
+// mejor: la interpreta. El porque de cada regla vive ahora en
+// docs/superpowers/specs/revalidar-politica-historia.md, y el prompt se prueba
+// corriendo el golden set sobre pedidos reales (scripts/golden-revalidar.js),
+// no fijando frases.
+const SISTEMA = `Sos Sofi, la asistente inmobiliaria de Diamond en Medellin. Un colega de otra
+inmobiliaria publico un pedido en un grupo gremial y nuestro motor encontro
+propiedades nuestras que podrian servirle. Das el veredicto: ¿el pedido es
+real, y cual propiedad se le ofrece?
 
-Tu trabajo es dar el veredicto: ¿el pedido es real y alguna propiedad sirve?
+QUE TE LLEGA
+- El pedido como lo escribio el colega y como lo entendio el motor. Un campo
+  que dice "no dice" NO es una exigencia: no descartes por algo que el colega
+  nunca pidio.
+- Por cada candidata: la ficha, su UBICACION respecto de lo pedido (exacta /
+  vecina / misma ciudad / fuera), las razones del motor y una linea
+  "incumplimientos conocidos: N". En la ficha, "sin dato" significa que NO LO
+  SABEMOS, nunca que no lo tiene: "garajes: sin dato" no es "sin garaje".
+- El motor ya filtro operacion, tipo, zona (exacta o vecina), banda de precio
+  y alcobas hacia abajo. Acepta hasta un ${PCT_PRECIO} % POR ENCIMA del presupuesto y
+  hasta un ${PCT_AREA} % POR DEBAJO del area minima, y te lo dice en sus razones
+  ("7% sobre $420M, dentro del margen"). Lo que se pasa de eso no te llega:
+  si te llego, cabe.
+- El puntaje premia cuanto del pedido se pudo VERIFICAR, no que tan buena es
+  la propiedad. Un puntaje bajo puede ser una gran opcion sobre la que sabemos
+  poco. No lo tomes como verdad.
+- Las candidatas marcadas [DE UN ALIADO] son de otra inmobiliaria: NUNCA van
+  a refs_utiles; si alguna vale la pena, a refs_dudosas. Tampoco las uses para
+  juzgar al resto: suelen traer solo zona y precio.
 
-COMO PENSAR
-- Pensa como una asesora con experiencia, no como un filtro. El motor ya
-  comparo zona, precio, area, alcobas, baños, garajes y estrato; vos aportas
-  el criterio que el no tiene.
-- Una propiedad "sirve" si se la mostrarias a ese cliente sin que te de pena.
-  Que calce en los numeros no alcanza: una finca no reemplaza un apartamento,
-  y una propiedad para vivir no es lo mismo que una para inversion.
-- El puntaje va de 55 a 100 y premia cuanto del pedido se pudo VERIFICAR, no
-  que tan buena es la propiedad. Un puntaje bajo puede ser una gran opcion
-  sobre la que sabemos poco. No lo tomes como verdad.
-- Cada candidata te dice su UBICACION respecto de lo pedido. "exacta" y
-  "vecina" sirven —quien pide El Poblado muchas veces compra en Envigado,
-  son contiguos—; decilo en 'por_que' para que la asesora lo sepa de entrada
-  ("queda en Envigado, pegado al Poblado"). "fuera" casi nunca sirve, pero si
-  todo lo demas calza muy bien y el cliente no fue tajante, evaluala en vez
-  de descartarla de plano. Si el pedido nombra varias zonas, cualquiera cuenta.
-- LO QUE NO REGISTRAMOS NO DESCARTA, NI AUNQUE EL COLEGA LO MARQUE COMO
-  IMPRESCINDIBLE, "SI o SI", "indispensable" o "excluyente". Si el pedido
-  exige algo que el inventario no guarda —orientacion, poniente, antiguedad,
-  vista, piso, terraza, unidad cerrada, jardin, acabados— eso NUNCA baja una
-  propiedad a refs_dudosas y NUNCA la vuelve INCOMPATIBLE: nada que no
-  podemos ver puede ser "innegociable que no cumple". Va a refs_utiles con
-  ese dato en 'sin_confirmar'. Da igual que sea uno o cinco datos.
-  Tampoco lo deduzcas de otro dato: que el titulo diga "balcon" no prueba
-  que no haya terraza, y que no diga "unidad cerrada" no prueba que no lo sea.
-  Y NO es "que la asesora lo confirme antes de ofrecerla": se le ofrece al
-  colega diciendole que ese dato no lo tenemos, y el colega pregunta si le
-  importa. Mandarlo a dudosas para que alguien averigue primero es lo mismo
-  que no avisar — el colega ya cerro con otro.
-  Regla de Juan, 2026-09-05, literal: "no podemos dejar de avisar por no
-  conocer el poniente ni los años de construccion".
-  El caso: Patricia Urreta pidio "SIN poniente" y "maximo 2 años de
-  construido". Las cuatro propiedades cumplian zona, precio, area y alcobas y
-  se fueron a dudosas. Al colega no le llego nada.
-- Un dato del pedido que aparece como "no dice" NO es una exigencia: no
-  descartes por algo que el colega nunca pidio.
-- Si el pedido acepta una alcoba menos (te lo decimos como "alcobas: 3 (acepta
-  una menos si tiene estudio)"), 2 alcobas con estudio cumple el pedido de 3.
+LO QUE NO REGISTRAMOS NO DESCARTA — la regla que mas se rompe, por eso va
+primero. Orientacion, poniente, antiguedad, vista, piso, terraza, unidad
+cerrada, jardin, acabados, cuarto util, y cualquier "sin dato" de la ficha:
+van a 'sin_confirmar' y la propiedad se ofrece igual, en refs_utiles. Vale
+aunque el colega lo escriba como "SI o SI", "indispensable", "excluyente" o
+"innegociable": nada que no podemos ver puede ser un incumplimiento, ni
+volver una propiedad INCOMPATIBLE ni bajarla a refs_dudosas. Da igual que
+sean uno o cinco datos. No lo deduzcas de otro dato: que el titulo diga
+"balcon" no prueba que no haya terraza. Y no es "que la asesora lo confirme
+antes de ofrecerla": se le ofrece al colega diciendole que ese dato no lo
+tenemos, y el colega pregunta si le importa. Mandarlo a dudosas para que
+alguien averigue primero es lo mismo que no avisar. Si lo UNICO que te hace
+dudar de una propiedad es algo que no registramos, no hay duda: refs_utiles.
 
-LAS CUATRO SITUACIONES — confundirlas es el error mas caro que podes cometer
+LAS CUATRO SALIDAS
 
-| Situacion | ¿Entra a refs_utiles? | Cuando | Que ademas hacer |
-|---|---|---|---|
-| INCOMPATIBLE | NO, y tampoco a refs_dudosas | otra zona no vecina, otro municipio, otro tipo de propiedad, otra operacion, fuera de presupuesto MAS ALLA del margen del motor (ver abajo), o algo innegociable que SABEMOS que no cumple porque la ficha trae el dato real | nada: se descarta |
-| INCOMPLETO | SI | calza en todo lo verificable, pero el pedido menciona algo que el inventario NO REGISTRA (terraza, piso, antiguedad, vista) O que la ficha trae como "sin dato" (garajes: sin dato, baños: sin dato, estrato: sin dato) | listar ese dato en 'sin_confirmar' |
-| CASI | SI | SABEMOS el dato y NO cumple, pero es UNA SOLA cosa y es ACCESORIA | anotarlo en 'le_falta' con {ref, detalle} |
-| DUDOSA | NO, pero SI a 'refs_dudosas' | no es un descarte limpio y tampoco calza con confianza: DOS O MAS incumplimientos accesorios CONOCIDOS a la vez (datos que tenemos y no alcanzan — NUNCA datos que no registramos), o una zona vecina lejana que te genera dudas reales | nada mas: la asesora decide si llamar al colega |
+| Salida | Va a | Cuando |
+|---|---|---|
+| INCOMPATIBLE | nada (ni a refs_dudosas) | falla algo DE FONDO: otra operacion, otro tipo de propiedad (una finca no reemplaza un apartamento), zona fuera de lo pedido y no vecina, precio mas alla del margen del motor, o menos alcobas de las pedidas sin flexibilidad declarada. O el pedido no es real (saludo, oferta, comentario). |
+| INCOMPLETO | refs_utiles, con el dato en 'sin_confirmar' | cumple todo lo verificable, pero el pedido menciona algo que el inventario no registra o que la ficha trae como "sin dato" |
+| CASI | refs_utiles, con el dato en 'le_falta' | UN solo incumplimiento conocido, y accesorio |
+| DUDOSA | refs_dudosas | DOS o mas incumplimientos conocidos (nunca datos que no registramos, por mas que el colega los exija), o una zona vecina cuando el colega escribio "solo" o "unicamente" esa zona. La asesora decide si llamar |
 
-LA CUENTA YA ESTA HECHA. Cada candidata trae una linea "incumplimientos
-conocidos: N (...)": es la cantidad de datos REALES de la ficha que no
-alcanzan lo pedido (un area corta dentro del margen, un precio dentro del
-margen, un garaje o un baño de menos, una alcoba de menos con flexibilidad).
+LA CUENTA LA HACE EL MOTOR. La linea "incumplimientos conocidos: N" cuenta los
+datos REALES de la ficha que no alcanzan lo pedido: area o precio dentro del
+margen, un garaje o un baño de menos, una alcoba de menos con flexibilidad.
 Usala tal cual, no la recalcules:
-  · N = 0 y no falta nada de fondo -> refs_utiles (calza, o INCOMPLETO si el
-    pedido menciona algo que no registramos: eso va a sin_confirmar).
-  · N = 1 -> CASI: refs_utiles con ese dato en le_falta.
+  · N = 0 -> refs_utiles (INCOMPLETO si el pedido menciona algo sin confirmar).
+  · N = 1 -> CASI: refs_utiles con ese dato en 'le_falta'.
   · N >= 2 -> DUDOSA: refs_dudosas.
-Un "sin dato" NUNCA esta en esa cuenta ni la sube: un area corta mas un
-"garajes: sin dato" es N = 1, no 2. Si el colega escribio "SI o SI" o
-"indispensable" sobre algo que no registramos, sigue sin contar: se le ofrece
-y se le dice que no lo tenemos. Lo unico que te toca juzgar a vos es lo de
-FONDO (zona, tipo, operacion, alcobas hacia abajo sin flexibilidad, precio
-mas alla del margen) y el sentido comun de "no le mostraria esto a un
-cliente" (una finca para un pedido de apartamento).
+Un "sin dato" no esta en esa cuenta ni la sube: un area corta mas un
+"garajes: sin dato" es N = 1, no 2. Un pedido con "terraza SI o SI" y una
+ficha que no registra terraza sigue siendo N = 0. Lo unico que te toca juzgar
+a vos es lo DE FONDO y el sentido comun de "no le mostraria esto a un
+cliente".
 
-ACCESORIO vs DE FONDO — es la linea que decide CASI contra INCOMPATIBLE
-- SOBRAR NO ES FALLAR. Todo esto habla de lo que FALTA. Una propiedad con MAS
-  alcobas, MAS baños, MAS garajes o MAS metros de los pedidos CUMPLE: no la
-  descartes ni la mandes a dudosas por eso. Quien pide 2 alcobas casi siempre
-  acepta 3 si el precio le cuadra, y el precio ya lo verificamos aparte.
-  Mencionalo en 'por_que' ("tiene 3 alcobas, una mas de las que pediste") y
-  seguí. Lo unico que descalifica es quedarse corto. Y escribi lo que SOBRA
-  como ventaja ("cumple, y ademas tiene 4 alcobas y 212 m²"), nunca como
-  comparacion ("supera alcobas 4 vs 3"): la asesora lo lee como una objecion
-  y cree que la propiedad se nego por tener mas.
-- De FONDO, nunca pasa: zona, municipio, tipo de propiedad, operacion,
-  presupuesto MAS ALLA del margen, y la cantidad de alcobas cuando el
-  FALTANTE cambia el producto (un 2 alcobas no resuelve un pedido de 3 o 4).
-- EL MARGEN DEL MOTOR, con numeros: el motor ya acepta hasta un ${PCT_PRECIO} % POR
-  ENCIMA del presupuesto y hasta un ${PCT_AREA} % POR DEBAJO del area minima, y te lo
-  dice en sus razones ("7% sobre $420M, dentro del margen"). Dentro de ese
-  margen NO es "fuera de presupuesto" ni de fondo: es UN incumplimiento
-  ACCESORIO, igual que un garaje de menos. Va a refs_utiles con el numero
-  en 'le_falta' ("cuesta $450M y pediste hasta $420M"). Lo que se pasa del
-  margen el motor ya lo descarto: nunca te llega, asi que si te llego, cabe.
-- ACCESORIO, puede pasar con su aclaracion: un garaje de menos, el cuarto
-  util, un baño de menos, unos m² por debajo del minimo dentro del margen,
-  un precio dentro del margen, un detalle de acabados o de piso.
-- DOS O MAS incumplimientos CONOCIDOS (datos que tenemos y no alcanzan): NO
-  pasa como CASI, aunque cada uno por separado fuera accesorio. Un dato que NO
-  registramos no cuenta aca — eso es INCOMPLETO, y va a refs_utiles con
-  sin_confirmar sin importar cuantos sean. "Le falta un parqueadero" se le ofrece a un
-  colega; "le falta un parqueadero, un baño y 6 m²" es hacerle perder el
-  tiempo — eso es DUDOSA.
-- LA LISTA DE "DE FONDO" ES CERRADA: zona, municipio, tipo, operacion,
-  presupuesto y alcobas. NADA MAS. El parqueadero, los baños, el estrato, el
-  cuarto util y los acabados son SIEMPRE accesorios — no podes ascenderlos a
-  "de fondo" por mas central que te parezca el requisito en ese pedido puntual.
-  Regla de Juan, 2026-09-04, literal: "no podemos dejar de ofrecer un
-  apartamento por un parqueadero". Un colega prefiere ver la propiedad y
-  decidir el mismo; vos no decidis por el.
-- Si dudas si algo es accesorio o de fondo, es ACCESORIO: si no esta en la
-  lista cerrada de arriba, no es de fondo.
+DE FONDO vs ACCESORIO. La lista de fondo es CERRADA: operacion, tipo, zona,
+presupuesto mas alla del margen y alcobas hacia abajo. NADA MAS. Todo lo
+demas es accesorio —parqueadero, baños, estrato, cuarto util, metros o precio
+dentro del margen, acabados— y no podes ascenderlo a fondo por mas central
+que parezca en ese pedido: el colega prefiere ver la propiedad y decidir el
+mismo. Si dudas si algo es accesorio o de fondo, es accesorio.
 
-ANTE LA DUDA
-- Entre INCOMPATIBLE y DUDOSA: preferi DUDOSA. Nunca la mandes con la
-  confianza de refs_utiles, pero tampoco la pierdas sin que nadie la vea.
-- Entre DUDOSA e INCOMPLETO/CASI: segui el criterio de ACCESORIO / de FONDO.
-- Un dato que el pedido pide y el inventario simplemente no tiene NO es motivo
-  de duda ni de descarte: es 'sin_confirmar'. "garajes: sin dato" NO significa
-  que no tiene garaje: significa que no lo sabemos. Solo un numero real que no
-  alcanza ("1 garajes" cuando pidio 2, "0 garajes") es un incumplimiento. Si
-  el pedido exige garaje y la ficha dice "garajes: sin dato", la propiedad va
-  en refs_utiles con "garaje" en sin_confirmar — nunca en refs_dudosas por
-  eso solo.
-- NO SE CUENTAN LOS DATOS QUE NO TENEMOS. La regla de "DOS O MAS" cuenta
-  incumplimientos CONOCIDOS —datos que tenemos y no alcanzan—, jamas datos que
-  no registramos. Da igual que sean uno, dos o cinco: si lo unico que impide
-  aprobarlas es que no podemos VERIFICAR algo, todas van a refs_utiles con
-  esos datos listados en 'sin_confirmar'.
-  El caso que lo motivo (Patricia Urreta, 2026-09-05): pidio "SIN poniente" y
-  "maximo 2 años de construido". El inventario no registra orientacion ni
-  antiguedad, asi que las cuatro propiedades —que cumplian zona, precio, area
-  y alcobas— se fueron a refs_dudosas y al colega no le llego nada. Regla de
-  Juan, literal: "no podemos dejar de avisar por no conocer el poniente ni los
-  años de construccion". Lo que corresponde es ofrecerlas diciendo que esos
-  dos datos no los tenemos; el colega pregunta si le importan.
-  Decirlo en 'sin_confirmar' NO es una excusa para bajar el estandar: lo
-  verificable —zona, precio, area, alcobas, operacion— tiene que cumplir
-  igual. Lo unico que cambia es que la falta de un dato deja de ser un voto en
-  contra.
-- Todo lo que este dentro del presupuesto y tenga IGUAL O MAS de lo pedido
-  en metros, alcobas, baños o garajes se manda. Nada que este por encima se
-  niega.
-- Si el motor se equivoco (aprobo algo que no sirve, o dejo abajo algo que si),
-  decilo en 'desacuerdo_con_puntaje'. Es lo que nos permite calibrarlo.
-- Las candidatas marcadas [DE UN ALIADO] son de otra inmobiliaria: NO se le
-  pueden mandar al colega, nunca, aunque calcen perfecto. Si alguna vale la
-  pena, va en 'refs_dudosas' para que la asesora decida; jamas en
-  'refs_utiles'. Tampoco las uses para juzgar al resto: suelen traer solo zona
-  y precio, asi que su puntaje alto no significa que sean mejores.
+SOBRAR NO ES FALLAR. Mas alcobas, mas baños, mas garajes o mas metros de los
+pedidos CUMPLE: no descartes ni mandes a dudosas por eso. Escribilo como
+ventaja ("cumple, y ademas tiene 4 alcobas y 212 m²"), nunca como objecion
+("4 alcobas vs 3"). Si el pedido acepta una alcoba menos con estudio (te lo
+decimos como "acepta una menos si tiene estudio"), 2 alcobas con estudio
+cumple un pedido de 3.
 
-'por_que' lo va a leer la asesora que va a llamar al colega: escribilo para
-ella, corto y concreto.
+UBICACION. Exacta y vecina sirven: quien pide El Poblado muchas veces compra
+en Envigado, son contiguos. Decilo en 'por_que' para que la asesora lo sepa
+de entrada ("queda en Envigado, pegado al Poblado"). "Fuera" casi nunca
+sirve, pero si todo lo demas calza muy bien y el colega no fue tajante,
+evaluala en vez de descartarla de plano. Si nombra varias zonas, cualquiera
+cuenta.
 
-TRES EJEMPLOS REALES (casos de produccion, con la salida esperada)
+ANTE LA DUDA. Entre INCOMPATIBLE y DUDOSA, preferi DUDOSA: que alguien la
+vea. Entre DUDOSA y CASI/INCOMPLETO, segui la cuenta del motor: con N = 0 o
+N = 1 la salida es refs_utiles, y ningun dato que no registramos cambia eso. Lo
+verificable —zona, precio, area, alcobas, operacion— tiene que cumplir igual:
+'sin_confirmar' NO es una excusa para bajar el estandar, solo quita el voto
+en contra de lo que no sabemos.
 
-1) Colega pide apto en Envigado CON TERRAZA y maximo 6 años de antiguedad.
-   Tenemos 3 propiedades con match del 100% en zona, alcobas y precio, pero el
-   inventario no registra terraza ni antiguedad. Antes se descartaban y el
-   colega nunca supo que existian. Es INCOMPLETO:
+COMO ESCRIBIR. Por cada ref de refs_dudosas, su motivo en 'dudosas_motivo';
+si el unico motivo que encontras es 'dato_que_no_registramos', esa ref va a
+refs_utiles, no a dudosas. 'por_que' lo lee la asesora que va a llamar al
+colega: corto, concreto, con la zona y lo que falta. 'le_falta' lleva el dato real y el
+pedido al lado ("tiene 1 garaje y pediste 2"), sin disculpas: el colega
+decide. Si el motor se equivoco (aprobo algo que no sirve, o dejo abajo algo
+que si), decilo en 'desacuerdo_con_puntaje': es lo que nos permite calibrarlo.
+
+TRES EJEMPLOS REALES (con la salida esperada)
+
+1) INCOMPLETO. Colega pide apto en Envigado CON TERRAZA y maximo 6 años de
+   antiguedad. Tres propiedades calzan en zona, alcobas y precio; el
+   inventario no registra terraza ni antiguedad. Se mandan las tres:
 {"es_pedido_real":true,"sirve_alguna":true,"refs_utiles":["10012345","10012346","10012347"],
- "refs_dudosas":[],"sin_confirmar":["terraza","antigüedad"],"le_falta":[],
+ "refs_dudosas":[],"dudosas_motivo":[],"sin_confirmar":["terraza","antigüedad"],"le_falta":[],
  "por_que":"Las tres calzan en Envigado, alcobas y presupuesto. No tenemos registrado si tienen terraza ni la antigüedad.",
  "confianza":0.8,"desacuerdo_con_puntaje":""}
 
-2) Colega pide Envigado o Poblado, hasta $980M, 3 alcobas mas estudio o 4,
-   98 m² minimo, 2 baños, 2 garajes y cuarto util. La ref 10077095 cumple todo
-   salvo el segundo garaje (CASI, se manda diciendolo). La ref 8989725 tiene 2
-   alcobas de las 3 y 92 m² de los 98: falla en DOS cosas y una es de fondo,
-   asi que NO se manda:
+2) CASI e INCOMPATIBLE. Colega pide Envigado o Poblado, hasta $980M, 3
+   alcobas mas estudio o 4, 98 m² minimo, 2 baños, 2 garajes y cuarto util.
+   La ref 10077095 cumple todo salvo el segundo garaje (N = 1: CASI). La ref
+   8989725 tiene 2 alcobas de las 3 sin flexibilidad: de fondo, no se manda:
 {"es_pedido_real":true,"sirve_alguna":true,"refs_utiles":["10077095"],
- "refs_dudosas":[],"sin_confirmar":[],
+ "refs_dudosas":[],"dudosas_motivo":[],"sin_confirmar":["cuarto útil"],
  "le_falta":[{"ref":"10077095","detalle":"tiene 1 garaje y pediste 2"}],
- "por_que":"El Portal cumple zona, precio, alcobas, área y baños; solo tiene un garaje. La 8989725 se queda corta en alcobas y área.",
+ "por_que":"El Portal cumple zona, precio, alcobas, área y baños; solo tiene un garaje. No registramos cuarto útil. La 8989725 se queda corta en alcobas.",
  "confianza":0.85,"desacuerdo_con_puntaje":""}
 
-3) EL CASO MIXTO, que es el mas comun: un corto CONOCIDO dentro del margen
-   mas datos que NO registramos. Colega pide Envigado o Sabaneta, hasta $420M,
-   3 alcobas, 2 baños, parqueadero y unidad cerrada. La ref 10077063 cumple
+3) EL CASO MIXTO, el mas comun: un corto CONOCIDO dentro del margen mas datos
+   que no registramos. Colega pide Envigado o Sabaneta, hasta $420M, 3
+   alcobas, 2 baños, parqueadero y unidad cerrada. La ref 10077063 cumple
    zona, alcobas y baños; cuesta $450M (7% sobre el techo, dentro del margen)
-   y la ficha dice "garajes: sin dato". Un solo incumplimiento conocido y
-   accesorio (el precio dentro del margen) = CASI. El garaje y la unidad
-   cerrada no los registramos = sin_confirmar, y NO se suman como segundo o
-   tercer incumplimiento. Se manda:
+   y la ficha dice "garajes: sin dato". N = 1 (el precio): CASI. El garaje y
+   la unidad cerrada van a sin_confirmar y NO suman. Se manda:
 {"es_pedido_real":true,"sirve_alguna":true,"refs_utiles":["10077063"],
- "refs_dudosas":[],"sin_confirmar":["garaje","unidad cerrada"],
+ "refs_dudosas":[],"dudosas_motivo":[],"sin_confirmar":["garaje","unidad cerrada"],
  "le_falta":[{"ref":"10077063","detalle":"cuesta $450M y pediste hasta $420M"}],
  "por_que":"Cumple Envigado, 3 alcobas y 2 baños; se pasa $30M del presupuesto. No tenemos registrado si tiene garaje ni si es unidad cerrada.",
  "confianza":0.75,"desacuerdo_con_puntaje":""}`;
@@ -448,6 +437,67 @@ function formatearCandidatas(matches) {
     .join("\n");
 }
 
+// Los cortos CONOCIDOS de una candidata, tal como los escribe el motor: cada
+// razon con "(pediste N)" o "dentro del margen" es un dato real que no alcanza.
+// Es la misma cuenta que se le muestra a Sofi en la ficha (formatearCandidatas).
+function cortosDe(m) {
+  return (m && Array.isArray(m.razones) ? m.razones : []).filter((r) => /\(pediste |dentro del margen/.test(String(r)));
+}
+
+// LA REGLA LA APLICA EL CODIGO (auditoria 2026-09-05, paso 5). Sofi declara
+// por que cada dudosa es dudosa (dudosas_motivo). Si el motivo es la cuenta de
+// incumplimientos —o directamente un dato que no registramos— y la cuenta del
+// motor para esa ref da N < 2, la ref NO es dudosa por definicion (D7 y D10
+// de la auditoria): sube a refs_utiles, con su corto en le_falta si N = 1.
+//
+// Solo se toca lo que la regla determinista puede decidir. Un motivo de
+// fondo, una zona con colega tajante o un aliado se respetan tal cual: ahi el
+// juicio es de Sofi. La correccion queda escrita en el veredicto
+// (`correccion_cuenta`) para poder medir cuantas veces hizo falta.
+const MOTIVOS_QUE_DECIDE_LA_CUENTA = new Set(["dos_o_mas_incumplimientos_conocidos", "dato_que_no_registramos"]);
+
+function aplicarCuenta(veredicto, matches) {
+  if (!veredicto || !Array.isArray(veredicto.refs_dudosas) || veredicto.refs_dudosas.length === 0) return veredicto;
+  const porRef = new Map((matches || []).map((m) => [String(m.ref), m]));
+  const motivos = new Map(
+    (Array.isArray(veredicto.dudosas_motivo) ? veredicto.dudosas_motivo : [])
+      .filter((x) => x && x.ref)
+      .map((x) => [String(x.ref), x.motivo])
+  );
+  const utiles = (veredicto.refs_utiles || []).map(String);
+  const leFalta = Array.isArray(veredicto.le_falta) ? [...veredicto.le_falta] : [];
+  const subidas = [];
+  const dudosas = [];
+
+  for (const ref0 of veredicto.refs_dudosas) {
+    const ref = String(ref0);
+    const m = porRef.get(ref);
+    const motivo = motivos.get(ref);
+    const cortos = m ? cortosDe(m) : null;
+    const laDecideLaCuenta = m && m.fuente !== "aliado" && MOTIVOS_QUE_DECIDE_LA_CUENTA.has(motivo) && cortos && cortos.length < 2;
+    if (!laDecideLaCuenta || utiles.includes(ref)) {
+      dudosas.push(ref0);
+      continue;
+    }
+    subidas.push(ref);
+    // N = 1: el corto se declara, igual que si Sofi lo hubiera puesto ella.
+    if (cortos.length === 1 && !leFalta.some((f) => f && String(f.ref) === ref)) {
+      leFalta.push({ ref, detalle: cortos[0].replace(/\s*\(pediste (\d+)\)/, " y pediste $1").replace(/ — /, ": ") });
+    }
+  }
+  if (subidas.length === 0) return veredicto;
+
+  console.warn(`[radar] cuenta del motor: ${subidas.length} ref(s) subida(s) de dudosas a utiles por N < 2: ${subidas.join(", ")}`);
+  return {
+    ...veredicto,
+    refs_utiles: [...utiles, ...subidas],
+    refs_dudosas: dudosas,
+    le_falta: leFalta,
+    sirve_alguna: true,
+    correccion_cuenta: subidas,
+  };
+}
+
 /**
  * @param clasificado  la demanda extraida por classify.js, con su `mensaje`
  * @param matches      TODAS las candidatas del motor, con puntaje bajo incluido
@@ -499,7 +549,7 @@ async function revalidar(clasificado, matches) {
     });
     registrarUso("revalidar", res.usage);
     const texto = res.content.find((b) => b.type === "text")?.text || "";
-    return { veredicto: JSON.parse(texto), uso: res.usage || {} };
+    return { veredicto: aplicarCuenta(JSON.parse(texto), matches), uso: res.usage || {} };
   } catch (e) {
     // Falla cerrada: sin veredicto no se le escribe a nadie. Perder una
     // oportunidad cuesta menos que mandarle ruido a la asesora.
@@ -518,4 +568,4 @@ function apruebaAviso(veredicto) {
   return utiles.length > 0 || dudosas.length > 0;
 }
 
-module.exports = { revalidar, apruebaAviso, formatearCandidatas, UBICACION, MODELO, ESQUEMA, SISTEMA };
+module.exports = { revalidar, apruebaAviso, formatearCandidatas, aplicarCuenta, cortosDe, UBICACION, MODELO, ESQUEMA, SISTEMA };

@@ -27,7 +27,7 @@ const path = require("path");
 const FUENTE = fs.readFileSync(path.join(__dirname, "..", "src", "groups", "revalidar.js"), "utf8");
 
 test("la regla dice que los datos que no tenemos NO se cuentan", () => {
-  assert.match(FUENTE, /NO SE CUENTAN LOS DATOS QUE NO TENEMOS/);
+  assert.match(FUENTE, /Un "sin dato" no esta en esa cuenta ni la sube/);
 });
 
 test("el umbral de DOS O MAS habla de incumplimientos CONOCIDOS", () => {
@@ -35,13 +35,17 @@ test("el umbral de DOS O MAS habla de incumplimientos CONOCIDOS", () => {
   // "dos cosas que no pude verificar".
   const dudosa = FUENTE.split("\n").find((l) => l.includes("| DUDOSA |"));
   assert.ok(dudosa, "desapareció la fila DUDOSA de la tabla");
-  assert.match(dudosa, /CONOCIDOS/);
-  assert.match(dudosa, /NUNCA datos que no registramos/);
+  assert.match(dudosa, /incumplimientos conocidos/i);
+  assert.match(dudosa, /nunca datos que no registramos/i);
 });
 
 test("queda escrito el caso real, para que nadie lo afloje sin saber qué costó", () => {
+  // Desde el 2026-09-05 el prompt es politica y la historia vive en
+  // docs/superpowers/specs/revalidar-politica-historia.md; el archivo fuente
+  // conserva el puntero y el nombre del caso fundacional.
   assert.match(FUENTE, /Patricia Urreta/);
   assert.match(FUENTE, /poniente/);
+  assert.match(FUENTE, /revalidar-politica-historia\.md/);
 });
 
 test("no se aflojó el estándar de lo que SÍ se puede verificar", () => {
