@@ -81,8 +81,9 @@ const ubicacion = require("./ubicacion");
 // que tengan un scoring alto" — se manda TODO lo que ya paso la compuerta de
 // calidad de src/groups/publicable.js (puntaje >= umbral, zona exacta o
 // vecina, datos limpios). Esa compuerta es la que de verdad decide "esto es
-// bueno", no un limite fijo de cantidad. Se deja el parametro por si algun
-// dia hace falta acotar de nuevo, pero el default ya no trunca.
+// bueno", no un limite fijo de cantidad. El parametro `maxPropiedades` queda
+// como perilla explicita (hay un test que fija que un valor pasado a mano SI
+// se respeta); el default ya no trunca.
 const MAX_PROPIEDADES = Infinity;
 
 function primerNombre(nombre) {

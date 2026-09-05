@@ -34,6 +34,21 @@ railway run --service diamond node scripts/golden-revalidar.js
 | El margen del motor (+10 % precio, −10 % área) se le dice a Sofi con números; dentro del margen es CASI, no incompatible | Deisy Marín ($30M sobre $420M, 7 %) y Mateo Narváez ($25M sobre $300M; 60 de 65 m²) fueron a dudosas después de que el motor las aceptara a propósito. Los porcentajes se interpolan desde `src/groups/margenes.js` | 2026-09-05 |
 | La cuenta de incumplimientos conocidos la hace el motor y Sofi la usa tal cual | Con la regla "los no registrados no cuentan" escrita tres veces, Sofi igual sumó "garajes: sin dato" como segundo incumplimiento (Mateo Narváez, 18:44). `formatearCandidatas` deriva N de las razones con "(pediste N)" o "dentro del margen" | 2026-09-05 |
 | Un dato del pedido que aparece como "no dice" no es una exigencia | — | 2026-09-02 |
+| `dudosas_motivo`: Sofi declara por qué cada dudosa es dudosa (enum), y `aplicarCuenta` sube a `refs_utiles` toda ref cuyo motivo sea la cuenta o un dato no registrado cuando la cuenta del motor da N < 2 | Con el prompt reescrito como política, Gustavo Arango y Patricia Urreta volvieron a caer a dudosas ("dos datos sin confirmar = dos huecos"). La prosa no alcanzó; la regla la aplica el código y la corrección queda escrita en `correccion_cuenta` | 2026-09-05 |
+
+## Lo que Wasi sí registra y todavía no usamos (hallazgo del 2026-09-05)
+
+La API oficial (`/property/search`) manda `features.internal` y
+`features.external` para 43 de las 112 propiedades: "Urbanización cerrada"
+(16), "Balcón" (32), "Vista panorámica" (18), "Garaje" (10), "Terraza" (6),
+"Jardín" (4), "Patio" (4), "Luz en la mañana" / "Luz en la tarde" (3). Hoy el
+sync no las guarda en `properties.caracteristicas` (script de medición:
+`dmap/scripts/wasi-features-crudo.ts`). Si se sincronizan, "unidad cerrada" y
+"terraza" dejan de ser datos que "no registramos" para esas 43 y la ficha de
+Sofi puede confirmarlos en positivo. La ausencia seguiría sin significar "no
+tiene". Y `garages` llega como el string `"0"` en las 39 sin cargar, nunca
+ausente ni null: el 0 es inverificable en origen y la regla "0 = sin dato" se
+queda.
 
 ## Los tres ejemplos del prompt
 

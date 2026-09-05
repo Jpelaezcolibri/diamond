@@ -89,16 +89,17 @@ function evaluarOferta(oferta, mandato, { margenPrecio = MARGEN_PRECIO_DEFAULT }
   // null si la operacion no calza, si el tipo no calza o si la ubicacion no
   // coincide ni de vecina. No se reimplementa nada de eso aca.
   //
-  // OJO (verificado corriendo el motor real, 2026-08-25): evaluarCandidata
-  // trae SUS PROPIOS cortes duros de precio (10%, ver MARGEN_PRECIO) y de
-  // habitaciones/baños/garajes (exactos si el pedido no vino marcado
-  // flexible_habitaciones) — pensados para el carril de venta, donde son
-  // correctos. En el carril de compra esos tres son blandos por decision de
-  // producto (ver el comentario de arriba del archivo), asi que NO se le
-  // pasan a evaluarCandidata: si se le pasaran, devolveria null antes de que
-  // esta funcion pueda escribir la salvedad, y una oferta que "sirve con
-  // salvedad" se perderia como si nunca hubiera calzado. Solo viaja lo que
-  // sigue siendo corte duro tambien para nosotros: operacion, tipo y zona.
+  // OJO: evaluarCandidata trae SUS PROPIOS cortes duros —precio (con el
+  // margen de ./margenes.js), banda inferior y alcobas hacia abajo—, pensados
+  // para el carril de venta, donde son correctos. (Baños y garajes dejaron de
+  // ser corte duro alli el 2026-09-04; el comentario anterior decia que
+  // seguian siendo exactos y ya no era cierto — auditoria 2026-09-05, H8.)
+  // En el carril de compra todo eso es blando por decision de producto (ver
+  // el comentario de arriba del archivo), asi que NO se le pasa a
+  // evaluarCandidata: si se le pasara, devolveria null antes de que esta
+  // funcion pueda escribir la salvedad, y una oferta que "sirve con salvedad"
+  // se perderia como si nunca hubiera calzado. Solo viaja lo que sigue siendo
+  // corte duro tambien para nosotros: operacion, tipo y zona.
   const criterioCompuertas = {
     operacion: c.operacion,
     tipo: c.tipo,

@@ -171,10 +171,13 @@ function mensajeListoParaReenviar(senal, veredicto, utiles, org) {
 const PORQUE = {
   sin_telefono: "No pudimos resolver el número del colega, así que el bot no tenía cómo escribirle. Te toca a vos.",
   pedido_vencido: "El pedido ya tiene más de media hora. Que el bot escriba tan tarde se lee como spam; de parte tuya no.",
-  limite_colega_alcanzado: "Hoy ya le escribimos dos veces a este colega. Un tercer mensaje del bot se lee como insistencia.",
+  // limite_colega_alcanzado / limite_colega_no_verificable se quitaron el
+  // 2026-09-05: decidirDm no emite esos motivos desde que el tope por colega
+  // se elimino (2026-09-04). Una traduccion de un motivo que ya no existe
+  // solo confunde a quien lea esta tabla.
   limite_linea_alcanzado: "La línea llegó a su tope de mensajes por hoy.",
-  limite_colega_no_verificable: "No pudimos contar cuántos mensajes le mandamos hoy a este colega, y ante la duda el bot no escribe.",
   limite_linea_no_verificable: "No pudimos contar los mensajes que mandó la línea hoy, y ante la duda el bot no escribe.",
+  cuota_whatsapp_alta: "La línea está cerca de la cuota mensual de mensajes de WhatsApp, y el bot se frena para dejar colchón.",
   sin_fecha_mensaje: "El pedido llegó sin fecha, así que no podemos saber si todavía está vigente.",
   dm_fallido: "El bot intentó escribirle y WhatsApp rechazó el envío.",
 };

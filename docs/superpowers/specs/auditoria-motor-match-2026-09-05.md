@@ -176,3 +176,22 @@ Siete tests aseguran substrings del prompt (`s.includes("nunca en refs_dudosas p
 | 8 | Limpiar `PORQUE`, comentarios stale de `cruce-mandatos` y `revalidar`, parámetros vestigiales | S | H8, bajos |
 
 Los pasos 1 a 3 cierran hoy el problema que motivó la auditoría. El paso 5 es el que evita que vuelva a pasar.
+
+## Estado al cierre (2026-09-05, misma tarde)
+
+Los 8 pasos se ejecutaron en orden, cada uno verificado con la suite (1571 tests) y, donde tocaba el prompt, con el golden set de 6 pedidos reales corrido con la clave de producción (`scripts/golden-revalidar.js`).
+
+| Paso | Commit | Resultado verificado |
+|---|---|---|
+| 1 | `2eb716d` | Bloque contradictorio fuera; Julissa (piso) y Patricia (poniente) pasan a útiles |
+| 2 | `e67209f` | Margen del motor en el prompt + cuenta de incumplimientos hecha por el motor; 6/6 del golden set |
+| 3 | `9beeb9c` | Golden set y script de diagnóstico commiteados |
+| 4 | `d0b3565`, `688e5ba` | `desvios` usa el grado del motor (módulo `ubicacion.js`); tildes aplanadas: Itagüí pasa de 0 a 2 propiedades, Belén de 3 a 6 |
+| 5 | `0c93cc8` | Prompt reescrito como política (historia en `revalidar-politica-historia.md`); `dudosas_motivo` + `aplicarCuenta` aplican la regla en código; 6/6 |
+| 6 | `2491de4` | `formato.datoCargado` en los cinco sitios |
+| 7 | ver abajo | Wasi manda `garages: "0"` (string) en las 39 sin cargar, nunca null ni ausente: el 0 es inverificable en origen, la regla se queda |
+| 8 | ver abajo | Motivos muertos de `PORQUE` (y el de cuota de WhatsApp que faltaba), comentario stale de `cruce-mandatos`. El parámetro `maxPropiedades` de `redactar` se dejó: un test lo fija como perilla explícita |
+
+Extra que salió del paso 7 y no estaba en el plan: la API de Wasi manda `features` (Urbanización cerrada ×16, Terraza ×6, Balcón ×32, Vista panorámica ×18, Garaje ×10, Jardín ×4) para 43 de 112 propiedades y el sync no las guarda. Sincronizarlas a `properties.caracteristicas` haría verificables en positivo justo los atributos que motivaron esta auditoría. Es el siguiente paso natural; queda propuesto, no hecho.
+
+Pendiente del plan original que se decidió no hacer hoy: la lista única de exigencias compartida por los cinco módulos (segunda mitad de H6). El helper cerró la duplicación de la regla; la lista de campos sigue en cada archivo porque cada uno la formatea distinto y el refactor no cambiaba comportamiento.
