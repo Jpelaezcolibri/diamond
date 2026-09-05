@@ -46,7 +46,7 @@
 // garajes y otra no. Por eso viaja como {ref, detalle} y la aclaracion se
 // imprime dentro de la ficha de esa propiedad, no en el encabezado.
 const config = require("../config");
-const { getClient, CACHE_ESTABLE } = require("../lib/anthropic");
+const { getClient, CACHE_ESTABLE, registrarUso } = require("../lib/anthropic");
 
 // Sonnet y no Haiku a proposito: esto es juicio, no extraccion, y el volumen es
 // bajo (solo demandas que ya trajeron al menos una candidata). El clasificador
@@ -408,6 +408,7 @@ async function revalidar(clasificado, matches) {
       output_config: { format: { type: "json_schema", schema: ESQUEMA } },
       messages: [{ role: "user", content: pedido }],
     });
+    registrarUso("revalidar", res.usage);
     const texto = res.content.find((b) => b.type === "text")?.text || "";
     return { veredicto: JSON.parse(texto), uso: res.usage || {} };
   } catch (e) {

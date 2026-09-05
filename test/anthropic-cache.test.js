@@ -67,3 +67,51 @@ test("el prompt de revalidar supera el minimo cacheable de Sonnet", () => {
   const tokens = revalidar.SISTEMA.length / 3.6;
   assert.ok(tokens > 1024, `SISTEMA de revalidar quedo en ~${Math.round(tokens)} tokens: el cache no se aplicaria`);
 });
+
+// ── El medidor ────────────────────────────────────────────────────────────
+//
+// Es lo unico que va a decir si el cache pega en produccion. Si se rompe,
+// volvemos a estar ciegos.
+const { registrarUso } = require("../src/lib/anthropic");
+
+function capturando(fn) {
+  const original = console.log;
+  const lineas = [];
+  console.log = (...args) => lineas.push(args.join(" "));
+  try {
+    fn();
+  } finally {
+    console.log = original;
+  }
+  return lineas;
+}
+
+test("el medidor reporta el porcentaje leido del cache", () => {
+  const lineas = capturando(() =>
+    registrarUso("engine", {
+      cache_read_input_tokens: 9000,
+      cache_creation_input_tokens: 0,
+      input_tokens: 1000,
+      output_tokens: 250,
+    })
+  );
+  assert.strictEqual(lineas.length, 1);
+  assert.match(lineas[0], /\[uso\] engine/);
+  assert.match(lineas[0], /entrada=10000/);
+  assert.match(lineas[0], /cache_read=9000 \(90%\)/);
+});
+
+test("el medidor nunca tumba una respuesta al cliente", () => {
+  // Un usage ausente, vacio o con basura no puede lanzar: esto corre en el
+  // camino de una respuesta real de WhatsApp.
+  for (const basura of [null, undefined, {}, { input_tokens: "no soy un numero" }, 42]) {
+    assert.doesNotThrow(() => registrarUso("engine", basura));
+  }
+});
+
+test("el medidor no registra contenido, solo cuentas", () => {
+  const lineas = capturando(() =>
+    registrarUso("engine", { input_tokens: 100, output_tokens: 5, texto: "dato privado del cliente" })
+  );
+  assert.ok(!lineas.join("").includes("dato privado"), "el log no puede llevar contenido");
+});

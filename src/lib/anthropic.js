@@ -55,5 +55,37 @@ if (process.env.ANTHROPIC_CACHE_TTL && !TTL_VALIDOS.has(process.env.ANTHROPIC_CA
 
 const CACHE_ESTABLE = Object.freeze({ type: "ephemeral", ttl: TTL });
 
-module.exports = { getClient, _setClientForTests, CACHE_ESTABLE };
+// Deja en el log cuanto del prompt se leyo del cache y cuanto se pago entero.
+//
+// Existe porque el prompt caching es el unico ahorro del sistema que falla en
+// SILENCIO: si el marcador se cae, si el bloque estable deja de ser estable, o
+// si el TTL vuelve a 5 minutos, no se rompe nada — solo se paga de mas, y no
+// hay forma de enterarse sin abrir la consola de Anthropic. Con esto alcanza
+// con mirar los logs de Railway.
+//
+// `cache_read` alto y `escrito` bajo = el cache esta pegando. `escrito` alto
+// en cada llamada = el prefijo se esta invalidando y hay que mirar que se
+// colo dentro del bloque estable.
+//
+// Best-effort y sin PII: solo cuenta tokens, nunca contenido. Un `usage`
+// ausente o raro no puede tumbar una respuesta al cliente.
+function registrarUso(ruta, usage) {
+  try {
+    if (!usage) return;
+    const leido = usage.cache_read_input_tokens || 0;
+    const escrito = usage.cache_creation_input_tokens || 0;
+    const fresco = usage.input_tokens || 0;
+    const entrada = leido + escrito + fresco;
+    if (!entrada) return;
+    const pct = Math.round((leido / entrada) * 100);
+    console.log(
+      `[uso] ${ruta} entrada=${entrada} cache_read=${leido} (${pct}%) escrito=${escrito} fresco=${fresco} salida=${usage.output_tokens || 0}`
+    );
+  } catch {
+    // Medir nunca puede romper lo medido.
+  }
+}
+
+
+module.exports = { getClient, _setClientForTests, CACHE_ESTABLE, registrarUso };
 
