@@ -128,9 +128,15 @@ function instalar() {
       // sea la via por la que sale el DM cuando no hay telefono. Un mock que
       // lo ignora no puede distinguir un envio al numero de uno al
       // identificador oculto.
+      // `envioDmResultado` acepta una FUNCION desde el 2026-09-05: el respaldo
+      // por telefono necesita que el primer intento (por lid) falle y el
+      // segundo (por telefono) salga, y con un valor fijo los dos intentos son
+      // identicos — el test pasaria sin ejercitar nada.
       enviarDm: async (sesion, telefono, texto, opciones = {}) => {
         enviosDm.push({ sesion, telefono, texto, opciones });
-        return envioDmResultado;
+        return typeof envioDmResultado === "function"
+          ? envioDmResultado({ telefono, opciones, intento: enviosDm.length })
+          : envioDmResultado;
       },
       // Por defecto null: "no se pudo leer" es el caso que no frena (ver la
       // nota deliberada en politica.js#decidirDm) y es el que no debe romper
@@ -650,15 +656,41 @@ test("sin telefono pero con el lid del autor, el DM sale igual por <lid>@lid", a
   ]);
 });
 
-test("con telefono resuelto se prefiere el telefono: el lid no viaja como destino", async () => {
+test("con telefono resuelto TAMBIEN sale por el lid: es el camino principal", async () => {
+  // Invertido el 2026-09-05 por decision de Juan sobre la medicion de ese dia
+  // (ver la nota extensa en test/group-politica.test.js y en politica.js).
+  // El telefono resuelto NO se pierde: se sigue guardando en la señal y es lo
+  // que arma el link wa.me del aviso a la asesora.
   telefonoColegaResuelto = "573001234567";
   await vivo.procesarMensaje(ORG, mensaje(), {
     grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA",
   });
 
-  assert.strictEqual(enviosDm[0].telefono, "573001234567");
-  assert.ok(!enviosDm[0].opciones.lid, "con numero no se manda por el identificador oculto");
-  assert.ok(politicasGuardadas[0].traza.includes("destino:telefono"), politicasGuardadas[0].traza.join(","));
+  assert.ok(enviosDm[0].opciones.lid, "no salio por el lid");
+  assert.ok(politicasGuardadas[0].traza.includes("destino:lid"), politicasGuardadas[0].traza.join(","));
+});
+
+test("si el lid no entrega, el DM sale por el telefono resuelto", async () => {
+  // LA REGRESION QUE CIERRA (Juan, 2026-09-05, al hacer del lid el camino
+  // principal): un colega con telefono resuelto ANTES se contactaba por el
+  // telefono. Ahora sale por el lid, asi que un lid que no entregue seria
+  // perder a un colega que antes si alcanzabamos.
+  telefonoColegaResuelto = "573001234567";
+  envioDmResultado = ({ opciones }) =>
+    opciones.lid
+      ? { ok: false, error: "session not found", previoAlEnvio: true }
+      : { ok: true, wamid: "wm-respaldo" };
+
+  await vivo.procesarMensaje(ORG, mensaje(), {
+    grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA",
+  });
+
+  const porLid = enviosDm.filter((e) => e.opciones && e.opciones.lid);
+  const porTelefono = enviosDm.filter((e) => !e.opciones || !e.opciones.lid);
+  assert.ok(porLid.length >= 1, "no intento primero por el lid");
+  assert.strictEqual(porTelefono.length, 1, "no reintento por el telefono");
+  assert.strictEqual(porTelefono[0].telefono, "573001234567");
+  assert.strictEqual(marcadasRespondidas.length, 1, "el pedido no quedo registrado como respondido");
 });
 
 test("sin telefono Y sin lid no hay a quien escribirle: se avisa a la asesora -- ningun pedido se pierde", async () => {

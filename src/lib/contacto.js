@@ -70,6 +70,45 @@ function telefonoNormalizado(telefono) {
   return String(telefono).replace(/\D/g, "");
 }
 
+// EL TELEFONO QUE EL COLEGA ESCRIBIO EN SU PROPIO MENSAJE (Juan, 2026-09-05).
+//
+// EL CASO: Adriana Gutierrez publico su pedido firmando "Adriana Gutierrez /
+// 📲3172874669", y el aviso a la asesora decia "Contacto: no se pudo resolver
+// el número" — con el numero escrito en el mismo mensaje que se le mostraba
+// tres renglones mas abajo. telefonoVisible (src/channels/whatsapp-group.js)
+// solo mira los campos del payload de WhatsApp, nunca el texto.
+//
+// CUANTO APORTA, medido el 2026-09-05: 195 de 760 pedidos (25,7 %) traen un
+// celular colombiano escrito. Como VIA de contacto aporta poco —el lid ya
+// cubre a esos colegas— y por eso no cambia a quien se le escribe. Su valor es
+// que la asesora deje de leer "no se pudo resolver" con el numero a la vista,
+// y que le quede un link para tocar en vez de tener que buscar el nombre en el
+// grupo.
+//
+// Exige forma de celular colombiano (3 + 9 digitos, con 57 opcional) sobre una
+// cadena de digitos AISLADA: sin eso, "$950.000.000" da 950000000 -> nueve
+// digitos que empiezan por 9, y un precio se convertiria en un telefono. Los
+// separadores que se permiten adentro son espacio, punto y guion — los que usa
+// una persona al escribir un numero— nunca los que arman una cifra en pesos.
+function telefonoEnTexto(texto) {
+  const t = String(texto || "");
+  if (!t) return null;
+  // (?<![\d.,]) y (?![\d.,]) aislan la cadena: descartan el fragmento que sea
+  // parte de un numero mas largo, que es como un precio se cuela.
+  const patron = /(?<![\d.,])(?:\+?57[\s.-]?)?3\d{2}[\s.-]?\d{3}[\s.-]?\d{4}(?![\d.,])/g;
+  for (const cruda of t.match(patron) || []) {
+    const candidato = cruda.replace(/\D/g, "");
+    if (!esCelularColombiano(candidato)) continue;
+    // SIEMPRE con el 57 adelante. Quien lo escribe en un grupo pone los 10
+    // digitos locales ("3172874669"), y con eso linkWhatsapp arma
+    // "wa.me/3172874669" — un link que WhatsApp no abre. El unico consumidor
+    // de esto es un link para que la asesora toque, asi que devolverlo a
+    // medias seria peor que no devolverlo.
+    return candidato.startsWith("57") ? candidato : `57${candidato}`;
+  }
+  return null;
+}
+
 // Link a la linea OFICIAL de Sofi (Juan, 2026-08-22): "que todo mensaje que
 // salga hacia un colega invite a escribirle a Sofi" -- asi se abre la ventana
 // de 24h en la linea oficial (sin el riesgo de baneo de la linea vinculada al
@@ -121,4 +160,4 @@ function tocarNombreEnGrupo(quien) {
   return `tocá el nombre de ${quien} en el grupo para abrirle el chat directo — no hace falta tenerlo guardado`;
 }
 
-module.exports = { esMarcable, linkWhatsapp, esCelularColombiano, telefonoNormalizado, linkWhatsappEstricto, linkContactoOficial, tocarNombreEnGrupo };
+module.exports = { esMarcable, linkWhatsapp, esCelularColombiano, telefonoNormalizado, telefonoEnTexto, linkWhatsappEstricto, linkContactoOficial, tocarNombreEnGrupo };

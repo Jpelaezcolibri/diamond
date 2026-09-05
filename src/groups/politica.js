@@ -256,8 +256,23 @@ function decidirDm({
   // El minimo de 10 digitos es el mismo que exige waha.enviarDm para armar
   // el chatId: un lid mas corto no es un destino, y aceptarlo aca daria un
   // pedido por respondido sin que salga nada.
+  //
+  // EL LID VA PRIMERO (Juan, 2026-09-05): "primero quiero que el principal
+  // camino de contacto sea el lid, si no hay lid debe de haber numero de
+  // telefono". Invierte el orden que tenia desde el 2026-09-04, y lo invierte
+  // porque la medicion de ese dia lo pide: de 760 pedidos de colegas, 748
+  // (98,4 %) llegan SOLO como @lid y apenas 2 traen telefono visible. De los
+  // 276 colegas que llegan por lid, 60 no tienen telefono por ninguna via.
+  //
+  // Y la brecha se ensancha: el calentamiento del directorio esta apagado
+  // desde el 2026-09-04 (rate-overlimit de WhatsApp, y esa linea ya fue
+  // baneada una vez), asi que el mapa lid->telefono quedo congelado y cada
+  // colega nuevo entra —y se queda— como lid.
+  //
+  // El telefono no se pierde: sigue siendo el destino cuando no hay lid, y
+  // sigue siendo lo que alimenta el link wa.me del aviso a la asesora.
   const lidDigitos = String(lid || "").replace(/\D/g, "");
-  const via = telefono ? "telefono" : lidDigitos.length >= 10 ? "lid" : null;
+  const via = lidDigitos.length >= 10 ? "lid" : telefono ? "telefono" : null;
   // El motivo sigue llamandose `sin_telefono` aunque ahora signifique "sin
   // ningun destino": es la clave que ya leen alerta-asesor.js (el texto que
   // le explica a la asesora por que no salio solo), digest-avisos.js y la

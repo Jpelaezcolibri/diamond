@@ -185,14 +185,21 @@ test("sin telefono pero con lid, el DM sale igual por el identificador oculto", 
   assert.ok(d.traza.includes("destino:lid"), d.traza.join(","));
 });
 
-test("con telefono Y lid se prefiere el telefono: es el destino verificado", () => {
-  // El lid resuelve al mismo chat, pero el numero es el dato que ya se
-  // confirmo (esCelularColombiano) y el que despues sirve para el link
-  // wa.me del aviso a la asesora.
+test("con telefono Y lid manda el LID: es como llega el 98 % de los colegas", () => {
+  // ORDEN INVERTIDO el 2026-09-05 (Juan: "primero quiero que el principal
+  // camino de contacto sea el lid"). Hasta ese dia ganaba el telefono, por ser
+  // el destino verificado. Lo que cambio es la medicion: de 760 pedidos de
+  // colegas, 748 (98,4 %) llegan SOLO como @lid y apenas 2 traen telefono
+  // visible; de los 276 colegas que llegan por lid, 60 no tienen telefono por
+  // ninguna via. Y el calentamiento del directorio esta apagado, asi que cada
+  // colega nuevo entra —y se queda— como lid.
+  //
+  // El telefono no se pierde: sigue siendo el destino cuando no hay lid, y
+  // sigue alimentando el link wa.me del aviso a la asesora.
   const d = politica.decidirDm(escenarioDm({ lid: "141746805670125" }));
   assert.strictEqual(d.enviarDm, true);
-  assert.strictEqual(d.via, "telefono");
-  assert.ok(!d.traza.includes("destino:lid"), d.traza.join(","));
+  assert.strictEqual(d.via, "lid");
+  assert.ok(d.traza.includes("destino:lid"), d.traza.join(","));
 });
 
 test("sin telefono y sin lid no hay a quien escribirle: se calla (y vivo.js cae a la asesora)", () => {

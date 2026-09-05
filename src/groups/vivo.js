@@ -502,6 +502,23 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
         await new Promise((r) => setTimeout(r, 3000));
         envioDm = await waha.enviarDm(sesion, telefonoColega, textoDm, opcionesDm).catch((e) => ({ ok: false, error: e.message }));
       }
+
+      // RESPALDO POR TELEFONO (Juan, 2026-09-05, al hacer del lid el camino
+      // principal). Antes de este cambio, un colega con telefono resuelto se
+      // contactaba POR el telefono; ahora sale por el lid, asi que un lid que
+      // no entregue significaria perder a un colega que antes si alcanzabamos.
+      // Esa regresion se cierra aca: si el envio por lid no salio y hay un
+      // telefono verificado, se reintenta por ese destino.
+      //
+      // Solo cuando el fallo fue ANTES de que el mensaje saliera, por la misma
+      // razon que el reintento de arriba: con estado desconocido, insistir por
+      // otra via arriesga mandarle el DM dos veces al mismo colega, que es la
+      // conducta por la que a uno lo reportan.
+      if (envioDm && !envioDm.ok && envioDm.previoAlEnvio && decisionDm.via === "lid" && telefonoColega) {
+        console.warn(`[radar] El DM por lid no salio (${envioDm.error}); se reintenta por el telefono resuelto.`);
+        envioDm = await waha.enviarDm(sesion, telefonoColega, textoDm, {}).catch((e) => ({ ok: false, error: e.message }));
+      }
+
       if (envioDm && envioDm.ok) {
         // Se registra con modo 'auto' — igual que el camino que publica DENTRO
         // del grupo (ver la nota en group-signals.js#dmsHoyPorColega sobre por

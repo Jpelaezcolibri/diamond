@@ -40,7 +40,7 @@
 
 const formato = require("../lib/formato");
 const { normalizarTitulo } = require("../lib/formato");
-const { linkWhatsappEstricto, linkContactoOficial, tocarNombreEnGrupo } = require("../lib/contacto");
+const { linkWhatsappEstricto, linkContactoOficial, tocarNombreEnGrupo, telefonoEnTexto } = require("../lib/contacto");
 const redactar = require("./redactar");
 
 // Una propiedad, corta: la asesora ya conoce el inventario, no necesita la
@@ -98,14 +98,33 @@ function linea(match) {
 // termino en el baneo de una cuenta en julio de 2026 (ver src/lib/waha.js) por
 // escribirle a alguien fuera del circuito oficial. linkWhatsapp (esMarcable,
 // <=13 digitos) es un techo demasiado ancho para ese riesgo.
-function contactoPara(telefonoColega, autorTelefono, quien) {
+// TERCERA FUENTE: el numero que el colega escribio en su propio pedido (Juan,
+// 2026-09-05). El caso que lo motivo: Adriana Gutierrez firmo su pedido con
+// "📲3172874669" y este bloque decia "no se pudo resolver el número" — con el
+// numero a la vista tres renglones mas abajo, en el mismo aviso. Medido ese
+// dia: 195 de 760 pedidos traen un celular escrito.
+//
+// Va DESPUES de las dos fuentes verificadas (el directorio y el identificador
+// del autor) porque es la menos confiable: el texto puede traer el numero del
+// DUEÑO de la propiedad o el de un tercero, no necesariamente el de quien
+// publica. Por eso el aviso dice de donde salio en vez de presentarlo como si
+// lo hubieramos resuelto: la asesora tiene que poder decidir si confia.
+function contactoPara(telefonoColega, autorTelefono, quien, textoOriginal = null) {
   const link = linkWhatsappEstricto(telefonoColega) || linkWhatsappEstricto(autorTelefono);
   if (link) return link;
+
+  const delTexto = linkWhatsappEstricto(telefonoEnTexto(textoOriginal));
+  if (delTexto) return `${delTexto} (lo escribió en su mensaje — confirmá que sea el de ${quien})`;
+
   return `no se pudo resolver el número — ${tocarNombreEnGrupo(quien)}`;
 }
 
-function telefonoResuelto(telefonoColega, autorTelefono) {
-  return Boolean(linkWhatsappEstricto(telefonoColega) || linkWhatsappEstricto(autorTelefono));
+function telefonoResuelto(telefonoColega, autorTelefono, textoOriginal = null) {
+  return Boolean(
+    linkWhatsappEstricto(telefonoColega) ||
+      linkWhatsappEstricto(autorTelefono) ||
+      linkWhatsappEstricto(telefonoEnTexto(textoOriginal))
+  );
 }
 
 // Mensaje ya armado para reenviar (Juan, 2026-09-01): sin telefono resuelto, la
@@ -231,7 +250,7 @@ function construir(senal, veredicto, matches, telefonoColega = null, org = null,
   if (utiles.length === 0 && dudosas.length === 0) return null;
 
   const quien = senal.autor_nombre || "un colega";
-  const contactoTexto = contactoPara(telefonoColega, senal.autor_telefono, quien);
+  const contactoTexto = contactoPara(telefonoColega, senal.autor_telefono, quien, senal.texto_original);
 
   const busca = queBusca(senal);
   const porque = porqueNoSalioSolo(motivoDm, utiles.length > 0);
@@ -364,7 +383,7 @@ function construirAvisoPostDm(senal, veredicto, matches, refsEnviadas, telefonoC
 
   const quien = (senal && senal.autor_nombre) || "un colega";
   const grupo = (senal && senal.grupo_nombre) || "sin nombre";
-  const contactoTexto = contactoPara(telefonoColega, senal && senal.autor_telefono, quien);
+  const contactoTexto = contactoPara(telefonoColega, senal && senal.autor_telefono, quien, senal && senal.texto_original);
   const enviadas = (refsEnviadas || []).filter(Boolean);
   const detalleEnviadas = enviadas.length ? `: ${enviadas.map((r) => `Ref ${r}`).join(", ")}` : ".";
 
