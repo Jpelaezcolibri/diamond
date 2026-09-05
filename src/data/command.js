@@ -46,15 +46,39 @@ async function seguimientos(scope, { dias = 3 } = {}) {
 // "80 millones", "2.500.000 para arriendo"). Devuelve pesos o null.
 function parsePresupuesto(texto) {
   if (!texto) return null;
-  const digits = String(texto).replace(/\D/g, "");
-  if (!digits) return null;
-  let n = parseInt(digits, 10);
-  if (!Number.isFinite(n) || n <= 0) return null;
+  const s = String(texto);
+
+  // UNA CIFRA A LA VEZ, no todos los digitos pegados (arreglado 2026-09-05).
+  //
+  // Antes esto era `texto.replace(/\D/g, "")`: le arrancaba TODO lo que no
+  // fuera digito y concatenaba lo que quedara. Con un rango —"500 a 600
+  // millones", que es como habla un cliente— eso producia "500600" y, por ser
+  // millones, $500.600.000.000. Medio billon de pesos que nadie dijo nunca.
+  // Ese lead le ganaba en presupuesto a cualquier propiedad y disparo 1.906
+  // avisos entre el 1 y el 5 de septiembre.
+  //
+  // El patron incluye . y , DENTRO de la cifra para no partir un separador de
+  // miles: "2.500" es una cifra (dos mil quinientos), mientras que "500 a 600"
+  // son dos.
+  const crudas = s.match(/\d[\d.,]*/g);
+  if (!crudas) return null;
+
   // "1300" o "1.300 millones" -> el cliente habla en millones. Un presupuesto
   // inmobiliario real en pesos siempre supera los $100.000; por debajo de eso
   // el numero viene expresado en millones.
-  if (/millon/i.test(texto) || n < 100000) n = n * 1000000;
-  return n;
+  const enMillones = /millon/i.test(s);
+  const valores = [];
+  for (const cruda of crudas) {
+    const n = parseInt(cruda.replace(/[.,]/g, ""), 10);
+    if (!Number.isFinite(n) || n <= 0) continue;
+    valores.push(enMillones || n < 100000 ? n * 1000000 : n);
+  }
+  if (valores.length === 0) return null;
+
+  // El TECHO del rango. Un presupuesto es hasta cuanto puede pagar el cliente,
+  // asi que de "500 a 600" lo que manda es 600 — y sea cual sea el resultado,
+  // siempre es un numero que la persona dijo, no uno inventado al pegarlos.
+  return Math.max(...valores);
 }
 
 // Matching puro lead↔propiedad (exportado para tests). Devuelve los leads que
