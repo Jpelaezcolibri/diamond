@@ -53,6 +53,23 @@ function linkWhatsappEstricto(telefono) {
   return esCelularColombiano(telefono) ? `https://wa.me/${String(telefono).replace(/\D/g, "")}` : null;
 }
 
+// El numero LISTO PARA MOSTRAR, o null: solo digitos, y solo si tiene forma
+// de celular colombiano real (esCelularColombiano).
+//
+// POR QUE DEVUELVE DIGITOS Y NO EL DATO CRUDO (2026-09-05). No alcanza con
+// validar y despues imprimir lo que habia guardado. La columna
+// ally_properties.contacto_telefono trae de todo —el nombre del colega, el
+// string "null", un telefono con el + adelante, y hasta "Carolina Fleisman
+// +573002701862" con el nombre pegado— y los avisos de esos dias salieron
+// diciendo "Contacto del colega: ++573002701862" y "+Carolina Fleisman
+// +573002701862". Validar y luego imprimir el crudo arregla la mitad del
+// problema; devolver el numero normalizado lo arregla entero, y deja un solo
+// lugar donde se decide como se ve un telefono.
+function telefonoNormalizado(telefono) {
+  if (!esCelularColombiano(telefono)) return null;
+  return String(telefono).replace(/\D/g, "");
+}
+
 // Link a la linea OFICIAL de Sofi (Juan, 2026-08-22): "que todo mensaje que
 // salga hacia un colega invite a escribirle a Sofi" -- asi se abre la ventana
 // de 24h en la linea oficial (sin el riesgo de baneo de la linea vinculada al
@@ -104,4 +121,4 @@ function tocarNombreEnGrupo(quien) {
   return `tocá el nombre de ${quien} en el grupo para abrirle el chat directo — no hace falta tenerlo guardado`;
 }
 
-module.exports = { esMarcable, linkWhatsapp, esCelularColombiano, linkWhatsappEstricto, linkContactoOficial, tocarNombreEnGrupo };
+module.exports = { esMarcable, linkWhatsapp, esCelularColombiano, telefonoNormalizado, linkWhatsappEstricto, linkContactoOficial, tocarNombreEnGrupo };

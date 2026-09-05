@@ -13,7 +13,7 @@
 // hace tres semanas.
 
 const allyProperties = require("../data/ally-properties");
-const { esMarcable } = require("../lib/contacto");
+const { telefonoNormalizado } = require("../lib/contacto");
 
 // ally_properties.operacion tiene un check que exige 'Venta' | 'Arriendo'
 // capitalizado; el clasificador devuelve minusculas. Sin normalizar, cada
@@ -60,7 +60,14 @@ async function guardarOferta(org, oferta, { vistoEn = null } = {}) {
     descripcion: oferta.notas || null,
     inmobiliaria_origen: null,
     contacto_nombre: m.autor || null,
-    contacto_telefono: esMarcable(telefonoCrudo) ? telefonoCrudo : null,
+    // esMarcable NO servia aca (2026-09-05): solo mide un techo de <=13
+    // digitos, y un nombre tiene 0 — asi que "Diana Tobón" pasaba el filtro y
+    // se guardaba como telefono. Medido contra produccion el 5 de septiembre:
+    // 88 de 129 filas del dia tenian el nombre del colega en esta columna.
+    // Ademas de ensuciar los avisos, esta columna es parte de la clave de
+    // deduplicacion de ally_properties (org_id, contacto_telefono, ref), asi
+    // que con nombres adentro las propiedades se deduplican mal.
+    contacto_telefono: telefonoNormalizado(telefonoCrudo),
     mensaje_original: m.texto || null,
     origen: "grupo",
     group_id: m.groupId || null,

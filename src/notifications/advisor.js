@@ -1,4 +1,4 @@
-const { tocarNombreEnGrupo } = require("../lib/contacto");
+const { tocarNombreEnGrupo, telefonoNormalizado } = require("../lib/contacto");
 
 // Etiquetas legibles de la intencion del cliente para la alerta al asesor.
 const INTENCION_LABEL = {
@@ -125,7 +125,11 @@ function formatAllyMatch(allyMatch) {
   const ref = allyMatch.ref ? ` (ref ${allyMatch.ref})` : "";
   const contacto = allyMatch.contacto_nombre || "sin nombre";
   const inmobiliaria = allyMatch.inmobiliaria_origen || "inmobiliaria sin especificar";
-  const telefono = allyMatch.contacto_telefono ? `, tel +${allyMatch.contacto_telefono}` : "";
+  // Normalizado, nunca el dato crudo: la columna trae nombres y "null" (ver
+  // telefonoNormalizado en src/lib/contacto.js). Si no es un telefono real,
+  // no se inventa uno: la linea simplemente no sale.
+  const telNormalizado = telefonoNormalizado(allyMatch.contacto_telefono);
+  const telefono = telNormalizado ? `, tel +${telNormalizado}` : "";
   return `Posible match en red de aliados: ${tipo}${zona}${precio}${ref} — contacto: ${contacto} (${inmobiliaria})${telefono}. CONFIRMA disponibilidad antes de ofrecerla al cliente.`;
 }
 
@@ -170,8 +174,11 @@ function buildAllyOfferMatchAlert(allyProperty, lead) {
   // Nunca "respondele en el grupo" (norma de Juan, 2026-08-22): sin telefono
   // marcable, la accion real es tocar el nombre del colega en el grupo para
   // abrirle el chat privado (tocarNombreEnGrupo, src/lib/contacto.js).
-  const contactoColega = allyProperty.contacto_telefono
-    ? `Contacto del colega: +${allyProperty.contacto_telefono}.`
+  // Mismo criterio: o sale un numero real y normalizado, o sale la
+  // instruccion de tocar el nombre en el grupo. Nunca "+Diana Tobón".
+  const telColega = telefonoNormalizado(allyProperty.contacto_telefono);
+  const contactoColega = telColega
+    ? `Contacto del colega: +${telColega}.`
     : `El colega no dejo telefono marcable — ${tocarNombreEnGrupo(contacto)}.`;
   return [
     "Oferta nueva que le puede servir a tu cliente!",
