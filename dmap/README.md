@@ -39,6 +39,7 @@ Los 10 work packages de Fase 1 (ver [ARCHITECTURE.md §15](ARCHITECTURE.md#15-pl
 
 **Ya en producción — no repetir estos pasos:**
 - ~~Credenciales de la API oficial de Wasi~~ — obtenidas y verificadas el 2026-07-05, **y activas**: `syncSource = wasi_api` ya está configurado, el sync corre solo (última corrida conocida: 99 propiedades vistas).
+- **Características desde `features` (2026-09-05):** la API manda `features.internal/external` ("Urbanización cerrada", "Terraza", "Balcón", "Vista panorámica", "Garaje"…) para 43 de 112 propiedades; el sync las aplana a `properties.caracteristicas` ("A, B, C") y las refresca en cada corrida solo cuando la fuente las trae. `garages`/`bathrooms`/`stratum` llegan como el string `"0"` cuando no están cargados (nunca null ni ausentes): un 0 es "sin dato", no "no tiene". Scripts de medición, solo lectura: `railway run --service dmap npx tsx scripts/wasi-features-crudo.ts` y `scripts/wasi-garages-crudo.ts`.
 - ~~Migración `db/migrations/2026-07-05_dmap.sql` (y las 4 siguientes: `_dmap_rls`, `_dmap_ai_engine`, `_dmap_creative_engines`, `_dce_property_contexts`)~~ — aplicadas, `property_contexts` recibe escrituras reales.
 - ~~Redis provisionado~~ — Online en Railway (`redis-volume`), workers (sync/cognitive/metrics/token-refresh) confirmados procesando en logs.
 - ~~Bucket `dmap-creatives`~~ — creado el 2026-07-06, en uso.
