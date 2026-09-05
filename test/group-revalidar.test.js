@@ -255,7 +255,35 @@ test("el prompt NO vuelve a mandar a dudosas lo que simplemente no registramos",
   assert.ok(!/ATRIBUTOS QUE NO PODEMOS EVALUAR/.test(s), "volvio el bloque del 04-sep que contradice la regla del 05-sep");
   assert.ok(!/esas refs van en 'refs_dudosas', NUNCA en 'refs_utiles'/.test(s));
   // La regla vigente, con su destino: lo que no registramos va a utiles.
-  assert.match(s, /eso NUNCA baja una propiedad a refs_dudosas\. Va a refs_utiles/);
+  assert.match(s, /eso NUNCA baja una propiedad a refs_dudosas y NUNCA la vuelve INCOMPATIBLE/);
+  assert.match(s, /Va a refs_utiles con ese dato en 'sin_confirmar'/);
+});
+
+// EL MARGEN DEL MOTOR LLEGA AL PROMPT CON LOS MISMOS NUMEROS (auditoria
+// 2026-09-05, H2). match.js aceptaba +10 % de precio y -10 % de area desde el
+// 20-ago y el prompt nunca lo supo: Sofi leia "presupuesto" en la lista de
+// fondo y mando a dudosas a Deisy Marin ($30M sobre $420M, 7 %) y a Mateo
+// Narvaez ($25M sobre $300M, 8 %; 60 m² de 65) la tarde del 05-sep, despues
+// de que el motor las aceptara a proposito. Se interpola desde match.js para
+// que no puedan volver a divergir.
+test("el prompt le dice a Sofi el margen del motor, con los numeros de match.js", () => {
+  const { MARGEN_PRECIO, MARGEN_AREA } = require("../src/groups/match");
+  const s = require("../src/groups/revalidar").SISTEMA.replace(/\s+/g, " ");
+  assert.match(s, new RegExp(`hasta un ${Math.round(MARGEN_PRECIO * 100)} % POR ENCIMA del presupuesto`));
+  assert.match(s, new RegExp(`hasta un ${Math.round(MARGEN_AREA * 100)} % POR DEBAJO del area minima`));
+  // Y el destino: dentro del margen es CASI (le_falta), no INCOMPATIBLE.
+  assert.match(s, /Dentro de ese margen NO es "fuera de presupuesto" ni de fondo/);
+  assert.match(s, /fuera de presupuesto MAS ALLA del margen del motor/);
+});
+
+// El caso mixto (un corto conocido + datos no registrados) tiene su ejemplo:
+// los dos anteriores solo cubrian "todo desconocido" y "todo conocido", y era
+// justo el caso sin ejemplo el que Sofi resolvia sumando lo que no sabia.
+test("el prompt trae el ejemplo del caso mixto con sin_confirmar y le_falta a la vez", () => {
+  const s = require("../src/groups/revalidar").SISTEMA;
+  assert.match(s, /EL CASO MIXTO/);
+  assert.match(s, /"sin_confirmar":\["garaje","unidad cerrada"\]/);
+  assert.match(s, /"le_falta":\[\{"ref":"10077063","detalle":"cuesta \$450M y pediste hasta \$420M"\}\]/);
 });
 
 // El test que estaba aca ("un veredicto con solo dudosas se aprueba (va a la

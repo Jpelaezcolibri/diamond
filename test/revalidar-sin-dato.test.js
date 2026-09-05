@@ -42,6 +42,33 @@ test("con dato, la ficha es la de siempre", () => {
   assert.ok(ficha.includes("3 baños · 2 garajes · estrato 6"), ficha);
 });
 
+// LA CUENTA LA HACE EL MOTOR (auditoria 2026-09-05, H3). Mateo Narvaez, 18:44:
+// area 60 de 65 (dentro del margen) + "garajes: sin dato" -> Sofi conto DOS y
+// mando a dudosas, con la regla "lo que no registramos no cuenta" escrita tres
+// veces. Ahora la ficha trae el numero hecho, derivado de las razones del
+// motor, y un "sin dato" no puede subirlo.
+test("la ficha cuenta los incumplimientos conocidos y un 'sin dato' no suma", () => {
+  const ficha = formatearCandidatas([
+    { ...base, banos: 2, garajes: 0, razones: ["Zona: Viviendas del Sur", "$280M dentro de $300M", "3 alcobas", "60 m² (pediste 65)", "2 baños"] },
+  ]);
+  assert.ok(ficha.includes("incumplimientos conocidos: 1 (60 m² (pediste 65))"), ficha);
+  assert.ok(ficha.includes("garajes: sin dato"), ficha);
+});
+
+test("el precio dentro del margen cuenta como incumplimiento conocido; sin cortos, la cuenta es 0", () => {
+  const conMargen = formatearCandidatas([{ ...base, razones: ["Zona: Envigado", "$450M — 7% sobre $420M, dentro del margen", "3 alcobas"] }]);
+  assert.ok(conMargen.includes("incumplimientos conocidos: 1 ($450M — 7% sobre $420M, dentro del margen)"), conMargen);
+  const limpio = formatearCandidatas([{ ...base, razones: ["Zona: Envigado", "$400M dentro de $420M", "3 alcobas"] }]);
+  assert.ok(limpio.includes("incumplimientos conocidos: 0"), limpio);
+});
+
+test("el prompt le ordena a Sofi usar la cuenta del motor tal cual", () => {
+  const s = SISTEMA.replace(/\s+/g, " ");
+  assert.ok(s.includes("LA CUENTA YA ESTA HECHA"));
+  assert.ok(s.includes("N >= 2 -> DUDOSA"));
+  assert.ok(s.includes('un area corta mas un "garajes: sin dato" es N = 1, no 2'));
+});
+
 test("el prompt le dice a Sofi que 'sin dato' es sin_confirmar, no dudosa, y que sobrar no se niega", () => {
   assert.ok(SISTEMA.includes('"garajes: sin dato" NO significa'));
   assert.ok(SISTEMA.includes("nunca en refs_dudosas por"));
