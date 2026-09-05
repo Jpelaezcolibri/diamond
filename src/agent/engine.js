@@ -10,7 +10,7 @@ const { TOOL_DEFINITIONS, executeTool, maybeCaptadorAlert } = require("./tools")
 const { isQualified } = require("./qualification");
 const { buildAdvisorAlert, formatCitaFechaHora } = require("../notifications/advisor");
 const { detectSellerIntent, detectClientLanguage } = require("./intent");
-const { getClient } = require("../lib/anthropic");
+const { getClient, registrarUso } = require("../lib/anthropic");
 
 const MAX_TOOL_ITERATIONS = 5;
 const HISTORY_LIMIT = 12;
@@ -271,6 +271,7 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
     messages,
     tools: TOOL_DEFINITIONS,
   });
+  registrarUso("engine", response.usage);
 
   // Claude puede escribir texto conversacional EN EL MISMO turno en que llama
   // una tool (ej. agradecer a un aliado no depende del resultado de guardarlo)
@@ -307,6 +308,10 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
       messages,
       tools: TOOL_DEFINITIONS,
     });
+    // Cada vuelta reenvia el historial COMPLETO, incluido el tool_result de
+    // buscar_propiedades: es la llamada mas cara del sistema y la que hay que
+    // vigilar si la factura sube.
+    registrarUso(`engine:tool_loop#${iterations}`, response.usage);
   }
 
   const finalText = extractText(response);
@@ -324,6 +329,7 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
       messages,
       tools: TOOL_DEFINITIONS,
     });
+    registrarUso("engine:reintento", response.usage);
     reply = extractText(response);
   }
   reply = reply || "Disculpa, no pude procesar tu mensaje. ¿Puedes intentarlo de nuevo? 🙏";
