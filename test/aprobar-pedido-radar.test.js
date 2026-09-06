@@ -1,7 +1,11 @@
 // El otro lado del aviso "casi" (src/groups/vivo.js#avisarCercano): cuando
 // el asesor responde "si" a un pedido que el radar callo solo por puntaje
-// bajo, esto lo publica en el grupo por la misma via auditada que usa el
+// bajo, esto le escribe al colega por la misma via auditada que usa el
 // camino 100% automatico (Juan, 2026-08-20).
+//
+// OJO: desde el 2026-09-02 esa via es el DM al PRIVADO del colega, no una
+// publicacion en el grupo (ver la nota en vivo.js#aprobarManual). El
+// `resultado: "publicado"` que mockean estos tests conservo el nombre viejo.
 
 const { test } = require("node:test");
 const assert = require("node:assert");

@@ -141,7 +141,7 @@ test("aviso (asistido) y respuesta (auto) son independientes: una señal puede t
   assert.strictEqual(s.respuesta.salio, true);
 });
 
-test("modo sombra: respuesta.salio es true pero el resumen NO lo cuenta como 'respondioBot' (no se publico)", async (t) => {
+test("modo sombra: respuesta.salio es true pero el resumen NO lo cuenta como salido (no le llego a nadie)", async (t) => {
   t.mock.method(supabase, "from", mockPorTabla({
     group_signals: {
       data: [{
@@ -157,10 +157,10 @@ test("modo sombra: respuesta.salio es true pero el resumen NO lo cuenta como 're
 
   const r = await radarTrazabilidad.trazabilidad(SCOPE_ADMIN);
   assert.strictEqual(r.señales[0].respuesta.salio, true);
-  assert.strictEqual(r.resumen.respondioBot, 0);
+  assert.strictEqual(r.resumen.salioAlColega, 0);
 });
 
-test("el resumen cuenta respondioBot solo con modo auto de verdad publicado", async (t) => {
+test("el resumen cuenta salioAlColega solo con modo auto de verdad enviado", async (t) => {
   t.mock.method(supabase, "from", mockPorTabla({
     group_signals: {
       data: [
@@ -173,7 +173,7 @@ test("el resumen cuenta respondioBot solo con modo auto de verdad publicado", as
   }));
 
   const r = await radarTrazabilidad.trazabilidad(SCOPE_ADMIN);
-  assert.strictEqual(r.resumen.respondioBot, 2);
+  assert.strictEqual(r.resumen.salioAlColega, 2);
   assert.strictEqual(r.resumen.entraron, 3);
 });
 
@@ -250,4 +250,101 @@ test("si falta la migracion de aviso_advisor_id, el fallback SIGUE trayendo resp
   const r = await radarTrazabilidad.trazabilidad(SCOPE_ADMIN);
   assert.strictEqual(r.disponible, true);
   assert.strictEqual(r.señales[0].respuesta.texto, "texto de respaldo");
+});
+
+// ── EL CANAL: por donde salio de verdad (Juan, 2026-09-06) ─────────────────
+//
+// BUG REAL. Sofi le reporto a Juan "el bot respondio automaticamente 9 veces
+// directo en los grupos" sobre el 5 de septiembre. Los 9 mensajes existieron,
+// pero NINGUNO salio en un grupo: fueron DMs privados al colega, porque
+// Diamond esta en modo asistido desde el 2026-09-02. La cifra era correcta y
+// el canal inventado.
+//
+// La causa: `respuesta_modo` guarda 'auto' para las TRES vias (publicar en el
+// grupo, DM automatico, DM manual desde el CRM) — decision deliberada de
+// group-signals.js para no correr otra migracion — y este payload no traia
+// nada que dijera cual de las tres fue. El prompt del Centro de Comando
+// rellenaba el hueco con la arquitectura de agosto ("respuesta es lo que el
+// bot publico DIRECTO en el grupo").
+//
+// Estos tests fijan que el canal viaje en el dato, para que nadie mas tenga
+// que adivinarlo.
+
+const SEÑAL_RESPONDIDA = {
+  ...SEÑAL_BASE,
+  respondida_at: "2026-09-05T13:42:53Z",
+  respuesta_modo: "auto",
+  respuesta_texto: "Hola Claudia, vi tu solicitud. Tengo 2 opciones...",
+  respuesta_refs: ["AP1"],
+};
+
+function conOrg(modo, señales) {
+  return mockPorTabla({
+    group_signals: { data: señales, error: null },
+    organizations: { data: modo === null ? [] : [{ grupos_respuesta_modo: modo }], error: null },
+  });
+}
+
+test("modo asistido: el payload dice que NO se publica en grupo y que el destino es el privado del colega", async (t) => {
+  t.mock.method(supabase, "from", conOrg("asistido", [SEÑAL_RESPONDIDA]));
+
+  const r = await radarTrazabilidad.trazabilidad(SCOPE_ADMIN);
+  assert.strictEqual(r.canal.modo, "asistido");
+  assert.strictEqual(r.canal.publica_en_grupo, false);
+  assert.strictEqual(r.canal.destino, "dm_privado_al_colega");
+});
+
+test("modo asistido: una respuesta 'auto' es un DM al colega, NO una publicacion en el grupo", async (t) => {
+  t.mock.method(supabase, "from", conOrg("asistido", [SEÑAL_RESPONDIDA]));
+
+  const r = await radarTrazabilidad.trazabilidad(SCOPE_ADMIN);
+  assert.strictEqual(r.señales[0].respuesta.salio, true);
+  assert.strictEqual(r.señales[0].respuesta.canal, "dm_colega");
+});
+
+test("un DM mandado a mano desde el CRM se distingue del automatico", async (t) => {
+  t.mock.method(supabase, "from", conOrg("asistido", [{ ...SEÑAL_RESPONDIDA, politica_motivo: "dm_manual" }]));
+
+  const r = await radarTrazabilidad.trazabilidad(SCOPE_ADMIN);
+  assert.strictEqual(r.señales[0].respuesta.canal, "dm_manual");
+});
+
+test("modo auto: ahi SI es una publicacion en el grupo", async (t) => {
+  t.mock.method(supabase, "from", conOrg("auto", [SEÑAL_RESPONDIDA]));
+
+  const r = await radarTrazabilidad.trazabilidad(SCOPE_ADMIN);
+  assert.strictEqual(r.canal.publica_en_grupo, true);
+  assert.strictEqual(r.señales[0].respuesta.canal, "grupo");
+});
+
+test("sombra: se redacto y no salio a ningun lado", async (t) => {
+  t.mock.method(supabase, "from", conOrg("sombra", [{ ...SEÑAL_RESPONDIDA, respuesta_modo: "sombra" }]));
+
+  const r = await radarTrazabilidad.trazabilidad(SCOPE_ADMIN);
+  assert.strictEqual(r.canal.publica_en_grupo, false);
+  assert.strictEqual(r.señales[0].respuesta.canal, "sombra");
+});
+
+// Falla cerrado, como el resto del radar: sin saber el modo NO se afirma un
+// canal. Un canal inventado es justo el bug que estos tests existen para
+// evitar, y "no lo se" es una respuesta que Sofi sabe dar.
+test("si no se puede leer el modo de la org, el canal es null y nadie lo adivina", async (t) => {
+  t.mock.method(supabase, "from", conOrg(null, [SEÑAL_RESPONDIDA]));
+
+  const r = await radarTrazabilidad.trazabilidad(SCOPE_ADMIN);
+  assert.strictEqual(r.canal.modo, null);
+  assert.strictEqual(r.canal.publica_en_grupo, null);
+  assert.strictEqual(r.señales[0].respuesta.canal, null);
+});
+
+test("el resumen cuenta lo que le LLEGO AL COLEGA, con un nombre que no promete un grupo", async (t) => {
+  t.mock.method(supabase, "from", conOrg("asistido", [
+    { ...SEÑAL_RESPONDIDA, id: "s1" },
+    { ...SEÑAL_RESPONDIDA, id: "s2" },
+    { ...SEÑAL_BASE, id: "s3" },
+  ]));
+
+  const r = await radarTrazabilidad.trazabilidad(SCOPE_ADMIN);
+  assert.strictEqual(r.resumen.salioAlColega, 2);
+  assert.strictEqual(r.resumen.respondioBot, undefined, "el nombre viejo prometia 'el bot respondio (en el grupo)'");
 });

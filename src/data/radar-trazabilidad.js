@@ -30,6 +30,64 @@ function esColumnaFaltante(error) {
   return error?.code === "PGRST204" || error?.code === "42703";
 }
 
+// ── POR DONDE SALIO DE VERDAD (Juan, 2026-09-06) ──────────────────────────
+//
+// BUG REAL QUE ESTO RESUELVE. Sofi le reporto a Juan que el 5 de septiembre
+// "el bot respondio automaticamente 9 veces directo en los grupos". Los 9
+// mensajes salieron, pero ninguno a un grupo: fueron DMs privados al colega.
+// La cifra era del dato; el canal lo puso el prompt, que seguia describiendo
+// la arquitectura de agosto.
+//
+// La raiz es que `respuesta_modo` guarda 'auto' para TRES vias distintas
+// (publicar en el grupo, DM automatico, DM manual desde el CRM). Fue una
+// decision deliberada — ver la nota larga en group-signals.js#dmsHoyPorColega,
+// que la justifica en que las vias "nunca coexisten para la misma org". Es
+// cierto para DECIDIR, y falso para REPORTAR: quien lee el dato despues no
+// tiene como saber cual de las tres ocurrio. Este modulo cierra ese hueco
+// resolviendo el canal aca, una sola vez, en vez de dejar que cada lector lo
+// adivine.
+//
+// El modo es de la organizacion ENTERA y es el ACTUAL, no el que regia cuando
+// salio cada mensaje: si la org cambia de modo, las señales viejas se releen
+// con el modo nuevo. Hoy no hay historia de ese cambio en la base y no se
+// inventa una. Por eso el campo dice el modo del que sale la conclusion, para
+// que quien lo lea pueda desconfiar con fundamento.
+const CANALES = {
+  asistido: { destino: "dm_privado_al_colega", publica_en_grupo: false, respuesta: "dm_colega" },
+  auto: { destino: "publicacion_en_el_grupo", publica_en_grupo: true, respuesta: "grupo" },
+  sombra: { destino: "nada_sale", publica_en_grupo: false, respuesta: "sombra" },
+};
+
+// Sin modo NO se afirma un canal. Falla cerrado como el resto del radar: un
+// canal inventado es exactamente el bug de arriba, y "no lo se" es una
+// respuesta que Sofi sabe dar.
+function canalDeLaOrg(modo) {
+  const c = CANALES[modo];
+  if (!c) return { modo: null, destino: null, publica_en_grupo: null };
+  return { modo, destino: c.destino, publica_en_grupo: c.publica_en_grupo };
+}
+
+// El canal de UNA respuesta concreta. `sombra` y `dm_manual` se leen de la
+// propia fila (respuesta_modo, politica_motivo) y por eso son fiables aunque
+// la org haya cambiado de modo; el resto sale del modo actual.
+function canalDeLaRespuesta(fila, modo) {
+  if (fila.respuesta_modo === "sombra") return "sombra";
+  if (fila.politica_motivo === "dm_manual") return "dm_manual";
+  const c = CANALES[modo];
+  return c ? c.respuesta : null;
+}
+
+async function modoDeLaOrg(orgId) {
+  if (!supabase || !orgId) return null;
+  const { data, error } = await supabase
+    .from("organizations")
+    .select("grupos_respuesta_modo")
+    .eq("id", orgId)
+    .limit(1);
+  if (error || !data || !data.length) return null;
+  return data[0].grupos_respuesta_modo || null;
+}
+
 function resumenMatch(m) {
   return {
     ref: m.ref,
@@ -103,6 +161,12 @@ async function trazabilidad(scope, { dias = 7, soloConAviso = false, limite = MA
 
   const señales = data || [];
 
+  // El canal viaja SIEMPRE, aunque no haya ni una señal: la primera pregunta
+  // de "¿como va el radar?" es por donde contesta, y sin esto se responde de
+  // memoria.
+  const modoOrg = await modoDeLaOrg(scope.orgId);
+  const canal = canalDeLaOrg(modoOrg);
+
   // El resumen agregado se calcula SIN el cap de MAX_FILAS, sobre toda la
   // ventana de `dias` — separado a proposito del detalle de arriba.
   //
@@ -116,7 +180,7 @@ async function trazabilidad(scope, { dias = 7, soloConAviso = false, limite = MA
   const resumen = await calcularResumen(scope, desde, soloConAviso, dias);
 
   if (señales.length === 0) {
-    return { disponible: true, dias, total: 0, señales: [], resumen };
+    return { disponible: true, dias, canal, total: 0, señales: [], resumen };
   }
 
   // Nombres de grupo, y de paso QUIEN recibio cada aviso — en las mismas dos
@@ -204,6 +268,10 @@ async function trazabilidad(scope, { dias = 7, soloConAviso = false, limite = MA
         ? {
             salio: true,
             modo: s.respuesta_modo || null,
+            // POR DONDE salio, que no se deduce de `modo`: 'auto' es el mismo
+            // valor para el DM al colega y para la publicacion en el grupo.
+            // dm_colega | dm_manual | grupo | sombra | null si no se sabe.
+            canal: canalDeLaRespuesta(s, modoOrg),
             cuando: s.respondida_at,
             texto: s.respuesta_texto || null,
             refs: s.respuesta_refs || [],
@@ -213,11 +281,11 @@ async function trazabilidad(scope, { dias = 7, soloConAviso = false, limite = MA
     };
   });
 
-  return { disponible: true, dias, total: filas.length, señales: filas, resumen };
+  return { disponible: true, dias, canal, total: filas.length, señales: filas, resumen };
 }
 
 function resumenVacio(dias) {
-  return { dias, entraron: 0, conCandidatas: 0, revisadasPorSofi: 0, aprobadas: 0, avisosEnviados: 0, respondioBot: 0, conResultado: 0, desacuerdos: [] };
+  return { dias, entraron: 0, conCandidatas: 0, revisadasPorSofi: 0, aprobadas: 0, avisosEnviados: 0, salioAlColega: 0, conResultado: 0, desacuerdos: [] };
 }
 
 const CAMPOS_RESUMEN = "id, matches, revalidacion, enviado_at, respondida_at, respuesta_modo";
@@ -270,7 +338,7 @@ async function calcularResumen(scope, desde, soloConAviso, dias) {
     revisadasPorSofi: revisadas.length,
     aprobadas: aprobadas.length,
     avisosEnviados: enviados.length,
-    respondioBot: respondidas.length,
+    salioAlColega: respondidas.length,
     conResultado,
     // Los desacuerdos son el material de calibracion: donde Sofi dice que el
     // puntaje se equivoco.
