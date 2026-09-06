@@ -7,6 +7,7 @@ const properties = require("../data/properties");
 const allyProperties = require("../data/ally-properties");
 const advisors = require("../data/advisors");
 const radarTrazabilidad = require("../data/radar-trazabilidad");
+const publicable = require("../groups/publicable");
 const groupSignals = require("../data/group-signals");
 const signalEvents = require("../data/signal-events");
 const organizations = require("../data/organizations");
@@ -928,13 +929,20 @@ async function aprobarPedidoRadarComando(input, ctx) {
   switch (r.resultado) {
     case "publicado":
       return `Listo, aprobado y publicado en "${r.grupo}":\n\n${r.texto}`;
+    // Desde el 2026-09-04 el lid es el canal principal y el telefono el
+    // respaldo, asi que este caso ya NO significa "no tenemos el numero":
+    // significa que no habia NI telefono NI lid. Se explica asi para que nadie
+    // vuelva a contarlo como "al colega le falta el telefono" (paso el
+    // 2026-09-06 y era falso: el DM ya habia salido por lid esa mañana).
+    case "sin_telefono":
+      return "No pude escribirle: esa señal no tiene ni telefono ni @lid del colega, que son las dos vias de envio. NO es que falte el numero de telefono — con el @lid alcanza, y aca tampoco hay. Deciselo asi, sin atribuirlo a un telefono faltante.";
     case "ya_respondida":
       return "Ese pedido ya tenia una respuesta — no se puede aprobar de nuevo.";
     case "grupo_no_habilitado":
     case "grupo_no_encontrado":
       return "Ese grupo ya no esta habilitado para responder — no se puede publicar ahi.";
     case "sin_propiedades_publicables": {
-      const motivos = (r.descartados || []).map((d) => `Ref ${d.ref || "sin ref"} — ${d.motivos.join(", ")}`).join("\n");
+      const motivos = (r.descartados || []).map((d) => `Ref ${d.ref || "sin ref"} — ${publicable.explicarMotivos(d.motivos)}`).join("\n");
       return `Ninguna de las candidatas pasa la compuerta de calidad AHORA mismo (puede que el inventario haya cambiado desde que llego el pedido).${motivos ? `\n${motivos}` : ""}`;
     }
     case "sesion_ambigua":

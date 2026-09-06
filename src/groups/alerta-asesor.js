@@ -169,7 +169,7 @@ function mensajeListoParaReenviar(senal, veredicto, utiles, org) {
 // src/groups/politica.js#decidirDm y queda guardado en la señal. Solo faltaba
 // decirlo en palabras.
 const PORQUE = {
-  sin_telefono: "No pudimos resolver el número del colega, así que el bot no tenía cómo escribirle. Te toca a vos.",
+  sin_telefono: "No teníamos ni número ni @lid del colega, así que el bot no tenía por dónde escribirle. Te toca a vos.",
   pedido_vencido: "El pedido ya tiene más de media hora. Que el bot escriba tan tarde se lee como spam; de parte tuya no.",
   // limite_colega_alcanzado / limite_colega_no_verificable se quitaron el
   // 2026-09-05: decidirDm no emite esos motivos desde que el tope por colega

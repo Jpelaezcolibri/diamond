@@ -256,5 +256,11 @@ test("aprobar_pedido_radar: si ya no pasa la compuerta de calidad, dice por que 
 
   const out = await executeCommandTool("aprobar_pedido_radar", { cual: "Camilo" }, { scope: adminScope(), session: null });
   assert.match(out, /Ninguna de las candidatas pasa la compuerta de calidad/);
-  assert.match(out, /precio_fuera_de_rango/);
+  // El motivo sale EN CASTELLANO, no como identificador (2026-09-06). Un
+  // "precio_fuera_de_rango" no le dice nada a quien lo lee, y un motivo que no
+  // se entiende es un motivo que se reemplaza por una explicacion inventada:
+  // fue exactamente lo que paso cuando Sofi atribuyo a un telefono faltante
+  // una ref que en realidad estaba apartada por dato malo en Wasi.
+  assert.match(out, /precio esta fuera de rango/);
+  assert.doesNotMatch(out, /precio_fuera_de_rango/);
 });

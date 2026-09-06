@@ -23,7 +23,7 @@ const aprobado = { sirve_alguna: true, refs_utiles: ["9935585"], refs_dudosas: [
 test("feed: aprobada y sin telefono -> encabezado de alerta, la razon y la urgencia", () => {
   const t = feed.construir(senal, aprobado, matches, { enCola: true, motivoDm: "sin_telefono" });
   assert.ok(t.startsWith("🚨🚨 Sofi APROBO un pedido del radar — el bot NO pudo escribirle al colega"), t);
-  assert.ok(t.includes("No salio al colega: 🚨 No pudimos resolver el número del colega"), t);
+  assert.ok(t.includes("No salio al colega: 🚨 No teníamos ni número ni @lid del colega"), t);
   assert.ok(t.includes("YA APROBADA por Sofi: escribile vos con urgencia"), t);
   assert.ok(t.includes("En cola de salida"), "sigue diciendo que el aviso a la asesora si va");
 });
@@ -44,7 +44,7 @@ test("feed: descartada por Sofi -> nunca la urgencia, aunque no haya telefono", 
 test("aviso a la asesora: aprobada y sin telefono -> primera linea de alerta y la urgencia en la razon", () => {
   const t = alerta.construir(senal, aprobado, matches, null, { id: "org-1" }, "sin_telefono");
   assert.ok(t.startsWith("🚨🚨 OPORTUNIDAD APROBADA — el bot NO pudo escribirle al colega"), t);
-  assert.ok(t.includes("Por qué no salió solo: 🚨 No pudimos resolver el número"), t);
+  assert.ok(t.includes("Por qué no salió solo: 🚨 No teníamos ni número ni @lid"), t);
   assert.ok(t.includes("escribile vos con urgencia"), t);
 });
 

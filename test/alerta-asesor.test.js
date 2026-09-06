@@ -525,7 +525,12 @@ test("la ficha lleva el link de WASI, nunca el de la landing de Diamond", () => 
 test("dice POR QUE el bot no le escribio solo al colega", () => {
   const sinTel = construir(senalCompleta, veredictoOk, [matchWasi], null, null, "sin_telefono");
   assert.match(sinTel, /Por qué no salió solo:/);
-  assert.match(sinTel, /no tenía cómo escribirle/i);
+  // Nombra las DOS vias (2026-09-06). Desde que el @lid es el canal principal,
+  // "no pudimos resolver el número" hacia pensar que faltaba un teléfono, y de
+  // ahí salió que se explicara un envío fallido por un número faltante cuando
+  // el @lid alcanzaba de sobra.
+  assert.match(sinTel, /ni número ni @lid/i);
+  assert.match(sinTel, /no tenía por dónde escribirle/i);
 
   const vencido = construir(senalCompleta, veredictoOk, [matchWasi], "573001234567", null, "pedido_vencido");
   assert.match(vencido, /media hora/i, "el motivo tiene que ser el de ESE pedido, no uno generico");

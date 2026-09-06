@@ -86,6 +86,15 @@ test("candidatosDeOrg no llama a signalEvents si no hay candidatos (evita una qu
   assert.strictEqual(llamado, false);
 });
 
+// APAGADO POR DEFECTO desde el 2026-09-06: lo reemplazo el cierre del dia
+// (src/scheduler/cierre-dia.js). El codigo se queda para que volver atras
+// cueste RADAR_RECORDATORIO_ENABLED=true y no un revert, asi que los tests
+// que ejercitan el envio lo encienden a mano — igual que habria que hacerlo
+// en produccion.
+const config = require("../src/config");
+// Este archivo corre en su propio proceso: encenderlo aca no afecta a nadie mas.
+config.groups.recordatorio.enabled = true;
+
 test("runOnce: reclama, resuelve el asesor y manda el recordatorio", async (t) => {
   t.mock.method(organizations, "listActive", async () => [{ id: "org-1", name: "Diamond" }]);
   t.mock.method(groupSignals, "candidatosRecordatorio", async () => [

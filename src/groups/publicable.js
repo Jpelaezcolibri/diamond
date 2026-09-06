@@ -153,4 +153,41 @@ function filtrar(matches, opciones = {}) {
   return { publicables: publicables.slice(0, limite), descartados };
 }
 
-module.exports = { esPublicable, filtrar, UMBRAL_DEFAULT, RANGOS, REFS_BLOQUEADAS };
+// QUE SIGNIFICA CADA MOTIVO, EN CASTELLANO (Juan, 2026-09-06).
+//
+// BUG REAL. Juan le pidio a Sofi que le mandara al colega la 9921388, la de
+// Loma de los Balsos, que era la que mejor calzaba. No salio, y Sofi le
+// contesto que el colega "no tiene telefono registrado en el sistema". Eso era
+// falso por partida doble: el DM a ese colega YA habia salido esa mañana por
+// lid (politica_traza: destino:lid), y la razon real de que esa ref no fuera
+// era otra — esta en esta lista: ref_bloqueada.
+//
+// Los motivos son identificadores para el codigo. Cuando salen hacia una
+// persona tienen que decir algo que esa persona pueda ACCIONAR, y sobre todo
+// tienen que salir: un motivo que no se traduce es un motivo que quien lo lea
+// va a reemplazar por una explicacion inventada.
+const MOTIVOS_LEGIBLES = {
+  ref_bloqueada: "esta apartada a proposito porque tiene un dato mal cargado en Wasi (GRUPOS_REFS_BLOQUEADAS). Se corrige en Wasi y se saca de la lista; mientras tanto no sale a ningun colega",
+  no_es_inventario_propio: "es de la red de aliados, no es nuestra: no se ofrece en el gremio",
+  zona_no_publicable: "la zona no calza con lo que pidio el colega",
+  puntaje_bajo: "el puntaje quedo por debajo del umbral para salir sola",
+  sin_ref: "no tiene referencia",
+  sin_titulo: "no tiene titulo cargado",
+  sin_precio: "no tiene precio cargado",
+  precio_fuera_de_rango: "el precio esta fuera de rango sano: casi seguro es un dato corrupto en Wasi",
+  sin_zona: "no tiene zona cargada",
+  sin_area: "no tiene area cargada",
+  sin_link: "no tiene link propio",
+  link_ajeno: "el link apunta a un dominio que no es el nuestro",
+  sin_link_wasi: "no tiene link de Wasi para verificar",
+  link_no_abre: "el link no abre",
+  sync_viejo: "el sync de Wasi esta viejo, asi que el dato puede no ser el actual",
+};
+
+// Traduce una lista de motivos. Un motivo que no este en el mapa se devuelve
+// crudo: es preferible un identificador feo a que quien lo lea no reciba nada.
+function explicarMotivos(motivos) {
+  return (motivos || []).map((m) => MOTIVOS_LEGIBLES[m] || m).join("; ");
+}
+
+module.exports = { esPublicable, filtrar, UMBRAL_DEFAULT, RANGOS, REFS_BLOQUEADAS, MOTIVOS_LEGIBLES, explicarMotivos };
