@@ -1042,6 +1042,32 @@ async function aprobarManual(org, signalId) {
     destinoLid: signal.autor_telefono || null,
   });
 
+  // LA DECISION QUEDA REGISTRADA, IGUAL QUE EN LOS OTROS DOS CAMINOS
+  // (revision del 2026-09-06, hallazgo critico).
+  //
+  // BUG REAL. Esta funcion mandaba el DM y marcaba `respondida_at`, pero NO
+  // tocaba `politica_motivo` — asi que quedaba el motivo que habia escrito el
+  // intento automatico anterior, que por definicion fue un "no". La señal
+  // 565d3778 (Mateo Narvaez, 2026-09-01) quedo diciendo las dos cosas a la vez:
+  //
+  //   politica_motivo = "sin_telefono"   politica_traza = ["NO:sin_telefono"]
+  //   respondida_at   = 22:28            respuesta_texto = "Hola Mateo, ..."
+  //
+  // O sea: "no se le escribio por falta de telefono" al lado del texto de lo
+  // que se le escribio. Esa fila es de donde Sofi lee para responder "¿por que
+  // no salio esto?", y de ahi salieron los reportes falsos del 2026-09-06.
+  // Traducir motivos y prohibirle inventar no arregla nada si el dato miente.
+  //
+  // Motivo propio y distinto de 'dm_manual' (el del CRM): los dos son humanos,
+  // pero se disparan desde lugares distintos y conviene poder separarlos al
+  // auditar quien aprobo que.
+  await groupSignals
+    .guardarPolitica(org.id, signal.id, {
+      motivo: "aprobacion_manual",
+      traza: ["aprobacion_manual", `refs:${refs.join(",")}`],
+    })
+    .catch(() => {});
+
   // `destino` para que quien lo muestre no tenga que adivinar: el CRM y Sofi
   // decian "publicado" y de ahi salio que Sofi le contara a Juan que la
   // respuesta iba al grupo.

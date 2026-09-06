@@ -1511,3 +1511,28 @@ test("responderPorDmManual: sin 'le_falta' en la revalidacion, el DM sale sin ac
   assert.strictEqual(r.resultado, "dm_enviado");
   assert.doesNotMatch(enviosDmManual[0].texto, /Aclaración:/);
 });
+
+// LA DECISION DE UNA APROBACION MANUAL TAMBIEN SE REGISTRA (revision del
+// 2026-09-06, hallazgo critico).
+//
+// BUG REAL. aprobarManual mandaba el DM y marcaba `respondida_at`, pero no
+// tocaba `politica_motivo`: quedaba el motivo del intento automatico anterior,
+// que por definicion fue un "no". La señal 565d3778 (Mateo Narvaez, 2026-09-01)
+// quedo en produccion diciendo `politica_motivo = "sin_telefono"` y
+// `politica_traza = ["NO:sin_telefono"]` al lado del texto de lo que SI se le
+// mando. Esa fila es de donde Sofi lee para explicar por que algo no salio, y
+// de ahi salieron los reportes falsos del 2026-09-06.
+test("aprobarManual: deja registrada SU decision, no la del intento automatico anterior", async () => {
+  señalParaAprobar = señalCallada({ autor_telefono: "141746805670125" });
+  grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = "573001234567";
+
+  await vivo.aprobarManual({ id: "org-1" }, "sig-callada");
+
+  const suya = politicasGuardadas.filter((p) => p.motivo === "aprobacion_manual");
+  assert.strictEqual(suya.length, 1, "tiene que escribir su propio motivo");
+  assert.strictEqual(suya[0].id, "sig-callada");
+  assert.ok(Array.isArray(suya[0].traza));
+  // Nunca puede quedar como motivo final un "no" cuando el mensaje si salio.
+  assert.strictEqual(marcadas.length, 1, "y el mensaje salio de verdad");
+});
