@@ -118,9 +118,14 @@ app.listen(config.port, () => {
   // el log y en el WhatsApp del vigilante. A los 10 s, para que la base ya
   // este disponible. Ver src/lib/arranque.js.
   if (config.supabaseUrl) setTimeout(() => require("./lib/arranque").anunciar(), 10 * 1000);
-  // Empuja a la asesora a responder el aviso de un pedido del radar: sirve
-  // para calibrar (signal_events) y renueva la ventana de 24h de los avisos
-  // siguientes.
+  // UN mensaje al final del dia con las PROPIEDADES que se movieron, para que
+  // la asesora cuente en que quedo cada una (Juan, 2026-09-06). Reemplaza al
+  // recordatorio por pedido, que citaba el texto del colega y que ella no
+  // podia relacionar con ninguna propiedad suya.
+  if (config.supabaseUrl) require("./scheduler/cierre-dia").start();
+  // El recordatorio por pedido queda apagado por defecto desde el 2026-09-06
+  // (RADAR_RECORDATORIO_ENABLED=true lo revive). Sigue arrancando para que esa
+  // vuelta atras no necesite un despliegue de codigo.
   if (config.supabaseUrl) require("./scheduler/radar-recordatorio").start();
   // Escalado a Catherine si Natalia (asesor PRINCIPAL del radar) no responde
   // el aviso a tiempo, en los dos carriles (venta y compra) — Juan, 2026-08-26.

@@ -139,8 +139,23 @@ const config = {
     // (Juan, 2026-08-18): la respuesta sirve para calibrar Y renueva la
     // ventana de 24h — sin ella, los avisos siguientes se quedan sin poder
     // salir. Ver src/scheduler/radar-recordatorio.js.
+    // El CIERRE DEL DIA reemplaza al recordatorio por pedido (Juan,
+    // 2026-09-06). Un solo mensaje, a hora fija, que nombra NUESTRAS
+    // propiedades en vez de citar el texto del colega, y que cobra tambien los
+    // DM que Sofi mando sola — el 82% que antes nunca se preguntaba.
+    // Ver src/scheduler/cierre-dia.js y src/groups/cierre-dia.js.
+    cierre: {
+      enabled: process.env.RADAR_CIERRE_ENABLED !== "false",
+      // Hora de Bogota. 18 = al final de la jornada, cuando ya paso todo lo
+      // del dia y la asesora todavia esta con el telefono en la mano.
+      hour: parseInt(process.env.RADAR_CIERRE_HOUR || "18", 10),
+    },
+
+    // APAGADO desde el 2026-09-06: lo reemplaza `cierre`. El codigo se queda
+    // porque el cierre del dia es lo que no esta probado en produccion, y
+    // volver atras tiene que costar una variable de entorno, no un revert.
     recordatorio: {
-      enabled: process.env.RADAR_RECORDATORIO_ENABLED !== "false",
+      enabled: process.env.RADAR_RECORDATORIO_ENABLED === "true",
       // 2h: mismo plazo que el seguimiento al cliente (config.followups) —
       // suficiente margen para que la asesora atienda sin que el pedido se
       // enfrie (el colega del grupo puede vender antes a otro que si le escribio).

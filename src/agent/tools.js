@@ -11,6 +11,7 @@ const { LEGAL_TOPICS, LEGAL_DISCLAIMER } = require("./knowledge");
 const crypto = require("node:crypto");
 const groupSignals = require("../data/group-signals");
 const signalEvents = require("../data/signal-events");
+const radarCierres = require("../data/radar-cierres");
 const whatsappGroups = require("../data/whatsapp-groups");
 const { cruzar: cruzarGrupos } = require("../groups/match");
 const { plano } = require("../groups/texto");
@@ -235,6 +236,34 @@ const TOOL_DEFINITIONS = [
         cual: { type: "string", description: "Si hay varios pedidos pendientes y el asesor especifico cual (zona, colega, o parte del texto), pasalo para desambiguar." },
       },
       required: ["tipo"],
+    },
+  },
+  {
+    name: "registrar_resultados_cierre",
+    description:
+      "Registra los resultados que el asesor responde AL CIERRE DEL DIA, el mensaje que le lista por numero las propiedades que se movieron. Usala cuando conteste con numeros: '1 no servia, 3 hubo visita', '2 y 4 sin respuesta', 'el 1 se cerro'. Manda TODOS los que diga en una sola llamada, no una por numero. El numero lo resuelve la herramienta contra la lista exacta que se le envio — vos no elijas la propiedad ni la nombres de memoria: si el numero no existe te lo va a decir. Si el asesor cuenta un resultado SIN numero ('ya llame al de Sabaneta'), esa es registrar_resultado_radar, no esta.",
+    input_schema: {
+      type: "object",
+      properties: {
+        resultados: {
+          type: "array",
+          description: "Uno por cada numero que menciono el asesor.",
+          items: {
+            type: "object",
+            properties: {
+              numero: { type: "integer", description: "El numero tal como aparece en el cierre del dia." },
+              tipo: {
+                type: "string",
+                enum: ["CONVERSACION", "VISITA", "NEGOCIACION", "CIERRE", "PERDIDO", "SIN_RESPUESTA", "DESCARTADO"],
+                description: "CONVERSACION=hablaron, VISITA=hubo visita, NEGOCIACION=estan en precio, CIERRE=se cerro, PERDIDO=se cayo o ya se vendio con otro, SIN_RESPUESTA=le escribio y no le contestaron, DESCARTADO=no servia / no aplicaba.",
+              },
+              motivo: { type: "string", description: "El detalle que dio el asesor, si dio alguno. Opcional." },
+            },
+            required: ["numero", "tipo"],
+          },
+        },
+      },
+      required: ["resultados"],
     },
   },
   {
@@ -833,6 +862,10 @@ async function executeTool(name, input, ctx) {
     return registrarResultadoRadar(input, ctx);
   }
 
+  if (name === "registrar_resultados_cierre") {
+    return registrarResultadosCierre(input, ctx);
+  }
+
   if (name === "aprobar_pedido_radar") {
     return aprobarPedidoRadar(input, ctx);
   }
@@ -1176,6 +1209,90 @@ async function registrarResultadoRadar(input, ctx) {
   return "Listo, quedo registrado. Gracias por contarme — eso es justo lo que hace que el radar mejore.";
 }
 
+// El cobro del CIERRE DEL DIA (Juan, 2026-09-06): la asesora recibe una lista
+// numerada de SUS propiedades y responde "1 no servia, 3 hubo visita".
+//
+// QUIEN DECIDE QUE ES CADA NUMERO. El codigo, contra `radar_cierres.items`, que
+// es la numeracion EXACTA que se le envio. No el modelo, y no una lista
+// recalculada: entre las 18:00 y su respuesta pueden entrar señales nuevas, y
+// recalcular correria los numeros y registraria el resultado sobre la
+// propiedad equivocada. Registrar mal es peor que no registrar.
+//
+// Un numero que no esta en el cierre NO se aproxima al mas parecido: se dice y
+// se sigue con los demas. Falla cerrado, como el resto del radar.
+async function registrarResultadosCierre(input, ctx) {
+  if (!ctx.advisor) {
+    return "Esta herramienta es para cuando un asesor de la casa responde el cierre del dia. No aplica con un cliente.";
+  }
+
+  const pedidos = Array.isArray(input?.resultados) ? input.resultados : [];
+  if (pedidos.length === 0) return "No me llego ningun resultado para registrar. Preguntale a que numero se refiere.";
+
+  let cierre;
+  try {
+    cierre = await radarCierres.ultimoCobrable(ctx.org.id, ctx.advisor.id);
+  } catch (e) {
+    console.warn("[tools] No se pudo leer el cierre del dia:", e.message);
+    return "No pude consultar el cierre del dia en este momento. Decile que lo intente de nuevo en un rato.";
+  }
+
+  if (!cierre || !Array.isArray(cierre.items) || cierre.items.length === 0) {
+    return "No encuentro un cierre del dia reciente para este asesor, asi que no se a que propiedad corresponde cada numero. Preguntale por la referencia de la propiedad y usa registrar_resultado_radar.";
+  }
+
+  const porNumero = new Map(cierre.items.map((i) => [Number(i.n), i]));
+  const guardados = [];
+  const problemas = [];
+
+  for (const pedido of pedidos) {
+    const numero = Number(pedido?.numero);
+    const tipo = String(pedido?.tipo || "").toUpperCase();
+    const item = porNumero.get(numero);
+
+    if (!item) {
+      problemas.push(`el ${Number.isFinite(numero) ? numero : "que dijo"} no esta en el cierre que le mandamos`);
+      continue;
+    }
+    if (!signalEvents.TIPOS.includes(tipo)) {
+      problemas.push(`"${pedido?.tipo}" no es un resultado valido para el ${numero}`);
+      continue;
+    }
+
+    try {
+      // Un numero puede cubrir varias señales: la misma propiedad ofrecida a
+      // dos colegas se lista una sola vez (ver cierre-dia.js). El resultado
+      // vale para todas — la gestion fue sobre esa propiedad.
+      for (const signalId of item.signal_ids || []) {
+        await signalEvents.registrar(ctx.org.id, {
+          signalId,
+          advisorId: ctx.advisor.id,
+          tipo,
+          motivo: pedido?.motivo || null,
+        });
+      }
+      guardados.push({ numero, ref: item.ref, tipo });
+    } catch (e) {
+      console.warn("[tools] No se pudo registrar el resultado del cierre:", e.message);
+      problemas.push(`no pude guardar el ${numero}`);
+    }
+  }
+
+  // La confirmacion nombra la REFERENCIA, no el numero solo: asi Sofi puede
+  // repetirle a la asesora que quedo registrado sobre que propiedad sin
+  // reconstruirlo de memoria.
+  const partes = [];
+  if (guardados.length) {
+    partes.push(
+      `Registrado: ${guardados.map((g) => `${g.numero}) ${g.ref} → ${g.tipo}`).join(", ")}. Confirmaselo asi, nombrando la referencia.`
+    );
+  }
+  if (problemas.length) {
+    partes.push(`No se registro ${problemas.join("; ")}. Deciselo y preguntale cual era.`);
+  }
+  if (!guardados.length && !problemas.length) return "No hubo nada que registrar.";
+  return partes.join(" ");
+}
+
 // Publica un pedido que el radar callo por poco (Juan, 2026-08-20): "que
 // desde el mismo celular se responda en el grupo correspondiente al mensaje
 // correspondiente". El aviso lo manda src/groups/vivo.js#avisarCercano; esto
@@ -1290,5 +1407,5 @@ async function rechazarPedidoRadar(input, ctx) {
 
 module.exports = {
   TOOL_DEFINITIONS, executeTool, maybeCaptadorAlert, registrarDemandaColega, consultarRadarGrupos,
-  registrarResultadoRadar, aprobarPedidoRadar, rechazarPedidoRadar, registrarMandatoCompra,
+  registrarResultadoRadar, registrarResultadosCierre, aprobarPedidoRadar, rechazarPedidoRadar, registrarMandatoCompra,
 };
