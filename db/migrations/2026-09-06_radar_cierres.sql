@@ -26,16 +26,33 @@
 -- dos corridas del mismo dia no pueden mandar dos cierres. Mismo patron que
 -- claimRecordatorio en src/data/group-signals.js.
 --
--- `items` guarda la referencia ELEGIDA por señal, no todas sus candidatas: es
--- la propiedad por la que se pregunto, y sin ella el registro no seria
--- auditable mañana.
+-- `items` guarda la referencia ELEGIDA, no todas las candidatas: es la
+-- propiedad por la que se pregunto, y sin ella el registro no seria auditable
+-- mañana. Se agrupa POR REFERENCIA, asi que un item puede cubrir varias
+-- señales (la misma propiedad ofrecida a dos colegas es un solo numero).
 --
 -- Correr a mano en Supabase. Idempotente.
 
-create table if not exists radar_cierres (
+-- ══ POR QUE TODO VA CALIFICADO CON `public.` (2026-09-06) ══
+--
+-- Al correrla, el editor devolvio: ERROR 42P01: relation "organizations" does
+-- not exist. La tabla SI existe en el proyecto qwqmlmyyswpdypdfvmiv, esquema
+-- public, verificado por REST el mismo dia. O sea que el error no era sobre la
+-- base sino sobre la SESION: o `public` no estaba en el search_path, o el
+-- editor estaba apuntando a otro proyecto.
+--
+-- Calificar el esquema mata la primera causa para siempre. Si el error vuelve
+-- despues de esto, la causa es la segunda y no se arregla con SQL: hay que
+-- cambiar de proyecto en el dashboard. Para saber en cual estas parado:
+--
+--   select current_database(), current_schema(), (select count(*) from public.organizations);
+--
+-- En el proyecto correcto eso devuelve 1 organizacion (Diamond).
+
+create table if not exists public.radar_cierres (
   id uuid primary key default gen_random_uuid(),
-  org_id uuid not null references organizations(id),
-  advisor_id uuid not null references advisors(id),
+  org_id uuid not null references public.organizations(id),
+  advisor_id uuid not null references public.advisors(id),
   fecha date not null,
   items jsonb not null default '[]'::jsonb,
   enviado_at timestamptz,
@@ -43,15 +60,15 @@ create table if not exists radar_cierres (
   unique (org_id, advisor_id, fecha)
 );
 
-comment on table radar_cierres is
+comment on table public.radar_cierres is
   'Un cierre del dia por asesora: la lista numerada de propiedades que se le mando, para poder resolver "1 no servia" contra la propiedad correcta.';
 
-comment on column radar_cierres.items is
-  'Array [{n, signal_id, ref, titulo, colega}] en el orden EXACTO en que se numero en el mensaje. No se recalcula.';
+comment on column public.radar_cierres.items is
+  'Array [{n, signal_ids, ref, titulo, colega}] en el orden EXACTO en que se numero en el mensaje. signal_ids es una lista: la misma propiedad ofrecida a dos colegas es UN numero que cubre las dos señales. No se recalcula.';
 
-comment on column radar_cierres.enviado_at is
+comment on column public.radar_cierres.enviado_at is
   'Null cuando el cierre se armo pero WhatsApp no lo entrego (ventana de 24h cerrada). Se deja la fila para que ese dia se vea, en vez de desaparecer.';
 
 -- La consulta del cobro: el ultimo cierre de esta asesora, ventana de 3 dias.
 create index if not exists radar_cierres_asesora_fecha
-  on radar_cierres (org_id, advisor_id, fecha desc);
+  on public.radar_cierres (org_id, advisor_id, fecha desc);
