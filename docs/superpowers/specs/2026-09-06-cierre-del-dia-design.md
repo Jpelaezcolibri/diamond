@@ -42,7 +42,7 @@ casi nada, y el 82 % de lo que se movió jamás se pregunta.
 
 ## Qué se construye
 
-Un **cierre del día**: un solo mensaje, a las 18:30 hora Colombia, que lista
+Un **cierre del día**: un solo mensaje, a las 18:00 hora Colombia, que lista
 las propiedades de la asesora que se movieron ese día y le pide el resultado
 de cada una por número.
 
@@ -67,7 +67,7 @@ Decisiones que tomó Juan y que no se reabren acá:
 - **Alcance: todo lo que se movió.** Las que ella tuvo que decidir y también
   las que Sofi le mandó sola al colega. Es el arreglo del 82 % que hoy no se
   pregunta.
-- **Hora: 18:30.** Días sin movimiento no mandan nada.
+- **Hora: 18:00.** Días sin movimiento no mandan nada.
 
 ## Arquitectura
 
@@ -84,7 +84,7 @@ Cuatro piezas, cada una con un trabajo:
 
 El número tiene que significar **lo mismo cuando ella responde** que cuando se
 envió. Si la lista se vuelve a calcular al recibir la respuesta, cualquier
-señal que entre entre las 18:30 y su contestación corre la numeración y
+señal que entre entre las 18:00 y su contestación corre la numeración y
 registramos el resultado sobre la propiedad equivocada. Eso es peor que no
 registrar nada, y es el mismo error que `registrarResultadoRadar` ya evita
 negándose a adivinar cuando hay varios pendientes.
@@ -97,7 +97,7 @@ create table if not exists radar_cierres (
   org_id uuid not null references organizations(id),
   advisor_id uuid not null references advisors(id),
   fecha date not null,
-  items jsonb not null,          -- [{n, signal_id, ref, titulo, colega}]
+  items jsonb not null,          -- [{n, signal_ids, ref, titulo, colega}]
   enviado_at timestamptz,
   created_at timestamptz not null default now(),
   unique (org_id, advisor_id, fecha)
@@ -134,9 +134,10 @@ El título y la zona salen de `matches` cruzando por `ref`. Si una señal no
 tiene ninguna referencia, **no entra al cierre**: preguntar por una propiedad
 que no podemos nombrar es volver al problema que esto arregla.
 
-Una señal puede haber movido varias propiedades. Se lista **una por señal**,
-la que se ofreció, porque el resultado que buscamos es el de esa gestión. La
-referencia elegida queda guardada en `items` para que el registro sea auditable.
+Una señal puede haber movido varias propiedades. Se lista **una por referencia**:
+si dos señales ofrecieron la misma propiedad, es un solo número y contestar ese
+número cierra las dos. Salió del ensayo con datos reales, donde la casa de La
+Mota aparecía dos veces.
 
 ### El cobro de la respuesta
 
@@ -170,7 +171,7 @@ probado y volver atrás tiene que costar una variable de entorno, no un revert.
 
 ## Riesgos
 
-- **La ventana de 24 h.** Un cierre a las 18:30 solo se entrega si la ventana
+- **La ventana de 24 h.** Un cierre a las 18:00 solo se entrega si la ventana
   está abierta. Si ella no escribió en el día, el mensaje falla y ese día se
   pierde. No se reintenta, por lo mismo que ya documenta `radar-recordatorio`:
   la única forma de reabrirla es que ella escriba. El `enviado_at` de
