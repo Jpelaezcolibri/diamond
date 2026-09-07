@@ -49,6 +49,7 @@ const { evaluarOferta } = require("./cruce-mandatos");
 const command = require("../data/command");
 const cruceLeads = require("./cruce-leads");
 const ritmo = require("../lib/ritmo-avisos");
+const carrilArriendo = require("./carril-arriendo");
 
 const VENTANA_LIMITE_HORAS = 24;
 
@@ -179,6 +180,15 @@ async function procesarMensaje(org, mensaje, { grupo, modo = "sombra", enviar = 
   // respuestas: sirve para calibrar el motor sin exponer la marca.
   if (modo === "asistido") {
     return asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, sesion });
+  }
+
+  // NADA AL GRUPO, POR CODIGO (Juan, 2026-09-07: "nada a grupos, solo
+  // respuestas al dm"). Hoy este camino esta inactivo —la org esta en
+  // 'asistido' y ningun grupo tiene responde=true— y la guarda existe
+  // justamente para que siga siendo cierto el dia que alguna de esas dos
+  // cosas cambie por error.
+  if (carrilArriendo.esDelCarril(c)) {
+    return { resultado: "carril_sin_publicacion_en_grupo", signalId: signal.id };
   }
 
   // 5. Compuerta de calidad del dato, y despues politica de conducta. Son dos
@@ -498,7 +508,11 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
   // queda en la señal misma, no solo en un log que se pierde.
   await groupSignals.guardarPolitica(org.id, signal.id, { motivo: decisionDm.motivo, traza: decisionDm.traza }).catch(() => {});
 
-  if (decisionDm.enviarDm && sesion && utiles.length > 0) {
+  // El carril de arriendo exige ademas que alguna candidata calce fino
+  // (RADAR_AMOBLADO_UMBRAL_DM). Si no, el pedido NO se pierde: cae al aviso
+  // diferenciado a la asesora, mas abajo en esta misma funcion.
+  const salidaSolaOk = !carrilArriendo.esDelCarril(c) || carrilArriendo.puedeSalirSolo(utiles);
+  if (decisionDm.enviarDm && sesion && utiles.length > 0 && salidaSolaOk) {
     const textoDm = textoParaColega(
       mensaje.autor,
       utiles,
@@ -932,6 +946,14 @@ async function aprobarManual(org, signalId) {
   // supervision, es si el radar sigue prestando atencion a ese grupo.
   if (grupo.modo === "ignorar") return { resultado: "grupo_no_habilitado" };
 
+  // El interruptor del carril SI aplica a la aprobacion manual: apagar un
+  // carril es dejar de recibir, no distinguir poblaciones. El umbral NO
+  // aplica — la persona que aprueba reemplaza al puntaje, igual que el
+  // `umbral: 0` de mas abajo.
+  if (carrilArriendo.esDelCarril(signal) && !carrilArriendo.carrilActivo()) {
+    return { resultado: "carril_apagado" };
+  }
+
   // BUG real (Juan, 2026-08-20): "aun no puedo enviar mensajes que el bot
   // callo". La causa: esto seguia exigiendo el mismo umbral de puntaje (70)
   // que el camino 100% automatico, asi que aprobar un pedido que se callo por
@@ -1105,6 +1127,10 @@ async function responderPorDmManual(org, signalId, { sesion = null, refs = null 
   if (!signal) return { resultado: "no_encontrada" };
   if (signal.respondida_at) return { resultado: "ya_respondida" };
   if (signal.clase !== "demanda") return { resultado: "no_es_demanda" };
+
+  if (carrilArriendo.esDelCarril(signal) && !carrilArriendo.carrilActivo()) {
+    return { resultado: "carril_apagado" };
+  }
 
   // El grupo ya no se usa para resolver el telefono: desde el 2026-09-04
   // directorio.telefonoDe es 100% local (directorio_lids + la pista del
