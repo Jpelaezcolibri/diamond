@@ -4,17 +4,13 @@ const { evaluarCandidata } = require("../src/groups/match");
 
 // Base que pasa todas las compuertas que YA existen, para que cada test de
 // abajo aisle una sola variable: la de amoblado.
-// NOTA (desviacion minima del brief, 2026-09-07): "Los Gonzáles" no esta
-// registrada en src/lib/zonas.js (ni vecina ni subzona de "poblado"), asi que
-// con `ciudad: ""` la compuerta de zona YA existente descartaba esta base
-// antes de llegar a la de amoblado -- contradice su propio comentario ("pasa
-// todas las compuertas que YA existen"). Se agrega `ciudad: "Medellín"` (el
-// mismo dato que ya traen las tres propiedades de abajo) para que la
-// ubicacion resuelva "otra_zona" en vez de null. No se toca zonas.js ni
-// ninguna logica de match.js: es solo el dato que le faltaba a este pedido.
+// "Los Gonzáles" quedo registrada en src/lib/zonas.js (VECINDAD + SUBZONA_DE)
+// el 2026-09-07: un pedido de "El Poblado" contra esta zona gradua 'exacta',
+// asi que la compuerta de ubicacion la deja pasar con `ciudad: ""`, sin
+// truco.
 const pedido = {
   operacion: "arriendo", tipo: "apartamento", zona: "El Poblado", zonas: ["El Poblado"],
-  zonas_excluidas: [], ciudad: "Medellín", precio_max: 8000000, precio_min: 0,
+  zonas_excluidas: [], ciudad: "", precio_max: 8000000, precio_min: 0,
   habitaciones: 2, area_min: 0, banos: 0, garajes: 0, estrato: 0,
   amoblado: "", periodo: "",
 };
