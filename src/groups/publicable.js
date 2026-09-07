@@ -90,6 +90,24 @@ function esPublicable(match, { umbral = UMBRAL_DEFAULT, syncFresco = true, refsB
     motivos.push("zona_no_publicable");
   }
 
+  // AMOBLADO SIN CONFIRMAR (2026-09-07). Wasi solo dice "Amoblado" en el
+  // titulo, asi que hay propiedades de las que no lo sabemos. Cuando el colega
+  // lo pidio explicitamente, eso NO puede salir solo: ofrecerle un vacio a
+  // quien pidio amoblado es el mismo tipo de dato no verificable que frena
+  // `edificio_especifico` en politica.js.
+  //
+  // No se pierde el pedido: la senal llega igual al aviso de la asesora, con
+  // este motivo traducido. Es la talla explicita a la regla D7 (lo no
+  // registrado se ofrece con sin_confirmar) y vive ACA, en codigo, y no como
+  // una frase opuesta dentro del prompt de revalidar.js -- que es como se
+  // construyo la contradiccion que encontro la auditoria del 2026-09-05.
+  if (match.amoblado_sin_confirmar) motivos.push("amoblado_sin_confirmar");
+
+  // PLAZO NO SOPORTADO (2026-09-07). Nuestro inventario esta cotizado por mes.
+  // "$4.500.000 por 15 dias" calza perfecto contra un amoblado mensual del
+  // mismo precio, y le ofreceriamos un mes por el precio de quince dias.
+  if (match.periodo_no_soportado) motivos.push("periodo_no_soportado");
+
   if (!(Number(match.puntaje) >= umbral)) motivos.push("puntaje_bajo");
 
   const ref = String(match.ref || "").trim();
@@ -170,6 +188,8 @@ const MOTIVOS_LEGIBLES = {
   ref_bloqueada: "esta apartada a proposito porque tiene un dato mal cargado en Wasi (GRUPOS_REFS_BLOQUEADAS). Se corrige en Wasi y se saca de la lista; mientras tanto no sale a ningun colega",
   no_es_inventario_propio: "es de la red de aliados, no es nuestra: no se ofrece en el gremio",
   zona_no_publicable: "la zona no calza con lo que pidio el colega",
+  amoblado_sin_confirmar: "el colega pidió amoblado y no tenemos confirmado que ésta lo esté: Wasi sólo lo dice en el título y esta ficha no lo trae",
+  periodo_no_soportado: "el pedido es por días o semanas y nuestro inventario está cotizado por mes",
   puntaje_bajo: "el puntaje quedo por debajo del umbral para salir sola",
   sin_ref: "no tiene referencia",
   sin_titulo: "no tiene titulo cargado",
