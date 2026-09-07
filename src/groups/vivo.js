@@ -716,7 +716,7 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
     telefonoColega,
     org,
     decisionDm.motivo,
-    { link: linkAviso }
+    { link: linkAviso, carrilAmoblados: carrilEsDelPedido }
   );
   if (!texto) {
     await feedComando.registrar(org, señalParaFeed, veredicto, matches).catch((e) =>

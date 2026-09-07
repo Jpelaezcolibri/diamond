@@ -249,7 +249,7 @@ function queBusca(senal) {
  *                        aviso sale como antes, sin la linea de explicacion.
  * @returns el texto del aviso, o null si no hay nada que decir
  */
-function construir(senal, veredicto, matches, telefonoColega = null, org = null, motivoDm = null, { link = null } = {}) {
+function construir(senal, veredicto, matches, telefonoColega = null, org = null, motivoDm = null, { link = null, carrilAmoblados = false } = {}) {
   const refsUtiles = veredicto && Array.isArray(veredicto.refs_utiles) ? veredicto.refs_utiles : [];
   const refsDudosas = veredicto && Array.isArray(veredicto.refs_dudosas) ? veredicto.refs_dudosas : [];
   if (!veredicto || (refsUtiles.length === 0 && refsDudosas.length === 0)) return null;
@@ -377,8 +377,16 @@ function construir(senal, veredicto, matches, telefonoColega = null, org = null,
 
   const cierre = [``, `Contame en qué quedó (la llamaste, no servía, ya se vendió). Con eso el radar aprende.`];
 
+  // ENCABEZADO DEL CARRIL (Juan, 2026-09-07): "un mensaje diferenciado que
+  // sepa que es de amoblados". Natalia recibe avisos de venta todo el dia; sin
+  // esto, uno de arriendo se lee igual que los demas y se trata igual.
+  //
+  // Va DENTRO de armar y no pegado al return para que lo cuente el clamp de
+  // 4096 caracteres de Meta, y para que salga igual en la version compacta.
+  const encabezado = carrilAmoblados ? ["🛋️ *AMOBLADOS* — pedido que no salió solo", ``] : [];
+
   const armar = (compacto) =>
-    [...cabecera, ...bloqueUtiles(compacto), ...bloqueDudosas, ...bloqueApartadas, ...sofiDice, ...bloqueReenviar, ...bloqueSofi, ...cierre].join("\n");
+    [...encabezado, ...cabecera, ...bloqueUtiles(compacto), ...bloqueDudosas, ...bloqueApartadas, ...sofiDice, ...bloqueReenviar, ...bloqueSofi, ...cierre].join("\n");
 
   const completo = armar(false);
   // Margen de seguridad bajo el limite real de Meta (4096). Solo tiene
