@@ -75,6 +75,9 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
   corrida el mismo día en el mismo bloque (solo el DEFAULT para orgs nuevas).
   `2026-09-04_dm_destinatario.sql` (columnas de auditoría del destinatario del
   DM) corrida y verificada por REST el 2026-09-04.
+  `2026-09-07_amoblado.sql` (columnas `amoblado` y `periodo` en
+  `group_signals`) corrida por Juan y **verificada por REST** el 2026-09-07:
+  la consulta devuelve `{"amoblado":null,"periodo":null}`, no un 42703.
   **No hay migraciones pendientes.**
   Regla: antes de declarar una migración "pendiente" acá, verificarla con un
   `select` por REST — esta lista estuvo desactualizada del 2026-08-18 al
@@ -82,7 +85,21 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
 - **Pendientes de negocio:** teléfonos reales de asesores de arriendo/
   vehículos en `advisors` · corregir precio de la ref `9921388` en Wasi ·
   verificación de empresa en Meta · confirmar las 3 propiedades exclusivas
-  del negocio.
+  del negocio · **los amoblados que faltan en Wasi**: el sync trae el 100% de
+  lo que expone la cuenta, pero esa cuenta es **PARAISO INMOBILIARIO**
+  (`paraisoinmobiliario.inmo.co`) y sólo tiene 2 propiedades en alquiler.
+  Verificado el 2026-09-07 con una corrida manual (`seen 112, created 0`)
+  contrastada contra el conteo de la web pública de la cuenta, que da los
+  mismos 112. Si se cargan en otra cuenta de Wasi, el sync no las ve y **no
+  falla**.
+- **Carril de amoblados (2026-09-07):** el radar ya entiende "amoblado" y
+  saca las demandas de arriendo por dos carriles — DM al colega si el match
+  llega a `RADAR_AMOBLADO_UMBRAL_DM` (85), y aviso diferenciado a la asesora
+  si no. `RADAR_AMOBLADO_ACTIVO=false` apaga el carril entero.
+  **Gate pendiente:** el cambio al prompt de `revalidar.js` se desplegó SIN
+  correr `scripts/golden-revalidar.js` (decisión de Juan, 2026-09-07: la
+  clave local se quedó sin saldo). Correrlo cuando haya crédito y mirar si
+  algún veredicto se movió.
 
 ## 3. Mapa de módulos
 
