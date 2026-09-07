@@ -104,11 +104,36 @@ const ESQUEMA = {
             description:
               "Nombre PROPIO de un edificio, torre, conjunto o unidad especifica que el pedido nombra explicitamente (ej. 'edificio Murano Plaza', 'Torre Aqua', 'Conjunto Los Cerezos'). Vacio si el pedido solo da zona/barrio, o si dice 'unidad cerrada'/'conjunto cerrado' como caracteristica generica SIN nombre propio. No confundir con el nombre de la inmobiliaria del colega ni con el barrio.",
           },
+          // AMOBLADO, TRI-ESTADO (2026-09-07). Un booleano no puede expresar
+          // la diferencia entre "no lo menciono" y "lo rechazo", y son
+          // conductas opuestas: ante "" una propiedad amoblada es elegible,
+          // ante "no" queda descartada. El caso que lo motivo esta en la base:
+          // "*Busco CASA para arriendo en el Poblado* 3 alcobas mas servicio
+          // $9.000.000 *SIN muebles*" — hoy eso cruza contra nuestro amoblado
+          // de Los Gonzales sin que nada lo frene.
+          amoblado: {
+            type: "string",
+            enum: ["si", "no", ""],
+            description:
+              "'si' si el pedido pide amoblado/amueblado. 'no' si lo rechaza explicitamente ('SIN muebles', 'sin amoblar', 'vacio', 'no amoblado'). '' si no lo menciona.",
+          },
+          // PERIODO (2026-09-07). El peligro NO es el que parece: un pedido de
+          // "$300.000 por noche" ya lo bloquea la banda de precio sola. El que
+          // si pasa hoy es el inverso: "$4.500.000 por 15 dias" extrae
+          // precio_max 4.500.000, calza perfecto contra nuestro amoblado
+          // mensual, y le ofrecemos un mes por el precio de quince dias.
+          periodo: {
+            type: "string",
+            enum: ["mes", "corta", ""],
+            description:
+              "'corta' si el arriendo es por noches, dias, semanas o una estadia de pocos dias. 'mes' si es mensual o de largo plazo. '' si no se puede saber.",
+          },
         },
         required: [
           "id", "clase", "confianza", "operacion", "tipo", "zonas", "zona", "zonas_excluidas", "ciudad",
           "precio_min", "precio_max", "habitaciones", "area_min", "banos",
           "garajes", "estrato", "contacto", "notas", "flexible_habitaciones", "edificio",
+          "amoblado", "periodo",
         ],
         additionalProperties: false,
       },
@@ -139,6 +164,8 @@ Reglas de extracción:
 - \`banos\`, \`garajes\` y \`estrato\`: sólo si el mensaje los pide explícitamente. "2 baños, parqueadero doble" → banos 2, garajes 2. "estrato 5 o 6" → 5 (el mínimo).
 - \`flexible_habitaciones\`: true SOLO si el mensaje dice "estudio" (ej. "3 alcobas o 2 con estudio", "2 alcobas y estudio") o "para inversión"/"para invertir". No lo actives por intuición ni por el tono del pedido — solo por esas palabras.
 - \`edificio\`: nombre PROPIO de un edificio, torre, conjunto o unidad que el pedido nombre explícitamente — "en el *edificio Murano Plaza*", "Torre Aqua", "Conjunto Los Cerezos". Vacío si el pedido solo da zona/barrio, o si dice "unidad cerrada"/"conjunto cerrado" como característica genérica SIN nombre propio ("que sea unidad cerrada" no cuenta; "en la unidad Reserva del Parque" sí). No confundas esto con el nombre de la inmobiliaria de quien pide, ni con el nombre del barrio.
+- \`amoblado\`: 'si' cuando el pedido pide amoblado o amueblado ("busco amoblado en Sabaneta", "apartamento amoblado en el poblado"). 'no' cuando lo RECHAZA explícitamente — "SIN muebles", "sin amoblar", "vacío", "no amoblado". '' si no lo menciona. Los tres valores son distintos y no se pueden mezclar: '' significa que al colega le da igual, 'no' significa que no lo quiere.
+- \`periodo\`: 'corta' si el arriendo es por noches, días, semanas o una estadía de pocos días ("por 15 días", "3 noches", "renta corta", "airbnb"). 'mes' si es mensual o de largo plazo. '' si no se puede saber. Ojo: un precio alto no implica mensual — "$4.500.000 por 15 días" es 'corta' con precio_max 4500000.
 - Un mensaje de una sola propiedad con foto y ficha es oferta aunque no diga "vendo".
 - Devolvé exactamente un objeto por mensaje de entrada, con su id textual.`;
 
@@ -268,6 +295,6 @@ function costoDe({ input_tokens = 0, output_tokens = 0 }) {
 }
 
 module.exports = {
-  classify, armarLotes, formatearLote, costoDe, esReintentable,
+  classify, armarLotes, formatearLote, costoDe, esReintentable, ESQUEMA,
   MODELO, TAMANO_LOTE, CONCURRENCIA, REINTENTOS,
 };

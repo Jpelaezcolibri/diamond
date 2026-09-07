@@ -28,6 +28,7 @@ const OPERACIONES = [
   "arriendo", "arrendar", "arrienda", "arrendamiento",
   "venta", "vender", "vende", "venden", "compra", "comprar", "compro",
   "permuta", "permutar", "traspaso", "cesion",
+  "renta", "rentar", "alquiler", "alquilar",
 ];
 
 // Alguien busca algo — direccion 2 (demanda).
@@ -53,6 +54,7 @@ const ATRIBUTOS = [
   "bano", "banos", "metros", "mts", "m2", "estrato", "piso", "balcon",
   "ascensor", "porteria", "unidad cerrada", "administracion", "amoblado",
   "sin amoblar", "vista", "remodelado",
+  "amoblados", "amueblado", "sin muebles", "renta corta", "coliving", "airbnb", "temporal",
 ];
 
 // Zonas del Valle de Aburra que un mensaje puede nombrar sin decir la ciudad.
