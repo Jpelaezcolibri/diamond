@@ -603,3 +603,89 @@ test("construirAvisoPostDm: sin campos del pedido ni por_que, sale como antes --
   assert.ok(!/Por qué no se las mandé/.test(texto));
   assert.ok(!/\n\n\n/.test(texto), "sin renglones vacios de mas");
 });
+
+// ── FIX CRITICO (review de fin de rama, 2026-09-07) ─────────────────────
+//
+// EL BUG: el bloque "mandale ESTO YA" se armaba con `veredicto.refs_utiles`
+// CRUDO -- lo que Sofi aprobo -- nunca con lo que publicable.filtrar +
+// verificar-link.js (la compuerta de calidad que vivo.js YA corre antes del
+// DM automatico) dejaba pasar. Una ref con el periodo que no soportamos, el
+// precio corrupto o el link caido se colaba igual en el texto que la asesora
+// reenvia tal cual al colega. Reproducido: "Busco amoblado 15 dias" -> Sofi
+// aprueba, la compuerta descarta por `periodo_no_soportado`, y sin este fix
+// el aviso decia "mandale ESTO YA" con un apartamento de arriendo mensual
+// como si el plazo calzara.
+//
+// `descartadosCalidad` (nuevo, opcional) es exactamente lo que vivo.js ya
+// calculaba y solo mandaba a `console.warn` -- ver la nota de "COMPUERTA DE
+// CALIDAD" en src/groups/vivo.js#asistir.
+
+test("compuerta de calidad: la ref que Sofi aprobo pero la compuerta descarto NO aparece en el mensaje para reenviar", () => {
+  const texto = construir(
+    senal(),
+    VEREDICTO, // refs_utiles: ["AP004"]
+    [matchUtil({ linkWasi: "https://info.wasi.co/apartamento-venta-ap004/9744456" })],
+    null, // sin telefono resuelto -- el caso donde normalmente SI se arma el mensaje listo (98% de los colegas)
+    null,
+    "periodo_no_soportado",
+    { descartadosCalidad: [{ ref: "AP004", motivos: ["periodo_no_soportado"] }] }
+  );
+  assert.ok(texto, "el aviso tiene que salir igual: la asesora necesita saber que el pedido existio");
+  assert.doesNotMatch(texto, /mandale ESTO YA/i, "sin nada limpio que ofrecer, no hay mensaje para reenviar");
+  assert.doesNotMatch(texto, /▸ Ref AP004/, "tampoco puede listarse como ofrecible en el bloque normal");
+});
+
+test("compuerta de calidad: la asesora ve un 'Por qué no salió solo' con el motivo REAL, nunca un aviso mudo", () => {
+  const texto = construir(
+    senal(),
+    VEREDICTO,
+    [matchUtil()],
+    "573001234567",
+    null,
+    "periodo_no_soportado",
+    { descartadosCalidad: [{ ref: "AP004", motivos: ["periodo_no_soportado"] }] }
+  );
+  assert.match(texto, /Por qué no salió solo:/, "antes del fix esta linea faltaba del todo (PORQUE no tenia 'periodo_no_soportado')");
+  assert.match(texto, /por días o semanas/i, "el motivo real, traducido -- la misma traduccion de publicable.js");
+});
+
+test("compuerta de calidad: la ref descartada se lista con su razon real (⛔), no se esconde ni se generaliza", () => {
+  const texto = construir(
+    senal(),
+    VEREDICTO,
+    [matchUtil()],
+    "573001234567",
+    null,
+    "periodo_no_soportado",
+    { descartadosCalidad: [{ ref: "AP004", motivos: ["periodo_no_soportado"] }] }
+  );
+  assert.match(texto, /⛔ Ref AP004/);
+  assert.match(texto, /no la ofrezcas hasta confirmar/i);
+  assert.doesNotMatch(texto, /dato mal cargado en Wasi/, "esa razon es solo para REFS_BLOQUEADAS, no para la compuerta de calidad");
+});
+
+test("compuerta de calidad: con dos refs aprobadas y solo una descartada, la buena SI se reenvia y la mala no", () => {
+  const veredictoDosRefs = { ...VEREDICTO, refs_utiles: ["AP004", "AP009"] };
+  const buena = matchUtil({ linkWasi: "https://info.wasi.co/ap004" });
+  const mala = matchUtil({ ref: "AP009", titulo: "Apartamento en Sabaneta", zona: "Sabaneta", linkWasi: "https://info.wasi.co/ap009" });
+  const texto = construir(
+    senal(),
+    veredictoDosRefs,
+    [buena, mala],
+    null,
+    null,
+    null,
+    { descartadosCalidad: [{ ref: "AP009", motivos: ["sin_precio"] }] }
+  );
+  const inicioMensajeListo = texto.indexOf("mandale ESTO YA");
+  assert.notStrictEqual(inicioMensajeListo, -1, "la buena si tiene que generar el mensaje para reenviar");
+  const mensajeListo = texto.slice(inicioMensajeListo);
+  assert.match(mensajeListo, /AP004/);
+  assert.doesNotMatch(mensajeListo, /AP009|Sabaneta/, "la descartada por calidad no puede aparecer en el texto que se reenvia al colega");
+});
+
+test("sin descartadosCalidad (llamador viejo), construir sigue funcionando exactamente igual que antes", () => {
+  const texto = construir(senal(), VEREDICTO, [matchUtil()], "573001234567", null, "ok");
+  assert.match(texto, /Ref AP004/);
+  assert.ok(!texto.includes("Por qué no salió solo"), "'ok' sigue sin inventar una explicacion");
+});

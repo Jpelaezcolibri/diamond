@@ -745,6 +745,55 @@ test("carril de arriendo (Sofi no aprobo nada util): con utiles vacio no se inve
   assert.doesNotMatch(enviadosPorSofi[0].texto, /carril de amoblados/);
 });
 
+// ── FIX CRITICO (review de fin de rama, 2026-09-07) ─────────────────────
+//
+// EL BUG, de punta a punta: Sofi aprueba una ref (refs_utiles), pero la
+// compuerta de calidad (publicable.filtrar + verificar-link.js, que vivo.js
+// YA corre antes de intentar el DM) la descarta -- en este caso por
+// `periodo_no_soportado` (un pedido de arriendo por dias contra un
+// inventario cotizado por mes). Antes del fix:
+//   1. `utiles` (post-compuerta) quedaba vacio, asi que la correccion del
+//      carril (que exige utiles.length > 0) nunca se disparaba.
+//   2. decidirDm ya habia dicho "ok" (via el @lid, el camino de 98% de los
+//      colegas) y nada lo corregia -- la señal quedaba "ok".
+//   3. alertaAsesor.construir buscaba "ok" en su tabla PORQUE, no lo
+//      encontraba, y el aviso salia SIN ninguna linea de "Por qué no salió
+//      solo" -- mudo.
+//   4. Peor: el bloque "mandale ESTO YA" se armaba con `refs_utiles` CRUDO,
+//      asi que la asesora recibia la ORDEN de reenviarle al colega la ref
+//      que el propio bot acababa de decidir que no se podia ofrecer.
+test("compuerta de calidad (periodo no soportado): el motivo real llega a la asesora y la ref descartada no sale en el mensaje para reenviar", async () => {
+  // Sin telefono resuelto, solo el lid del autor -- el 98% de los colegas,
+  // y el camino por el que decidirDm SI dice "ok" (ver politica.js#decidirDm).
+  telefonoColegaResuelto = null;
+  matchesDevueltos = [match({ periodo_no_soportado: true })];
+
+  const r = await vivo.procesarMensaje(ORG, mensaje(), {
+    grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA",
+  });
+
+  // La compuerta de calidad descarto la unica candidata: no hay nada limpio
+  // que mandarle al colega por DM.
+  assert.strictEqual(enviosDm.length, 0, "la compuerta de calidad descarto la unica candidata: no hay DM que mandar");
+  assert.strictEqual(r.resultado, "avisada");
+
+  // La señal NO se queda diciendo "ok": queda con el motivo real de la
+  // compuerta de calidad, el mismo que ya calculaba descartadosDm.
+  const ultimaPolitica = politicasGuardadas[politicasGuardadas.length - 1];
+  assert.strictEqual(ultimaPolitica.motivo, "periodo_no_soportado", "el motivo real, nunca 'ok'");
+
+  assert.strictEqual(enviadosPorSofi.length, 1);
+  const texto = enviadosPorSofi[0].texto;
+
+  // (b) la asesora ve la razon real -- ya no un aviso mudo.
+  assert.match(texto, /Por qué no salió solo/, "antes del fix esta linea faltaba del todo");
+  assert.match(texto, /por días o semanas/i, "el motivo real, traducido");
+
+  // (a) la ref que la compuerta descarto NUNCA puede aparecer en el bloque
+  // de reenvio -- antes del fix, este bloque SI aparecia con esa ref.
+  assert.doesNotMatch(texto, /mandale ESTO YA/i, "sin nada limpio que ofrecer, no puede haber mensaje para reenviar");
+});
+
 // ── SIN TELEFONO, SE MANDA POR EL LID (Juan, 2026-09-04) ────────────────
 //
 // Antes, este bloque afirmaba que sin telefono resuelto el pedido se desviaba

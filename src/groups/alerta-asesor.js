@@ -42,7 +42,7 @@ const formato = require("../lib/formato");
 const { normalizarTitulo } = require("../lib/formato");
 const { linkWhatsappEstricto, linkContactoOficial, tocarNombreEnGrupo, telefonoEnTexto } = require("../lib/contacto");
 const redactar = require("./redactar");
-const { REFS_BLOQUEADAS } = require("./publicable");
+const { REFS_BLOQUEADAS, explicarMotivos } = require("./publicable");
 
 // Una propiedad, corta: la asesora ya conoce el inventario, no necesita la
 // ficha entera. Necesita reconocerla y tener el link a mano.
@@ -204,7 +204,24 @@ function porqueNoSalioSolo(motivo, hayUtiles) {
   if (!hayUtiles) {
     return "Sofi no aprobó ninguna del todo, así que no le escribió nada al colega. Estas quedan para que decidas vos.";
   }
-  return PORQUE[motivo] ? `🚨 ${PORQUE[motivo]} ${URGENCIA}` : null;
+  if (PORQUE[motivo]) return `🚨 ${PORQUE[motivo]} ${URGENCIA}`;
+  // LA COMPUERTA DE CALIDAD TIENE SUS PROPIOS MOTIVOS (fix critico, revision
+  // post-merge 2026-09-07). `motivo` viene de politica.js#decidirDm casi
+  // siempre, pero vivo.js tambien puede guardar aca uno de los motivos de
+  // publicable.js/verificar-link.js (periodo_no_soportado, sin_precio,
+  // link_no_abre...) cuando esa compuerta fue la que de verdad vacio
+  // `utiles` -- ver la correccion en vivo.js#asistir. Esos motivos no viven en
+  // la tabla PORQUE de arriba, y sin este fallback llegaban aca como `null`:
+  // el aviso quedaba MUDO justo cuando mas urgente era explicar por que
+  // ("Busco amoblado 15 dias" -> Sofi aprobo, la compuerta lo freno, y la
+  // asesora no se enteraba de ninguna de las dos cosas). Se reusa la
+  // traduccion de publicable.js en vez de copiarla aca -- ya existe y cubre
+  // TODOS sus motivos, no solo el que motivo este fix. Si explicarMotivos no
+  // conoce el motivo, devuelve el identificador crudo sin traducir; eso NUNCA
+  // puede llegarle a una persona (es exactamente el bug que el commit
+  // b0f62ea ya cerro por otra puerta), asi que se calla en vez de mostrarlo.
+  const traducido = motivo ? explicarMotivos([motivo]) : null;
+  return traducido && traducido !== motivo ? `🚨 ${traducido} ${URGENCIA}` : null;
 }
 
 // Lo que busca el colega, en una linea (Juan, 2026-09-02): "que entienda que
@@ -247,9 +264,26 @@ function queBusca(senal) {
  * @param motivoDm        por que el bot NO le escribio solo al colega
  *                        (src/groups/politica.js#decidirDm). Opcional: sin el, el
  *                        aviso sale como antes, sin la linea de explicacion.
+ * @param opciones.descartadosCalidad  refs que Sofi SI aprobo (refs_utiles) pero
+ *                        que publicable.filtrar + verificar-link.js (la misma
+ *                        compuerta de calidad del DM automatico, ver vivo.js)
+ *                        descarto antes de que llegaran a ofrecerse -- [{ ref,
+ *                        motivos }]. Fix critico (revision post-merge
+ *                        2026-09-07): sin esto, esas refs se colaban en el
+ *                        "mandale ESTO YA" como si fueran ofrecibles. Opcional
+ *                        y default vacio: sin el, el aviso sale exactamente
+ *                        como antes.
  * @returns el texto del aviso, o null si no hay nada que decir
  */
-function construir(senal, veredicto, matches, telefonoColega = null, org = null, motivoDm = null, { link = null, carrilAmoblados = false } = {}) {
+function construir(
+  senal,
+  veredicto,
+  matches,
+  telefonoColega = null,
+  org = null,
+  motivoDm = null,
+  { link = null, carrilAmoblados = false, descartadosCalidad = [] } = {}
+) {
   const refsUtiles = veredicto && Array.isArray(veredicto.refs_utiles) ? veredicto.refs_utiles : [];
   const refsDudosas = veredicto && Array.isArray(veredicto.refs_dudosas) ? veredicto.refs_dudosas : [];
   if (!veredicto || (refsUtiles.length === 0 && refsDudosas.length === 0)) return null;
@@ -266,10 +300,37 @@ function construir(senal, veredicto, matches, telefonoColega = null, org = null,
   // entiende por que le llego, y si la bloqueada era la unica tiene derecho a
   // saber que existe y por que todavia no se puede ofrecer.
   const bloqueada = (ref) => REFS_BLOQUEADAS.has(String(ref).trim().toUpperCase());
-  const refsApartadas = [...refsUtiles, ...refsDudosas].map(String).filter(bloqueada);
 
-  const utiles = refsUtiles
-    .filter((ref) => !bloqueada(ref))
+  // COMPUERTA DE CALIDAD (fix critico, revision post-merge 2026-09-07). Sofi
+  // aprueba con su propio criterio (refs_utiles), pero eso NO es la misma
+  // compuerta que ya corrio en vivo.js antes de intentar el DM directo:
+  // publicable.filtrar + verificar-link.js pueden descartar una ref que Sofi
+  // aprobo -- precio corrupto, plazo que no soportamos (periodo_no_soportado),
+  // amoblado sin confirmar, link caido... Sin este mapa, esas refs quedaban
+  // en `utiles` -- la MISMA lista de la que sale el "mandale ESTO YA" -- y la
+  // asesora terminaba reenviandole al colega justo lo que el bot ya habia
+  // decidido que no se podia ofrecer (caso real: "Busco amoblado 15 dias" ->
+  // Sofi aprobo el unico amoblado del inventario, la compuerta lo descarto
+  // por periodo, y el aviso igual mandaba "mandale ESTO YA" con esa ref).
+  //
+  // `utilesSofi` (aprobado por Sofi, solo sin lo bloqueado a mano) es DISTINTO
+  // de `utiles` (lo que de verdad se puede ofrecer) a proposito: el primero
+  // alimenta el "hayUtiles" de porqueNoSalioSolo y el encabezado de
+  // "APROBADA" -- Sofi SI aprobo algo, aunque la compuerta despues no dejara
+  // nada ofrecible -- el segundo alimenta el listado y el mensaje para
+  // reenviar, que nunca pueden llevar una ref que la compuerta descarto.
+  const motivosCalidadPorRef = new Map(
+    (descartadosCalidad || []).map((d) => [String(d.ref).trim().toUpperCase(), d.motivos || []])
+  );
+  const descartadaPorCalidad = (ref) => motivosCalidadPorRef.has(String(ref).trim().toUpperCase());
+
+  const refsBloqueadasDelAviso = [...refsUtiles, ...refsDudosas].map(String).filter(bloqueada);
+  const utilesSofi = refsUtiles.filter((ref) => !bloqueada(ref));
+  const refsCalidadDescartada = utilesSofi.map(String).filter(descartadaPorCalidad);
+  const refsApartadas = [...refsBloqueadasDelAviso, ...refsCalidadDescartada];
+
+  const utiles = utilesSofi
+    .filter((ref) => !descartadaPorCalidad(ref))
     .map((ref) => (matches || []).find((m) => String(m.ref) === String(ref)))
     .filter(Boolean);
   // Para revisar (Juan, 2026-09-01): refs_dudosas de revalidar.js -- Sofi no
@@ -280,19 +341,26 @@ function construir(senal, veredicto, matches, telefonoColega = null, org = null,
     .map((ref) => (matches || []).find((m) => String(m.ref) === String(ref)))
     .filter(Boolean);
   // `refsApartadas.length` en la condicion: si TODO lo que habia estaba
-  // bloqueado, el aviso tiene que salir igual — es justo el caso en que la
-  // asesora necesita saber que teniamos algo y por que no se puede ofrecer.
+  // bloqueado o descartado por calidad, el aviso tiene que salir igual — es
+  // justo el caso en que la asesora necesita saber que teniamos algo y por
+  // que no se puede ofrecer.
   if (utiles.length === 0 && dudosas.length === 0 && refsApartadas.length === 0) return null;
 
   const quien = senal.autor_nombre || "un colega";
   const contactoTexto = contactoPara(telefonoColega, senal.autor_telefono, quien, senal.texto_original);
 
   const busca = queBusca(senal);
-  const porque = porqueNoSalioSolo(motivoDm, utiles.length > 0);
+  // `utilesSofi.length > 0`, NO `utiles.length > 0` (fix critico): "hay algo
+  // aprobado por Sofi" no es lo mismo que "hay algo ofrecible". Si se usara
+  // `utiles` aca, el caso de arriba (todo aprobado, todo descartado por
+  // calidad) caeria en la rama de "Sofi no aprobó ninguna del todo" -- falso,
+  // Sofi SI aprobo, la compuerta fue la que freno.
+  const porque = porqueNoSalioSolo(motivoDm, utilesSofi.length > 0);
 
   // Aprobada y sin salir es otra categoria de mensaje, y se tiene que ver
-  // desde la primera linea sin leer el resto.
-  const aprobadaSinSalir = utiles.length > 0 && Boolean(porque);
+  // desde la primera linea sin leer el resto. Mismo criterio que `porque`
+  // arriba: se mide contra la aprobacion de Sofi, no contra lo ofrecible.
+  const aprobadaSinSalir = utilesSofi.length > 0 && Boolean(porque);
   const cabecera = [
     aprobadaSinSalir ? `🚨🚨 OPORTUNIDAD APROBADA — el bot NO pudo escribirle al colega` : `🎯 Oportunidad en un grupo`,
     ``,
@@ -337,12 +405,23 @@ function construir(senal, veredicto, matches, telefonoColega = null, org = null,
   // Lo apartado, con su razon. Va DESPUES de lo ofrecible y antes del veredicto
   // de Sofi: la asesora primero ve con que puede trabajar, y despues por que
   // una quedo afuera.
-  const bloqueApartadas = refsApartadas.length
-    ? [
-        ``,
-        `⛔ ${refsApartadas.map((r) => `Ref ${r}`).join(", ")} también calza, pero tiene un dato mal cargado en Wasi — no la ofrezcas hasta que se corrija.`,
-      ]
-    : [];
+  const bloqueApartadas = [];
+  if (refsBloqueadasDelAviso.length) {
+    bloqueApartadas.push(
+      ``,
+      `⛔ ${refsBloqueadasDelAviso.map((r) => `Ref ${r}`).join(", ")} también calza, pero tiene un dato mal cargado en Wasi — no la ofrezcas hasta que se corrija.`
+    );
+  }
+  // Cada ref de la compuerta de calidad lleva SU PROPIA razon (fix critico):
+  // publicable.js puede descartar refs distintas por motivos distintos
+  // (una por periodo, otra por precio), asi que agruparlas bajo un solo
+  // texto generico -- como arriba, para REFS_BLOQUEADAS -- inventaria una
+  // razon que no aplica a todas. `explicarMotivos` es la MISMA traduccion que
+  // ya usa publicable.js: no se copia el texto aca.
+  for (const ref of refsCalidadDescartada) {
+    const motivos = motivosCalidadPorRef.get(String(ref).trim().toUpperCase()) || [];
+    bloqueApartadas.push(``, `⛔ Ref ${ref} también calza, pero ${explicarMotivos(motivos)} — no la ofrezcas hasta confirmar con el colega.`);
+  }
 
   const sofiDice = [``, `Sofi dice: ${veredicto.por_que}`];
 

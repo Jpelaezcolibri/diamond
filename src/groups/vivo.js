@@ -524,6 +524,28 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
     cuotaLinea,
   });
 
+  // LA COMPUERTA DE CALIDAD TAMBIEN CORRIGE EL MOTIVO (fix critico, revision
+  // post-merge 2026-09-07). decidirDm dice "ok" mirando telefono/lid y los
+  // limites de volumen -- no sabe que publicable.filtrar + verificarLink (mas
+  // arriba en esta funcion) ya descartaron TODO lo que Sofi habia aprobado
+  // (precio corrupto, plazo que no soportamos, amoblado sin confirmar...).
+  // Sin esto la señal quedaba "ok": alertaAsesor.js buscaba "ok" en su tabla
+  // PORQUE, no lo encontraba, y el aviso salia MUDO justo cuando mas urgente
+  // era explicar por que -- caso real: "Busco amoblado 15 dias", Sofi aprobo
+  // el unico amoblado del inventario, la compuerta lo descarto por periodo, y
+  // sin este fix la asesora recibia "mandale ESTO YA" con esa ref y ninguna
+  // linea de "Por qué no salió solo". Se corrige SOLO cuando decidirDm de
+  // verdad dijo "ok": si el motivo real era otro (sin_telefono,
+  // pedido_vencido...) esa es la razon autentica y no hay nada que pisar --
+  // mismo criterio que la correccion del carril, un poco mas abajo.
+  if (utilesSegunSofi.length > 0 && utiles.length === 0 && decisionDm.motivo === "ok") {
+    const motivoCalidad = descartadosDm[0] && descartadosDm[0].motivos && descartadosDm[0].motivos[0];
+    if (motivoCalidad) {
+      decisionDm.motivo = motivoCalidad;
+      decisionDm.traza = [...decisionDm.traza, `NO:${motivoCalidad}`];
+    }
+  }
+
   // El carril de arriendo exige ademas que alguna candidata calce fino
   // (RADAR_AMOBLADO_UMBRAL_DM) y que el interruptor este prendido. Si no, el
   // pedido NO se pierde: cae al aviso diferenciado a la asesora, mas abajo en
@@ -716,7 +738,11 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
     telefonoColega,
     org,
     decisionDm.motivo,
-    { link: linkAviso, carrilAmoblados: carrilEsDelPedido }
+    // descartadosCalidad (fix critico): las refs que Sofi aprobo pero que la
+    // compuerta de calidad de arriba (publicable.filtrar + verificarLink) ya
+    // descarto -- alertaAsesor.js las aparta del "mandale ESTO YA" en vez de
+    // ofrecerlas como si hubieran pasado.
+    { link: linkAviso, carrilAmoblados: carrilEsDelPedido, descartadosCalidad: descartadosDm }
   );
   if (!texto) {
     await feedComando.registrar(org, señalParaFeed, veredicto, matches).catch((e) =>
