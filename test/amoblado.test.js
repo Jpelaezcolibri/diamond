@@ -1,0 +1,45 @@
+const { test } = require("node:test");
+const assert = require("node:assert");
+const { esAmoblada } = require("../src/groups/amoblado");
+
+// Las dos fichas REALES del inventario de produccion (verificadas por REST el
+// 2026-09-07). Importan porque prueban el hallazgo que motivo este modulo:
+// Wasi pone "Amoblado" en el TITULO y no en las caracteristicas. La ficha de
+// la 10319436 trae 43 caracteristicas ("Sauna", "Turco", "Piscina"...) y
+// ninguna dice amoblado.
+test("la marca vive en el titulo, no en las caracteristicas", () => {
+  const don_quijote = {
+    titulo: "Apartamento Amoblado en Arriendo en Don Quijote, Medellín",
+    caracteristicas: "Admite mascotas, Agua, Armarios empotrados, Ascensor, Cocina integral",
+  };
+  assert.strictEqual(esAmoblada(don_quijote), true);
+});
+
+test("una propiedad de venta cualquiera es null, NO false", () => {
+  // La diferencia decide el carril: `false` descarta la candidata ante un
+  // pedido de amoblado; `null` la deja pasar marcada sin_confirmar y el
+  // pedido llega igual a la asesora. Colapsarlos pierde pedidos en silencio.
+  const venta = {
+    titulo: "Apartamento en Venta en Los Colores, Medellín - 2 Alcobas",
+    caracteristicas: "Balcón, Ascensor",
+  };
+  assert.strictEqual(esAmoblada(venta), null);
+});
+
+test("'sin amoblar' es false, y gana sobre el patron positivo", () => {
+  // El orden importa: "no amoblado" contiene "amoblad". Si el patron positivo
+  // se evalua primero, una propiedad explicitamente vacia se ofrece como
+  // amoblada — el error exacto que este modulo existe para no cometer.
+  assert.strictEqual(esAmoblada({ titulo: "Apartamento sin amoblar en Envigado" }), false);
+  assert.strictEqual(esAmoblada({ titulo: "Apto NO amoblado, Sabaneta" }), false);
+});
+
+test("tambien lee las caracteristicas, por si Wasi empieza a marcarlo", () => {
+  assert.strictEqual(esAmoblada({ titulo: "Apto en Laureles", caracteristicas: "Amoblado, Balcón" }), true);
+});
+
+test("sin datos es null, nunca revienta", () => {
+  assert.strictEqual(esAmoblada(null), null);
+  assert.strictEqual(esAmoblada({}), null);
+  assert.strictEqual(esAmoblada({ titulo: "", caracteristicas: null }), null);
+});
