@@ -147,6 +147,9 @@ function ficha(match, indice, { detalleFalta = null } = {}) {
   // baños" o "estrato 0", que es peor que no decir nada (ver la misma regla
   // en las exigencias de match.js).
   const detalles = [
+    // Solo en positivo y solo si lo sabemos: `null` es "no sabemos" y
+    // convertirlo en "sin amoblar" seria afirmar lo que no verificamos.
+    match.amoblado === true ? "amoblada" : null,
     formato.pluralizar(match.banos, "baño", "baños"),
     formato.pluralizar(match.garajes, "garaje"),
     formato.datoCargado(match.estrato) ? `estrato ${match.estrato}` : null,
