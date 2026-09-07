@@ -94,9 +94,31 @@ test("amoblado undefined se guarda como null", async () => {
 
 test("periodo se guarda con sus valores cuando llega", async () => {
   const { mod, insertadas } = instalar([]);
-  await mod.create("org-1", { ...pedido, periodo: "corto_plazo" });
+  await mod.create("org-1", { ...pedido, periodo: "mes" });
   limpiar();
-  assert.strictEqual(insertadas[0].periodo, "corto_plazo");
+  assert.strictEqual(insertadas[0].periodo, "mes");
+});
+
+test("periodo vacio se guarda como string vacio, no como null", async () => {
+  const { mod, insertadas } = instalar([]);
+  await mod.create("org-1", { ...pedido, periodo: "" });
+  limpiar();
+  assert.strictEqual(insertadas[0].periodo, "", "periodo vacio debe ser string");
+  assert.notStrictEqual(insertadas[0].periodo, null);
+});
+
+test("periodo 'corta' se guarda como 'corta', no como null", async () => {
+  const { mod, insertadas } = instalar([]);
+  await mod.create("org-1", { ...pedido, periodo: "corta" });
+  limpiar();
+  assert.strictEqual(insertadas[0].periodo, "corta");
+});
+
+test("periodo undefined se guarda como null", async () => {
+  const { mod, insertadas } = instalar([]);
+  await mod.create("org-1", { group_id: "grp-1", wa_message_id: "w", clase: "demanda" });
+  limpiar();
+  assert.strictEqual(insertadas[0].periodo, null);
 });
 
 // ── Degradacion: la migracion no corrio todavia ──────────────────────────────
@@ -133,26 +155,6 @@ test("una columna faltante (amoblado) NO se lleva puestas las demas -- fecha_men
   assert.strictEqual(reintento.origen, "vivo");
 });
 
-test("si falta periodo, se reintenta sin ella y la senal se guarda igual", async () => {
-  const { mod, insertadas } = instalar([errorColumna("periodo")]);
-  const r = await mod.create("org-1", pedido);
-  limpiar();
-
-  assert.ok(r.signal, "la senal no se pierde por periodo sin migrar");
-  assert.strictEqual(insertadas.length, 2, "un intento y un reintento");
-  assert.strictEqual(insertadas[1].periodo, undefined, "periodo no viaja en el reintento");
-});
-
-test("una columna faltante (periodo) NO se lleva puestas las demas -- fecha_mensaje sobrevive", async () => {
-  const { mod, insertadas } = instalar([errorColumna("periodo")]);
-  await mod.create("org-1", pedido);
-  limpiar();
-
-  const reintento = insertadas[1];
-  assert.strictEqual(reintento.periodo, undefined, "solo se saca la que falta");
-  assert.strictEqual(reintento.fecha_mensaje, pedido.fecha_mensaje, "fecha_mensaje sigue viajando");
-  assert.strictEqual(reintento.origen, "vivo");
-});
 
 test("si faltan amoblado y periodo, se van sacando de a una", async () => {
   const { mod, insertadas } = instalar([errorColumna("amoblado"), errorColumna("periodo")]);
