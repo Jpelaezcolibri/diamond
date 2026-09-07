@@ -279,7 +279,7 @@ module.exports = {
 En `src/groups/lexico.js`, agregar a `ATRIBUTOS` (después de `"sin amoblar"`):
 
 ```js
-  "amoblados", "amueblado", "sin muebles", "renta corta", "coliving", "airbnb", "temporal",
+  "amoblados", "amueblado", "sin muebles", "renta corta", "coliving", "airbnb",
 ```
 
 y a `OPERACIONES` (después de `"arrendamiento"`):

@@ -54,7 +54,15 @@ const ATRIBUTOS = [
   "bano", "banos", "metros", "mts", "m2", "estrato", "piso", "balcon",
   "ascensor", "porteria", "unidad cerrada", "administracion", "amoblado",
   "sin amoblar", "vista", "remodelado",
-  "amoblados", "amueblado", "sin muebles", "renta corta", "coliving", "airbnb", "temporal",
+  // Amoblados y renta corta (2026-09-07). Todos multipalabra o extranjerismos:
+  // colisionan poco con la charla normal del grupo. "temporal" estuvo aca unas
+  // horas y se saco en la revision — es palabra comun que no habla de inmuebles
+  // ("trabajo temporal", "temporal de lluvias") y basta UNA coincidencia para
+  // mandar el mensaje a la clasificacion, que se paga.
+  //
+  // "por noche" y "por dia" NO hacen falta: un "busco apto por 15 dias" ya
+  // sobrevive por "apto" (esta en TIPOS) y por el precio.
+  "amoblados", "amueblado", "sin muebles", "renta corta", "coliving", "airbnb",
 ];
 
 // Zonas del Valle de Aburra que un mensaje puede nombrar sin decir la ciudad.
