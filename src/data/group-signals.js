@@ -24,6 +24,8 @@ const ORIGENES = ["vivo", "export", "reenvio"];
 const COLUMNAS_NUEVAS = [
   "origen", "fecha_mensaje", "advisor_id",
   "area_min", "banos", "garajes", "estrato", "flexible_habitaciones",
+  // 2026-09-07_amoblado.sql
+  "amoblado", "periodo",
 ];
 let faltanColumnas = false;
 // Cuales faltan DE VERDAD, no "alguna falta". Hasta el 2026-08-24 esto era un
@@ -119,6 +121,10 @@ async function create(orgId, fields) {
     // Booleano, no id: `|| null` convertiria false en null y se perderia la
     // diferencia entre "no acepta una menos" y "no se sabe".
     flexible_habitaciones: fields.flexible_habitaciones ?? null,
+    // Texto, no booleano: "" (no lo menciona) y "no" (lo rechaza) son
+    // distintos, y `|| null` los colapsaria a los dos en null.
+    amoblado: fields.amoblado ?? null,
+    periodo: fields.periodo ?? null,
     contacto: fields.contacto || null,
     texto_original: fields.texto_original || null,
     matches: fields.matches || [],
@@ -972,7 +978,7 @@ module.exports = {
   findByWamid, pendientesDeAviso, candidatosRecordatorio, claimRecordatorio,
   candidatosEscaladoSilencio, claimEscaladoSilencio,
   dmsHoyPorColega, dmsHoyLinea,
-  CLASES, ORIGENES, MODOS_RESPUESTA, _resetBlindaje,
+  CLASES, ORIGENES, MODOS_RESPUESTA, COLUMNAS_NUEVAS, _resetBlindaje,
 };
 
 // Solo para tests: el flag de "falta la migracion" es de proceso.
