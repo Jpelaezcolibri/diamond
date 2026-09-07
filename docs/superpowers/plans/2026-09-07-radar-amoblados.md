@@ -1259,7 +1259,7 @@ Y en el bloque que le describe el pedido a Sofi, después de la línea de `estra
 **Y una sola frase al prompt `SISTEMA` de `revalidar.js`, que reconoce la talla en vez de contradecirla.** Agregarla junto a las reglas de `sin_confirmar`:
 
 ```
-El amoblado es la ÚNICA excepción a la regla de arriba: si el colega pidió amoblado y la ficha no lo confirma, la propiedad va igual a refs_utiles con el dato en 'sin_confirmar' — pero el motor no la va a dejar salir sola, y eso está bien y no es cosa tuya. No cambies tu criterio por esto.
+Sobre el amoblado, para que no te confunda: cuando el colega lo pidió y la ficha no lo confirma, seguí tratándolo como cualquier otro dato que no registramos — la propiedad va a refs_utiles con el amoblado en 'sin_confirmar'. Aparte de eso, el motor no deja que esa propiedad le salga sola al colega; ya está resuelto en el código y no es una decisión tuya. Tu criterio no cambia en nada por esto.
 ```
 
 - [ ] **Step 4: Run test to verify it passes**

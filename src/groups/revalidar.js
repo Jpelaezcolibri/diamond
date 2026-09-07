@@ -256,10 +256,7 @@ tenemos, y el colega pregunta si le importa. Mandarlo a dudosas para que
 alguien averigue primero es lo mismo que no avisar. Si lo UNICO que te hace
 dudar de una propiedad es algo que no registramos, no hay duda: refs_utiles.
 
-El amoblado es la ÚNICA excepción a la regla de arriba: si el colega pidió
-amoblado y la ficha no lo confirma, la propiedad va igual a refs_utiles con
-el dato en 'sin_confirmar' — pero el motor no la va a dejar salir sola, y eso
-está bien y no es cosa tuya. No cambies tu criterio por esto.
+Sobre el amoblado, para que no te confunda: cuando el colega lo pidió y la ficha no lo confirma, seguí tratándolo como cualquier otro dato que no registramos — la propiedad va a refs_utiles con el amoblado en 'sin_confirmar'. Aparte de eso, el motor no deja que esa propiedad le salga sola al colega; ya está resuelto en el código y no es una decisión tuya. Tu criterio no cambia en nada por esto.
 
 LAS CUATRO SALIDAS
 
