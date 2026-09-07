@@ -524,33 +524,48 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
     cuotaLinea,
   });
 
+  // El carril de arriendo exige ademas que alguna candidata calce fino
+  // (RADAR_AMOBLADO_UMBRAL_DM) y que el interruptor este prendido. Si no, el
+  // pedido NO se pierde: cae al aviso diferenciado a la asesora, mas abajo en
+  // esta misma funcion. Se calcula ANTES del guardarPolitica de abajo (Minor 1
+  // del review de 6104561) para que haya UNA sola escritura -- con dos
+  // escrituras seguidas la señal quedaba, aunque fuera un instante, diciendo
+  // "ok" mientras el DM ya estaba frenado. `utiles` (linea 476) ya esta
+  // calculado a esta altura, asi que adelantar este calculo no cambia ningun
+  // valor: nada entre la escritura vieja y esta usaba lo que esa escritura
+  // dejaba en la base.
+  const carrilEsDelPedido = carrilArriendo.esDelCarril(c);
+  const carrilApagado = carrilEsDelPedido && !carrilArriendo.carrilActivo();
+  const salidaSolaOk = !carrilEsDelPedido || carrilArriendo.puedeSalirSolo(utiles);
+
+  // CUAL ES LA RAZON REAL (Important del review de 6104561): decidirDm ya
+  // aprobo el envio (motivo "ok"), pero el carril de arriendo lo puede frenar
+  // por TRES causas bien distintas, y antes de este fix las tres quedaban
+  // escritas igual como "carril_umbral":
+  //   - el interruptor esta apagado (RADAR_AMOBLADO_ACTIVO=false): decirle a
+  //     la asesora "no llego al puntaje" es falso si el match era, por
+  //     ejemplo, un 98 -- el freno real es el interruptor, no el numero.
+  //     Motivo autentico: carril_apagado.
+  //   - el interruptor prendido y SI hay candidatas (`utiles` no vacio), pero
+  //     ninguna llega al umbral (o el amoblado no esta confirmado): aca
+  //     "carril_umbral" es la razon autentica, sin cambios.
+  //   - `utiles` vacio: el DM nunca iba a salir por falta de candidatas
+  //     aprobadas por Sofi, no por el carril -- inventarle una razon de
+  //     carril a eso es el mismo hueco que cerro el commit b0f62ea. Se deja
+  //     el motivo tal cual lo decidio decidirDm, sin tocarlo.
+  // Igual que antes: se corrige SOLO cuando decidirDm de verdad dijo "ok". Si
+  // el motivo real era otro (sin_telefono, limite_linea_alcanzado, etc.) esa
+  // es la razon autentica y no hay nada que pisar.
+  if (!salidaSolaOk && decisionDm.motivo === "ok" && utiles.length > 0) {
+    decisionDm.motivo = carrilApagado ? "carril_apagado" : "carril_umbral";
+    decisionDm.traza = [...decisionDm.traza, `NO:${decisionDm.motivo}`];
+  }
+
   // Auditable igual que el resto de las decisiones del radar (mismo llamado
   // que usa el camino auto/sombra mas arriba en este archivo, sobre la misma
   // columna): la razon por la que un pedido salio por DM o por la asesora
   // queda en la señal misma, no solo en un log que se pierde.
   await groupSignals.guardarPolitica(org.id, signal.id, { motivo: decisionDm.motivo, traza: decisionDm.traza }).catch(() => {});
-
-  // El carril de arriendo exige ademas que alguna candidata calce fino
-  // (RADAR_AMOBLADO_UMBRAL_DM). Si no, el pedido NO se pierde: cae al aviso
-  // diferenciado a la asesora, mas abajo en esta misma funcion.
-  const salidaSolaOk = !carrilArriendo.esDelCarril(c) || carrilArriendo.puedeSalirSolo(utiles);
-
-  // CORRECCION (Important 3 del review de 400c0c8): decidirDm ya aprobo el
-  // envio (motivo "ok") y eso quedo guardado arriba, ANTES de saber que el
-  // carril de arriendo lo iba a frenar por umbral. Sin este ajuste la señal
-  // se queda diciendo "ok" mientras el DM nunca sale, alertaAsesor.construir
-  // busca "ok" en PORQUE (alerta-asesor.js), no lo encuentra, y la asesora
-  // recibe el aviso SIN ninguna explicacion -- el mismo hueco que produjo
-  // "Sofi rellena los huecos con explicaciones inventadas" (2026-09-06,
-  // cerrado por el commit b0f62ea). Se corrige solo cuando decidirDm de
-  // verdad dijo "ok": si el motivo real era otro (sin_telefono,
-  // limite_linea_alcanzado, etc.) esa es la razon autentica y no hay nada que
-  // pisar.
-  if (!salidaSolaOk && decisionDm.motivo === "ok") {
-    decisionDm.motivo = "carril_umbral";
-    decisionDm.traza = [...decisionDm.traza, "NO:carril_umbral"];
-    await groupSignals.guardarPolitica(org.id, signal.id, { motivo: decisionDm.motivo, traza: decisionDm.traza }).catch(() => {});
-  }
   if (decisionDm.enviarDm && sesion && utiles.length > 0 && salidaSolaOk) {
     const textoDm = textoParaColega(
       mensaje.autor,

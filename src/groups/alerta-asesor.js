@@ -185,6 +185,12 @@ const PORQUE = {
   // su propio umbral (RADAR_AMOBLADO_UMBRAL_DM) y que la propiedad este
   // confirmada como amoblada -- src/groups/carril-arriendo.js#puedeSalirSolo.
   carril_umbral: "El match no llegó al puntaje que exige el carril de amoblados para salir solo (o no confirmamos que la propiedad sea amoblada). Vos decidís si igual le sirve al colega.",
+  // carril_apagado (Important del review de 6104561): distinto de
+  // carril_umbral a proposito -- src/groups/carril-arriendo.js#puedeSalirSolo
+  // devuelve false por el interruptor ANTES de mirar el puntaje, asi que un
+  // match de 98 con el interruptor apagado no puede contarse como "no llego
+  // al puntaje". Nunca reusar el texto de carril_umbral aca.
+  carril_apagado: "El carril de amoblados está apagado en este momento, así que ningún match sale solo por ese carril, sin importar el puntaje. Vos decidís si escribirle al colega.",
 };
 
 // Cuando Sofi APROBO y aun asi el bot no pudo escribirle al colega, el aviso

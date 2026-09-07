@@ -264,3 +264,17 @@ test("aprobar_pedido_radar: si ya no pasa la compuerta de calidad, dice por que 
   assert.match(out, /precio esta fuera de rango/);
   assert.doesNotMatch(out, /precio_fuera_de_rango/);
 });
+
+// Minor 2 del review de 6104561: sin este caso, "carril_apagado" caia en el
+// default y el operador veia el token crudo en vez de una frase.
+test("aprobar_pedido_radar: si el carril de amoblados esta apagado, lo dice en frase -- no el token crudo", async (t) => {
+  t.mock.method(groupSignals, "calladosPendientes", async () => [
+    { id: "sig-99", autor_nombre: "Camilo", texto_original: "busco en Envigado" },
+  ]);
+  t.mock.method(vivo, "aprobarManual", async () => ({ resultado: "carril_apagado" }));
+
+  const out = await executeCommandTool("aprobar_pedido_radar", { cual: "Camilo" }, { scope: adminScope(), session: null });
+  assert.match(out, /carril de amoblados/i);
+  assert.match(out, /RADAR_AMOBLADO_ACTIVO/);
+  assert.doesNotMatch(out, /\(carril_apagado\)/, "no puede mostrar el token crudo");
+});

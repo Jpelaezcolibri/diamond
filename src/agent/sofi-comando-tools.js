@@ -960,6 +960,11 @@ async function aprobarPedidoRadarComando(input, ctx) {
       return "La linea agoto su cuota de mensajes de WhatsApp de este mes (la pone WhatsApp, no nosotros) — hasta el proximo ciclo hay que escribirle a mano.";
     case "error_envio":
       return `El envio fallo: ${r.error || "sin detalle"}.`;
+    // El carril de amoblados tiene su propio interruptor, aparte de todo lo
+    // de arriba (Minor 2 del review de 6104561): sin este caso, el operador
+    // veia el token crudo "carril_apagado" en vez de una frase.
+    case "carril_apagado":
+      return "No se aprobó: el carril de amoblados está apagado ahora mismo (variable RADAR_AMOBLADO_ACTIVO en Railway) — nada sale solo por ese carril hasta que la actives. Podés seguir aprobando a mano mientras tanto.";
     default:
       return `No se pudo aprobar (${r.resultado}).`;
   }

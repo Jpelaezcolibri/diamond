@@ -161,6 +161,20 @@ test("el select de obtenerPorId no puede volver a perder los campos que el carri
       `el select de obtenerPorId no trae "${campo}", que carril-arriendo.js#esDelCarril necesita para no quedar ciego (Critical 1, commit 400c0c8)`
     );
   }
+
+  // AUTO-VERIFICACION (Minor 3 del review de 6104561): el comentario de
+  // señalDeArriendo() decia "EXACTAMENTE las columnas... ni una mas ni una
+  // menos", pero nada lo comprobaba -- el fixture podia irse desalineando del
+  // select real (de mas o de menos) sin que ningun test lo notara. Se
+  // compara por CONJUNTO (orden alfabetico) para no depender de en que orden
+  // cada uno liste los campos.
+  const columnasFixture = Object.keys(señalDeArriendo()).slice().sort();
+  const columnasSelect = columnas.slice().sort();
+  assert.deepStrictEqual(
+    columnasFixture,
+    columnasSelect,
+    "señalDeArriendo() se desalineo del select real de obtenerPorId -- actualiza el fixture (o este comentario, si el select cambio a proposito)"
+  );
 });
 
 function conCarril(valor, fn) {

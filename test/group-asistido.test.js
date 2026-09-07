@@ -675,6 +675,76 @@ test("carril de arriendo (puerta 2): si de verdad no habia como escribirle (sin 
   assert.strictEqual(ultimaPolitica.motivo, "sin_telefono");
 });
 
+// ── Carril de arriendo, la razon real (Important del review de 6104561) ──
+//
+// puedeSalirSolo devuelve false por TRES causas distintas y antes de este fix
+// las tres se guardaban igual como "carril_umbral" -- si el operador apagaba
+// RADAR_AMOBLADO_ACTIVO, la asesora leia "no llego al puntaje" aunque el
+// match fuera un 98. Estos tres tests pinean cada causa a SU motivo.
+test("carril de arriendo (interruptor apagado): con RADAR_AMOBLADO_ACTIVO=false, el motivo es carril_apagado -- nunca carril_umbral, aunque el match sea un 98", async () => {
+  telefonoColegaResuelto = "573001234567";
+  operacionDevuelta = "arriendo";
+  // Puntaje muy por encima del umbral (85) y amoblado confirmado: si esto
+  // igual no sale, tiene que ser por el interruptor, no por el puntaje.
+  matchesDevueltos = [match({ puntaje: 98, amoblado: true, amoblado_sin_confirmar: false })];
+  veredictoDeSofi = { ...APRUEBA };
+
+  const antes = process.env.RADAR_AMOBLADO_ACTIVO;
+  process.env.RADAR_AMOBLADO_ACTIVO = "false";
+  try {
+    const r = await vivo.procesarMensaje(ORG, mensaje(), {
+      grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA",
+    });
+
+    assert.strictEqual(enviosDm.length, 0, "el interruptor apagado frena el DM aunque el match sea un 98");
+    assert.strictEqual(r.resultado, "avisada");
+
+    const ultimaPolitica = politicasGuardadas[politicasGuardadas.length - 1];
+    assert.strictEqual(ultimaPolitica.motivo, "carril_apagado");
+    assert.ok(ultimaPolitica.traza.includes("NO:carril_apagado"), ultimaPolitica.traza.join(","));
+
+    // La asesora tiene que leer la razon REAL: el interruptor, nunca "no
+    // llego al puntaje" -- ese match era un 98.
+    assert.strictEqual(enviadosPorSofi.length, 1);
+    const texto = enviadosPorSofi[0].texto;
+    assert.match(texto, /Por qué no salió solo/);
+    assert.match(texto, /apagado/i, "tiene que decir que el carril esta apagado");
+    assert.doesNotMatch(texto, /no llegó al puntaje/i, "no puede decir que el match no califico: era un 98");
+  } finally {
+    if (antes === undefined) delete process.env.RADAR_AMOBLADO_ACTIVO;
+    else process.env.RADAR_AMOBLADO_ACTIVO = antes;
+  }
+});
+
+test("carril de arriendo (Sofi no aprobo nada util): con utiles vacio no se inventa una razon de carril", async () => {
+  telefonoColegaResuelto = "573001234567";
+  operacionDevuelta = "arriendo";
+  // Solo dudosas, ninguna util -- el DM nunca iba a salir por falta de
+  // candidatas aprobadas por Sofi, no porque el carril lo frenara. Con
+  // refs_utiles vacio Y refs_dudosas vacio, apruebaAviso descarta el pedido
+  // ANTES de llegar a decidirDm (ver "si Sofi dice que no sirve" mas arriba),
+  // asi que hace falta una dudosa para que el flujo llegue hasta aca.
+  veredictoDeSofi = { ...APRUEBA, refs_utiles: [], refs_dudosas: ["9780079"] };
+
+  const r = await vivo.procesarMensaje(ORG, mensaje(), {
+    grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA",
+  });
+
+  assert.strictEqual(r.resultado, "avisada");
+  assert.strictEqual(enviosDm.length, 0, "sin utiles aprobadas no hay DM que mandar");
+
+  const ultimaPolitica = politicasGuardadas[politicasGuardadas.length - 1];
+  // Ni "carril_umbral" (es para cuando SI habia candidatas y ninguna
+  // califico) ni "carril_apagado" (es para cuando el interruptor freno un
+  // envio que si tenia con que salir) -- aca simplemente no habia nada
+  // aprobado, y ese es el motivo que tiene que quedar.
+  assert.strictEqual(ultimaPolitica.motivo, "ok");
+
+  // La asesora recibe la razon autentica -- nunca una frase de carril.
+  assert.match(enviadosPorSofi[0].texto, /Sofi no aprobó ninguna/);
+  assert.doesNotMatch(enviadosPorSofi[0].texto, /carril de amoblados/);
+});
+
 // ── SIN TELEFONO, SE MANDA POR EL LID (Juan, 2026-09-04) ────────────────
 //
 // Antes, este bloque afirmaba que sin telefono resuelto el pedido se desviaba
