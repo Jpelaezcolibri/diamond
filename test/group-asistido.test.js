@@ -34,13 +34,17 @@ let enviosDm = [];
 let envioDmResultado = { ok: true, wamid: "wm-dm-1" };
 // ── Escalado inmediato marca la señal, para que radar-silencio no la reintente ──
 let claimsEscaladoSilencio = [];
+// Carril de arriendo (Important 3 del review de 400c0c8): por defecto "venta",
+// igual que antes de que el carril existiera, para no tocar ningun test de
+// esta suite que no lo mencione.
+let operacionDevuelta = "venta";
 
 function instalar() {
   require.cache[RUTA("groups/classify.js")] = {
     exports: {
       classify: async (ms) => ({
         clasificados: ms.map((m) => ({
-          id: m.id, clase: claseDevuelta, confianza: 0.95, operacion: "venta",
+          id: m.id, clase: claseDevuelta, confianza: 0.95, operacion: operacionDevuelta,
           tipo: "apartamento", zona: "laureles", ciudad: "medellin",
           precio_min: 0, precio_max: 900000000, habitaciones: 3, area_min: 0,
           banos: 0, garajes: 0, estrato: 0, contacto: "", notas: "", mensaje: m,
@@ -233,6 +237,7 @@ beforeEach(() => {
   enviosDm = [];
   envioDmResultado = { ok: true, wamid: "wm-dm-1" };
   claimsEscaladoSilencio = [];
+  operacionDevuelta = "venta";
   delete process.env.RADAR_ALERTA_TO;
   delete process.env.CONTACT_WHATSAPP_NUMBER;
   vivo = instalar();
@@ -620,6 +625,54 @@ test("la decision (DM u asesora) queda guardada en la señal, igual que el resto
   assert.strictEqual(politicasGuardadas[0].id, "sig-1");
   assert.strictEqual(politicasGuardadas[0].motivo, "ok");
   assert.ok(Array.isArray(politicasGuardadas[0].traza));
+});
+
+// ── Carril de arriendo, puerta 2 (Important 3 del review de 400c0c8) ────
+//
+// decidirDm aprobaba el envio (motivo "ok") y ESO quedaba guardado en la
+// señal, aunque el carril de arriendo lo frenara despues por umbral -- la
+// asesora recibia el aviso sin ninguna explicacion, porque alertaAsesor.js
+// buscaba "ok" en su tabla PORQUE y no lo encontraba (el mismo hueco de
+// "Sofi rellena los huecos con explicaciones inventadas", 2026-09-06).
+test("carril de arriendo (puerta 2): si el match no califica, la señal queda con el motivo real (no 'ok') y la asesora ve la razon", async () => {
+  telefonoColegaResuelto = "573001234567";
+  operacionDevuelta = "arriendo";
+  // match() por defecto trae puntaje 83 -- por debajo del umbral de 85 del
+  // carril (RADAR_AMOBLADO_UMBRAL_DM), asi que ninguna candidata "calza fino"
+  // aunque decidirDm hubiera aprobado el envio automatico.
+  const r = await vivo.procesarMensaje(ORG, mensaje(), {
+    grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA",
+  });
+
+  // El DM automatico NO sale: el carril lo freno, no decidirDm.
+  assert.strictEqual(enviosDm.length, 0);
+  assert.strictEqual(r.resultado, "avisada");
+
+  // La señal NO se queda diciendo "ok": el ultimo guardarPolitica corrige el
+  // motivo al real.
+  const ultimaPolitica = politicasGuardadas[politicasGuardadas.length - 1];
+  assert.strictEqual(ultimaPolitica.motivo, "carril_umbral");
+  assert.ok(ultimaPolitica.traza.includes("NO:carril_umbral"), ultimaPolitica.traza.join(","));
+
+  // Y la asesora SI recibe una explicacion -- ya no un aviso mudo.
+  assert.strictEqual(enviadosPorSofi.length, 1);
+  assert.match(enviadosPorSofi[0].texto, /Por qué no salió solo/);
+  assert.match(enviadosPorSofi[0].texto, /carril de amoblados/);
+});
+
+test("carril de arriendo (puerta 2): si de verdad no habia como escribirle (sin telefono ni lid), el motivo real no se pisa", async () => {
+  telefonoColegaResuelto = null;
+  operacionDevuelta = "arriendo";
+  const anonimo = { ...mensaje(), autorId: null, autorTelefono: null };
+  const r = await vivo.procesarMensaje(ORG, anonimo, {
+    grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA",
+  });
+
+  assert.strictEqual(r.resultado, "avisada");
+  const ultimaPolitica = politicasGuardadas[politicasGuardadas.length - 1];
+  // El motivo AUTENTICO (no habia a quien escribirle) no se reemplaza por
+  // "carril_umbral": ese motivo es solo para cuando decidirDm SI aprobaba.
+  assert.strictEqual(ultimaPolitica.motivo, "sin_telefono");
 });
 
 // ── SIN TELEFONO, SE MANDA POR EL LID (Juan, 2026-09-04) ────────────────

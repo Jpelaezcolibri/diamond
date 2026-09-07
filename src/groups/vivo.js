@@ -187,9 +187,19 @@ async function procesarMensaje(org, mensaje, { grupo, modo = "sombra", enviar = 
   // 'asistido' y ningun grupo tiene responde=true— y la guarda existe
   // justamente para que siga siendo cierto el dia que alguna de esas dos
   // cosas cambie por error.
-  if (carrilArriendo.esDelCarril(c)) {
-    return { resultado: "carril_sin_publicacion_en_grupo", signalId: signal.id };
-  }
+  //
+  // CORRECCION (Important 4 del review de 400c0c8): esto era un `return`
+  // temprano incondicional, y se llevaba puesto TODO lo que sigue en la
+  // funcion -- incluido avisarCercano, cuyo propio comentario cita la regla
+  // de Juan ("lo que no se responda por el bot debe de ir de una al chat de
+  // natalia... no podemos dejar pasar ningun pedido"), y tambien
+  // guardarPolitica + el feed del admin. La intencion de esta guarda es "nada
+  // al GRUPO", no "nada a Natalia": se marca aca y se sigue de largo por la
+  // compuerta de calidad y la politica normales; mas abajo, si la politica lo
+  // hubiera dejado publicar, se lo frena con este mismo motivo -- pero solo
+  // eso, para no pisar un motivo real (modo_apagado, ya_respondida,
+  // puntaje_bajo) que ya haya decidido callar por su cuenta.
+  const esCarrilSinPublicacionEnGrupo = carrilArriendo.esDelCarril(c);
 
   // 5. Compuerta de calidad del dato, y despues politica de conducta. Son dos
   // preguntas distintas: "¿este dato es publicable?" y "¿corresponde hablar?".
@@ -226,6 +236,18 @@ async function procesarMensaje(org, mensaje, { grupo, modo = "sombra", enviar = 
     respuestasRecientes: recientes ? recientes.cantidad : null,
     ahora,
   });
+
+  // Recien ACA se aplica el carril (Important 4): si la politica de todos
+  // modos iba a publicar, se frena -- pero SOLO en ese caso. Si `decision.publicar`
+  // ya era false por otra razon (modo_apagado, ya_respondida, puntaje_bajo,
+  // etc.), esa razon real se deja intacta: pisarla con "carril..." perderia el
+  // motivo autentico y ademas desactivaria por accidente la exclusion de
+  // avisarCercano que existe para ya_respondida/modo_apagado (mas abajo).
+  if (esCarrilSinPublicacionEnGrupo && decision.publicar) {
+    decision.publicar = false;
+    decision.motivo = "carril_sin_publicacion_en_grupo";
+    decision.traza = [...decision.traza, "NO:carril_sin_publicacion_en_grupo"];
+  }
 
   // Feed del admin, tambien para el camino determinista (auto/sombra): sin
   // esto, todo lo que la compuerta de calidad o la politica callan desaparece
@@ -512,6 +534,23 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
   // (RADAR_AMOBLADO_UMBRAL_DM). Si no, el pedido NO se pierde: cae al aviso
   // diferenciado a la asesora, mas abajo en esta misma funcion.
   const salidaSolaOk = !carrilArriendo.esDelCarril(c) || carrilArriendo.puedeSalirSolo(utiles);
+
+  // CORRECCION (Important 3 del review de 400c0c8): decidirDm ya aprobo el
+  // envio (motivo "ok") y eso quedo guardado arriba, ANTES de saber que el
+  // carril de arriendo lo iba a frenar por umbral. Sin este ajuste la señal
+  // se queda diciendo "ok" mientras el DM nunca sale, alertaAsesor.construir
+  // busca "ok" en PORQUE (alerta-asesor.js), no lo encuentra, y la asesora
+  // recibe el aviso SIN ninguna explicacion -- el mismo hueco que produjo
+  // "Sofi rellena los huecos con explicaciones inventadas" (2026-09-06,
+  // cerrado por el commit b0f62ea). Se corrige solo cuando decidirDm de
+  // verdad dijo "ok": si el motivo real era otro (sin_telefono,
+  // limite_linea_alcanzado, etc.) esa es la razon autentica y no hay nada que
+  // pisar.
+  if (!salidaSolaOk && decisionDm.motivo === "ok") {
+    decisionDm.motivo = "carril_umbral";
+    decisionDm.traza = [...decisionDm.traza, "NO:carril_umbral"];
+    await groupSignals.guardarPolitica(org.id, signal.id, { motivo: decisionDm.motivo, traza: decisionDm.traza }).catch(() => {});
+  }
   if (decisionDm.enviarDm && sesion && utiles.length > 0 && salidaSolaOk) {
     const textoDm = textoParaColega(
       mensaje.autor,

@@ -180,6 +180,11 @@ const PORQUE = {
   cuota_whatsapp_alta: "La línea está cerca de la cuota mensual de mensajes de WhatsApp, y el bot se frena para dejar colchón.",
   sin_fecha_mensaje: "El pedido llegó sin fecha, así que no podemos saber si todavía está vigente.",
   dm_fallido: "El bot intentó escribirle y WhatsApp rechazó el envío.",
+  // carril_umbral (Important 3 del review de 400c0c8): el carril de arriendo
+  // exige, ademas de todo lo anterior, que el match califique por encima de
+  // su propio umbral (RADAR_AMOBLADO_UMBRAL_DM) y que la propiedad este
+  // confirmada como amoblada -- src/groups/carril-arriendo.js#puedeSalirSolo.
+  carril_umbral: "El match no llegó al puntaje que exige el carril de amoblados para salir solo (o no confirmamos que la propiedad sea amoblada). Vos decidís si igual le sirve al colega.",
 };
 
 // Cuando Sofi APROBO y aun asi el bot no pudo escribirle al colega, el aviso

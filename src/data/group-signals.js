@@ -703,10 +703,22 @@ async function obtenerPorId(orgId, signalId) {
   // pagar un llamado a la IA por un pedido que Sofi ya reviso. Una señal que
   // nunca paso por asistido (entro en modo auto/sombra) simplemente no tiene
   // esta columna poblada, y el codigo lo trata como "sin salvedad".
+  //
+  // operacion se agrego (Critical 1 del review de 400c0c8, commit
+  // 400c0c8 "carril de arriendo con interruptor y umbral propio"): sin ella
+  // en este select, `signal.operacion` llegaba `undefined` a
+  // carril-arriendo.js#esDelCarril y la funcion SIEMPRE devolvia false --
+  // aprobarManual y responderPorDmManual (las dos puertas manuales) nunca
+  // veian que un pedido era del carril, asi que apagar RADAR_AMOBLADO_ACTIVO
+  // no las frenaba. El bug era real en produccion (el select ya corria asi
+  // antes de este commit) y quedaba oculto porque el test que lo cubria
+  // fabricaba `operacion` a mano en el fixture, algo que esta consulta nunca
+  // podia devolver. Si el carril llega a leer otro campo del signal (hoy solo
+  // lee `operacion`; `matches` ya estaba), hay que sumarlo TAMBIEN aca.
   const { data, error } = await supabase
     .from("group_signals")
     .select(
-      "id, group_id, clase, matches, autor_nombre, autor_telefono, texto_original, respondida_at, wa_message_id, revalidacion"
+      "id, group_id, clase, operacion, matches, autor_nombre, autor_telefono, texto_original, respondida_at, wa_message_id, revalidacion"
     )
     .eq("org_id", orgId)
     .eq("id", signalId)

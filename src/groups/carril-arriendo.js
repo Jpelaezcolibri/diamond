@@ -21,8 +21,23 @@ const UMBRAL_DEFAULT = 85;
 // Se leen en cada llamada y no al cargar el modulo: el interruptor tiene que
 // poder apagarse desde Railway sin redesplegar, y un `const` arriba obligaria
 // a reiniciar el proceso para que tome efecto.
+//
+// Valores que APAGAN el carril, normalizados con trim+lowercase (Important 5
+// del review de 400c0c8): la comparacion original exigia el string EXACTO
+// "false", asi que "False", "FALSE", "0", "no" o un "false " con un espacio
+// pegado a mano en la UI de Railway dejaban el carril PRENDIDO mientras el
+// operador creia haberlo apagado -- el mismo tipo de falla silenciosa que los
+// 1.906 avisos del 2026-09-05. Se suman "0" y "no" a la lista de apagado
+// porque son la forma mas comun en que una persona escribe "apagado" sin
+// pensar en la palabra literal "false"; no se suman variantes como
+// "off"/"disabled"/"n" porque no hay evidencia de que alguien las vaya a usar
+// aca y una lista mas larga es mas superficie para acertar mal por accidente
+// (ej. una zona horaria "no" de otro contexto).
+const VALORES_APAGADO = new Set(["false", "0", "no"]);
+
 function carrilActivo() {
-  return process.env.RADAR_AMOBLADO_ACTIVO !== "false";
+  const valor = String(process.env.RADAR_AMOBLADO_ACTIVO ?? "").trim().toLowerCase();
+  return !VALORES_APAGADO.has(valor);
 }
 
 function umbralDm() {
