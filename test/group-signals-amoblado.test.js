@@ -153,8 +153,12 @@ test("una columna faltante (amoblado) NO se lleva puestas las demas -- fecha_men
   assert.strictEqual(reintento.amoblado, undefined, "solo se saca la que falta");
   assert.strictEqual(reintento.fecha_mensaje, pedido.fecha_mensaje, "fecha_mensaje sigue viajando");
   assert.strictEqual(reintento.origen, "vivo");
+  // Bug real 2026-08-24: si se borraban todas las columnas nuevas cuando faltaba
+  // una, se perdia tambien periodo — la fecha del pedido que decide si sale por
+  // DM. Como ambas vienen en la misma migracion, una debe sobrevivir cuando solo
+  // falta la otra.
+  assert.strictEqual(reintento.periodo, pedido.periodo, "periodo (columna hermana) tambien sobrevive");
 });
-
 
 test("si faltan amoblado y periodo, se van sacando de a una", async () => {
   const { mod, insertadas } = instalar([errorColumna("amoblado"), errorColumna("periodo")]);
