@@ -46,7 +46,23 @@ function umbralDm() {
 
 // TODA demanda de arriendo, no solo la que dice la palabra amoblado: nuestro
 // inventario de arriendo es 100% amoblado, asi que un pedido que no menciona
-// muebles igual cruza contra un amoblado. Las demandas de venta no se tocan.
+// muebles igual cruza contra un amoblado.
+//
+// "Las demandas de venta no se tocan" (version anterior de este comentario)
+// era cierto para ESTE modulo -- esDelCarril y puedeSalirSolo de verdad solo
+// actuan sobre operacion==='arriendo' -- pero no para toda la rama. Tres
+// superficies COMPARTIDAS por venta y arriendo cambiaron en el mismo trabajo
+// que agrego este carril, y una demanda de venta SI las atraviesa:
+//   · src/lib/zonas.js: "Los Gonzáles"->Poblado y "Don Quijote"->Laureles
+//     gradan 'exacta' para cualquier operacion, venta incluida.
+//   · src/groups/revalidar.js: el parrafo nuevo sobre amoblado esta en el
+//     prompt de TODOS los veredictos, tambien los de venta.
+//   · src/groups/match.js + redactar.js: una propiedad de VENTA cuyo titulo
+//     en Wasi diga "Amoblado" igual imprime "amoblada" en el mensaje del
+//     grupo -- esAmoblada() no filtra por operacion.
+// Lo que sigue siendo cierto, y es lo que este modulo controla: ninguna
+// demanda de venta pasa por esDelCarril/puedeSalirSolo/carrilActivo, asi que
+// el interruptor y el umbral de aca abajo nunca la frenan ni la aceleran.
 function esDelCarril(clasificado) {
   return String(clasificado?.operacion || "").trim().toLowerCase() === "arriendo";
 }

@@ -21,7 +21,17 @@
 // Las palabras de negacion ("sin", "no") van ancladas con \b (frontera de
 // palabra). Sin esto, "no" en palabras como "moderno" dispara el patron:
 // "Apartamento moderno amoblado" falla como false cuando deberia ser true.
-const PATRON_SI = /amoblad|amueblad/i;
+//
+// PATRON_SI TAMBIEN VA ANCLADO (fix, revision post-merge 2026-09-07): sin el
+// \b, "amoblad" matchea como SUBCADENA de cualquier palabra que la contenga.
+// "Apartamento Desamoblado en Arriendo" (des-AMOBLAD-o) daba true -- lo
+// contrario exacto de lo que dice el titulo -- porque PATRON_NO tampoco lo
+// cubre (no es "sin amoblar" ni "no amoblado", es un prefijo pegado). Con el
+// \b puesto, "desamoblado" y "semiamoblado" dejan de matchear el patron
+// positivo (no hay frontera de palabra entre el prefijo y "amoblad") y caen a
+// `null` -- el tercer estado correcto para un dato que el titulo no confirma
+// con claridad, no un `true` inventado.
+const PATRON_SI = /\bamoblad|\bamueblad/i;
 const PATRON_NO = /\bsin\s+amoblar|\bsin\s+amueblar|\bsin\s+muebles|\bno\s+amoblad|\bno\s+amueblad/i;
 
 /**

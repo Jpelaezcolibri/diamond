@@ -55,3 +55,23 @@ test("defects verificados por reviewer 2026-09-07: word boundary y amueblad", ()
   assert.strictEqual(esAmoblada({ titulo: "Apartamento NO amueblado en Sabaneta" }), false);
   assert.strictEqual(esAmoblada({ titulo: "Apartamento sin amueblar en Envigado" }), false);
 });
+
+// IMPORTANT 2 del review de fin de rama (2026-09-07): PATRON_SI no tenia
+// frontera de palabra, asi que matcheaba como SUBCADENA de cualquier palabra
+// que contuviera "amoblad" -- "Desamoblado" (des-AMOBLAD-o) daba `true`,
+// justo lo contrario de lo que dice el titulo. Verificado ANTES del fix:
+// esAmoblada({titulo:"Apartamento Desamoblado en Arriendo en Laureles"})
+// devolvia true.
+test("'Desamoblado' NO es 'amoblado': el prefijo pegado no matchea el patron positivo", () => {
+  const desamoblado = { titulo: "Apartamento Desamoblado en Arriendo en Laureles" };
+  // PATRON_NO tampoco lo cubre (no es "sin amoblar" ni "no amoblado", es un
+  // prefijo pegado a la palabra) -- el resultado correcto es null, el tercer
+  // estado: no sabemos con certeza que dice el titulo, y `false` seria
+  // afirmar una negacion que el patron de negacion no reconoce.
+  assert.strictEqual(esAmoblada(desamoblado), null, "antes del fix esto daba true");
+});
+
+test("'semiamoblado' pasa de true a null -- el tercer estado correcto (no confirmado), no una afirmacion", () => {
+  const semi = { titulo: "Apartamento semiamoblado en Belen" };
+  assert.strictEqual(esAmoblada(semi), null);
+});

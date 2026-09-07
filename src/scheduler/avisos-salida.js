@@ -40,6 +40,7 @@ const mandatosData = require("../data/mandatos");
 const whatsappGroups = require("../data/whatsapp-groups");
 const revalidar = require("../groups/revalidar");
 const alertaAsesor = require("../groups/alerta-asesor");
+const carrilArriendo = require("../groups/carril-arriendo");
 const digest = require("../groups/digest-avisos");
 const linkAvisoLib = require("../lib/link-aviso");
 const directorio = require("../groups/directorio");
@@ -91,7 +92,17 @@ async function textoDePedido(org, senal, grupos, sesion) {
     telefono,
     org,
     senal.politica_motivo,
-    { link }
+    // carrilAmoblados (IMPORTANT 1 del review de fin de rama): esta bandeja
+    // reconstruye el MISMO aviso que vivo.js#asistir arma en linea (mismas
+    // piezas: veredicto y matches guardados en la señal, telefono resuelto de
+    // nuevo). vivo.js SI le pasa carrilAmoblados a construir(); esta funcion
+    // se quedaba solo con `{ link }` y el encabezado "🛋️ AMOBLADOS" se perdia
+    // justo en el caso que mas importa: cuando el freno de ritmo agrupo el
+    // aviso para la rafaga (el motivo de ser de este archivo). Se recalcula
+    // con el mismo criterio que vivo.js (operacion === 'arriendo'), no se lee
+    // de la señal porque esDelCarril no depende de nada que cambie entre el
+    // momento en que se detecto el pedido y el momento en que se avisa.
+    { link, carrilAmoblados: carrilArriendo.esDelCarril({ operacion: senal.operacion }) }
   );
 }
 
@@ -247,4 +258,4 @@ function stop() {
   timer = null;
 }
 
-module.exports = { start, stop, runOnce, procesarOrg, VENTANA_MIN, VIGENCIA_HORAS };
+module.exports = { start, stop, runOnce, procesarOrg, textoDePedido, VENTANA_MIN, VIGENCIA_HORAS };

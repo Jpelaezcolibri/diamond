@@ -267,3 +267,76 @@ test("los pedidos agrupados de un mismo colega tambien llevan su motivo", () => 
   assert.match(texto, /Poblado.*— el pedido ya tiene más de media hora/);
   assert.match(texto, /Laureles.*— ya le escribimos 2 veces hoy/);
 });
+
+// ── IMPORTANT 1 del review de fin de rama (2026-09-07): el encabezado
+// 🛋️ AMOBLADOS se perdia en el camino REAL de esta bandeja ──────────────
+//
+// avisos-salida.js#textoDePedido reconstruye el mismo aviso que vivo.js#asistir
+// arma en linea, pero antes de este fix pasaba `{ link }` solo -- nunca
+// `carrilAmoblados` -- a alertaAsesor.construir. Cualquier pedido que caiga
+// en el freno de ritmo (exactamente la rafaga, el motivo de ser de este
+// archivo) llegaba disfrazado de aviso de venta. test/alerta-amoblados.test.js
+// no lo detectaba porque le pasa la opcion a mano, sin pasar por un llamador
+// real -- esta prueba ejercita el llamador real.
+const avisosSalida = require("../src/scheduler/avisos-salida");
+const directorio = require("../src/groups/directorio");
+const groupSignalsData = require("../src/data/group-signals");
+
+function pedidoAmoblado(extra = {}) {
+  return {
+    id: "sig-amob-1",
+    group_id: "g1",
+    autor_nombre: "Gustavo Arango",
+    autor_telefono: "141746805670125",
+    texto_original: "Buscamos apartamento Amoblado en el poblado, hasta $8.000.000",
+    operacion: "arriendo",
+    tipo: "apartamento",
+    zona: "El Poblado",
+    precio_max: 8000000,
+    revalidacion: {
+      refs_utiles: ["10319436"],
+      refs_dudosas: [],
+      por_que: "Calza en zona y presupuesto.",
+    },
+    matches: [
+      {
+        fuente: "diamond", ref: "10319436", titulo: "Apartamento Amoblado en Arriendo en El Poblado",
+        zona: "El Poblado", precio: "$7.900.000", operacion: "Arriendo", area: "90m2",
+        habitaciones: 3, puntaje: 79, linkWasi: "https://info.wasi.co/apartamento-amoblado-10319436",
+      },
+    ],
+    politica_motivo: "sin_telefono",
+    ...extra,
+  };
+}
+
+test("textoDePedido: el encabezado de AMOBLADOS SI llega por el camino real de la bandeja de salida", async () => {
+  const telRestaurar = directorio.telefonoDe;
+  const tokenRestaurar = groupSignalsData.asegurarToken;
+  directorio.telefonoDe = async () => null;
+  groupSignalsData.asegurarToken = async () => null;
+  try {
+    const texto = await avisosSalida.textoDePedido({ id: "org-1" }, pedidoAmoblado(), new Map(), null);
+    assert.ok(texto, "tiene que producir un aviso");
+    assert.match(texto, /AMOBLADOS/, "el encabezado se perdia en este camino antes del fix");
+  } finally {
+    directorio.telefonoDe = telRestaurar;
+    groupSignalsData.asegurarToken = tokenRestaurar;
+  }
+});
+
+test("textoDePedido: un pedido de venta no lleva el encabezado de amoblados", async () => {
+  const telRestaurar = directorio.telefonoDe;
+  const tokenRestaurar = groupSignalsData.asegurarToken;
+  directorio.telefonoDe = async () => null;
+  groupSignalsData.asegurarToken = async () => null;
+  try {
+    const senalVenta = pedidoAmoblado({ operacion: "venta" });
+    const texto = await avisosSalida.textoDePedido({ id: "org-1" }, senalVenta, new Map(), null);
+    assert.ok(texto);
+    assert.doesNotMatch(texto, /AMOBLADOS/, "un aviso de venta no se marca");
+  } finally {
+    directorio.telefonoDe = telRestaurar;
+    groupSignalsData.asegurarToken = tokenRestaurar;
+  }
+});
