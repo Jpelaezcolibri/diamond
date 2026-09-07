@@ -699,7 +699,11 @@ async function registrarResultadoRadarComando(input, ctx) {
 
   let pendientes;
   try {
-    pendientes = await groupSignals.pendientesDeAviso(scope.orgId, null);
+    // Mismo pool ANCHO que la version del asesor (ver la nota en
+    // group-signals.js#pendientesDeAviso): lo que salio por DM al colega es
+    // justo de lo que falta saber en que quedo. Sin esto, el admin tampoco
+    // podia cerrar el circuito de mas de la mitad de lo que se movio.
+    pendientes = await groupSignals.pendientesDeAviso(scope.orgId, null, { incluirRespondidas: true });
   } catch (e) {
     console.warn("[comando] No se pudieron leer los avisos pendientes del radar:", e.message);
     return "No pude consultar los pedidos pendientes en este momento.";

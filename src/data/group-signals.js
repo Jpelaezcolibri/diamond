@@ -450,23 +450,59 @@ async function findByWamid(orgId, wamid) {
 // No hace el join contra signal_events aca: esa tabla es del Learning Domain
 // (ver src/data/signal-events.js) y la regla de dependencia es Radar ->
 // Learning Domain, nunca al reves. El cruce lo hace quien llama.
-async function pendientesDeAviso(orgId, advisorId = null, { limite = 20 } = {}) {
+// `incluirRespondidas` (Juan, 2026-09-07) — PENDIENTE DE QUE, EXACTAMENTE.
+//
+// Hay dos preguntas distintas y hasta hoy compartian un solo pool:
+//
+//   a) "¿que pedido puedo aprobar o rechazar?" — ahi una señal que YA salio no
+//      es candidata: aprobarManual devuelve `ya_respondida`. Pool angosto.
+//   b) "¿de que pedido me falta saber en que quedo?" — ahi una señal que salio
+//      por DM al colega es JUSTO la que falta. Pool ancho.
+//
+// BUG REAL. El filtro `.is("respondida_at", null)` se escribio el 2026-08-20 con
+// este comentario: "respondida_at solo lo pisa el camino auto/sombra, asi que en
+// modo asistido esto no cambia nada". Era cierto ese dia. Desde el 2026-09-02 el
+// DM al colega corre EN modo asistido y SI escribe `respondida_at`, asi que el
+// filtro empezo a esconder justo las señales donde mas paso algo.
+//
+// Medido el 2026-09-07 sobre lo que se movio desde el 25 de agosto: 179 señales,
+// de las cuales el pool solo veia 85. Las otras 94 eran invisibles. Cuando
+// Natalia escribio "no le servio" el 5 de septiembre (cinco veces, explicitas),
+// la herramienta le contesto que no encontraba ningun pedido pendiente. En toda
+// la historia de `signal_events` hay 2 filas.
+async function pendientesDeAviso(orgId, advisorId = null, { limite = 20, incluirRespondidas = false } = {}) {
+  const leLlego = (s) => s.enviado_at || (incluirRespondidas && s.respondida_at);
   if (!supabase) {
     return (memory.groupSignals || [])
-      .filter((s) => s.org_id === orgId && s.enviado_at && (!advisorId || s.aviso_advisor_id === advisorId))
+      .filter((s) => s.org_id === orgId && leLlego(s) && (!advisorId || s.aviso_advisor_id === advisorId))
       .slice(-limite);
   }
   let q = supabase
     .from("group_signals")
-    .select("id, texto_original, zona, tipo, operacion, enviado_at, matches, aviso_advisor_id")
-    .eq("org_id", orgId)
-    .not("enviado_at", "is", null)
-    // Un aviso ya publicado (aprobado a mano, Juan 2026-08-20) no es
-    // "pendiente" — respondida_at solo lo pisa el camino auto/sombra, asi
-    // que en modo asistido esto no cambia nada.
-    .is("respondida_at", null);
-  if (advisorId) q = q.eq("aviso_advisor_id", advisorId);
-  q = q.order("enviado_at", { ascending: false }).limit(limite);
+    .select("id, texto_original, zona, tipo, operacion, enviado_at, respondida_at, matches, aviso_advisor_id")
+    .eq("org_id", orgId);
+  if (incluirRespondidas) {
+    // Le llego al colega por cualquiera de las dos vias.
+    q = q.or("enviado_at.not.is.null,respondida_at.not.is.null");
+  } else {
+    q = q.not("enviado_at", "is", null).is("respondida_at", null);
+  }
+  // El DM al colega no le "pertenece" a nadie: sale sin aviso, asi que
+  // `aviso_advisor_id` queda null. Exigir la igualdad ahi habria vuelto a
+  // esconder las 94 señales que este cambio viene a rescatar, asi que en el
+  // pool ancho tambien entran las que no tienen destinatario registrado — son
+  // las de la asesora principal del radar, la unica linea que manda DMs.
+  if (advisorId) {
+    q = incluirRespondidas
+      ? q.or(`aviso_advisor_id.eq.${advisorId},aviso_advisor_id.is.null`)
+      : q.eq("aviso_advisor_id", advisorId);
+  }
+  // En el pool ancho se ordena por created_at: `enviado_at` es null en todas
+  // las que salieron por DM, y ordenar por una columna vacia las manda al
+  // fondo justo cuando son las mas relevantes.
+  q = incluirRespondidas
+    ? q.order("created_at", { ascending: false }).limit(limite)
+    : q.order("enviado_at", { ascending: false }).limit(limite);
   const { data, error } = await q;
   if (error) {
     if (esColumnaFaltante(error)) return [];

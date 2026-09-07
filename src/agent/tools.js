@@ -1142,8 +1142,12 @@ async function consultarRadarGrupos(input, ctx) {
 // herramientas del radar que le preguntan "¿a cual pedido te referis?": sin
 // esto, un pedido que la asesora YA resolvio (aprobo, rechazo o conto en que
 // quedo) le seguiria apareciendo en la lista para desambiguar la proxima vez.
-async function pendientesSinResultado(ctx) {
-  const pendientes = await groupSignals.pendientesDeAviso(ctx.org.id, ctx.advisor.id);
+// `incluirRespondidas` (Juan, 2026-09-07): ver la nota larga en
+// group-signals.js#pendientesDeAviso. Aprobar y rechazar necesitan el pool
+// ANGOSTO (lo que ya salio no se puede aprobar de nuevo); contar en que quedo
+// necesita el ANCHO, porque lo que salio por DM es justo de lo que falta saber.
+async function pendientesSinResultado(ctx, { incluirRespondidas = false } = {}) {
+  const pendientes = await groupSignals.pendientesDeAviso(ctx.org.id, ctx.advisor.id, { incluirRespondidas });
   if (pendientes.length === 0) return pendientes;
   // signalEvents es el Learning Domain — Radar depende de el, nunca al
   // reves, ver src/data/signal-events.js.
@@ -1175,7 +1179,12 @@ async function registrarResultadoRadar(input, ctx) {
   if (!signalId) {
     let pendientes;
     try {
-      pendientes = await pendientesSinResultado(ctx);
+      // POOL ANCHO: incluye lo que salio por DM al colega. Sin esto, el 53% de
+      // lo que se movio era invisible y esta herramienta contestaba "no
+      // encuentro ningun pedido pendiente" a una asesora que estaba diciendo
+      // "no le servio". Es la causa de que signal_events tenga 2 filas en toda
+      // su historia (medido 2026-09-07).
+      pendientes = await pendientesSinResultado(ctx, { incluirRespondidas: true });
     } catch (e) {
       console.warn("[tools] No se pudieron leer los avisos pendientes del radar:", e.message);
       return "No pude consultar los pedidos pendientes en este momento. Decile que lo intente de nuevo en un rato.";
