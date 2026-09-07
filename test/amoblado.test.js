@@ -43,3 +43,15 @@ test("sin datos es null, nunca revienta", () => {
   assert.strictEqual(esAmoblada({}), null);
   assert.strictEqual(esAmoblada({ titulo: "", caracteristicas: null }), null);
 });
+
+test("defects verificados por reviewer 2026-09-07: word boundary y amueblad", () => {
+  // Defecto 1: "no\s+amoblad" sin frontera de palabra confunde "moderno" +
+  // "amoblado" con negacion. Dos casos de fraseologia ordinaria colombiana.
+  assert.strictEqual(esAmoblada({ titulo: "Apartamento moderno amoblado en Laureles" }), true);
+  assert.strictEqual(esAmoblada({ titulo: "Conjunto urbano amoblado cerca al metro" }), true);
+
+  // Defecto 2: "PATRON_NO" no cubre la negacion de "amueblad". Al no encontrar
+  // la negacion, PATRON_SI acierta y devuelve true (lo opuesto de lo pedido).
+  assert.strictEqual(esAmoblada({ titulo: "Apartamento NO amueblado en Sabaneta" }), false);
+  assert.strictEqual(esAmoblada({ titulo: "Apartamento sin amueblar en Envigado" }), false);
+});

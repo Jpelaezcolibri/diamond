@@ -17,8 +17,12 @@
 // "amoblad" cubre amoblado/amoblada/amoblados; "amueblad", la variante que
 // usan algunos colegas. No se incluye "amoblar" (infinitivo): aparece casi
 // siempre dentro de "sin amoblar", que es lo contrario.
+//
+// Las palabras de negacion ("sin", "no") van ancladas con \b (frontera de
+// palabra). Sin esto, "no" en palabras como "moderno" dispara el patron:
+// "Apartamento moderno amoblado" falla como false cuando deberia ser true.
 const PATRON_SI = /amoblad|amueblad/i;
-const PATRON_NO = /sin\s+amoblar|sin\s+amueblar|sin\s+muebles|no\s+amoblad/i;
+const PATRON_NO = /\bsin\s+amoblar|\bsin\s+amueblar|\bsin\s+muebles|\bno\s+amoblad|\bno\s+amueblad/i;
 
 /**
  * @returns true  si el texto dice que esta amoblada
