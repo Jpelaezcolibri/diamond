@@ -245,6 +245,9 @@ test("clasificadorActivo entiende false/0/no y espacios; solo true/1/si/yes lo p
 
 test("un mensaje que llega por lid se liga con buscarPorLid, no por telefono, y guarda remitente_lid", async (t) => {
   delete process.env.RADAR_DM_CLASIFICAR;
+  // Defensa: si la lógica falla, la IA no debe llamarse.
+  _setClientForTests({ messages: { create: async () => { throw new Error("no debia llamarse"); } } });
+  t.after(() => _setClientForTests(null));
   let porLid = null;
   let porTel = false;
   t.mock.method(groupSignals, "buscarPorLid", async (org, lid) => { porLid = lid; return { id: "sig-lid" }; });
