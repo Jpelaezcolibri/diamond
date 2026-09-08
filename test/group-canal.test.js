@@ -332,12 +332,49 @@ test("lo que NO toca WhatsApp sigue disponible con el radar apagado", () => {
 // alerte". Existe SOLO porque la linea es 100% dedicada al radar, sin uso
 // personal (confirmado por Juan) — ver db/migrations/2026-08-21_linea_dm.sql.
 
-test("_esDM reconoce un chat 1 a 1 (@c.us) y lo distingue de un grupo", () => {
+test("_esDM reconoce un chat 1 a 1 por @c.us O por @lid, y lo distingue de todo lo demas", () => {
   const canal = require("../src/channels/whatsapp-group");
   assert.strictEqual(canal._esDM("573001112222@c.us"), true);
+  // Los DM del radar salen a <lid>@lid (politica.js prefiere el lid): la
+  // respuesta del colega vuelve por ese mismo chat (Juan, 2026-09-08).
+  assert.strictEqual(canal._esDM("276467766300904@lid"), true);
   assert.strictEqual(canal._esDM("123456@g.us"), false);
   assert.strictEqual(canal._esDM("status@broadcast"), false);
+  assert.strictEqual(canal._esDM("123@broadcast"), false);
+  assert.strictEqual(canal._esDM("123@newsletter"), false);
+  assert.strictEqual(canal._esDM("573001112222"), false);
   assert.strictEqual(canal._esDM(null), false);
+});
+
+test("_identidadDM separa telefono de lid y nunca mete un lid donde dice telefono", () => {
+  const canal = require("../src/channels/whatsapp-group");
+  assert.deepStrictEqual(canal._identidadDM("573001112222@c.us"), {
+    id: "573001112222@c.us", telefono: "573001112222", lid: null,
+  });
+  assert.deepStrictEqual(canal._identidadDM("276467766300904@lid"), {
+    id: "276467766300904@lid", telefono: null, lid: "276467766300904@lid",
+  });
+  // Un @c.us que NO tiene forma de celular colombiano se guarda igual, pero
+  // sin telefono: no se inventa un dato que despues alguien va a marcar.
+  assert.deepStrictEqual(canal._identidadDM("14155550100@c.us"), {
+    id: "14155550100@c.us", telefono: null, lid: null,
+  });
+});
+
+test("procesarDM le pasa a dm.procesarMensaje la identidad completa, no un telefono fabricado", () => {
+  const codigo = soloCodigo(leer("src/channels/whatsapp-group.js"));
+  const inicio = codigo.indexOf("async function procesarDM");
+  const fin = codigo.indexOf("router.post(\"/webhook/grupos\"");
+  const cuerpo = codigo.slice(inicio, fin);
+  assert.ok(cuerpo.includes("identidadDM(ev.chatId)"), "procesarDM tiene que resolver la identidad");
+  assert.ok(cuerpo.includes("remitenteLid:"), "y pasar el lid por separado");
+  assert.ok(!cuerpo.includes("remitenteTelefono: soloDigitos(ev.chatId)"), "nunca mas un telefono sacado del chatId a ciegas");
+});
+
+test("la cola del DM se arma con el chatId crudo, para que un lid y un telefono con los mismos digitos no se pisen", () => {
+  const codigo = soloCodigo(leer("src/channels/whatsapp-group.js"));
+  assert.ok(codigo.includes("enqueue(`dm:${ev.chatId}`"), "la clave de la cola es el chatId con su sufijo");
+  assert.ok(!codigo.includes("enqueue(`dm:${soloDigitos(ev.chatId)}`"));
 });
 
 test("la invariante ahora deja pasar DOS formas de chat (grupo o DM), nunca cualquier otra", () => {
