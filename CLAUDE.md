@@ -40,7 +40,7 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
   El clasificador de citas (`RADAR_DM_CLASIFICAR`) queda **apagado** — fase 1
   es solo leer. **No hay backfill:** lo que llegó antes de este cambio no
   quedó ni en log, el panel arranca vacío. Suite completa en verde
-  (1716/1716, `npm test` 2026-09-08). La migración
+  (1723/1723, `npm test` 2026-09-08, despues de la revision final). La migración
   `2026-09-08_linea_dm_lid.sql` (columna `remitente_lid` en `linea_dm`) está
   **PENDIENTE de correr en Supabase** — la corre Juan a mano en el SQL
   editor del proyecto `qwqmlmyyswpdypdfvmiv`; el código se degrada solo si
