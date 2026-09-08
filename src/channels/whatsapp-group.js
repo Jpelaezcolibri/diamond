@@ -27,12 +27,15 @@
 // WhatsApp. La unica defensa honesta es arquitectonica:
 //
 //   1. Se descarta cualquier chat que no sea un grupo (@g.us) o un mensaje
-//      directo (@c.us), en la primera linea, antes de cualquier log, consulta
-//      o escritura. El DM se habilito el 2026-08-21 SOLO porque esta linea es
-//      100% dedicada al radar, sin uso personal (Juan, confirmado ese dia) —
-//      ver la nota completa junto a INVARIANTE 1 mas abajo y
-//      db/migrations/2026-08-21_linea_dm.sql. Cualquier OTRO tipo de chat
-//      (broadcast, status, canales) sigue sin existir en ningun lado.
+//      directo (@c.us o @lid), en la primera linea, antes de cualquier log,
+//      consulta o escritura. El DM se habilito el 2026-08-21 SOLO porque esta
+//      linea es 100% dedicada al radar, sin uso personal (Juan, confirmado
+//      ese dia); el direccionamiento @lid se sumo el 2026-09-08 porque es por
+//      donde salen los DM del radar y por donde vuelven las respuestas — sin
+//      el, el inbox estaba vacio por diseno. Ver la nota completa junto a
+//      INVARIANTE 1 mas abajo y db/migrations/2026-08-21_linea_dm.sql y
+//      2026-09-08_linea_dm_lid.sql. Cualquier OTRO tipo de chat (broadcast,
+//      status, canales) sigue sin existir en ningun lado.
 //   2. Se descarta cualquier grupo que no este en la lista blanca. El DM no
 //      tiene lista blanca — no hay "grupos" que habilitar en un chat 1 a 1 —
 //      pero tampoco responde nada (ver src/groups/dm.js): solo lee, clasifica
@@ -223,12 +226,41 @@ function esAnteriorAlCorte(tsMs, sesion, grupo) {
 }
 
 const esGrupo = (chatId) => typeof chatId === "string" && chatId.endsWith("@g.us");
-// Chat 1 a 1 de WhatsApp (protocolo NOWEB de WAHA). Distinto de @g.us
-// (grupo) y de cualquier otro tipo de chat (broadcast, status, etc.), que
-// sigue sin procesarse — ver INVARIANTE 1 mas abajo, que ahora deja pasar
-// DOS formas de chat en vez de una, nunca "cualquier cosa".
-const esDM = (chatId) => typeof chatId === "string" && chatId.endsWith("@c.us");
+// Chat 1 a 1 de WhatsApp (protocolo NOWEB de WAHA). Dos direccionamientos
+// (Juan, 2026-09-08): `<telefono>@c.us` cuando WhatsApp expone el numero, y
+// `<lid>@lid` cuando lo oculta. El segundo importa porque es POR DONDE SALEN
+// los DM del radar (politica.js#decidirDm prefiere el lid siempre que
+// exista: 82 de 82 desde el 4-sep) — y la respuesta del colega vuelve por
+// el mismo chat. Hasta hoy se descartaba aca, en silencio: linea_dm tenia 0
+// filas en toda su historia. Distinto de @g.us (grupo) y de cualquier otro
+// tipo de chat (broadcast, status, canales), que sigue sin procesarse — ver
+// INVARIANTE 1 mas abajo.
+const esDM = (chatId) => typeof chatId === "string" && (chatId.endsWith("@c.us") || chatId.endsWith("@lid"));
 const soloDigitos = (jid) => String(jid || "").replace(/\D/g, "") || null;
+
+// QUIEN escribe en un chat 1 a 1, separado en lo que ES: un telefono si vino
+// por @c.us; un lid si vino por @lid. Nunca los dos, y nunca un lid
+// disfrazado de telefono — es el error que
+// db/migrations/2026-09-04_dm_destinatario.sql advierte, y que hasta hoy
+// `soloDigitos(ev.chatId)` cometia a ciegas. `id` es el chatId crudo, con
+// sufijo: la unica clave que no confunde a nadie.
+//
+// Un @c.us pone SIEMPRE sus digitos en `telefono`, sin filtrar por forma de
+// celular colombiano (revision final, 2026-09-08). Un chat @c.us ES una
+// direccion telefonica —fijo, extranjero o celular—, asi que guardar sus
+// digitos es honesto. Filtrarlos dejaba la fila con las DOS columnas en null
+// para el caso mas normal que hay despues del celular: una inmobiliaria con
+// WhatsApp Business sobre un fijo (57604...). Y una fila sin identidad no es
+// un dato menos: claveHilo devuelve null y el CRM parte la conversacion en
+// una tarjeta por mensaje, y en fase 2 ultimaCitaAlertada devuelve siempre
+// null, o sea que el dedup del aviso nunca dispara y sale una alerta por
+// mensaje. `esCelularColombiano` sigue donde sirve: en el camino de ENVIO
+// (waha.enviarDm), donde marcar un numero que no existe si cuesta.
+function identidadDM(chatId) {
+  const id = String(chatId || "");
+  if (id.endsWith("@lid")) return { id, telefono: null, lid: id };
+  return { id, telefono: id.endsWith("@c.us") ? soloDigitos(id) : null, lid: null };
+}
 
 // Procesa el mensaje despues de haber respondido 200. WAHA reintenta si el
 // webhook tarda, y clasificar + cruzar + publicar no cabe en ese plazo.
@@ -314,10 +346,13 @@ async function procesar(org, ev, grupo, sesion) {
 // la nota de diseno completa en src/groups/dm.js. En un chat 1 a 1 `from` ES
 // el JID de quien escribe (no hay "participant" como en un grupo).
 async function procesarDM(org, ev, sesion) {
+  const quien = identidadDM(ev.chatId);
   const mensaje = {
     waMessageId: ev.waMessageId,
     sesion: ev.sesion,
-    remitenteTelefono: soloDigitos(ev.chatId),
+    remitenteId: quien.id,
+    remitenteTelefono: quien.telefono,
+    remitenteLid: quien.lid,
     remitenteNombre: ev.autorNombre,
     texto: ev.texto,
     fechaMensaje: typeof ev.tsMs === "number" ? new Date(ev.tsMs).toISOString() : null,
@@ -339,6 +374,7 @@ router.post("/webhook/grupos", async (req, res) => {
   // respondio al numero de natalia") SOLO porque esta linea es 100% dedicada
   // al radar, sin uso personal — ver la nota completa en
   // db/migrations/2026-08-21_linea_dm.sql antes de tocar esto.
+  // ... Un DM llega por @c.us o por @lid (2026-09-08); los dos entran.
   if (req.body?.event !== "message" || !ev.waMessageId || (!esGrupo(ev.chatId) && !esDM(ev.chatId))) {
     return res.json({ ok: true });
   }
@@ -359,7 +395,7 @@ router.post("/webhook/grupos", async (req, res) => {
       if (yaVisto(ev.waMessageId)) return res.json({ ok: true });
 
       res.json({ ok: true });
-      enqueue(`dm:${soloDigitos(ev.chatId)}`, () =>
+      enqueue(`dm:${ev.chatId}`, () =>
         procesarDM(org, ev, sesionDM).catch((e) => {
           // Nunca se registra el contenido del mensaje en el log de error.
           console.error("[grupos] procesando DM:", e.message);
@@ -446,6 +482,7 @@ module.exports = router;
 module.exports._normalizar = normalizar;
 module.exports._esGrupo = esGrupo;
 module.exports._esDM = esDM;
+module.exports._identidadDM = identidadDM;
 module.exports._yaVisto = yaVisto;
 module.exports._esAnteriorAlCorte = esAnteriorAlCorte;
 module.exports._metricas = metricas;

@@ -19,6 +19,12 @@ const { _setClientForTests } = require("../src/lib/anthropic");
 // ANTES del require, no en un beforeEach.
 process.env.RADAR_VISITAS_ALERTA_TO = "573000000000";
 
+// El clasificador arranca APAGADO por defecto (fase 1 = leer, Juan
+// 2026-09-08). Los tests de clasificacion/alerta lo prenden explicitamente;
+// los que prueban "apagado" lo borran. Se lee en cada llamada, asi que
+// alcanza con setear la variable antes de procesar.
+process.env.RADAR_DM_CLASIFICAR = "true";
+
 const dm = require("../src/groups/dm");
 const groupSignals = require("../src/data/group-signals");
 const lineaDm = require("../src/data/linea-dm");
@@ -26,7 +32,8 @@ const mensajeAsesor = require("../src/lib/mensaje-asesor");
 
 const ORG = { id: "org-1" };
 const mensaje = (extra = {}) => ({
-  waMessageId: "wamid-1", sesion: "RADA-NATALIA", remitenteTelefono: "573001112222",
+  waMessageId: "wamid-1", sesion: "RADA-NATALIA",
+  remitenteId: "573001112222@c.us", remitenteTelefono: "573001112222", remitenteLid: null,
   remitenteNombre: "Felipe Velez", texto: "hola", fechaMensaje: "2026-08-21T10:00:00Z", ...extra,
 });
 
@@ -44,12 +51,15 @@ function veredicto(extra = {}) {
 }
 
 test.beforeEach((t) => {
+  process.env.RADAR_DM_CLASIFICAR = "true";
   t.mock.method(groupSignals, "buscarPorTelefono", async () => null);
+  t.mock.method(groupSignals, "buscarPorLid", async () => null);
   t.mock.method(lineaDm, "create", async () => ({ mensaje: { id: "dm-1", created_at: "2026-08-21T10:00:00Z" }, duplicado: false }));
   t.mock.method(lineaDm, "historialDe", async () => []);
   t.mock.method(lineaDm, "guardarClasificacion", async () => true);
   t.mock.method(lineaDm, "marcarAlertado", async () => true);
   t.mock.method(lineaDm, "ultimaCitaAlertada", async () => null);
+  t.mock.method(lineaDm, "faltaColumnaLid", () => false);
 });
 
 test("un mensaje duplicado no se vuelve a procesar", async (t) => {
@@ -200,4 +210,119 @@ test("el pedido de grupo del mismo telefono viaja en la alerta cuando se resuelv
 test("clasificarAvance sin mensajes no llama a la IA", async () => {
   const r = await dm.clasificarAvance([], new Date());
   assert.strictEqual(r, null);
+});
+
+// ── Fase 1: leer, no interpretar (Juan, 2026-09-08) ──────────────────────
+
+test("con RADAR_DM_CLASIFICAR apagado se guarda el mensaje y NO se llama a la IA ni se alerta", async (t) => {
+  delete process.env.RADAR_DM_CLASIFICAR;
+  let iaLlamada = false;
+  _setClientForTests({ messages: { create: async () => { iaLlamada = true; throw new Error("no debia llamarse"); } } });
+  t.after(() => _setClientForTests(null));
+  let seEnvio = false;
+  t.mock.method(mensajeAsesor, "enviarYRegistrar", async () => { seEnvio = true; return { ok: true }; });
+  const guardarClasif = t.mock.method(lineaDm, "guardarClasificacion", async () => true);
+
+  const r = await dm.procesarMensaje(ORG, mensaje());
+
+  assert.strictEqual(r.resultado, "guardado");
+  assert.strictEqual(r.dmId, "dm-1");
+  assert.strictEqual(iaLlamada, false);
+  assert.strictEqual(seEnvio, false);
+  assert.strictEqual(guardarClasif.mock.callCount(), 0);
+});
+
+test("clasificadorActivo entiende false/0/no y espacios; solo true/1/si/yes lo prenden", () => {
+  const casos = [
+    ["true", true], ["TRUE", true], [" 1 ", true], ["si", true], ["yes", true],
+    ["false", false], ["0", false], ["no", false], ["", false], [undefined, false], ["cualquier cosa", false],
+  ];
+  for (const [valor, esperado] of casos) {
+    if (valor === undefined) delete process.env.RADAR_DM_CLASIFICAR;
+    else process.env.RADAR_DM_CLASIFICAR = valor;
+    assert.strictEqual(dm.clasificadorActivo(), esperado, `RADAR_DM_CLASIFICAR=${JSON.stringify(valor)}`);
+  }
+});
+
+test("un mensaje que llega por lid se liga con buscarPorLid, no por telefono, y guarda remitente_lid", async (t) => {
+  delete process.env.RADAR_DM_CLASIFICAR;
+  // Defensa: si la lógica falla, la IA no debe llamarse.
+  _setClientForTests({ messages: { create: async () => { throw new Error("no debia llamarse"); } } });
+  t.after(() => _setClientForTests(null));
+  let porLid = null;
+  let porTel = false;
+  t.mock.method(groupSignals, "buscarPorLid", async (org, lid) => { porLid = lid; return { id: "sig-lid" }; });
+  t.mock.method(groupSignals, "buscarPorTelefono", async () => { porTel = true; return null; });
+  let creado = null;
+  t.mock.method(lineaDm, "create", async (org, fields) => { creado = fields; return { mensaje: { id: "dm-9", created_at: "2026-09-08T10:00:00Z" }, duplicado: false }; });
+
+  await dm.procesarMensaje(ORG, mensaje({ remitenteId: "276467766300904@lid", remitenteTelefono: null, remitenteLid: "276467766300904@lid" }));
+
+  assert.strictEqual(porLid, "276467766300904@lid");
+  assert.strictEqual(porTel, false);
+  assert.strictEqual(creado.remitenteLid, "276467766300904@lid");
+  assert.strictEqual(creado.remitenteTelefono, null);
+  assert.strictEqual(creado.senalId, "sig-lid");
+});
+
+// ── Guard: no clasificar si falta la columna (revision final, 2026-09-08) ──
+//
+// Escenario real: alguien prende RADAR_DM_CLASIFICAR en Railway (fase 2)
+// mientras db/migrations/2026-09-08_linea_dm_lid.sql sigue pendiente. Sin
+// esto, ultimaCitaAlertada() devuelve null SIEMPRE (nunca encuentra el hilo
+// por lid) => el dedup de alertas nunca frena => sale UNA ALERTA POR CADA
+// MENSAJE del hilo, por la linea OFICIAL de Sofi (cap de ~300 msj/mes). Un
+// colega coordinando una visita en 8 mensajes son 8 alertas: esto no
+// degrada, inunda.
+
+test("con la columna lid faltante, el clasificador NUNCA se llama y no sale ninguna alerta", async (t) => {
+  t.mock.method(lineaDm, "faltaColumnaLid", () => true);
+  let iaLlamada = false;
+  _setClientForTests({ messages: { create: async () => { iaLlamada = true; throw new Error("no debia llamarse"); } } });
+  t.after(() => _setClientForTests(null));
+  let seEnvio = false;
+  t.mock.method(mensajeAsesor, "enviarYRegistrar", async () => { seEnvio = true; return { ok: true }; });
+  const historial = t.mock.method(lineaDm, "historialDe", async () => []);
+
+  const r = await dm.procesarMensaje(ORG, mensaje());
+
+  assert.strictEqual(r.resultado, "guardado_sin_columna");
+  assert.strictEqual(r.dmId, "dm-1");
+  assert.strictEqual(iaLlamada, false);
+  assert.strictEqual(seEnvio, false);
+  assert.strictEqual(historial.mock.callCount(), 0);
+});
+
+test("con la columna lid faltante y el clasificador APAGADO, se sigue viendo el 'guardado' normal de fase 1", async (t) => {
+  delete process.env.RADAR_DM_CLASIFICAR;
+  t.mock.method(lineaDm, "faltaColumnaLid", () => true);
+  const r = await dm.procesarMensaje(ORG, mensaje());
+  assert.strictEqual(r.resultado, "guardado");
+});
+
+test("con la columna lid presente, el clasificador prendido sigue funcionando normal", async (t) => {
+  t.mock.method(lineaDm, "faltaColumnaLid", () => false);
+  mockVeredicto(t, veredicto({ hay_avance: true, tipo: "agendando", resumen: "coordinando" }));
+  let seEnvio = false;
+  t.mock.method(mensajeAsesor, "enviarYRegistrar", async () => { seEnvio = true; return { ok: true }; });
+
+  const r = await dm.procesarMensaje(ORG, mensaje());
+
+  assert.strictEqual(r.resultado, "alertado");
+  assert.strictEqual(seEnvio, true);
+});
+
+test("con el clasificador prendido, el hilo y el dedup se consultan por la identidad (lid), no por telefono", async (t) => {
+  process.env.RADAR_DM_CLASIFICAR = "true";
+  mockVeredicto(t, veredicto({ hay_avance: true, tipo: "agendando", resumen: "coordinando" }));
+  t.mock.method(mensajeAsesor, "enviarYRegistrar", async () => ({ ok: true }));
+  let identidadHilo = null;
+  let identidadDedup = null;
+  t.mock.method(lineaDm, "historialDe", async (org, identidad) => { identidadHilo = identidad; return []; });
+  t.mock.method(lineaDm, "ultimaCitaAlertada", async (org, identidad) => { identidadDedup = identidad; return null; });
+
+  await dm.procesarMensaje(ORG, mensaje({ remitenteId: "276467766300904@lid", remitenteTelefono: null, remitenteLid: "276467766300904@lid" }));
+
+  assert.deepStrictEqual(identidadHilo, { telefono: null, lid: "276467766300904@lid" });
+  assert.deepStrictEqual(identidadDedup, { telefono: null, lid: "276467766300904@lid" });
 });

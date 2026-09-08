@@ -352,36 +352,39 @@ export default async function GruposPage() {
         .filter((f) => f.entrada > 0 || f.salida > 0)
     : [];
 
-  // Inbox de la línea vinculada y "Posibles ventas" (Juan, 2026-08-21): mismo
-  // criterio de admin-only que el resto de "Escucha en vivo" — es la misma
-  // línea sensible, no tarea diaria de un asesor. Ambas consultas se
-  // degradan solas si las migraciones del 2026-08-21 todavía no corrieron.
-  const [dmRes, ventasRes] = admin
-    ? await Promise.all([
-        fetchSafe<DmMensaje>(
-          supabase
-            .from("linea_dm")
-            .select("id, remitente_telefono, remitente_nombre, texto, created_at, tiene_cita, avance_tipo, cita_fecha_hora_iso, senal_id")
-            .order("created_at", { ascending: false })
-            .limit(300),
-          "grupos:linea_dm"
-        ),
-        fetchSafe<PosibleVenta>(
-          supabase
-            .from("visita_venta_alertas")
-            .select("id, ref, visita_quien, visita_origen, visita_fecha_hora_iso, alertado_at, estado")
-            .order("alertado_at", { ascending: false })
-            .limit(200),
-          "grupos:visita_venta_alertas"
-        ),
-      ])
-    : [null, null];
+  // Inbox de la línea: lo ve TODO el equipo (Juan, 2026-09-08). Seguimiento
+  // de propiedades es trabajo diario de la asesora que atiende la línea, no
+  // una decisión sobre la privacidad de nadie — mismo criterio que
+  // /api/grupos/venta. La política RLS "team read" ya lo permite.
+  const dmRes = await fetchSafe<DmMensaje>(
+    supabase
+      .from("linea_dm")
+      .select("id, remitente_telefono, remitente_lid, remitente_nombre, texto, created_at, tiene_cita, avance_tipo, cita_fecha_hora_iso, senal_id")
+      .order("created_at", { ascending: false })
+      .limit(300),
+    "grupos:linea_dm"
+  );
 
-  // Pedido original de cada hilo de DM, resuelto via group_signals.senal_id
-  // (un solo viaje a la base para todos los hilos, no uno por hilo).
+  // "Posibles ventas" sigue admin-only: son cifras de toda la organización.
+  const ventasRes = admin
+    ? await fetchSafe<PosibleVenta>(
+        supabase
+          .from("visita_venta_alertas")
+          .select("id, ref, visita_quien, visita_origen, visita_fecha_hora_iso, alertado_at, estado")
+          .order("alertado_at", { ascending: false })
+          .limit(200),
+        "grupos:visita_venta_alertas"
+      )
+    : null;
+
+  // Pedido original, fecha del DM y propiedad ofrecida de cada hilo, via
+  // group_signals.senal_id (un solo viaje a la base para todos los hilos).
+  // La consulta sigue pasando por mias(): un asesor ve el pedido solo si la
+  // señal es suya; el hilo se ve igual, con "sin pedido ligado".
   const dmMensajes = dmRes?.data || [];
   const idsSeñalDm = [...new Set(dmMensajes.map((m) => m.senal_id).filter(Boolean))] as string[];
-  const pedidoPorSeñal = new Map<string, string | null>();
+  type SeñalHilo = { id: string; texto_original: string | null; respondida_at: string | null; respuesta_refs: string[] | null };
+  const señalPorId = new Map<string, SeñalHilo>();
   if (idsSeñalDm.length > 0) {
     // select("*") y no una lista de columnas: con una lista angosta el
     // helper generico de mias() dispara TS2589 (no logra resolver el tipo
@@ -390,14 +393,41 @@ export default async function GruposPage() {
     const { data: señales } = await mias(
       supabase.from("group_signals").select("*").in("id", idsSeñalDm)
     );
-    for (const s of (señales || []) as { id: string; texto_original: string | null }[]) {
-      pedidoPorSeñal.set(s.id, s.texto_original);
+    for (const s of (señales || []) as SeñalHilo[]) señalPorId.set(s.id, s);
+  }
+
+  // La propiedad que se le ofreció: el primer ref de respuesta_refs (lo que
+  // de verdad salió en el DM, no todo `matches`). Título/link se leen de
+  // `properties` al mostrar, nunca se arrastran: precio y disponibilidad
+  // pueden haber cambiado.
+  const refsDm = [...new Set([...señalPorId.values()].map((s) => s.respuesta_refs?.[0]).filter(Boolean))] as string[];
+  const propiedadDmPorRef = new Map<string, { ref: string; titulo: string | null; link: string | null }>();
+  if (refsDm.length > 0) {
+    const { data: props } = await supabase.from("properties").select("ref, titulo, link").in("ref", refsDm);
+    for (const p of props || []) {
+      propiedadDmPorRef.set(p.ref as string, { ref: p.ref as string, titulo: p.titulo as string | null, link: p.link as string | null });
     }
   }
-  const dmConPedido: DmMensaje[] = dmMensajes.map((m) => ({
-    ...m,
-    pedido_original: m.senal_id ? pedidoPorSeñal.get(m.senal_id) ?? null : null,
-  }));
+
+  const dmConPedido: DmMensaje[] = dmMensajes.map((m) => {
+    const s = m.senal_id ? señalPorId.get(m.senal_id) : undefined;
+    const ref = s?.respuesta_refs?.[0] ?? null;
+    return {
+      ...m,
+      pedido_original: s?.texto_original ?? null,
+      pedido_respondida_at: s?.respondida_at ?? null,
+      propiedad: ref ? propiedadDmPorRef.get(ref) ?? { ref, titulo: null, link: null } : null,
+      // "Hay señal ligada, pero no la puedo ver" es un estado distinto de "no
+      // hay señal ligada", y el panel los mostraba iguales (revisión final,
+      // 2026-09-08). Las señales del radar en vivo se persisten con el
+      // advisor_id de la dueña de la línea, así que para cualquier otra
+      // asesora no-admin `señalPorId` sale vacío y TODOS los hilos decían
+      // "sin pedido ligado" — culpando al dato cuando lo que falta es
+      // permiso. El aislamiento de mias() no se toca: solo se deja de mentir
+      // sobre por qué.
+      pedido_restringido: Boolean(m.senal_id) && !s,
+    };
+  });
 
   // Título/link de cada propiedad de "Posibles ventas" — se lee de
   // `properties`, no se arrastra desde el aviso: precio y disponibilidad
@@ -533,12 +563,35 @@ export default async function GruposPage() {
       {dmManualRes.hasError && <ErrorBanner message={dmManualRes.message} />}
       {reenvioManualRes.hasError && <ErrorBanner message={reenvioManualRes.message} />}
 
+      {/* Inbox de la línea -- lo ve todo el equipo (Juan, 2026-09-08). Es el
+          panel de seguimiento de propiedades: cada hilo es colega + pedido +
+          propiedad ofrecida. Las columnas de las fases 2-3 ya están, en gris. */}
+      <section>
+        <div className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white">
+          <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-4 py-3">
+            <h2
+              className="font-display text-sm font-bold text-slate-900"
+              title="Respuestas de colegas a los DM del radar, por hilo. Solo lectura: nadie responde desde acá. Los mensajes se guardan desde el 2026-09-08."
+            >
+              Inbox de la línea
+            </h2>
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-500">
+              {dmConPedido.length} mensaje{dmConPedido.length === 1 ? "" : "s"}
+            </span>
+          </div>
+          <div className="max-h-96 overflow-y-auto">
+            {dmRes.hasError && <ErrorBanner message={dmRes.message} />}
+            <LineaDmInbox mensajes={dmConPedido} embebido />
+          </div>
+        </div>
+      </section>
+
       {/* Atención hoy -- solo admin (Juan, 2026-08-21: "pasa el inbox y las
           posibles ventas pra la parte superior... para tener mejor acceso"):
-          siguen arriba, pero en tres tarjetas lado a lado con scroll propio
-          en vez de tres listas apiladas a lo largo. */}
+          siguen arriba, pero en tarjetas lado a lado con scroll propio en vez
+          de listas apiladas a lo largo. */}
       {admin && (
-        <section className="grid gap-4 lg:grid-cols-3">
+        <section className="grid gap-4 lg:grid-cols-2">
           <div className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white">
             <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-4 py-3">
               <h2
@@ -558,24 +611,6 @@ export default async function GruposPage() {
             <div className="max-h-80 overflow-y-auto">
               {ventasRes?.hasError && <ErrorBanner message={ventasRes.message} />}
               <PosiblesVentas ventas={ventas} embebido />
-            </div>
-          </div>
-
-          <div className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white">
-            <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-4 py-3">
-              <h2
-                className="font-display text-sm font-bold text-slate-900"
-                title="Mensajes directos (no de grupo) que le llegan a la línea vinculada. Solo lectura: nadie responde desde acá."
-              >
-                Inbox de la línea
-              </h2>
-              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-500">
-                {dmConPedido.length} mensaje{dmConPedido.length === 1 ? "" : "s"}
-              </span>
-            </div>
-            <div className="max-h-80 overflow-y-auto">
-              {dmRes?.hasError && <ErrorBanner message={dmRes.message} />}
-              <LineaDmInbox mensajes={dmConPedido} embebido />
             </div>
           </div>
 

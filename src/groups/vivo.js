@@ -1133,15 +1133,18 @@ async function aprobarManual(org, signalId) {
   if (!envio || !envio.ok) return { resultado: "error_envio", error: envio && envio.error };
 
   const refs = publicables.map((m) => m.ref).filter(Boolean);
-  // A QUIEN salio (Juan, 2026-09-04). Mismo patron que asistir /
-  // responderPorDmManual en este archivo. Aca NO hay identificador crudo: la
-  // columna group_signals.autor_telefono guarda soloDigitos(autorId), o sea
-  // que el sufijo (@lid o @c.us) ya se perdio al dar de alta la señal. Se
-  // guarda lo que hay, y por eso la migracion no promete que sea un lid.
+  // A QUIEN salio (Juan, 2026-09-04; corregido 2026-09-08). destinoLid se
+  // arma con lidColega, NO con signal.autor_telefono a secas: lidColega solo
+  // existe cuando el DM de verdad salio por lid (ver mas arriba), asi que
+  // esto deja de escribir un lid falso cuando el envio fue por telefono. Y
+  // cuando SI hubo lid, se le agrega el sufijo `@lid` a mano -- sin el,
+  // group-signals.js#buscarPorLid (que compara por IGUALDAD EXACTA contra el
+  // identificador crudo que trae el mensaje entrante, que siempre llega con
+  // su sufijo) nunca encuentra esta señal.
   await groupSignals.marcarRespondida(org.id, signal.id, {
     texto, wamid: envio.wamid, modo: "auto", refs,
     destinoTelefono: telefonoColega || null,
-    destinoLid: signal.autor_telefono || null,
+    destinoLid: lidColega ? `${lidColega}@lid` : null,
   });
 
   // LA DECISION QUEDA REGISTRADA, IGUAL QUE EN LOS OTROS DOS CAMINOS
@@ -1334,13 +1337,16 @@ async function responderPorDmManual(org, signalId, { sesion = null, refs = null 
   // enviado, que puede ser un subconjunto de lo elegido si algo no paso la
   // compuerta (ver `descartados` mas abajo).
   const refsEnviadas = publicables.map((m) => m.ref).filter(Boolean);
-  // A QUIEN salio (Juan, 2026-09-04). signal.autor_telefono son los digitos del
-  // identificador del autor sin su sufijo (ver la nota en aprobarManual): puede
-  // ser un lid o un telefono y desde aca no hay como distinguirlos.
+  // A QUIEN salio (Juan, 2026-09-04; corregido 2026-09-08). Mismo arreglo
+  // que aprobarManual: destinoLid sale de lidColega (solo existe cuando el
+  // DM de verdad salio por lid), no de signal.autor_telefono a secas, y se
+  // le agrega el sufijo `@lid` -- sin el, group-signals.js#buscarPorLid (que
+  // compara por IGUALDAD EXACTA contra el identificador crudo del mensaje
+  // entrante, que siempre llega con su sufijo) nunca encuentra esta señal.
   await groupSignals.marcarRespondida(org.id, signal.id, {
     texto, wamid: envioDm.wamid, modo: "auto", refs: refsEnviadas,
     destinoTelefono: telefonoColega || null,
-    destinoLid: signal.autor_telefono || null,
+    destinoLid: lidColega ? `${lidColega}@lid` : null,
   });
   // Distingue en la señal misma que esto lo mando una PERSONA desde el CRM
   // (auditoria 2026-09-02): respuesta_modo='auto' lo comparten el DM

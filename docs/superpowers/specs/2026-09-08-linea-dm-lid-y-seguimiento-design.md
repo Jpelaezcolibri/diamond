@@ -245,16 +245,50 @@ Todos en `test/`, con el patrón de mocks del repo (`memory` sin Supabase):
 
 ## 9. Verificación en producción, el día del despliegue
 
-1. Correr la migración y confirmarla por REST (`select remitente_lid from
-   linea_dm limit 1` no devuelve 42703).
-2. Desplegar con `RADAR_DM_CLASIFICAR` ausente (= apagado).
-3. Esperar la primera respuesta real de un colega. Confirmar: fila en
-   `linea_dm` con `remitente_lid` y `senal_id` no nulos; el hilo aparece en
-   `/grupos` con el pedido y la ref.
-4. Si en 48 h no entra ninguna fila: mirar los eventos crudos de WAHA para
-   ver con qué sufijo llegan las respuestas. Es el único supuesto no probado
-   de esta spec.
-5. Actualizar el estado del CLAUDE.md (sección 2) y la memoria.
+**Estado a 2026-09-08 (cierre de Task 6): código y documentación listos, en
+la rama `linea-dm-lid`, sin mergear a `main` ni desplegar. Nada de esta
+sección se ha probado en producción todavía.**
+
+Lo único verificado hoy: la suite completa del bot en verde (`npm test`,
+1716/1716, 0 fallos) y el hallazgo de formato en
+`group_signals.respuesta_destino_lid` (ver más abajo) contra la Supabase de
+producción por REST — de solo lectura, no cambia nada.
+
+Pasos que quedan pendientes, en orden, y quién los hace:
+
+1. **Migración** — Correr `db/migrations/2026-09-08_linea_dm_lid.sql` en el
+   SQL editor de Supabase y confirmarla por REST (`select remitente_lid from
+   linea_dm limit 1` no debe devolver `42703`). **Pendiente — la corre
+   Juan**, no Claude Code: no se ejecuta SQL contra producción desde acá.
+2. **Despliegue** — `git push origin main` (o el merge que Juan decida) con
+   `RADAR_DM_CLASIFICAR` ausente (= apagado). **Pendiente — lo decide y lo
+   corre Juan**, no desde esta rama de trabajo.
+3. **Primera respuesta real** — Esperar a que un colega conteste un DM del
+   radar. Confirmar: fila en `linea_dm` con `remitente_lid` y `senal_id` no
+   nulos; el hilo aparece en `/grupos` con el pedido y la ref. **Pendiente**,
+   depende de 1 y 2.
+4. **Ventana de 48 h** — Si no entra ninguna fila, mirar los eventos crudos
+   de WAHA para ver con qué sufijo llegan las respuestas de un colega al que
+   se le mandó DM. Sigue siendo el único supuesto no probado de esta spec:
+   que la respuesta del colega llegue etiquetada `@lid`.
+5. **Actualizar el estado** — Hecho para esta fase: CLAUDE.md (sección 2) ya
+   documenta el trabajo, con la migración marcada pendiente. Falta la
+   actualización que corresponde a los pasos 1-4 una vez ocurran de verdad
+   (migración corrida, desplegado, primera fila real o resultado de la
+   ventana de 48 h).
+
+**Hallazgo adicional de la revisión (no estaba en el plan original):**
+`group_signals.respuesta_destino_lid` se escribe hoy con dos formatos según
+el camino de escritura — `src/groups/vivo.js:657` (flujo automático) guarda
+el lid crudo CON sufijo `@lid`; `vivo.js:1144` y `:1343` (aprobación manual y
+DM manual desde el CRM) guardan solo dígitos, SIN sufijo. `buscarPorLid`
+compara por igualdad exacta, así que una señal resuelta por un camino manual
+nunca se va a poder ligar a la respuesta que llegue. Verificado por REST
+contra producción el 2026-09-08: 84 de 84 filas tienen el sufijo, todas del
+camino automático — el bug es latente, no activo hoy — pero producción corre
+en `GRUPOS_RESPUESTA_MODO=asistido`, que es justo el modo de los caminos
+manuales. Decisión pendiente de Juan: normalizar el formato en escritura o
+en lectura, y si se hace antes o después de este despliegue.
 
 ## 10. Fuera de alcance
 

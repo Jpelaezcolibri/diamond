@@ -142,4 +142,14 @@ app.listen(config.port, () => {
   // pudo capturar como visita agendada, ¿cual propiedad ya no esta
   // disponible? "quiero tener el control de las visitas y ventas".
   if (config.supabaseUrl) require("./scheduler/visitas-venta").start();
+  // Inbox de la linea: dice al arrancar si el clasificador esta prendido, como
+  // hacen los otros carriles — un interruptor que no se ve es uno que se olvida.
+  if (config.supabaseUrl) {
+    const { clasificadorActivo } = require("./groups/dm");
+    console.log(
+      clasificadorActivo()
+        ? "[linea-dm] clasificador de avances PRENDIDO — fase 2, alerta citas"
+        : "[linea-dm] clasificador apagado — fase 1, solo lectura (RADAR_DM_CLASIFICAR)"
+    );
+  }
 });

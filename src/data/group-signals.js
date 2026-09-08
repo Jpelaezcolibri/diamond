@@ -909,30 +909,66 @@ async function dmsHoyLinea(orgId, desdeIso) {
   return data.length;
 }
 
-// El pedido de grupo MAS RECIENTE de este remitente, si lo hay — el cruce que
-// necesita el inbox de DM (Juan, 2026-08-21: "hacer un cruce de datos de
-// cuales mensajes respondio el bot y cuales el colega de regreso le
-// respondio al numero de natalia"). Ver src/groups/dm.js.
+// El pedido mas reciente de este colega, para ligar lo que escribe al
+// privado con lo que publico en el grupo. Dos identidades posibles (Juan,
+// 2026-09-08): el telefono, que puede aparecer como autor del pedido O como
+// destino del DM que le mandamos (un colega que publico con lid y contesta
+// desde un @c.us expuesto); y el lid crudo, que solo vive en
+// respuesta_destino_lid porque es donde marcarRespondida lo dejo.
+//
+// "Mas reciente" y sin ventana de tiempo, por decision de Juan: dos DM
+// seguidos al mismo colega atribuyen la respuesta al segundo.
+const COLUMNAS_SEÑAL_HILO = "id, texto_original, zona, tipo, operacion, created_at, matches, respuesta_refs, respondida_at";
+
 async function buscarPorTelefono(orgId, telefono) {
   if (!telefono) return null;
   if (!supabase) {
     return (
       memory.groupSignals
-        .filter((s) => s.org_id === orgId && s.autor_telefono === telefono && s.clase === "demanda")
+        .filter(
+          (s) =>
+            s.org_id === orgId &&
+            (s.autor_telefono === telefono || s.respuesta_destino_telefono === telefono) &&
+            s.clase === "demanda"
+        )
         .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))[0] || null
     );
   }
   const { data, error } = await supabase
     .from("group_signals")
-    .select("id, texto_original, zona, tipo, operacion, created_at, matches, respuesta_refs, respondida_at")
+    .select(COLUMNAS_SEÑAL_HILO)
     .eq("org_id", orgId)
-    .eq("autor_telefono", telefono)
     .eq("clase", "demanda")
+    .or(`autor_telefono.eq.${telefono},respuesta_destino_telefono.eq.${telefono}`)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
   if (error) {
     console.error("[grupos] No se pudo buscar la señal por telefono:", error.message);
+    return null;
+  }
+  return data;
+}
+
+async function buscarPorLid(orgId, lid) {
+  if (!lid) return null;
+  if (!supabase) {
+    return (
+      memory.groupSignals
+        .filter((s) => s.org_id === orgId && s.respuesta_destino_lid === lid)
+        .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))[0] || null
+    );
+  }
+  const { data, error } = await supabase
+    .from("group_signals")
+    .select(COLUMNAS_SEÑAL_HILO)
+    .eq("org_id", orgId)
+    .eq("respuesta_destino_lid", lid)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    console.error("[grupos] No se pudo buscar la señal por lid:", error.message);
     return null;
   }
   return data;
@@ -1022,7 +1058,7 @@ module.exports = {
   create, list, setEstado, resumen, marcarEnviada, ultimaFechaImportada,
   pendientesDigest, marcarDigest, revertirDigest,
   marcarRespondida, respuestasDesde, guardarRevalidacion, marcarAvisoEnviado,
-  guardarPolitica, obtenerPorId, calladosPendientes, buscarPorTelefono, aprobadasSinAvisar,
+  guardarPolitica, obtenerPorId, calladosPendientes, buscarPorTelefono, buscarPorLid, aprobadasSinAvisar,
   findByWamid, pendientesDeAviso, candidatosRecordatorio, claimRecordatorio,
   candidatosEscaladoSilencio, claimEscaladoSilencio,
   dmsHoyPorColega, dmsHoyLinea,

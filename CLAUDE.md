@@ -28,8 +28,38 @@ Equipo: 1 dev (Juan) + Claude Code. Idioma de la app: español (Colombia).
 Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
 `docs:`, `config:`).
 
-## 2. Estado actual (2026-09-04)
+## 2. Estado actual (2026-09-08)
 
+- **Línea de Natalia: código listo para que empiece a recibir respuestas,
+  aún sin desplegar (2026-09-08, rama `linea-dm-lid`, sin mergear a `main`).**
+  Los DM del radar salen a `<lid>@lid` y el webhook solo aceptaba `@c.us`:
+  toda respuesta de un colega moría en la primera línea, en silencio, desde
+  el 2026-08-21 — `linea_dm` tenía 0 filas en toda su historia. Ahora entra
+  `@lid`, se guarda con `remitente_lid`, se liga al pedido de grupo por
+  `respuesta_destino_lid` y se ve en `/grupos` del CRM para todo el equipo.
+  El clasificador de citas (`RADAR_DM_CLASIFICAR`) queda **apagado** — fase 1
+  es solo leer. **No hay backfill:** lo que llegó antes de este cambio no
+  quedó ni en log, el panel arranca vacío. Suite completa en verde
+  (1723/1723, `npm test` 2026-09-08, despues de la revision final). La migración
+  `2026-09-08_linea_dm_lid.sql` (columna `remitente_lid` en `linea_dm`) está
+  **PENDIENTE de correr en Supabase** — la corre Juan a mano en el SQL
+  editor del proyecto `qwqmlmyyswpdypdfvmiv`; el código se degrada solo si
+  falta la columna, no rompe — `src/data/linea-dm.js` reintenta el insert sin
+  `remitente_lid` (la fila se guarda igual, el hilo simplemente no se agrupa
+  por lid) y avisa UNA vez por proceso en el log. Falta además el `git push` / merge a `main` —
+  eso también lo decide Juan. **Supuesto no probado:** que la respuesta del
+  colega llegue etiquetada `@lid`; si a las 48 h de desplegar no entra
+  ninguna fila en `linea_dm`, hay que mirar los eventos crudos de WAHA.
+  **Hallazgo de la revisión, pendiente de decisión de Juan:**
+  `group_signals.respuesta_destino_lid` se escribe hoy con DOS formatos según
+  el camino — `src/groups/vivo.js:657` (automático) guarda el lid crudo CON
+  sufijo `@lid`, pero `vivo.js:1144` y `:1343` (aprobación manual y DM manual
+  desde el CRM) guardan dígitos pelados SIN sufijo. Como `buscarPorLid`
+  compara por igualdad exacta, una señal resuelta a mano nunca se va a ligar.
+  Verificado contra producción el 2026-09-08: 84 de 84 filas tienen el
+  sufijo, todas automáticas — el bug es **latente, no activo** — pero
+  producción está en `GRUPOS_RESPUESTA_MODO=asistido`, que es justo el modo
+  de los caminos manuales. Spec y plan en `docs/superpowers/`.
 - **Radar en observación (desplegado 2026-09-04, commit `aec9fc8`).** Se aflojó
   la política de DM al colega: `match.js` ya no descarta por alcobas de más ni
   por baños/garajes cortos, y se quitó el tope de 2 DMs por colega. Decisión de
@@ -78,7 +108,10 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
   `2026-09-07_amoblado.sql` (columnas `amoblado` y `periodo` en
   `group_signals`) corrida por Juan y **verificada por REST** el 2026-09-07:
   la consulta devuelve `{"amoblado":null,"periodo":null}`, no un 42703.
-  **No hay migraciones pendientes.**
+  **Migración pendiente:** `2026-09-08_linea_dm_lid.sql` (columna
+  `remitente_lid` en `linea_dm`) — todavía NO se ha corrido en Supabase, la
+  corre Juan a mano. No desplegar la rama `linea-dm-lid` hasta que esté
+  verificada por REST.
   Regla: antes de declarar una migración "pendiente" acá, verificarla con un
   `select` por REST — esta lista estuvo desactualizada del 2026-08-18 al
   2026-09-03.

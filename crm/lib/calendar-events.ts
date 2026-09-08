@@ -12,6 +12,7 @@
 //    fecha (cita_fecha_hora_iso); "agendando"/"interes_avanzado" sin fecha
 //    exacta no tienen donde caer en un calendario — esas se ven en el inbox.
 import { getTeamRoster } from "@/lib/team";
+import { anclaHilo } from "@/lib/linea-dm-hilo";
 
 export type CalendarEvent = {
   id: string;
@@ -84,6 +85,7 @@ type LineaDmAvance = {
   id: string;
   remitente_nombre: string | null;
   remitente_telefono: string | null;
+  remitente_lid: string | null;
   cita_fecha_hora_iso: string | null;
   avance_tipo: string | null;
   senal_id: string | null;
@@ -114,6 +116,18 @@ export function bogotaDateKey(iso: string): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Bogota" }).format(new Date(iso));
 }
 
+// Un aviso por proceso, no uno por render (revisión final, 2026-09-08):
+// getCalendarEvents corre en CADA carga de /calendario, así que sin esta
+// bandera el warning de abajo se imprime en cada una mientras la migración
+// de linea_dm siga pendiente. Mismo patrón que create() en
+// src/data/linea-dm.js del lado del bot.
+let avisoMigracionLineaDmPendiente = false;
+function avisarMigracionLineaDmPendiente(codigo: string) {
+  if (avisoMigracionLineaDmPendiente) return;
+  avisoMigracionLineaDmPendiente = true;
+  console.warn("[calendario:linea_dm] Falta una migración de linea_dm: el calendario va sin los avances de colegas.", codigo);
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function getCalendarEvents(supabase: any): Promise<{
   events: CalendarEvent[];
@@ -130,7 +144,7 @@ export async function getCalendarEvents(supabase: any): Promise<{
       .limit(500),
     supabase
       .from("linea_dm")
-      .select("id, remitente_nombre, remitente_telefono, cita_fecha_hora_iso, avance_tipo, senal_id")
+      .select("id, remitente_nombre, remitente_telefono, remitente_lid, cita_fecha_hora_iso, avance_tipo, senal_id")
       .eq("tiene_cita", true)
       .not("cita_fecha_hora_iso", "is", null)
       .limit(500),
@@ -141,7 +155,18 @@ export async function getCalendarEvents(supabase: any): Promise<{
   if (remindersRes.error) console.error("[calendario:advisor_reminders]", remindersRes.error.message);
   // linea_dm es best-effort: si la migracion 2026-08-21_linea_dm.sql todavia
   // no corrio, el calendario sigue funcionando igual, solo sin esos eventos.
-  if (dmRes.error && dmRes.error.code !== "42P01" && dmRes.error.code !== "PGRST205") {
+  //
+  // 42703/PGRST204 (columna faltante) cuentan igual que 42P01/PGRST205
+  // (tabla faltante): mientras 2026-09-08_linea_dm_lid.sql no corra, el
+  // select de arriba pide `remitente_lid` y falla entero, dmRes.data queda
+  // null y el Calendario del equipo pierde en silencio TODOS los eventos
+  // "avance_colega" (revisión final, 2026-09-08).
+  const CODIGOS_MIGRACION_PENDIENTE = ["42P01", "PGRST205", "42703", "PGRST204"];
+  if (dmRes.error && CODIGOS_MIGRACION_PENDIENTE.includes(dmRes.error.code)) {
+    // Tolerado, pero no mudo: el log dice qué falta correr, no un mensaje
+    // crudo de Postgres que hay que ir a traducir. Una sola vez por proceso.
+    avisarMigracionLineaDmPendiente(dmRes.error.code);
+  } else if (dmRes.error) {
     console.error("[calendario:linea_dm]", dmRes.error.message);
   }
   const mensajes = [citasRes.error?.message, remindersRes.error?.message].filter(Boolean) as string[];
@@ -211,9 +236,12 @@ export async function getCalendarEvents(supabase: any): Promise<{
       clienteNombre: m.remitente_nombre,
       propertyRef: m.senal_id ? refPorSeñal.get(m.senal_id) ?? null : null,
       origen: "avance_colega" as const,
-      // Mismo id de ancla que crm/components/linea-dm-inbox.tsx#anclaHilo —
-      // si uno cambia, el otro tiene que cambiar igual.
-      linkChat: `/grupos#dm-${m.remitente_telefono || "sin-telefono"}`,
+      // Misma ancla que crm/components/linea-dm-inbox.tsx#anclaHilo (se
+      // importa, no se duplica): lid sin sufijo si lo hay, si no el teléfono,
+      // si no el id de esta fila (revisión final, 2026-09-08) — acá `m` es
+      // siempre una fila suelta de linea_dm, así que `m.id` es el mismo
+      // mensaje único que ese hilo tiene del otro lado.
+      linkChat: `/grupos#${anclaHilo({ lid: m.remitente_lid, telefono: m.remitente_telefono }, m.id)}`,
       autoAgendada: false,
       // El colega ya confirmó fecha/hora por la línea: tampoco tiene estados.
       estado: "confirmada" as const,
