@@ -12,6 +12,7 @@
 //    fecha (cita_fecha_hora_iso); "agendando"/"interes_avanzado" sin fecha
 //    exacta no tienen donde caer en un calendario — esas se ven en el inbox.
 import { getTeamRoster } from "@/lib/team";
+import { anclaHilo } from "@/lib/linea-dm-hilo";
 
 export type CalendarEvent = {
   id: string;
@@ -84,6 +85,7 @@ type LineaDmAvance = {
   id: string;
   remitente_nombre: string | null;
   remitente_telefono: string | null;
+  remitente_lid: string | null;
   cita_fecha_hora_iso: string | null;
   avance_tipo: string | null;
   senal_id: string | null;
@@ -130,7 +132,7 @@ export async function getCalendarEvents(supabase: any): Promise<{
       .limit(500),
     supabase
       .from("linea_dm")
-      .select("id, remitente_nombre, remitente_telefono, cita_fecha_hora_iso, avance_tipo, senal_id")
+      .select("id, remitente_nombre, remitente_telefono, remitente_lid, cita_fecha_hora_iso, avance_tipo, senal_id")
       .eq("tiene_cita", true)
       .not("cita_fecha_hora_iso", "is", null)
       .limit(500),
@@ -211,9 +213,9 @@ export async function getCalendarEvents(supabase: any): Promise<{
       clienteNombre: m.remitente_nombre,
       propertyRef: m.senal_id ? refPorSeñal.get(m.senal_id) ?? null : null,
       origen: "avance_colega" as const,
-      // Mismo id de ancla que crm/components/linea-dm-inbox.tsx#anclaHilo —
-      // si uno cambia, el otro tiene que cambiar igual.
-      linkChat: `/grupos#dm-${m.remitente_telefono || "sin-telefono"}`,
+      // Misma ancla que crm/components/linea-dm-inbox.tsx#anclaHilo (se
+      // importa, no se duplica): lid sin sufijo si lo hay, si no el teléfono.
+      linkChat: `/grupos#${anclaHilo({ lid: m.remitente_lid, telefono: m.remitente_telefono })}`,
       autoAgendada: false,
       // El colega ya confirmó fecha/hora por la línea: tampoco tiene estados.
       estado: "confirmada" as const,
