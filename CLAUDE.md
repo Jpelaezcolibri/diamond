@@ -96,10 +96,14 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
   saca las demandas de arriendo por dos carriles — DM al colega si el match
   llega a `RADAR_AMOBLADO_UMBRAL_DM` (85), y aviso diferenciado a la asesora
   si no. `RADAR_AMOBLADO_ACTIVO=false` apaga el carril entero.
-  **Gate pendiente:** el cambio al prompt de `revalidar.js` se desplegó SIN
-  correr `scripts/golden-revalidar.js` (decisión de Juan, 2026-09-07: la
-  clave local se quedó sin saldo). Correrlo cuando haya crédito y mirar si
-  algún veredicto se movió.
+  **Golden set corrido y en verde (2026-09-07, 6/6):**
+  `railway run --service diamond node scripts/golden-revalidar.js` — se corre
+  con la clave de PRODUCCIÓN, no con la local. Lo que prueba: la frase nueva
+  sobre amoblado no degradó a D7. En los 6 casos las propiedades siguen
+  saliendo en `refs_utiles` con el dato en `sin_confirmar` y `refs_dudosas`
+  vacío — o sea, Sofi no empezó a tratar lo no registrado como "de segunda",
+  que era el riesgo real y habría afectado al carril de VENTA sin que ningún
+  test lo viera.
 
 ## 3. Mapa de módulos
 
