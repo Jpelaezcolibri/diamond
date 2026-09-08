@@ -31,6 +31,21 @@ const { getClient } = require("../lib/anthropic");
 const MODELO = process.env.CLAUDE_MODEL_GRUPOS || "claude-haiku-4-5";
 const VISITAS_ALERTA_TO = process.env.RADAR_VISITAS_ALERTA_TO || "";
 
+// INTERRUPTOR del clasificador (Juan, 2026-09-08: "por ahora solo leer,
+// luego las citas"). Apagado por defecto: en fase 1 el mensaje se guarda y se
+// liga al pedido, pero no se interpreta ni se alerta — y no se paga IA
+// mientras no haga falta. Se lee en CADA llamada, no al cargar el modulo,
+// para que prenderlo en Railway no exija un despliegue.
+//
+// Valores que PRENDEN, con trim+lowercase (mismo criterio que
+// carril-arriendo.js#carrilActivo, al reves: aca lo raro es prender):
+// "true", "1", "si", "yes". Todo lo demas, incluida la ausencia, es apagado.
+const VALORES_PRENDIDO = new Set(["true", "1", "si", "yes"]);
+function clasificadorActivo() {
+  const valor = String(process.env.RADAR_DM_CLASIFICAR ?? "").trim().toLowerCase();
+  return VALORES_PRENDIDO.has(valor);
+}
+
 const ESQUEMA = {
   type: "object",
   additionalProperties: false,
@@ -100,7 +115,7 @@ function construirAlerta(mensaje, veredicto, señal) {
   const partes = [
     TITULOS[veredicto.tipo] || "🔔 Avance en la línea de Natalia",
     ``,
-    `Colega: ${mensaje.remitenteNombre || mensaje.remitenteTelefono || "sin nombre"}`,
+    `Colega: ${mensaje.remitenteNombre || mensaje.remitenteTelefono || "sin nombre (escribe por lid)"}`,
     veredicto.fecha_hora_iso
       ? `Fecha/hora: ${new Date(veredicto.fecha_hora_iso).toLocaleString("es-CO", {
           timeZone: "America/Bogota", weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
@@ -115,17 +130,26 @@ function construirAlerta(mensaje, veredicto, señal) {
 
 /**
  * @param org      organizacion resuelta
- * @param mensaje  { waMessageId, sesion, remitenteTelefono, remitenteNombre, texto, fechaMensaje }
+ * @param mensaje  { waMessageId, sesion, remitenteId, remitenteTelefono, remitenteLid, remitenteNombre, texto, fechaMensaje }
+ *                 — remitenteTelefono y remitenteLid son excluyentes (ver
+ *                 whatsapp-group.js#identidadDM).
  * @returns { resultado, dmId } — nunca lanza por un mensaje suelto: un error
  *          en uno no puede tumbar la escucha de la linea.
  */
 async function procesarMensaje(org, mensaje, { ahora = new Date() } = {}) {
-  const señal = await groupSignals.buscarPorTelefono(org.id, mensaje.remitenteTelefono).catch(() => null);
+  const identidad = { telefono: mensaje.remitenteTelefono || null, lid: mensaje.remitenteLid || null };
+
+  // El pedido que origino el DM: por lid si vino por lid (es lo que
+  // marcarRespondida guardo en respuesta_destino_lid), por telefono si no.
+  const señal = identidad.lid
+    ? await groupSignals.buscarPorLid(org.id, identidad.lid).catch(() => null)
+    : await groupSignals.buscarPorTelefono(org.id, identidad.telefono).catch(() => null);
 
   const { mensaje: guardado, duplicado } = await lineaDm.create(org.id, {
     sesion: mensaje.sesion,
     waMessageId: mensaje.waMessageId,
-    remitenteTelefono: mensaje.remitenteTelefono,
+    remitenteTelefono: identidad.telefono,
+    remitenteLid: identidad.lid,
     remitenteNombre: mensaje.remitenteNombre,
     texto: mensaje.texto,
     fechaMensaje: mensaje.fechaMensaje,
@@ -134,7 +158,11 @@ async function procesarMensaje(org, mensaje, { ahora = new Date() } = {}) {
   if (duplicado) return { resultado: "duplicado" };
   if (!guardado) return { resultado: "sin_tabla" };
 
-  const historial = await lineaDm.historialDe(org.id, mensaje.remitenteTelefono, { limite: 10 });
+  // Fase 1 (Juan, 2026-09-08): leer, no interpretar. Se corta ACA, despues
+  // de guardar y ligar, y antes de cualquier llamada a la IA.
+  if (!clasificadorActivo()) return { resultado: "guardado", dmId: guardado.id };
+
+  const historial = await lineaDm.historialDe(org.id, identidad, { limite: 10 });
   const hilo = historial.length ? historial : [{ texto: mensaje.texto, created_at: guardado.created_at }];
   const veredicto = await clasificarAvance(hilo, ahora);
   if (!veredicto) return { resultado: "sin_clasificar", dmId: guardado.id };
@@ -152,7 +180,7 @@ async function procesarMensaje(org, mensaje, { ahora = new Date() } = {}) {
   // hilo, pero SI avisar si la fecha cambio (reagenda) o si el tipo de
   // avance escalo (de "agendando" a "cita_confirmada", por ejemplo).
   const clave = veredicto.fecha_hora_iso || veredicto.tipo;
-  const ultima = await lineaDm.ultimaCitaAlertada(org.id, mensaje.remitenteTelefono).catch(() => null);
+  const ultima = await lineaDm.ultimaCitaAlertada(org.id, identidad).catch(() => null);
   if (ultima && ultima === clave) return { resultado: "avance_ya_alertado", dmId: guardado.id };
 
   if (!VISITAS_ALERTA_TO) return { resultado: "sin_destinatario", dmId: guardado.id };
@@ -164,4 +192,4 @@ async function procesarMensaje(org, mensaje, { ahora = new Date() } = {}) {
   return { resultado: envio && envio.ok ? "alertado" : "error_envio", dmId: guardado.id, error: envio && envio.error };
 }
 
-module.exports = { procesarMensaje, clasificarAvance, construirAlerta, ESQUEMA, MODELO };
+module.exports = { procesarMensaje, clasificarAvance, construirAlerta, clasificadorActivo, ESQUEMA, MODELO };
