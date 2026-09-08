@@ -25,12 +25,36 @@ function esTablaFaltante(error) {
   return error?.code === "42P01" || error?.code === "PGRST205";
 }
 
+// Falta una COLUMNA, que no es lo mismo que faltar la tabla. PGRST204:
+// PostgREST no la encuentra en su cache de esquema. 42703: Postgres dice que
+// no existe. Mismo criterio que src/data/group-signals.js#esColumnaFaltante,
+// src/data/mandatos.js y src/data/radar-trazabilidad.js.
+function esColumnaFaltante(error) {
+  return error?.code === "PGRST204" || error?.code === "42703";
+}
+
+// Lo que `create` puede sacrificar cuando una migracion no corrio todavia.
+// Hoy solo remitente_lid (2026-09-08_linea_dm_lid.sql); si manana se agrega
+// otra columna nueva, va aca.
+const COLUMNAS_NUEVAS = ["remitente_lid"];
+
 let faltaTabla = false;
 function avisarFaltaTabla() {
   if (faltaTabla) return;
   faltaTabla = true;
   console.warn(
     "[linea-dm] Falta correr db/migrations/2026-08-21_linea_dm.sql — los DM de la linea vinculada no se estan guardando."
+  );
+}
+
+// Un aviso por proceso, no uno por mensaje: mientras la migracion este
+// pendiente esto corre en CADA DM que entra y taparia el log.
+let faltaColumna = false;
+function avisarFaltaColumna() {
+  if (faltaColumna) return;
+  faltaColumna = true;
+  console.warn(
+    "[linea-dm] Falta correr db/migrations/2026-09-08_linea_dm_lid.sql — el DM se guarda igual, pero sin remitente_lid: el hilo del colega no se puede agrupar por su lid."
   );
 }
 
@@ -57,7 +81,22 @@ async function create(orgId, fields) {
     return { mensaje: creado, duplicado: false };
   }
 
-  const { data, error } = await supabase.from("linea_dm").insert(row).select().single();
+  let { data, error } = await supabase.from("linea_dm").insert(row).select().single();
+
+  // DEGRADACION SI FALTA LA COLUMNA (revision final, 2026-09-08). El caso
+  // real es desplegar antes de que corra 2026-09-08_linea_dm_lid.sql. Sin
+  // esto, el error caia en el `throw` de abajo: la excepcion la atrapa el
+  // .catch del webhook (src/channels/whatsapp-group.js), pero para entonces
+  // yaVisto() ya marco el mensaje y a WAHA ya se le respondio 200 — la
+  // primera respuesta de un colega se perdia PARA SIEMPRE, y el panel vacio
+  // mandaba a diagnosticar lo que no era. Se suelta UNA columna, no la fila.
+  if (error && esColumnaFaltante(error)) {
+    avisarFaltaColumna();
+    const degradado = { ...row };
+    for (const c of COLUMNAS_NUEVAS) delete degradado[c];
+    ({ data, error } = await supabase.from("linea_dm").insert(degradado).select().single());
+  }
+
   if (!error) return { mensaje: data, duplicado: false };
   // 23505 = violacion de indice unico: dedup haciendo su trabajo, no un fallo.
   if (error.code === "23505") return { mensaje: null, duplicado: true };
@@ -87,7 +126,9 @@ async function historialDe(orgId, identidad, { limite = 10 } = {}) {
     .order("created_at", { ascending: false })
     .limit(limite);
   if (error) {
-    if (esTablaFaltante(error)) return [];
+    // Tabla o columna faltante: el hilo se degrada a vacio (el clasificador
+    // trabaja con el mensaje suelto) en vez de tumbar todo el procesamiento.
+    if (esTablaFaltante(error) || esColumnaFaltante(error)) return [];
     throw error;
   }
   return (data || []).reverse();
@@ -105,7 +146,7 @@ async function guardarClasificacion(orgId, id, { tieneCita, avanceTipo = null, f
     .eq("org_id", orgId)
     .eq("id", id);
   if (error) {
-    if (esTablaFaltante(error)) return false;
+    if (esTablaFaltante(error) || esColumnaFaltante(error)) return false;
     console.error("[linea-dm] No se pudo guardar la clasificacion:", error.message);
     return false;
   }
@@ -154,7 +195,11 @@ async function ultimaCitaAlertada(orgId, identidad) {
     .limit(1)
     .maybeSingle();
   if (error) {
-    if (esTablaFaltante(error)) return null;
+    // Sin la columna no hay como saber que se alerto antes. Devolver null es
+    // lo mismo que hacia el throw (dm.js lo atrapa con .catch(() => null)),
+    // pero sin ruido: el efecto es que el dedup del aviso no frena nada
+    // mientras la migracion siga pendiente.
+    if (esTablaFaltante(error) || esColumnaFaltante(error)) return null;
     throw error;
   }
   return clave(data);

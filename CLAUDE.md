@@ -44,7 +44,9 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
   `2026-09-08_linea_dm_lid.sql` (columna `remitente_lid` en `linea_dm`) está
   **PENDIENTE de correr en Supabase** — la corre Juan a mano en el SQL
   editor del proyecto `qwqmlmyyswpdypdfvmiv`; el código se degrada solo si
-  falta la columna, no rompe. Falta además el `git push` / merge a `main` —
+  falta la columna, no rompe — `src/data/linea-dm.js` reintenta el insert sin
+  `remitente_lid` (la fila se guarda igual, el hilo simplemente no se agrupa
+  por lid) y avisa UNA vez por proceso en el log. Falta además el `git push` / merge a `main` —
   eso también lo decide Juan. **Supuesto no probado:** que la respuesta del
   colega llegue etiquetada `@lid`; si a las 48 h de desplegar no entra
   ninguna fila en `linea_dm`, hay que mirar los eventos crudos de WAHA.
