@@ -143,7 +143,18 @@ export async function getCalendarEvents(supabase: any): Promise<{
   if (remindersRes.error) console.error("[calendario:advisor_reminders]", remindersRes.error.message);
   // linea_dm es best-effort: si la migracion 2026-08-21_linea_dm.sql todavia
   // no corrio, el calendario sigue funcionando igual, solo sin esos eventos.
-  if (dmRes.error && dmRes.error.code !== "42P01" && dmRes.error.code !== "PGRST205") {
+  //
+  // 42703/PGRST204 (columna faltante) cuentan igual que 42P01/PGRST205
+  // (tabla faltante): mientras 2026-09-08_linea_dm_lid.sql no corra, el
+  // select de arriba pide `remitente_lid` y falla entero, dmRes.data queda
+  // null y el Calendario del equipo pierde en silencio TODOS los eventos
+  // "avance_colega" (revisión final, 2026-09-08).
+  const CODIGOS_MIGRACION_PENDIENTE = ["42P01", "PGRST205", "42703", "PGRST204"];
+  if (dmRes.error && CODIGOS_MIGRACION_PENDIENTE.includes(dmRes.error.code)) {
+    // Tolerado, pero no mudo: el log dice qué falta correr, no un mensaje
+    // crudo de Postgres que hay que ir a traducir.
+    console.warn("[calendario:linea_dm] Falta una migración de linea_dm: el calendario va sin los avances de colegas.", dmRes.error.code);
+  } else if (dmRes.error) {
     console.error("[calendario:linea_dm]", dmRes.error.message);
   }
   const mensajes = [citasRes.error?.message, remindersRes.error?.message].filter(Boolean) as string[];

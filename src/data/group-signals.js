@@ -909,9 +909,6 @@ async function dmsHoyLinea(orgId, desdeIso) {
   return data.length;
 }
 
-// El pedido de grupo MAS RECIENTE de este remitente, si lo hay — el cruce que
-// necesita el inbox de DM (Juan, 2026-08-21: "hacer un cruce de datos de
-// cuales mensajes respondio el bot y cuales el colega de regreso le
 // El pedido mas reciente de este colega, para ligar lo que escribe al
 // privado con lo que publico en el grupo. Dos identidades posibles (Juan,
 // 2026-09-08): el telefono, que puede aparecer como autor del pedido O como
