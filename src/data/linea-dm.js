@@ -8,6 +8,18 @@
 const supabase = require("./supabase");
 const memory = require("./memory");
 
+// La IDENTIDAD de quien escribe (Juan, 2026-09-08): un chat 1 a 1 llega por
+// `<telefono>@c.us` o por `<lid>@lid`, nunca por los dos. Se resuelve a UNA
+// columna para consultar el hilo y el dedup de alertas. El lid gana si
+// existe, porque es la unica identidad estable para el 98% de los colegas
+// (ver docs/superpowers/specs/2026-09-08-linea-dm-lid-y-seguimiento-design.md).
+function columnaDeIdentidad(identidad) {
+  if (!identidad) return null;
+  if (identidad.lid) return { columna: "remitente_lid", valor: identidad.lid };
+  if (identidad.telefono) return { columna: "remitente_telefono", valor: identidad.telefono };
+  return null;
+}
+
 function esTablaFaltante(error) {
   // 42P01: la tabla no existe. PGRST205: PostgREST no la tiene en su cache.
   return error?.code === "42P01" || error?.code === "PGRST205";
@@ -29,6 +41,7 @@ async function create(orgId, fields) {
     sesion: fields.sesion || null,
     wa_message_id: fields.waMessageId,
     remitente_telefono: fields.remitenteTelefono || null,
+    remitente_lid: fields.remitenteLid || null,
     remitente_nombre: fields.remitenteNombre || null,
     texto: fields.texto || null,
     fecha_mensaje: fields.fechaMensaje || null,
@@ -58,18 +71,19 @@ async function create(orgId, fields) {
 // Los ultimos mensajes de ESTE remitente, mas viejo primero — el contexto
 // completo del hilo que necesita el clasificador (src/groups/dm.js): una
 // fecha puede quedar dicha en un mensaje y la hora en el siguiente.
-async function historialDe(orgId, remitenteTelefono, { limite = 10 } = {}) {
-  if (!remitenteTelefono) return [];
+async function historialDe(orgId, identidad, { limite = 10 } = {}) {
+  const filtro = columnaDeIdentidad(identidad);
+  if (!filtro) return [];
   if (!supabase) {
     return (memory.lineaDm || [])
-      .filter((m) => m.org_id === orgId && m.remitente_telefono === remitenteTelefono)
+      .filter((m) => m.org_id === orgId && m[filtro.columna] === filtro.valor)
       .slice(-limite);
   }
   const { data, error } = await supabase
     .from("linea_dm")
     .select("id, texto, created_at")
     .eq("org_id", orgId)
-    .eq("remitente_telefono", remitenteTelefono)
+    .eq(filtro.columna, filtro.valor)
     .order("created_at", { ascending: false })
     .limit(limite);
   if (error) {
@@ -120,12 +134,13 @@ async function marcarAlertado(orgId, id) {
 // hay, si no el tipo de avance) — para no re-avisar el MISMO avance en cada
 // mensaje nuevo del hilo, pero SI avisar de nuevo si cambia (reagenda, o
 // paso de "agendando" a "cita_confirmada").
-async function ultimaCitaAlertada(orgId, remitenteTelefono) {
-  if (!remitenteTelefono) return null;
+async function ultimaCitaAlertada(orgId, identidad) {
+  const filtro = columnaDeIdentidad(identidad);
+  if (!filtro) return null;
   const clave = (m) => m?.cita_fecha_hora_iso || m?.avance_tipo || null;
   if (!supabase) {
     const alertadas = (memory.lineaDm || [])
-      .filter((m) => m.org_id === orgId && m.remitente_telefono === remitenteTelefono && m.alertado_at)
+      .filter((m) => m.org_id === orgId && m[filtro.columna] === filtro.valor && m.alertado_at)
       .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
     return clave(alertadas[0]);
   }
@@ -133,7 +148,7 @@ async function ultimaCitaAlertada(orgId, remitenteTelefono) {
     .from("linea_dm")
     .select("cita_fecha_hora_iso, avance_tipo")
     .eq("org_id", orgId)
-    .eq("remitente_telefono", remitenteTelefono)
+    .eq(filtro.columna, filtro.valor)
     .not("alertado_at", "is", null)
     .order("created_at", { ascending: false })
     .limit(1)
@@ -145,4 +160,4 @@ async function ultimaCitaAlertada(orgId, remitenteTelefono) {
   return clave(data);
 }
 
-module.exports = { create, historialDe, guardarClasificacion, marcarAlertado, ultimaCitaAlertada };
+module.exports = { create, historialDe, guardarClasificacion, marcarAlertado, ultimaCitaAlertada, columnaDeIdentidad };

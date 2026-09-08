@@ -76,7 +76,7 @@ test("create se degrada limpio si la tabla todavia no existe (falta la migracion
 
 test("historialDe sin telefono no consulta la base", async (t) => {
   const espia = t.mock.method(supabase, "from", () => chain({ data: [], error: null }));
-  const h = await lineaDm.historialDe(ORG, null);
+  const h = await lineaDm.historialDe(ORG, { telefono: null, lid: null });
   assert.deepStrictEqual(h, []);
   assert.strictEqual(espia.mock.callCount(), 0);
 });
@@ -90,21 +90,89 @@ test("historialDe devuelve el hilo en orden cronologico (mas viejo primero)", as
     ],
     error: null,
   }));
-  const h = await lineaDm.historialDe(ORG, "573001112222");
+  const h = await lineaDm.historialDe(ORG, { telefono: "573001112222", lid: null });
   assert.deepStrictEqual(h.map((m) => m.texto), ["a", "b", "c"]);
 });
 
 test("ultimaCitaAlertada usa la fecha si la hay, o el tipo de avance si no", async (t) => {
   t.mock.method(supabase, "from", () => chain({ data: { cita_fecha_hora_iso: "2026-08-25T15:00:00-05:00", avance_tipo: "cita_confirmada" }, error: null }));
-  assert.strictEqual(await lineaDm.ultimaCitaAlertada(ORG, "573001112222"), "2026-08-25T15:00:00-05:00");
+  assert.strictEqual(await lineaDm.ultimaCitaAlertada(ORG, { telefono: "573001112222", lid: null }), "2026-08-25T15:00:00-05:00");
 });
 
 test("ultimaCitaAlertada cae al tipo cuando no hay fecha (ej interes_avanzado)", async (t) => {
   t.mock.method(supabase, "from", () => chain({ data: { cita_fecha_hora_iso: null, avance_tipo: "interes_avanzado" }, error: null }));
-  assert.strictEqual(await lineaDm.ultimaCitaAlertada(ORG, "573001112222"), "interes_avanzado");
+  assert.strictEqual(await lineaDm.ultimaCitaAlertada(ORG, { telefono: "573001112222", lid: null }), "interes_avanzado");
 });
 
 test("ultimaCitaAlertada sin nada alertado devuelve null", async (t) => {
   t.mock.method(supabase, "from", () => chain({ data: null, error: null }));
-  assert.strictEqual(await lineaDm.ultimaCitaAlertada(ORG, "573001112222"), null);
+  assert.strictEqual(await lineaDm.ultimaCitaAlertada(ORG, { telefono: "573001112222", lid: null }), null);
+});
+
+// ── Identidad por lid (Juan, 2026-09-08) ──────────────────────────────────
+//
+// Los DM del radar salen a <lid>@lid y la respuesta vuelve por ese chat. Un
+// lid NUNCA va en remitente_telefono: es el error contra el que advierte
+// db/migrations/2026-09-04_dm_destinatario.sql.
+
+test("create guarda remitente_lid y deja remitente_telefono en null cuando el chat llego por lid", async (t) => {
+  let recibido = null;
+  t.mock.method(supabase, "from", () => {
+    const c = chain({ data: null, error: null });
+    c.insert = (row) => { recibido = row; return c; };
+    c.single = () => Promise.resolve({ data: { id: "dm-2", ...recibido }, error: null });
+    return c;
+  });
+
+  await lineaDm.create(ORG, {
+    waMessageId: "wamid-2", remitenteTelefono: null, remitenteLid: "276467766300904@lid",
+    remitenteNombre: "Carva", texto: "hola", fechaMensaje: "2026-09-08T10:00:00Z",
+  });
+
+  assert.strictEqual(recibido.remitente_lid, "276467766300904@lid");
+  assert.strictEqual(recibido.remitente_telefono, null);
+});
+
+test("columnaDeIdentidad prefiere el lid, cae al telefono, y sin ninguno devuelve null", () => {
+  assert.deepStrictEqual(
+    lineaDm.columnaDeIdentidad({ telefono: null, lid: "276467766300904@lid" }),
+    { columna: "remitente_lid", valor: "276467766300904@lid" }
+  );
+  assert.deepStrictEqual(
+    lineaDm.columnaDeIdentidad({ telefono: "573001112222", lid: null }),
+    { columna: "remitente_telefono", valor: "573001112222" }
+  );
+  assert.strictEqual(lineaDm.columnaDeIdentidad({ telefono: null, lid: null }), null);
+  assert.strictEqual(lineaDm.columnaDeIdentidad(null), null);
+});
+
+test("historialDe por lid filtra por remitente_lid, no por telefono", async (t) => {
+  const filtros = [];
+  t.mock.method(supabase, "from", () => {
+    const c = chain({ data: [{ id: "m1", texto: "a", created_at: "2026-09-08T10:00:00Z" }], error: null });
+    c.eq = (col, val) => { filtros.push([col, val]); return c; };
+    return c;
+  });
+  const h = await lineaDm.historialDe(ORG, { telefono: null, lid: "276467766300904@lid" });
+  assert.deepStrictEqual(h.map((m) => m.texto), ["a"]);
+  assert.ok(filtros.some(([c, v]) => c === "remitente_lid" && v === "276467766300904@lid"));
+  assert.ok(!filtros.some(([c]) => c === "remitente_telefono"));
+});
+
+test("historialDe sin identidad no consulta la base", async (t) => {
+  const espia = t.mock.method(supabase, "from", () => chain({ data: [], error: null }));
+  assert.deepStrictEqual(await lineaDm.historialDe(ORG, { telefono: null, lid: null }), []);
+  assert.strictEqual(espia.mock.callCount(), 0);
+});
+
+test("ultimaCitaAlertada por lid filtra por remitente_lid", async (t) => {
+  const filtros = [];
+  t.mock.method(supabase, "from", () => {
+    const c = chain({ data: { cita_fecha_hora_iso: null, avance_tipo: "agendando" }, error: null });
+    c.eq = (col, val) => { filtros.push([col, val]); return c; };
+    return c;
+  });
+  const clave = await lineaDm.ultimaCitaAlertada(ORG, { telefono: null, lid: "276467766300904@lid" });
+  assert.strictEqual(clave, "agendando");
+  assert.ok(filtros.some(([c, v]) => c === "remitente_lid" && v === "276467766300904@lid"));
 });
