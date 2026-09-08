@@ -337,9 +337,9 @@ test("buscarPorLid en memoria devuelve la señal MAS RECIENTE con ese respuesta_
   const memory = require("../src/data/memory");
   const antes = memory.groupSignals.length;
   memory.groupSignals.push(
-    { id: "s-vieja", org_id: "org-1", respuesta_destino_lid: "276467766300904@lid", created_at: "2026-09-01T10:00:00Z" },
-    { id: "s-nueva", org_id: "org-1", respuesta_destino_lid: "276467766300904@lid", created_at: "2026-09-08T10:00:00Z" },
-    { id: "s-otro", org_id: "org-1", respuesta_destino_lid: "111@lid", created_at: "2026-09-09T10:00:00Z" }
+    { id: "s-vieja", org_id: "org-1", clase: "demanda", respuesta_destino_lid: "276467766300904@lid", created_at: "2026-09-01T10:00:00Z" },
+    { id: "s-nueva", org_id: "org-1", clase: "demanda", respuesta_destino_lid: "276467766300904@lid", created_at: "2026-09-08T10:00:00Z" },
+    { id: "s-otro", org_id: "org-1", clase: "demanda", respuesta_destino_lid: "111@lid", created_at: "2026-09-09T10:00:00Z" }
   );
   try {
     const s = await groupSignals.buscarPorLid("org-1", "276467766300904@lid");
@@ -370,6 +370,19 @@ test("buscarPorTelefono tambien encuentra la señal por respuesta_destino_telefo
   const or = llamadas.find(([m]) => m === "or");
   assert.ok(or, "tiene que usar .or() para mirar las dos columnas");
   assert.strictEqual(or[1], "autor_telefono.eq.573205938640,respuesta_destino_telefono.eq.573205938640");
+});
+
+// El filtro por clase protege a src/agent/engine.js:236, que usa esta misma
+// funcion para meter `ultimoPedido` DENTRO del system prompt de Sofi: sin el,
+// una OFERTA del colega entraria al prompt como si fuera un pedido suyo.
+test("buscarPorTelefono sigue filtrando por clase=demanda -- una oferta nunca puede volverse 'el ultimo pedido'", async () => {
+  const { mod, llamadasPorTabla } = instalarConSupabase({ data: { id: "s-2" }, error: null });
+  await mod.buscarPorTelefono("org-9", "573205938640");
+  const eqs = llamadasPorTabla[0].llamadas.filter(([m]) => m === "eq");
+  assert.ok(
+    eqs.some(([, col, val]) => col === "clase" && val === "demanda"),
+    "el filtro por clase no se puede quitar: engine.js depende de el"
+  );
 });
 ```
 
@@ -412,7 +425,7 @@ async function buscarPorTelefono(orgId, telefono) {
           (s) =>
             s.org_id === orgId &&
             (s.autor_telefono === telefono || s.respuesta_destino_telefono === telefono) &&
-            (s.clase === "demanda" || !s.clase)
+            s.clase === "demanda"
         )
         .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))[0] || null
     );
@@ -421,6 +434,7 @@ async function buscarPorTelefono(orgId, telefono) {
     .from("group_signals")
     .select(COLUMNAS_SEÑAL_HILO)
     .eq("org_id", orgId)
+    .eq("clase", "demanda")
     .or(`autor_telefono.eq.${telefono},respuesta_destino_telefono.eq.${telefono}`)
     .order("created_at", { ascending: false })
     .limit(1)
@@ -457,7 +471,7 @@ async function buscarPorLid(orgId, lid) {
 }
 ```
 
-Nota: se quita el `.eq("clase", "demanda")` de `buscarPorTelefono`. Razón: un colega al que le mandamos un DM lo hizo por una demanda (es lo único que dispara DM), así que el filtro era redundante para el camino nuevo y excluía señales sin `clase` en memoria. Si un test existente dependía de `clase`, el filtro en memoria acepta `demanda` o sin clase.
+**El `.eq("clase", "demanda")` de `buscarPorTelefono` NO se toca** (corrección de pre-vuelo, 2026-09-08). La función tiene un segundo consumidor: `src/agent/engine.js:236` la usa para armar `ultimoPedido`, que va DENTRO del system prompt de Sofi cuando le escribe un colega. Sin el filtro, una **oferta** (un colega ofreciendo una propiedad) podría entrar al prompt como si fuera un pedido suyo. `buscarPorLid` no lleva el filtro porque `respuesta_destino_lid` solo se estampa cuando salió un DM, y un DM solo sale por una demanda: la columna ya es el filtro.
 
 Agregar `buscarPorLid` al `module.exports` (en la línea donde está `buscarPorTelefono`).
 
