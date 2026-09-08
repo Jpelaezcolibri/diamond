@@ -90,7 +90,14 @@ function Pendiente({ etiqueta, fase }: { etiqueta: string; fase: string }) {
 function Hilo({ hilo }: { hilo: Hilo }) {
   const ultimo = hilo.mensajes[hilo.mensajes.length - 1];
   const badge = hilo.avanceMasReciente?.avance_tipo ? AVANCE_LABEL[hilo.avanceMasReciente.avance_tipo] : null;
-  const conPedido = hilo.mensajes.find((m) => m.pedido_original || m.propiedad || m.pedido_respondida_at);
+  // EN REVERSA: `hilo.mensajes` está ordenado ascendente (más viejo primero),
+  // así que un `find` directo tomaba el pedido MÁS VIEJO. Un colega que
+  // recibió dos DM por dos pedidos distintos y contestó a los dos veía en el
+  // encabezado la ref del primero (revisión final, 2026-09-08) —
+  // contradiciendo la regla de la spec ("dos DM seguidos al mismo colega
+  // atribuyen la respuesta al segundo") y el propio orden del panel, que
+  // lista por actividad más reciente. Mismo criterio que `avance`, arriba.
+  const conPedido = [...hilo.mensajes].reverse().find((m) => m.pedido_original || m.propiedad || m.pedido_respondida_at);
   const pedido = conPedido?.pedido_original ?? null;
   const propiedad = conPedido?.propiedad ?? null;
   const dmSalio = conPedido?.pedido_respondida_at ?? null;
