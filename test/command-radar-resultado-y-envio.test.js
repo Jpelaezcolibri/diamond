@@ -192,3 +192,33 @@ test("asesor sin telefono cargado, lo dice", async (t) => {
   const out = await executeCommandTool("enviar_whatsapp_equipo", { asesor: "Sin Telefono", mensaje: "hola" }, { scope: adminScope(), session: null });
   assert.match(out, /no tiene telefono/);
 });
+
+// EL POOL ANCHO (Juan, 2026-09-07) — lo que salio por DM tambien espera un
+// resultado.
+//
+// BUG REAL. `pendientesDeAviso` filtraba por `respondida_at is null`, con un
+// comentario del 2026-08-20 que decia "en modo asistido esto no cambia nada".
+// Era cierto ese dia. Desde el 2026-09-02 el DM al colega corre EN modo
+// asistido y SI escribe `respondida_at`, asi que el filtro empezo a esconder
+// justo las señales donde mas paso algo: 94 de 179 medidas el 2026-09-07.
+//
+// La consecuencia se vio en la conversacion real: el 5 de septiembre Natalia
+// escribio "no le servio", "el de $1.700m no sirvio", "Patricia no sirvio" —
+// cinco veces, explicitas — y la herramienta le contestaba que no encontraba
+// ningun pedido pendiente. En toda la historia de signal_events hay 2 filas.
+test("registrar_resultado_radar pide el pool ANCHO: lo que salio por DM tambien cuenta", async (t) => {
+  let opciones = null;
+  t.mock.method(groupSignals, "pendientesDeAviso", async (orgId, advisorId, opts) => {
+    opciones = opts;
+    return [{ id: "sig-dm", texto_original: "busco apto en Belen", aviso_advisor_id: null }];
+  });
+  t.mock.method(signalEvents, "ultimoPorSenal", async () => new Map());
+  const registrados = [];
+  t.mock.method(signalEvents, "registrar", async (orgId, fields) => { registrados.push(fields); });
+
+  await executeCommandTool("registrar_resultado_radar", { tipo: "PERDIDO" }, { scope: adminScope(), session: null });
+
+  assert.ok(opciones && opciones.incluirRespondidas === true, "sin el pool ancho, un DM al colega es invisible");
+  assert.strictEqual(registrados.length, 1);
+  assert.strictEqual(registrados[0].signalId, "sig-dm");
+});

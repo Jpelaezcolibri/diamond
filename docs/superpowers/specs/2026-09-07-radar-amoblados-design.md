@@ -224,9 +224,15 @@ Aplica la regla que Juan fijó el 2026-09-05 tras los 1.906 avisos:
 
 ### 7. El léxico
 
-A `lexico.js`: `"amoblados"`, `"amueblado"`, `"por noche"`, `"por dia"`,
-`"renta corta"`, `"coliving"`, `"airbnb"`, `"temporal"`. El archivo lo pide
-explícitamente: *"ante la duda, agregalo"*.
+A `lexico.js`: `"amoblados"`, `"amueblado"`, `"sin muebles"`, `"renta corta"`,
+`"coliving"`, `"airbnb"`. Todos multipalabra o extranjerismos, que colisionan
+poco con la charla del grupo.
+
+Dos que se descartaron en la revisión del 2026-09-07, y por qué: `"temporal"`
+es palabra común que no habla de inmuebles ("trabajo temporal", "temporal de
+lluvias") y basta UNA coincidencia para mandar el mensaje a la clasificación,
+que se paga. `"por noche"` y `"por dia"` son redundantes: un "busco apto por 15
+días" ya sobrevive al prefiltro por `"apto"` y por el precio.
 
 ---
 

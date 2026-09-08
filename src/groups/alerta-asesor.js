@@ -42,11 +42,22 @@ const formato = require("../lib/formato");
 const { normalizarTitulo } = require("../lib/formato");
 const { linkWhatsappEstricto, linkContactoOficial, tocarNombreEnGrupo, telefonoEnTexto } = require("../lib/contacto");
 const redactar = require("./redactar");
-const { REFS_BLOQUEADAS } = require("./publicable");
+const {
+  REFS_BLOQUEADAS,
+  explicarMotivosSeguro,
+  clasificarMotivos,
+  aclaracionParaColega,
+} = require("./publicable");
 
 // Una propiedad, corta: la asesora ya conoce el inventario, no necesita la
 // ficha entera. Necesita reconocerla y tener el link a mano.
-function linea(match) {
+//
+// `aclaracion` (2026-09-07) es el reparo con el que la propiedad SIGUE en la
+// lista: la compuerta de calidad la freno para salir sola al grupo, pero la
+// decision es de la asesora y no se le puede esconder la propiedad ni la
+// razon. Mismo criterio que la aclaracion de zona de redactar.js#ficha —
+// el dato se muestra CON su salvedad, nunca se borra.
+function linea(match, aclaracion = null) {
   const titulo = normalizarTitulo(match.titulo) || "Propiedad";
   const datos = [
     match.zona,
@@ -72,7 +83,10 @@ function linea(match) {
   // propiedad, que es lo que empujaba el aviso contra el tope de 4096. Una
   // propiedad de aliado no tiene linkWasi y sale sin link, que es correcto: no
   // es inventario nuestro.
-  return `▸ Ref ${match.ref} — ${titulo}\n  ${datos}${nota}${match.linkWasi ? `\n  ${match.linkWasi}` : ""}`;
+  const reparo = String(aclaracion || "").trim();
+  const salvedad = reparo ? `\n  ⚠️ ${reparo}` : "";
+
+  return `▸ Ref ${match.ref} — ${titulo}\n  ${datos}${nota}${salvedad}${match.linkWasi ? `\n  ${match.linkWasi}` : ""}`;
 }
 
 // Texto de contacto: con telefono resuelto, el link directo al privado; sin
@@ -142,13 +156,35 @@ function telefonoResuelto(telefonoColega, autorTelefono, textoOriginal = null) {
 // (fuente "aliado") sale con linkWasi null, y redactar.js#ficha imprimiria un
 // link vacio. Sin ninguna propiedad propia entre las utiles, no hay mensaje
 // que armar: se omite el bloque entero, nunca a medias.
-function mensajeListoParaReenviar(senal, veredicto, utiles, org) {
+//
+// LOS REPAROS DE LA COMPUERTA VIAJAN ADENTRO (Juan, 2026-09-07): "el borrador
+// listo para reenviar lleva esa misma aclaracion adentro". Una propiedad que
+// la compuerta freno por un motivo de PUBLICACION sigue en la lista de la
+// asesora, asi que tambien puede terminar en el borrador — y ahi no puede
+// presentarse como si estuviera limpia. Se inyecta por `leFalta`, el MISMO
+// canal por el que ya viaja la aclaracion de zona ({ref, detalle} ->
+// redactar.js#ficha -> "Aclaración: ..."), en vez de inventar un segundo
+// mecanismo: asi la ficha sale con UNA sola linea de Aclaración con todo
+// junto, que es como la lee el colega.
+function mensajeListoParaReenviar(senal, veredicto, utiles, org, aclaracionesColega = new Map()) {
   const propias = utiles.filter((m) => m.linkWasi);
   if (propias.length === 0) return null;
+
+  // Copia: `veredicto.le_falta` es el objeto guardado en la señal y no se
+  // muta — el mismo veredicto lo leen el feed del admin y el CRM.
+  const leFalta = (Array.isArray(veredicto.le_falta) ? veredicto.le_falta : []).map((f) => ({ ...f }));
+  for (const m of propias) {
+    const extra = aclaracionesColega.get(String(m.ref));
+    if (!extra) continue;
+    const yaEsta = leFalta.find((f) => f && String(f.ref) === String(m.ref) && String(f.detalle || "").trim());
+    if (yaEsta) yaEsta.detalle = `${yaEsta.detalle} · ${extra}`;
+    else leFalta.push({ ref: m.ref, detalle: extra });
+  }
+
   return redactar.mensajeGrupo(senal, propias, {
     org,
     sinConfirmar: veredicto.sin_confirmar || [],
-    leFalta: veredicto.le_falta || [],
+    leFalta,
     // El borrador que la asesora reenvia lleva las MISMAS aclaraciones que el
     // DM automatico: si el desvio de zona solo saliera por el camino del bot,
     // el colega recibiria una version mas honesta cuando le escribe la maquina
@@ -180,6 +216,17 @@ const PORQUE = {
   cuota_whatsapp_alta: "La línea está cerca de la cuota mensual de mensajes de WhatsApp, y el bot se frena para dejar colchón.",
   sin_fecha_mensaje: "El pedido llegó sin fecha, así que no podemos saber si todavía está vigente.",
   dm_fallido: "El bot intentó escribirle y WhatsApp rechazó el envío.",
+  // carril_umbral (Important 3 del review de 400c0c8): el carril de arriendo
+  // exige, ademas de todo lo anterior, que el match califique por encima de
+  // su propio umbral (RADAR_AMOBLADO_UMBRAL_DM) y que la propiedad este
+  // confirmada como amoblada -- src/groups/carril-arriendo.js#puedeSalirSolo.
+  carril_umbral: "El match no llegó al puntaje que exige el carril de amoblados para salir solo (o no confirmamos que la propiedad sea amoblada). Vos decidís si igual le sirve al colega.",
+  // carril_apagado (Important del review de 6104561): distinto de
+  // carril_umbral a proposito -- src/groups/carril-arriendo.js#puedeSalirSolo
+  // devuelve false por el interruptor ANTES de mirar el puntaje, asi que un
+  // match de 98 con el interruptor apagado no puede contarse como "no llego
+  // al puntaje". Nunca reusar el texto de carril_umbral aca.
+  carril_apagado: "El carril de amoblados está apagado en este momento, así que ningún match sale solo por ese carril, sin importar el puntaje. Vos decidís si escribirle al colega.",
 };
 
 // Cuando Sofi APROBO y aun asi el bot no pudo escribirle al colega, el aviso
@@ -193,7 +240,31 @@ function porqueNoSalioSolo(motivo, hayUtiles) {
   if (!hayUtiles) {
     return "Sofi no aprobó ninguna del todo, así que no le escribió nada al colega. Estas quedan para que decidas vos.";
   }
-  return PORQUE[motivo] ? `🚨 ${PORQUE[motivo]} ${URGENCIA}` : null;
+  if (PORQUE[motivo]) return `🚨 ${PORQUE[motivo]} ${URGENCIA}`;
+  // LA COMPUERTA DE CALIDAD TIENE SUS PROPIOS MOTIVOS (fix critico, revision
+  // post-merge 2026-09-07). `motivo` viene de politica.js#decidirDm casi
+  // siempre, pero vivo.js tambien puede guardar aca uno de los motivos de
+  // publicable.js/verificar-link.js (periodo_no_soportado, sin_precio,
+  // link_no_abre...) cuando esa compuerta fue la que de verdad vacio
+  // `utiles` -- ver la correccion en vivo.js#asistir. Esos motivos no viven en
+  // la tabla PORQUE de arriba, y sin este fallback llegaban aca como `null`:
+  // el aviso quedaba MUDO justo cuando mas urgente era explicar por que
+  // ("Busco amoblado 15 dias" -> Sofi aprobo, la compuerta lo freno, y la
+  // asesora no se enteraba de ninguna de las dos cosas). Se reusa la
+  // traduccion de publicable.js en vez de copiarla aca -- ya existe y cubre
+  // TODOS sus motivos, no solo el que motivo este fix. Si explicarMotivos no
+  // conoce el motivo, devuelve el identificador crudo sin traducir; eso NUNCA
+  // puede llegarle a una persona (es exactamente el bug que el commit
+  // b0f62ea ya cerro por otra puerta), asi que se calla en vez de mostrarlo.
+  //
+  // EL PUNTO FINAL LO PONE ESTA FUNCION (Minor, 2026-09-07). Los textos de
+  // PORQUE terminan en punto; los de MOTIVOS_LEGIBLES no (son fragmentos que
+  // completan otras frases, "Ref X calza, pero <motivo> — ..."). Sin esto la
+  // linea salia pegada: "...cotizado por mes Es una oportunidad YA APROBADA".
+  const traducido = motivo ? explicarMotivosSeguro([motivo]) : null;
+  if (!traducido) return null;
+  const conPunto = /[.!?…]$/.test(traducido) ? traducido : `${traducido}.`;
+  return `🚨 ${conPunto} ${URGENCIA}`;
 }
 
 // Lo que busca el colega, en una linea (Juan, 2026-09-02): "que entienda que
@@ -236,9 +307,27 @@ function queBusca(senal) {
  * @param motivoDm        por que el bot NO le escribio solo al colega
  *                        (src/groups/politica.js#decidirDm). Opcional: sin el, el
  *                        aviso sale como antes, sin la linea de explicacion.
+ * @param opciones.descartadosCalidad  refs que Sofi SI aprobo (refs_utiles) pero
+ *                        que publicable.filtrar + verificar-link.js (la misma
+ *                        compuerta de calidad del DM automatico, ver vivo.js)
+ *                        frenaron para salir solas -- [{ ref, motivos }].
+ *                        NO son todas lo mismo: publicable.js#clasificarMotivos
+ *                        las parte en "no se puede publicar sin supervision"
+ *                        (sigue ofrecible, con su reparo al lado y adentro del
+ *                        borrador) y "nunca se ofrece" (va al bloque ⛔).
+ *                        Opcional y default vacio: sin el, el aviso sale
+ *                        exactamente como antes.
  * @returns el texto del aviso, o null si no hay nada que decir
  */
-function construir(senal, veredicto, matches, telefonoColega = null, org = null, motivoDm = null, { link = null } = {}) {
+function construir(
+  senal,
+  veredicto,
+  matches,
+  telefonoColega = null,
+  org = null,
+  motivoDm = null,
+  { link = null, carrilAmoblados = false, descartadosCalidad = [] } = {}
+) {
   const refsUtiles = veredicto && Array.isArray(veredicto.refs_utiles) ? veredicto.refs_utiles : [];
   const refsDudosas = veredicto && Array.isArray(veredicto.refs_dudosas) ? veredicto.refs_dudosas : [];
   if (!veredicto || (refsUtiles.length === 0 && refsDudosas.length === 0)) return null;
@@ -255,12 +344,65 @@ function construir(senal, veredicto, matches, telefonoColega = null, org = null,
   // entiende por que le llego, y si la bloqueada era la unica tiene derecho a
   // saber que existe y por que todavia no se puede ofrecer.
   const bloqueada = (ref) => REFS_BLOQUEADAS.has(String(ref).trim().toUpperCase());
-  const refsApartadas = [...refsUtiles, ...refsDudosas].map(String).filter(bloqueada);
 
-  const utiles = refsUtiles
-    .filter((ref) => !bloqueada(ref))
+  // COMPUERTA DE CALIDAD, Y SUS DOS CLASES DE "NO" (Juan, 2026-09-07). Sofi
+  // aprueba con su propio criterio (refs_utiles), pero eso NO es la misma
+  // compuerta que ya corrio en vivo.js antes de intentar el DM directo:
+  // publicable.filtrar + verificar-link.js pueden frenar una ref que Sofi
+  // aprobo. Lo que NO se puede hacer es tratar todos esos frenos igual —
+  // publicable.js#clasificarMotivos los parte en dos y aca se usan distinto:
+  //
+  //   · SOLO PUBLICACION (zona, puntaje, sync viejo, plazo, amoblado sin
+  //     confirmar, campos faltantes): la propiedad SIGUE en la lista de la
+  //     asesora, con su reparo al lado. Ella es exactamente quien resuelve
+  //     eso. Es el invariante de src/groups/ubicacion.js:134-137 — un match
+  //     `otra_zona` entra al aviso A PROPOSITO, con su aclaracion ("queda en
+  //     Belén, no en Laureles"). Esconderselo le borraba la lista entera en
+  //     dos casos muy comunes: un pedido sin barrio (todo grada `ciudad`) y
+  //     una caida del sync de Wasi (todo `sync_viejo`), justo el dia en que
+  //     el respaldo humano mas importa.
+  //   · NUNCA OFRECER (precio corrupto o ausente, inventario ajeno, ref
+  //     bloqueada a mano, link que no abre): eso no se ofrece ni por mano de
+  //     la asesora. Va al bloque ⛔ de apartadas, con su razon.
+  //
+  // `utilesSofi` (aprobado por Sofi, solo sin lo bloqueado a mano) sigue
+  // siendo distinto de `utiles` (lo ofrecible) a proposito: el primero dice
+  // si HUBO aprobacion, el segundo dice si hay algo que mandar.
+  const clasePorRef = new Map(
+    (descartadosCalidad || []).map((d) => [String(d.ref).trim().toUpperCase(), clasificarMotivos(d.motivos || [])])
+  );
+  const claseDe = (ref) => clasePorRef.get(String(ref).trim().toUpperCase()) || null;
+  const nuncaOfrecer = (ref) => {
+    const c = claseDe(ref);
+    return Boolean(c && c.nuncaOfrecer.length);
+  };
+  // El reparo para la asesora: la traduccion de publicable.js, la misma que ya
+  // existe. `explicarMotivosSeguro` y no `explicarMotivos` para que un motivo
+  // sin traducir se calle en vez de llegarle crudo a una persona.
+  const reparoDe = (ref) => {
+    const c = claseDe(ref);
+    return c && c.soloPublicacion.length ? explicarMotivosSeguro(c.soloPublicacion) : null;
+  };
+
+  const refsBloqueadasDelAviso = [...refsUtiles, ...refsDudosas].map(String).filter(bloqueada);
+  const utilesSofi = refsUtiles.filter((ref) => !bloqueada(ref));
+  const refsCalidadDescartada = utilesSofi.map(String).filter(nuncaOfrecer);
+  const refsApartadas = [...refsBloqueadasDelAviso, ...refsCalidadDescartada];
+
+  const utiles = utilesSofi
+    .filter((ref) => !nuncaOfrecer(ref))
     .map((ref) => (matches || []).find((m) => String(m.ref) === String(ref)))
     .filter(Boolean);
+
+  // Lo que el colega tiene que leer DENTRO del borrador, por ref. Se calcula
+  // aca (no en el bloque de reenvio) porque es el mismo dato que alimenta la
+  // salvedad de la ficha: una sola fuente, dos redacciones.
+  const aclaracionesColega = new Map();
+  for (const m of utiles) {
+    const c = claseDe(m.ref);
+    const texto = c && c.soloPublicacion.length ? aclaracionParaColega(c.soloPublicacion) : null;
+    if (texto) aclaracionesColega.set(String(m.ref), texto);
+  }
   // Para revisar (Juan, 2026-09-01): refs_dudosas de revalidar.js -- Sofi no
   // las aprueba para el envio normal, pero tampoco las descarta del todo.
   // Van SOLO al asesor, nunca al colega.
@@ -269,18 +411,31 @@ function construir(senal, veredicto, matches, telefonoColega = null, org = null,
     .map((ref) => (matches || []).find((m) => String(m.ref) === String(ref)))
     .filter(Boolean);
   // `refsApartadas.length` en la condicion: si TODO lo que habia estaba
-  // bloqueado, el aviso tiene que salir igual — es justo el caso en que la
-  // asesora necesita saber que teniamos algo y por que no se puede ofrecer.
+  // bloqueado o descartado por calidad, el aviso tiene que salir igual — es
+  // justo el caso en que la asesora necesita saber que teniamos algo y por
+  // que no se puede ofrecer.
   if (utiles.length === 0 && dudosas.length === 0 && refsApartadas.length === 0) return null;
 
   const quien = senal.autor_nombre || "un colega";
   const contactoTexto = contactoPara(telefonoColega, senal.autor_telefono, quien, senal.texto_original);
 
   const busca = queBusca(senal);
-  const porque = porqueNoSalioSolo(motivoDm, utiles.length > 0);
+  // `utilesSofi.length > 0`, NO `utiles.length > 0` (fix critico): "hay algo
+  // aprobado por Sofi" no es lo mismo que "hay algo ofrecible". Si se usara
+  // `utiles` aca, el caso de arriba (todo aprobado, todo descartado por
+  // calidad) caeria en la rama de "Sofi no aprobó ninguna del todo" -- falso,
+  // Sofi SI aprobo, la compuerta fue la que freno.
+  const porque = porqueNoSalioSolo(motivoDm, utilesSofi.length > 0);
 
   // Aprobada y sin salir es otra categoria de mensaje, y se tiene que ver
-  // desde la primera linea sin leer el resto.
+  // desde la primera linea sin leer el resto. AQUI SE MIDE LO OFRECIBLE, NO
+  // LA APROBACION DE SOFI (Minor, 2026-09-07): el encabezado le ORDENA
+  // escribirle al colega YA, y esa orden no puede encabezar un cuerpo que no
+  // tiene nada confirmable que mandarle. Si Sofi aprobo pero todo quedo
+  // apartado por dato corrupto, el aviso sale como oportunidad normal y el
+  // bloque ⛔ explica que paso — el "Por qué no salió solo" sigue midiendose
+  // contra `utilesSofi` unas lineas mas arriba, porque ahi la pregunta es
+  // otra: si Sofi aprobo o no.
   const aprobadaSinSalir = utiles.length > 0 && Boolean(porque);
   const cabecera = [
     aprobadaSinSalir ? `🚨🚨 OPORTUNIDAD APROBADA — el bot NO pudo escribirle al colega` : `🎯 Oportunidad en un grupo`,
@@ -310,7 +465,11 @@ function construir(senal, veredicto, matches, telefonoColega = null, org = null,
       const verbo = utiles.length === 1 ? "puede" : "pueden";
       return [``, `Le ${verbo} servir ${utiles.length} propiedad${plural} — el detalle completo va más abajo, en el mensaje listo para reenviar.`];
     }
-    return [``, utiles.length === 1 ? `Le puede servir:` : `Le pueden servir:`, utiles.map(linea).join("\n")];
+    return [
+      ``,
+      utiles.length === 1 ? `Le puede servir:` : `Le pueden servir:`,
+      utiles.map((m) => linea(m, reparoDe(m.ref))).join("\n"),
+    ];
   }
 
   const bloqueDudosas = dudosas.length
@@ -319,19 +478,45 @@ function construir(senal, veredicto, matches, telefonoColega = null, org = null,
         utiles.length
           ? `🔎 Para revisar (no confirmadas — decidí vos si vale la pena llamar al colega):`
           : `🔎 Para revisar (nada confirmado del todo — decidí vos si vale la pena llamar al colega):`,
-        dudosas.map(linea).join("\n"),
+        dudosas.map((m) => linea(m)).join("\n"),
       ]
     : [];
 
   // Lo apartado, con su razon. Va DESPUES de lo ofrecible y antes del veredicto
   // de Sofi: la asesora primero ve con que puede trabajar, y despues por que
   // una quedo afuera.
-  const bloqueApartadas = refsApartadas.length
-    ? [
-        ``,
-        `⛔ ${refsApartadas.map((r) => `Ref ${r}`).join(", ")} también calza, pero tiene un dato mal cargado en Wasi — no la ofrezcas hasta que se corrija.`,
-      ]
-    : [];
+  const bloqueApartadas = [];
+  if (refsBloqueadasDelAviso.length) {
+    bloqueApartadas.push(
+      ``,
+      `⛔ ${refsBloqueadasDelAviso.map((r) => `Ref ${r}`).join(", ")} también calza, pero tiene un dato mal cargado en Wasi — no la ofrezcas hasta que se corrija.`
+    );
+  }
+  // Cada ref de la compuerta de calidad lleva SU PROPIA razon (fix critico):
+  // publicable.js puede frenar refs distintas por motivos distintos (una por
+  // precio corrupto, otra por link caido), asi que agruparlas bajo un solo
+  // texto generico -- como arriba, para REFS_BLOQUEADAS -- inventaria una
+  // razon que no aplica a todas. `explicarMotivosSeguro` es la MISMA
+  // traduccion que ya usa publicable.js: no se copia el texto aca.
+  //
+  // SOLO LOS MOTIVOS DE "NUNCA OFRECER" llegan a este bloque; los de
+  // publicacion se muestran junto a la propiedad, que sigue ofrecible.
+  //
+  // Y CON EL MISMO CANDADO QUE `porqueNoSalioSolo` (Minor, 2026-09-07): un
+  // motivo sin traduccion no puede salir crudo hacia una persona. Antes esta
+  // linea llamaba a explicarMotivos sin guardia y un identificador nuevo
+  // habria terminado escrito en el WhatsApp de Natalia. Sin traduccion, la
+  // ref se aparta igual -- eso nunca se calla -- solo que sin razon inventada.
+  for (const ref of refsCalidadDescartada) {
+    const clase = claseDe(ref);
+    const razon = explicarMotivosSeguro((clase && clase.nuncaOfrecer) || []);
+    bloqueApartadas.push(
+      ``,
+      razon
+        ? `⛔ Ref ${ref} también calza, pero ${razon} — no la ofrezcas hasta confirmar con el colega.`
+        : `⛔ Ref ${ref} también calza, pero la compuerta de calidad la apartó — no la ofrezcas hasta confirmar con el colega.`
+    );
+  }
 
   const sofiDice = [``, `Sofi dice: ${veredicto.por_que}`];
 
@@ -340,7 +525,7 @@ function construir(senal, veredicto, matches, telefonoColega = null, org = null,
   // texto YA armado. Con telefono resuelto no hace falta: la asesora ya
   // tiene el link directo al privado arriba, en `Contacto:`.
   const mensajeListo = utiles.length > 0 && !telefonoResuelto(telefonoColega, senal.autor_telefono)
-    ? mensajeListoParaReenviar(senal, veredicto, utiles, org)
+    ? mensajeListoParaReenviar(senal, veredicto, utiles, org, aclaracionesColega)
     : null;
   const bloqueReenviar = mensajeListo
     ? [
@@ -366,8 +551,16 @@ function construir(senal, veredicto, matches, telefonoColega = null, org = null,
 
   const cierre = [``, `Contame en qué quedó (la llamaste, no servía, ya se vendió). Con eso el radar aprende.`];
 
+  // ENCABEZADO DEL CARRIL (Juan, 2026-09-07): "un mensaje diferenciado que
+  // sepa que es de amoblados". Natalia recibe avisos de venta todo el dia; sin
+  // esto, uno de arriendo se lee igual que los demas y se trata igual.
+  //
+  // Va DENTRO de armar y no pegado al return para que lo cuente el clamp de
+  // 4096 caracteres de Meta, y para que salga igual en la version compacta.
+  const encabezado = carrilAmoblados ? ["🛋️ *AMOBLADOS* — pedido que no salió solo", ``] : [];
+
   const armar = (compacto) =>
-    [...cabecera, ...bloqueUtiles(compacto), ...bloqueDudosas, ...bloqueApartadas, ...sofiDice, ...bloqueReenviar, ...bloqueSofi, ...cierre].join("\n");
+    [...encabezado, ...cabecera, ...bloqueUtiles(compacto), ...bloqueDudosas, ...bloqueApartadas, ...sofiDice, ...bloqueReenviar, ...bloqueSofi, ...cierre].join("\n");
 
   const completo = armar(false);
   // Margen de seguridad bajo el limite real de Meta (4096). Solo tiene
@@ -457,7 +650,7 @@ function construirAvisoPostDm(senal, veredicto, matches, refsEnviadas, telefonoC
     ...bloquePedido,
     ``,
     `🔎 Esto otro quedó sin mandar (no confirmado) — decidí vos si vale la pena:`,
-    dudosas.map(linea).join("\n"),
+    dudosas.map((m) => linea(m)).join("\n"),
     ...bloquePorQue,
   ];
   return clamp(lineas.join("\n"));

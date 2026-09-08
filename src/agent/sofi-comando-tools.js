@@ -699,7 +699,11 @@ async function registrarResultadoRadarComando(input, ctx) {
 
   let pendientes;
   try {
-    pendientes = await groupSignals.pendientesDeAviso(scope.orgId, null);
+    // Mismo pool ANCHO que la version del asesor (ver la nota en
+    // group-signals.js#pendientesDeAviso): lo que salio por DM al colega es
+    // justo de lo que falta saber en que quedo. Sin esto, el admin tampoco
+    // podia cerrar el circuito de mas de la mitad de lo que se movio.
+    pendientes = await groupSignals.pendientesDeAviso(scope.orgId, null, { incluirRespondidas: true });
   } catch (e) {
     console.warn("[comando] No se pudieron leer los avisos pendientes del radar:", e.message);
     return "No pude consultar los pedidos pendientes en este momento.";
@@ -960,6 +964,11 @@ async function aprobarPedidoRadarComando(input, ctx) {
       return "La linea agoto su cuota de mensajes de WhatsApp de este mes (la pone WhatsApp, no nosotros) — hasta el proximo ciclo hay que escribirle a mano.";
     case "error_envio":
       return `El envio fallo: ${r.error || "sin detalle"}.`;
+    // El carril de amoblados tiene su propio interruptor, aparte de todo lo
+    // de arriba (Minor 2 del review de 6104561): sin este caso, el operador
+    // veia el token crudo "carril_apagado" en vez de una frase.
+    case "carril_apagado":
+      return "No se aprobó: el carril de amoblados está apagado ahora mismo (variable RADAR_AMOBLADO_ACTIVO en Railway) — nada sale solo por ese carril hasta que la actives. Podés seguir aprobando a mano mientras tanto.";
     default:
       return `No se pudo aprobar (${r.resultado}).`;
   }

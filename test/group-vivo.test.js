@@ -39,6 +39,10 @@ let avisosCercanosEnviados = [];
 let envioAvisoCercanoResultado = { ok: true, wamid: "wm-aviso-cercano" };
 // Doble para el caso "edificio especifico" (Juan, 2026-08-21).
 let edificioDevuelto = "";
+// Doble para las pruebas del carril de arriendo en el camino auto/sombra
+// (Important 4 del review de 400c0c8): por defecto "venta", igual que antes
+// de que existiera el carril, para no tocar ningun test existente.
+let operacionDevuelta = "venta";
 // Dobles para vivo.js#responderPorDmManual (Juan, 2026-08-24).
 let telefonoColegaManual = null;
 let enviosDmManual = [];
@@ -56,7 +60,7 @@ function instalarDobles() {
     exports: {
       classify: async (ms) => ({
         clasificados: ms.map((m) => ({
-          id: m.id, clase: claseDevuelta, confianza: 0.95, operacion: "venta",
+          id: m.id, clase: claseDevuelta, confianza: 0.95, operacion: operacionDevuelta,
           tipo: "apartamento", zona: "el poblado", ciudad: "medellin",
           precio_min: 0, precio_max: 1200000000, habitaciones: 0, area_min: 0,
           banos: 0, garajes: 0, estrato: 0, contacto: "", notas: "", edificio: edificioDevuelto, mensaje: m,
@@ -263,6 +267,7 @@ beforeEach(() => {
   avisosCercanosEnviados = [];
   envioAvisoCercanoResultado = { ok: true, wamid: "wm-aviso-cercano" };
   edificioDevuelto = "";
+  operacionDevuelta = "venta";
   telefonoColegaManual = null;
   enviosDmManual = [];
   envioDmManualResultado = { ok: true, wamid: "wm-dm-manual" };
@@ -1326,6 +1331,60 @@ test("avisarCercano: si TAMBIEN le falta un dato (no solo puntaje), no es un 'ca
 
   delete process.env.RADAR_REVISOR_PHONE;
   assert.strictEqual(avisosCercanosEnviados.length, 0);
+});
+
+// ── Carril de arriendo, puerta 1 (camino auto/sombra) — Important 4 del
+// review de 400c0c8: el guard de "nada al grupo" bloqueaba TAMBIEN el aviso a
+// Natalia y el resto del pipeline, cuando su unica intencion era frenar la
+// publicacion en el grupo gremial.
+
+test("carril de arriendo (puerta 1): NO publica en el grupo, pero SI avisa a Natalia y SI queda en el feed", async () => {
+  process.env.RADAR_REVISOR_PHONE = "573001878024";
+  vivo = instalarDobles();
+  operacionDevuelta = "arriendo";
+  // Un match que, sin el carril, se habria publicado solo (puntaje alto,
+  // dato limpio): asi la prueba distingue "no publica por el carril" de "no
+  // publica porque el match era malo".
+  matchesDevueltos = [matchBueno({ puntaje: 88 })];
+  let publicoEnGrupo = false;
+
+  const r = await vivo.procesarMensaje(ORG, mensaje(), {
+    grupo: GRUPO, modo: "auto", ahora: MEDIODIA,
+    enviar: async () => { publicoEnGrupo = true; return { ok: true, wamid: "no-deberia-salir" }; },
+  });
+
+  delete process.env.RADAR_REVISOR_PHONE;
+
+  // NO se publica en el grupo: es lo unico que esta guarda tiene que frenar.
+  assert.strictEqual(publicoEnGrupo, false);
+  assert.strictEqual(r.resultado, "callado");
+  assert.strictEqual(r.motivo, "carril_sin_publicacion_en_grupo");
+  assert.deepStrictEqual(marcadas, [], "no se marca como respondida: nunca se publico nada");
+
+  // SI llega a Natalia (avisarCercano) -- el hueco real que este fix cierra.
+  assert.strictEqual(avisosCercanosEnviados.length, 1);
+  assert.strictEqual(avisosCercanosEnviados[0].telefono, "573001878024");
+
+  // SI queda registrado el motivo en la señal y en el feed del admin --
+  // antes el `return` temprano tambien se los llevaba puestos.
+  assert.strictEqual(politicasGuardadas.length, 1);
+  assert.strictEqual(politicasGuardadas[0].motivo, "carril_sin_publicacion_en_grupo");
+  assert.strictEqual(feedRegistrado.length, 1);
+  assert.strictEqual(feedRegistrado[0].resultado, "callado");
+});
+
+test("carril de arriendo (puerta 1): una demanda de VENTA no toca esta guarda, se publica normal", async () => {
+  operacionDevuelta = "venta";
+  matchesDevueltos = [matchBueno({ puntaje: 88 })];
+  let publicoEnGrupo = false;
+
+  const r = await vivo.procesarMensaje(ORG, mensaje(), {
+    grupo: GRUPO, modo: "auto", ahora: MEDIODIA,
+    enviar: async () => { publicoEnGrupo = true; return { ok: true, wamid: "wamid.OUT" }; },
+  });
+
+  assert.strictEqual(publicoEnGrupo, true, "una demanda de venta no pasa por el carril");
+  assert.strictEqual(r.resultado, "publicado");
 });
 
 // Antes (primera version de avisarCercano) esto NO avisaba: se curaba por

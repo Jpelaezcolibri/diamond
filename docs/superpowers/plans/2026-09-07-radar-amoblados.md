@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- **Idioma:** código y nombres en inglés; comentarios, prompts y textos de usuario en español (Colombia). Los comentarios explican **por qué**, con el caso real que los motivó — es el estilo de todo `src/groups/`.
+- **Idioma:** en `src/groups/` los **identificadores van en español**, siguiendo lo que ya existe en el módulo (`ciudadCoincide`, `claveDuplicado`, `armarLotes`, `esPublicable`). Esto se decidió con Juan el 2026-09-07: el "código en inglés" del CLAUDE.md no describe a este módulo, y aplicarlo sólo al código nuevo lo dejaría mezclado dentro del mismo archivo. Comentarios, prompts y textos de usuario, en español (Colombia). Los comentarios explican **por qué**, con el caso real que los motivó.
 - **Sin acentos ni ñ en los comentarios de código** (convención vigente del repo); sí en los textos que lee una persona.
 - **Tests:** `node --test test/<archivo>.test.js` para uno solo; `npm test` corre todos.
 - **`null` no es `false`.** En `amoblado`, `null` significa "no sabemos" y decide el carril de salida. Nunca colapsarlos con `||`.
@@ -117,8 +117,15 @@ Crear `src/groups/amoblado.js`:
 // "amoblad" cubre amoblado/amoblada/amoblados; "amueblad", la variante que
 // usan algunos colegas. No se incluye "amoblar" (infinitivo): aparece casi
 // siempre dentro de "sin amoblar", que es lo contrario.
+// CADA alternativa lleva su \b, y no es cosmetico (revision del 2026-09-07):
+// sin el, "no\s+amoblad" matchea la "no" final de la palabra anterior, y
+// "Apartamento moderno amoblado en Laureles" devolvia false — o sea, se
+// descartaba un amoblado real. Pasa con cualquier palabra terminada en -no:
+// moderno, urbano, cercano, plano. Y la negacion necesita las DOS grafias:
+// sin "no\s+amueblad", un "NO amueblado" caia en el patron positivo y
+// devolvia true, exactamente lo contrario de lo que dice el aviso.
 const PATRON_SI = /amoblad|amueblad/i;
-const PATRON_NO = /sin\s+amoblar|sin\s+amueblar|sin\s+muebles|no\s+amoblad/i;
+const PATRON_NO = /\bsin\s+amoblar|\bsin\s+amueblar|\bsin\s+muebles|\bno\s+amoblad|\bno\s+amueblad/i;
 
 /**
  * @returns true  si el texto dice que esta amoblada
@@ -272,7 +279,7 @@ module.exports = {
 En `src/groups/lexico.js`, agregar a `ATRIBUTOS` (después de `"sin amoblar"`):
 
 ```js
-  "amoblados", "amueblado", "sin muebles", "renta corta", "coliving", "airbnb", "temporal",
+  "amoblados", "amueblado", "sin muebles", "renta corta", "coliving", "airbnb",
 ```
 
 y a `OPERACIONES` (después de `"arrendamiento"`):
@@ -1252,7 +1259,7 @@ Y en el bloque que le describe el pedido a Sofi, después de la línea de `estra
 **Y una sola frase al prompt `SISTEMA` de `revalidar.js`, que reconoce la talla en vez de contradecirla.** Agregarla junto a las reglas de `sin_confirmar`:
 
 ```
-El amoblado es la ÚNICA excepción a la regla de arriba: si el colega pidió amoblado y la ficha no lo confirma, la propiedad va igual a refs_utiles con el dato en 'sin_confirmar' — pero el motor no la va a dejar salir sola, y eso está bien y no es cosa tuya. No cambies tu criterio por esto.
+Sobre el amoblado, para que no te confunda: cuando el colega lo pidió y la ficha no lo confirma, seguí tratándolo como cualquier otro dato que no registramos — la propiedad va a refs_utiles con el amoblado en 'sin_confirmar'. Aparte de eso, el motor no deja que esa propiedad le salga sola al colega; ya está resuelto en el código y no es una decisión tuya. Tu criterio no cambia en nada por esto.
 ```
 
 - [ ] **Step 4: Run test to verify it passes**

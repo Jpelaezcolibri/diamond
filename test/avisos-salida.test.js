@@ -267,3 +267,187 @@ test("los pedidos agrupados de un mismo colega tambien llevan su motivo", () => 
   assert.match(texto, /Poblado.*— el pedido ya tiene más de media hora/);
   assert.match(texto, /Laureles.*— ya le escribimos 2 veces hoy/);
 });
+
+// ── IMPORTANT 1 del review de fin de rama (2026-09-07): el encabezado
+// 🛋️ AMOBLADOS se perdia en el camino REAL de esta bandeja ──────────────
+//
+// avisos-salida.js#textoDePedido reconstruye el mismo aviso que vivo.js#asistir
+// arma en linea, pero antes de este fix pasaba `{ link }` solo -- nunca
+// `carrilAmoblados` -- a alertaAsesor.construir. Cualquier pedido que caiga
+// en el freno de ritmo (exactamente la rafaga, el motivo de ser de este
+// archivo) llegaba disfrazado de aviso de venta. test/alerta-amoblados.test.js
+// no lo detectaba porque le pasa la opcion a mano, sin pasar por un llamador
+// real -- esta prueba ejercita el llamador real.
+const avisosSalida = require("../src/scheduler/avisos-salida");
+const directorio = require("../src/groups/directorio");
+const groupSignalsData = require("../src/data/group-signals");
+
+function pedidoAmoblado(extra = {}) {
+  return {
+    id: "sig-amob-1",
+    group_id: "g1",
+    autor_nombre: "Gustavo Arango",
+    autor_telefono: "141746805670125",
+    texto_original: "Buscamos apartamento Amoblado en el poblado, hasta $8.000.000",
+    operacion: "arriendo",
+    tipo: "apartamento",
+    zona: "El Poblado",
+    precio_max: 8000000,
+    revalidacion: {
+      refs_utiles: ["10319436"],
+      refs_dudosas: [],
+      por_que: "Calza en zona y presupuesto.",
+    },
+    matches: [
+      {
+        fuente: "diamond", ref: "10319436", titulo: "Apartamento Amoblado en Arriendo en El Poblado",
+        zona: "El Poblado", precio: "$7.900.000", operacion: "Arriendo", area: "90m2",
+        habitaciones: 3, puntaje: 79, ubicacion: "exacta", amoblado: true,
+        // `link` (la landing propia) y `linkWasi`: los dos, como los trae una
+        // fila real. Sin `link`, publicable.js marca `sin_link` y el aviso
+        // saldria con una salvedad que no corresponde a este caso.
+        link: "https://diamondinmobiliaria.com/propiedades/10319436",
+        linkWasi: "https://info.wasi.co/apartamento-amoblado-10319436",
+      },
+    ],
+    politica_motivo: "sin_telefono",
+    ...extra,
+  };
+}
+
+test("textoDePedido: el encabezado de AMOBLADOS SI llega por el camino real de la bandeja de salida", async () => {
+  const telRestaurar = directorio.telefonoDe;
+  const tokenRestaurar = groupSignalsData.asegurarToken;
+  directorio.telefonoDe = async () => null;
+  groupSignalsData.asegurarToken = async () => null;
+  try {
+    const texto = await avisosSalida.textoDePedido({ id: "org-1" }, pedidoAmoblado(), new Map(), null);
+    assert.ok(texto, "tiene que producir un aviso");
+    assert.match(texto, /AMOBLADOS/, "el encabezado se perdia en este camino antes del fix");
+  } finally {
+    directorio.telefonoDe = telRestaurar;
+    groupSignalsData.asegurarToken = tokenRestaurar;
+  }
+});
+
+test("textoDePedido: un pedido de venta no lleva el encabezado de amoblados", async () => {
+  const telRestaurar = directorio.telefonoDe;
+  const tokenRestaurar = groupSignalsData.asegurarToken;
+  directorio.telefonoDe = async () => null;
+  groupSignalsData.asegurarToken = async () => null;
+  try {
+    const senalVenta = pedidoAmoblado({ operacion: "venta" });
+    const texto = await avisosSalida.textoDePedido({ id: "org-1" }, senalVenta, new Map(), null);
+    assert.ok(texto);
+    assert.doesNotMatch(texto, /AMOBLADOS/, "un aviso de venta no se marca");
+  } finally {
+    directorio.telefonoDe = telRestaurar;
+    groupSignalsData.asegurarToken = tokenRestaurar;
+  }
+});
+
+// ── EL RESIDUO: la bandeja de salida reconstruia el aviso SIN la compuerta ──
+//
+// Este camino se toma en la RAFAGA -- cuando a la asesora se le escribio hace
+// menos de VENTANA_MIN -- que es exactamente el motivo de ser de este archivo.
+// Antes de este fix, textoDePedido armaba el aviso con `refs_utiles` crudo:
+// decia el motivo por el que la propiedad se freno (politica_motivo viene de
+// la fila, ya corregido por vivo.js) y en el mismo mensaje se la entregaba
+// para reenviar, como si estuviera limpia. Los dos caminos --el de vivo.js en
+// linea y este-- tienen que producir lo mismo.
+//
+// La fila trae todo lo que hace falta: `select("*")` devuelve `matches` con
+// sus banderas y `revalidacion` con lo que Sofi aprobo.
+
+function conStubsDeBandeja(fn) {
+  return async () => {
+    const telRestaurar = directorio.telefonoDe;
+    const tokenRestaurar = groupSignalsData.asegurarToken;
+    directorio.telefonoDe = async () => null;
+    groupSignalsData.asegurarToken = async () => null;
+    try {
+      await fn();
+    } finally {
+      directorio.telefonoDe = telRestaurar;
+      groupSignalsData.asegurarToken = tokenRestaurar;
+    }
+  };
+}
+
+test(
+  "textoDePedido: un plazo que no soportamos se explica Y viaja adentro del borrador, nunca como propiedad limpia",
+  conStubsDeBandeja(async () => {
+    const senal = pedidoAmoblado({
+      politica_motivo: "periodo_no_soportado",
+      matches: [
+        {
+          fuente: "diamond", ref: "10319436", titulo: "Apartamento Amoblado en Arriendo en El Poblado",
+          zona: "El Poblado", ciudad: "Medellín", precio: "$7.900.000", operacion: "Arriendo", area: "90m2",
+          habitaciones: 3, puntaje: 79, ubicacion: "exacta", amoblado: true,
+          periodo_no_soportado: true,
+          link: "https://diamondinmobiliaria.com/propiedades/10319436",
+          linkWasi: "https://info.wasi.co/apartamento-amoblado-10319436",
+        },
+      ],
+    });
+    const texto = await avisosSalida.textoDePedido({ id: "org-1" }, senal, new Map(), null);
+
+    assert.ok(texto, "tiene que producir un aviso");
+    assert.match(texto, /▸ Ref 10319436/, "la asesora sigue viendo la propiedad: ella decide");
+    assert.match(texto, /⚠️ .*cotizado por mes/i, "con la razon pegada a la ficha");
+    const borrador = texto.slice(texto.indexOf("mandale ESTO YA"));
+    assert.match(
+      borrador,
+      /Aclaración:.*cotizada por mes, no por días ni semanas/,
+      "antes del fix el borrador la entregaba sin una palabra del plazo"
+    );
+  })
+);
+
+test(
+  "textoDePedido: una ref bloqueada a mano SI se aparta por este camino, igual que en linea",
+  conStubsDeBandeja(async () => {
+    // 9921388 esta en GRUPOS_REFS_BLOQUEADAS por el precio mal cargado en Wasi.
+    const senal = pedidoAmoblado({
+      revalidacion: { refs_utiles: ["9921388"], refs_dudosas: [], por_que: "Calza en zona y presupuesto." },
+      matches: [
+        {
+          fuente: "diamond", ref: "9921388", titulo: "Apartamento Loma de los Balsos",
+          zona: "El Poblado", precio: "$1.550.000.000", operacion: "Venta", area: "180m2",
+          habitaciones: 3, puntaje: 90, ubicacion: "exacta",
+          link: "https://diamondinmobiliaria.com/propiedades/9921388",
+          linkWasi: "https://info.wasi.co/apartamento-9921388",
+        },
+      ],
+    });
+    const texto = await avisosSalida.textoDePedido({ id: "org-1" }, senal, new Map(), null);
+
+    assert.ok(texto);
+    assert.match(texto, /⛔ Ref 9921388/, "el dato mal cargado no se ofrece ni por mano de la asesora");
+    assert.doesNotMatch(texto, /mandale ESTO YA/i, "y no hay nada que reenviar");
+  })
+);
+
+test(
+  "textoDePedido: sin ningun freno, el aviso sale exactamente como antes -- sin salvedades inventadas",
+  conStubsDeBandeja(async () => {
+    const texto = await avisosSalida.textoDePedido({ id: "org-1" }, pedidoAmoblado(), new Map(), null);
+    assert.ok(texto);
+    assert.match(texto, /▸ Ref 10319436/);
+    assert.ok(!texto.includes("⚠️"), `salvedad inventada:\n${texto}`);
+    assert.ok(!texto.includes("⛔"), `apartada sin motivo:\n${texto}`);
+  })
+);
+
+// El conteo del digest (Juan, 2026-09-07): "1 para ofrecer" sobre un pedido
+// cuya unica ref esta apartada es una mentira que la asesora descubre al
+// abrir la ficha.
+test("digest: sin nada ofrecible y sin dudosas, no se anuncia '0 para revisar' -- se dice que mire la ficha", () => {
+  const texto = digest.construir("Natalia", [
+    pedido("Gustavo Arango", { utiles: 0, dudosas: 0, motivo: "sin_telefono" }),
+    pedido("Jaime", { utiles: 2, dudosas: 0 }),
+  ], []);
+  assert.match(texto, /nada para ofrecer todavía — abrí la ficha para ver por qué/);
+  assert.match(texto, /2 para ofrecer/, "el que si tiene algo se sigue contando igual");
+  assert.ok(!texto.includes("0 para revisar"));
+});

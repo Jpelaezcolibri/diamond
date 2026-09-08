@@ -119,10 +119,26 @@ const VECINDAD = [
   ["poblado", "castropol"], ["poblado", "manila"], ["poblado", "provenza"],
   ["envigado", "escobero"], ["envigado", "chocho"], ["envigado", "zuniga"],
   ["poblado", "rio"],
+  // Juan, 2026-09-07 (medicion contra produccion): las UNICAS dos propiedades
+  // en arriendo de Diamond, las dos amobladas y la razon de ser de la feature
+  // de amoblados, quedaban invisibles por esto. Ref 10319436 esta en "Los
+  // Gonzales" y un pedido de "El Poblado" contra ella daba null en
+  // ubicacionCoincide -- la propiedad nunca llegaba a ser candidata, asi que
+  // la compuerta de amoblado (src/groups/match.js) nunca alcanzaba a
+  // evaluarla. Decision del dueño del negocio: Los Gonzales es El Poblado
+  // (comuna 14). Ver SUBZONA_DE mas abajo para la otra mitad del arreglo.
+  ["poblado", "gonzales"],
   // Corredor occidental: Laureles y su entorno inmediato.
   ["laureles", "estadio"], ["laureles", "conquistadores"], ["laureles", "velodromo"],
   ["laureles", "america"], ["laureles", "joaquin"], ["laureles", "bolivariana"],
   ["laureles", "colores"], ["laureles", "calasanz"], ["laureles", "bolivar"],
+  // Juan, 2026-09-07 (misma medicion): ref 10319552, la otra de las dos
+  // propiedades en arriendo de Diamond, esta en "Don Quijote". Decision del
+  // dueño del negocio: se asocia a Laureles. OJO: el token es "quijote", NUNCA
+  // "don" -- "don" es una palabra comun en nombres propios de zona ("Don
+  // Diego", "Don Bosco"...) y registrarla pegaria a Laureles cualquier zona
+  // ajena que la contenga, el mismo defecto que "san"/"loma" en GENERIC_GEO.
+  ["laureles", "quijote"],
   ["america", "calasanz"], ["america", "colores"],
   // Belen y su borde con Laureles y Guayabal.
   ["belen", "laureles"], ["belen", "guayabal"], ["belen", "mota"],
@@ -206,6 +222,23 @@ const SUBZONA_DE = new Map([
   // hace que el prefiltro SQL siquiera traiga Las Palmas cuando se busca
   // Poblado — sin ella esta subzona nunca llegaria al motor para evaluarse.
   ["palmas", "poblado"],
+  // Juan, 2026-09-07 (medicion contra produccion, mismo caso que la entrada
+  // en VECINDAD de arriba): ref 10319436, zona "Los Gonzáles", es una de las
+  // DOS UNICAS propiedades en arriendo de Diamond -- la feature de amoblados
+  // se construye para estas dos. Sin esta entrada, "El Poblado" contra "Los
+  // Gonzáles" graduaba 'vecina' (-5) en vez de 'exacta' (+20): decision del
+  // dueño del negocio (2026-09-07), Los Gonzales es El Poblado (comuna 14).
+  // La entrada en VECINDAD se conserva por la misma razon que la de "palmas":
+  // es la que hace que el prefiltro SQL siquiera traiga esta zona.
+  ["gonzales", "poblado"],
+  // Juan, 2026-09-07 (misma medicion): ref 10319552, zona "Don Quijote", es la
+  // otra de las dos propiedades en arriendo. Decision del dueño del negocio:
+  // se asocia a Laureles. LA CLAVE ES "quijote", NUNCA "don" -- "don" es una
+  // palabra comun en nombres propios de zona ("Don Diego", "Don Bosco"...) y
+  // registrarla como subzona de Laureles pegaria ahi cualquier zona ajena que
+  // comparta esa sola palabra, el mismo defecto que "san"/"loma" ya documentado
+  // en GENERIC_GEO. Esta es la constraint mas importante de esta entrada.
+  ["quijote", "laureles"],
 ]);
 
 // ¿Algun token de la propiedad es una sub-zona conocida de algun token

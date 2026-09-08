@@ -118,6 +118,18 @@ test("si el envio falla, lo dice sin tumbar la conversacion", async (t) => {
   assert.match(out, /sesion caida/);
 });
 
+// Minor 2 del review de 6104561: sin este caso, "carril_apagado" caia en el
+// default y el operador veia el token crudo en vez de una frase.
+test("si el carril de amoblados esta apagado, lo dice en frase -- no el token crudo", async (t) => {
+  t.mock.method(groupSignals, "pendientesDeAviso", async () => [{ id: "sig-x", texto_original: "x" }]);
+  t.mock.method(vivo, "aprobarManual", async () => ({ resultado: "carril_apagado" }));
+
+  const out = await executeTool("aprobar_pedido_radar", {}, ctxAsesor());
+  assert.match(out, /carril de amoblados/i);
+  assert.match(out, /RADAR_AMOBLADO_ACTIVO/);
+  assert.doesNotMatch(out, /\(carril_apagado\)/, "no puede mostrar el token crudo");
+});
+
 // Un pedido que Natalia YA rechazo (rechazar_pedido_radar, DESCARTADO) no
 // puede seguir apareciendo como "pendiente de aprobacion" — mismo helper
 // compartido (pendientesSinResultado) que registrar_resultado_radar ya usaba

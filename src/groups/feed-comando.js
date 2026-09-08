@@ -67,7 +67,7 @@ function construir(mensaje, veredicto, matches, { avisada = false, destinatarioN
     `Colega: ${mensaje.autor_nombre || "un colega"}`,
     `Pidio: "${(mensaje.texto_original || "").trim()}"`,
     "",
-    utiles.length ? `Le sirve:\n${utiles.map(linea).join("\n")}` : null,
+    utiles.length ? `Le sirve:\n${utiles.map((m) => linea(m)).join("\n")}` : null,
     `Sofi dice: ${veredicto.por_que || "sin explicacion"}`,
     veredicto.desacuerdo_con_puntaje ? `Desacuerdo con el puntaje del motor: ${veredicto.desacuerdo_con_puntaje}` : null,
     noSalioAlColega ? `\nNo salio al colega: ${noSalioAlColega}` : null,
@@ -122,7 +122,7 @@ function construirAuto(mensaje, resultado, { publicables = [], descartados = [],
       : `Habia candidatas validas, pero la politica de conducta dijo no responder: ${decision?.motivo || "motivo desconocido"}.`;
 
   const lineasPublicables = publicables.length
-    ? `${publico ? "Se ofrecio" : "Habria podido ofrecer"}:\n${publicables.map(linea).join("\n")}`
+    ? `${publico ? "Se ofrecio" : "Habria podido ofrecer"}:\n${publicables.map((m) => linea(m)).join("\n")}`
     : null;
 
   const lineasDescartadas = descartados.length

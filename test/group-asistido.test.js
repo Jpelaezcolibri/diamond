@@ -34,13 +34,17 @@ let enviosDm = [];
 let envioDmResultado = { ok: true, wamid: "wm-dm-1" };
 // ── Escalado inmediato marca la señal, para que radar-silencio no la reintente ──
 let claimsEscaladoSilencio = [];
+// Carril de arriendo (Important 3 del review de 400c0c8): por defecto "venta",
+// igual que antes de que el carril existiera, para no tocar ningun test de
+// esta suite que no lo mencione.
+let operacionDevuelta = "venta";
 
 function instalar() {
   require.cache[RUTA("groups/classify.js")] = {
     exports: {
       classify: async (ms) => ({
         clasificados: ms.map((m) => ({
-          id: m.id, clase: claseDevuelta, confianza: 0.95, operacion: "venta",
+          id: m.id, clase: claseDevuelta, confianza: 0.95, operacion: operacionDevuelta,
           tipo: "apartamento", zona: "laureles", ciudad: "medellin",
           precio_min: 0, precio_max: 900000000, habitaciones: 3, area_min: 0,
           banos: 0, garajes: 0, estrato: 0, contacto: "", notas: "", mensaje: m,
@@ -233,6 +237,7 @@ beforeEach(() => {
   enviosDm = [];
   envioDmResultado = { ok: true, wamid: "wm-dm-1" };
   claimsEscaladoSilencio = [];
+  operacionDevuelta = "venta";
   delete process.env.RADAR_ALERTA_TO;
   delete process.env.CONTACT_WHATSAPP_NUMBER;
   vivo = instalar();
@@ -620,6 +625,186 @@ test("la decision (DM u asesora) queda guardada en la señal, igual que el resto
   assert.strictEqual(politicasGuardadas[0].id, "sig-1");
   assert.strictEqual(politicasGuardadas[0].motivo, "ok");
   assert.ok(Array.isArray(politicasGuardadas[0].traza));
+});
+
+// ── Carril de arriendo, puerta 2 (Important 3 del review de 400c0c8) ────
+//
+// decidirDm aprobaba el envio (motivo "ok") y ESO quedaba guardado en la
+// señal, aunque el carril de arriendo lo frenara despues por umbral -- la
+// asesora recibia el aviso sin ninguna explicacion, porque alertaAsesor.js
+// buscaba "ok" en su tabla PORQUE y no lo encontraba (el mismo hueco de
+// "Sofi rellena los huecos con explicaciones inventadas", 2026-09-06).
+test("carril de arriendo (puerta 2): si el match no califica, la señal queda con el motivo real (no 'ok') y la asesora ve la razon", async () => {
+  telefonoColegaResuelto = "573001234567";
+  operacionDevuelta = "arriendo";
+  // match() por defecto trae puntaje 83 -- por debajo del umbral de 85 del
+  // carril (RADAR_AMOBLADO_UMBRAL_DM), asi que ninguna candidata "calza fino"
+  // aunque decidirDm hubiera aprobado el envio automatico.
+  const r = await vivo.procesarMensaje(ORG, mensaje(), {
+    grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA",
+  });
+
+  // El DM automatico NO sale: el carril lo freno, no decidirDm.
+  assert.strictEqual(enviosDm.length, 0);
+  assert.strictEqual(r.resultado, "avisada");
+
+  // La señal NO se queda diciendo "ok": el ultimo guardarPolitica corrige el
+  // motivo al real.
+  const ultimaPolitica = politicasGuardadas[politicasGuardadas.length - 1];
+  assert.strictEqual(ultimaPolitica.motivo, "carril_umbral");
+  assert.ok(ultimaPolitica.traza.includes("NO:carril_umbral"), ultimaPolitica.traza.join(","));
+
+  // Y la asesora SI recibe una explicacion -- ya no un aviso mudo.
+  assert.strictEqual(enviadosPorSofi.length, 1);
+  assert.match(enviadosPorSofi[0].texto, /Por qué no salió solo/);
+  assert.match(enviadosPorSofi[0].texto, /carril de amoblados/);
+});
+
+test("carril de arriendo (puerta 2): si de verdad no habia como escribirle (sin telefono ni lid), el motivo real no se pisa", async () => {
+  telefonoColegaResuelto = null;
+  operacionDevuelta = "arriendo";
+  const anonimo = { ...mensaje(), autorId: null, autorTelefono: null };
+  const r = await vivo.procesarMensaje(ORG, anonimo, {
+    grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA",
+  });
+
+  assert.strictEqual(r.resultado, "avisada");
+  const ultimaPolitica = politicasGuardadas[politicasGuardadas.length - 1];
+  // El motivo AUTENTICO (no habia a quien escribirle) no se reemplaza por
+  // "carril_umbral": ese motivo es solo para cuando decidirDm SI aprobaba.
+  assert.strictEqual(ultimaPolitica.motivo, "sin_telefono");
+});
+
+// ── Carril de arriendo, la razon real (Important del review de 6104561) ──
+//
+// puedeSalirSolo devuelve false por TRES causas distintas y antes de este fix
+// las tres se guardaban igual como "carril_umbral" -- si el operador apagaba
+// RADAR_AMOBLADO_ACTIVO, la asesora leia "no llego al puntaje" aunque el
+// match fuera un 98. Estos tres tests pinean cada causa a SU motivo.
+test("carril de arriendo (interruptor apagado): con RADAR_AMOBLADO_ACTIVO=false, el motivo es carril_apagado -- nunca carril_umbral, aunque el match sea un 98", async () => {
+  telefonoColegaResuelto = "573001234567";
+  operacionDevuelta = "arriendo";
+  // Puntaje muy por encima del umbral (85) y amoblado confirmado: si esto
+  // igual no sale, tiene que ser por el interruptor, no por el puntaje.
+  matchesDevueltos = [match({ puntaje: 98, amoblado: true, amoblado_sin_confirmar: false })];
+  veredictoDeSofi = { ...APRUEBA };
+
+  const antes = process.env.RADAR_AMOBLADO_ACTIVO;
+  process.env.RADAR_AMOBLADO_ACTIVO = "false";
+  try {
+    const r = await vivo.procesarMensaje(ORG, mensaje(), {
+      grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA",
+    });
+
+    assert.strictEqual(enviosDm.length, 0, "el interruptor apagado frena el DM aunque el match sea un 98");
+    assert.strictEqual(r.resultado, "avisada");
+
+    const ultimaPolitica = politicasGuardadas[politicasGuardadas.length - 1];
+    assert.strictEqual(ultimaPolitica.motivo, "carril_apagado");
+    assert.ok(ultimaPolitica.traza.includes("NO:carril_apagado"), ultimaPolitica.traza.join(","));
+
+    // La asesora tiene que leer la razon REAL: el interruptor, nunca "no
+    // llego al puntaje" -- ese match era un 98.
+    assert.strictEqual(enviadosPorSofi.length, 1);
+    const texto = enviadosPorSofi[0].texto;
+    assert.match(texto, /Por qué no salió solo/);
+    assert.match(texto, /apagado/i, "tiene que decir que el carril esta apagado");
+    assert.doesNotMatch(texto, /no llegó al puntaje/i, "no puede decir que el match no califico: era un 98");
+  } finally {
+    if (antes === undefined) delete process.env.RADAR_AMOBLADO_ACTIVO;
+    else process.env.RADAR_AMOBLADO_ACTIVO = antes;
+  }
+});
+
+test("carril de arriendo (Sofi no aprobo nada util): con utiles vacio no se inventa una razon de carril", async () => {
+  telefonoColegaResuelto = "573001234567";
+  operacionDevuelta = "arriendo";
+  // Solo dudosas, ninguna util -- el DM nunca iba a salir por falta de
+  // candidatas aprobadas por Sofi, no porque el carril lo frenara. Con
+  // refs_utiles vacio Y refs_dudosas vacio, apruebaAviso descarta el pedido
+  // ANTES de llegar a decidirDm (ver "si Sofi dice que no sirve" mas arriba),
+  // asi que hace falta una dudosa para que el flujo llegue hasta aca.
+  veredictoDeSofi = { ...APRUEBA, refs_utiles: [], refs_dudosas: ["9780079"] };
+
+  const r = await vivo.procesarMensaje(ORG, mensaje(), {
+    grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA",
+  });
+
+  assert.strictEqual(r.resultado, "avisada");
+  assert.strictEqual(enviosDm.length, 0, "sin utiles aprobadas no hay DM que mandar");
+
+  const ultimaPolitica = politicasGuardadas[politicasGuardadas.length - 1];
+  // Ni "carril_umbral" (es para cuando SI habia candidatas y ninguna
+  // califico) ni "carril_apagado" (es para cuando el interruptor freno un
+  // envio que si tenia con que salir) -- aca simplemente no habia nada
+  // aprobado, y ese es el motivo que tiene que quedar.
+  assert.strictEqual(ultimaPolitica.motivo, "ok");
+
+  // La asesora recibe la razon autentica -- nunca una frase de carril.
+  assert.match(enviadosPorSofi[0].texto, /Sofi no aprobó ninguna/);
+  assert.doesNotMatch(enviadosPorSofi[0].texto, /carril de amoblados/);
+});
+
+// ── FIX CRITICO (review de fin de rama, 2026-09-07) ─────────────────────
+//
+// EL BUG, de punta a punta: Sofi aprueba una ref (refs_utiles), pero la
+// compuerta de calidad (publicable.filtrar + verificar-link.js, que vivo.js
+// YA corre antes de intentar el DM) la descarta -- en este caso por
+// `periodo_no_soportado` (un pedido de arriendo por dias contra un
+// inventario cotizado por mes). Antes del fix:
+//   1. `utiles` (post-compuerta) quedaba vacio, asi que la correccion del
+//      carril (que exige utiles.length > 0) nunca se disparaba.
+//   2. decidirDm ya habia dicho "ok" (via el @lid, el camino de 98% de los
+//      colegas) y nada lo corregia -- la señal quedaba "ok".
+//   3. alertaAsesor.construir buscaba "ok" en su tabla PORQUE, no lo
+//      encontraba, y el aviso salia SIN ninguna linea de "Por qué no salió
+//      solo" -- mudo.
+//   4. Peor: el bloque "mandale ESTO YA" se armaba con `refs_utiles` CRUDO,
+//      asi que la asesora recibia la ORDEN de reenviarle al colega la ref
+//      que el propio bot acababa de decidir que no se podia ofrecer.
+//
+// REVISION 2026-09-07 (decision de Juan): `periodo_no_soportado` frena la
+// PUBLICACION sin supervision, no la propiedad. Al colega no se le manda solo
+// -- eso no cambia -- pero la asesora SI la ve, con la salvedad pegada, y el
+// borrador la lleva adentro ("está cotizada por mes, no por días ni semanas").
+// Lo que se le esconde es el dato corrupto o ajeno, no esto. Ver
+// publicable.js#clasificarMotivos y la regresion que documenta.
+test("compuerta de calidad (periodo no soportado): al colega no le sale solo, pero la asesora lo ve con la salvedad adentro del borrador", async () => {
+  // Sin telefono resuelto, solo el lid del autor -- el 98% de los colegas,
+  // y el camino por el que decidirDm SI dice "ok" (ver politica.js#decidirDm).
+  telefonoColegaResuelto = null;
+  matchesDevueltos = [match({ periodo_no_soportado: true })];
+
+  const r = await vivo.procesarMensaje(ORG, mensaje(), {
+    grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA",
+  });
+
+  // La compuerta de calidad descarto la unica candidata: no hay nada limpio
+  // que mandarle al colega por DM.
+  assert.strictEqual(enviosDm.length, 0, "la compuerta de calidad descarto la unica candidata: no hay DM que mandar");
+  assert.strictEqual(r.resultado, "avisada");
+
+  // La señal NO se queda diciendo "ok": queda con el motivo real de la
+  // compuerta de calidad, el mismo que ya calculaba descartadosDm.
+  const ultimaPolitica = politicasGuardadas[politicasGuardadas.length - 1];
+  assert.strictEqual(ultimaPolitica.motivo, "periodo_no_soportado", "el motivo real, nunca 'ok'");
+
+  assert.strictEqual(enviadosPorSofi.length, 1);
+  const texto = enviadosPorSofi[0].texto;
+
+  // (b) la asesora ve la razon real -- ya no un aviso mudo.
+  assert.match(texto, /Por qué no salió solo/, "antes del fix esta linea faltaba del todo");
+  assert.match(texto, /por días o semanas/i, "el motivo real, traducido");
+
+  // (a) la propiedad SIGUE en su lista, con la razon pegada: ella es quien
+  // resuelve un plazo, y esconderselo le borra el negocio.
+  assert.match(texto, /Le puede servir:/);
+  assert.match(texto, /⚠️ .*cotizado por mes/i, "la razon, pegada a la ficha");
+
+  // (b) y el borrador que ella reenvia NUNCA la presenta como si estuviera
+  // limpia -- antes de 9078af4 este bloque salia sin una palabra del plazo.
+  const borrador = texto.slice(texto.indexOf("mandale ESTO YA"));
+  assert.match(borrador, /Aclaración:.*cotizada por mes, no por días ni semanas/);
 });
 
 // ── SIN TELEFONO, SE MANDA POR EL LID (Juan, 2026-09-04) ────────────────

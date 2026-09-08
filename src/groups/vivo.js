@@ -49,6 +49,7 @@ const { evaluarOferta } = require("./cruce-mandatos");
 const command = require("../data/command");
 const cruceLeads = require("./cruce-leads");
 const ritmo = require("../lib/ritmo-avisos");
+const carrilArriendo = require("./carril-arriendo");
 
 const VENTANA_LIMITE_HORAS = 24;
 
@@ -181,6 +182,25 @@ async function procesarMensaje(org, mensaje, { grupo, modo = "sombra", enviar = 
     return asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, sesion });
   }
 
+  // NADA AL GRUPO, POR CODIGO (Juan, 2026-09-07: "nada a grupos, solo
+  // respuestas al dm"). Hoy este camino esta inactivo —la org esta en
+  // 'asistido' y ningun grupo tiene responde=true— y la guarda existe
+  // justamente para que siga siendo cierto el dia que alguna de esas dos
+  // cosas cambie por error.
+  //
+  // CORRECCION (Important 4 del review de 400c0c8): esto era un `return`
+  // temprano incondicional, y se llevaba puesto TODO lo que sigue en la
+  // funcion -- incluido avisarCercano, cuyo propio comentario cita la regla
+  // de Juan ("lo que no se responda por el bot debe de ir de una al chat de
+  // natalia... no podemos dejar pasar ningun pedido"), y tambien
+  // guardarPolitica + el feed del admin. La intencion de esta guarda es "nada
+  // al GRUPO", no "nada a Natalia": se marca aca y se sigue de largo por la
+  // compuerta de calidad y la politica normales; mas abajo, si la politica lo
+  // hubiera dejado publicar, se lo frena con este mismo motivo -- pero solo
+  // eso, para no pisar un motivo real (modo_apagado, ya_respondida,
+  // puntaje_bajo) que ya haya decidido callar por su cuenta.
+  const esCarrilSinPublicacionEnGrupo = carrilArriendo.esDelCarril(c);
+
   // 5. Compuerta de calidad del dato, y despues politica de conducta. Son dos
   // preguntas distintas: "¿este dato es publicable?" y "¿corresponde hablar?".
   //
@@ -216,6 +236,18 @@ async function procesarMensaje(org, mensaje, { grupo, modo = "sombra", enviar = 
     respuestasRecientes: recientes ? recientes.cantidad : null,
     ahora,
   });
+
+  // Recien ACA se aplica el carril (Important 4): si la politica de todos
+  // modos iba a publicar, se frena -- pero SOLO en ese caso. Si `decision.publicar`
+  // ya era false por otra razon (modo_apagado, ya_respondida, puntaje_bajo,
+  // etc.), esa razon real se deja intacta: pisarla con "carril..." perderia el
+  // motivo autentico y ademas desactivaria por accidente la exclusion de
+  // avisarCercano que existe para ya_respondida/modo_apagado (mas abajo).
+  if (esCarrilSinPublicacionEnGrupo && decision.publicar) {
+    decision.publicar = false;
+    decision.motivo = "carril_sin_publicacion_en_grupo";
+    decision.traza = [...decision.traza, "NO:carril_sin_publicacion_en_grupo"];
+  }
 
   // Feed del admin, tambien para el camino determinista (auto/sombra): sin
   // esto, todo lo que la compuerta de calidad o la politica callan desaparece
@@ -492,13 +524,71 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
     cuotaLinea,
   });
 
+  // LA COMPUERTA DE CALIDAD TAMBIEN CORRIGE EL MOTIVO (fix critico, revision
+  // post-merge 2026-09-07). decidirDm dice "ok" mirando telefono/lid y los
+  // limites de volumen -- no sabe que publicable.filtrar + verificarLink (mas
+  // arriba en esta funcion) ya descartaron TODO lo que Sofi habia aprobado
+  // (precio corrupto, plazo que no soportamos, amoblado sin confirmar...).
+  // Sin esto la señal quedaba "ok": alertaAsesor.js buscaba "ok" en su tabla
+  // PORQUE, no lo encontraba, y el aviso salia MUDO justo cuando mas urgente
+  // era explicar por que -- caso real: "Busco amoblado 15 dias", Sofi aprobo
+  // el unico amoblado del inventario, la compuerta lo descarto por periodo, y
+  // sin este fix la asesora recibia "mandale ESTO YA" con esa ref y ninguna
+  // linea de "Por qué no salió solo". Se corrige SOLO cuando decidirDm de
+  // verdad dijo "ok": si el motivo real era otro (sin_telefono,
+  // pedido_vencido...) esa es la razon autentica y no hay nada que pisar --
+  // mismo criterio que la correccion del carril, un poco mas abajo.
+  if (utilesSegunSofi.length > 0 && utiles.length === 0 && decisionDm.motivo === "ok") {
+    const motivoCalidad = descartadosDm[0] && descartadosDm[0].motivos && descartadosDm[0].motivos[0];
+    if (motivoCalidad) {
+      decisionDm.motivo = motivoCalidad;
+      decisionDm.traza = [...decisionDm.traza, `NO:${motivoCalidad}`];
+    }
+  }
+
+  // El carril de arriendo exige ademas que alguna candidata calce fino
+  // (RADAR_AMOBLADO_UMBRAL_DM) y que el interruptor este prendido. Si no, el
+  // pedido NO se pierde: cae al aviso diferenciado a la asesora, mas abajo en
+  // esta misma funcion. Se calcula ANTES del guardarPolitica de abajo (Minor 1
+  // del review de 6104561) para que haya UNA sola escritura -- con dos
+  // escrituras seguidas la señal quedaba, aunque fuera un instante, diciendo
+  // "ok" mientras el DM ya estaba frenado. `utiles` (linea 476) ya esta
+  // calculado a esta altura, asi que adelantar este calculo no cambia ningun
+  // valor: nada entre la escritura vieja y esta usaba lo que esa escritura
+  // dejaba en la base.
+  const carrilEsDelPedido = carrilArriendo.esDelCarril(c);
+  const carrilApagado = carrilEsDelPedido && !carrilArriendo.carrilActivo();
+  const salidaSolaOk = !carrilEsDelPedido || carrilArriendo.puedeSalirSolo(utiles);
+
+  // CUAL ES LA RAZON REAL (Important del review de 6104561): decidirDm ya
+  // aprobo el envio (motivo "ok"), pero el carril de arriendo lo puede frenar
+  // por TRES causas bien distintas, y antes de este fix las tres quedaban
+  // escritas igual como "carril_umbral":
+  //   - el interruptor esta apagado (RADAR_AMOBLADO_ACTIVO=false): decirle a
+  //     la asesora "no llego al puntaje" es falso si el match era, por
+  //     ejemplo, un 98 -- el freno real es el interruptor, no el numero.
+  //     Motivo autentico: carril_apagado.
+  //   - el interruptor prendido y SI hay candidatas (`utiles` no vacio), pero
+  //     ninguna llega al umbral (o el amoblado no esta confirmado): aca
+  //     "carril_umbral" es la razon autentica, sin cambios.
+  //   - `utiles` vacio: el DM nunca iba a salir por falta de candidatas
+  //     aprobadas por Sofi, no por el carril -- inventarle una razon de
+  //     carril a eso es el mismo hueco que cerro el commit b0f62ea. Se deja
+  //     el motivo tal cual lo decidio decidirDm, sin tocarlo.
+  // Igual que antes: se corrige SOLO cuando decidirDm de verdad dijo "ok". Si
+  // el motivo real era otro (sin_telefono, limite_linea_alcanzado, etc.) esa
+  // es la razon autentica y no hay nada que pisar.
+  if (!salidaSolaOk && decisionDm.motivo === "ok" && utiles.length > 0) {
+    decisionDm.motivo = carrilApagado ? "carril_apagado" : "carril_umbral";
+    decisionDm.traza = [...decisionDm.traza, `NO:${decisionDm.motivo}`];
+  }
+
   // Auditable igual que el resto de las decisiones del radar (mismo llamado
   // que usa el camino auto/sombra mas arriba en este archivo, sobre la misma
   // columna): la razon por la que un pedido salio por DM o por la asesora
   // queda en la señal misma, no solo en un log que se pierde.
   await groupSignals.guardarPolitica(org.id, signal.id, { motivo: decisionDm.motivo, traza: decisionDm.traza }).catch(() => {});
-
-  if (decisionDm.enviarDm && sesion && utiles.length > 0) {
+  if (decisionDm.enviarDm && sesion && utiles.length > 0 && salidaSolaOk) {
     const textoDm = textoParaColega(
       mensaje.autor,
       utiles,
@@ -648,7 +738,11 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
     telefonoColega,
     org,
     decisionDm.motivo,
-    { link: linkAviso }
+    // descartadosCalidad (fix critico): las refs que Sofi aprobo pero que la
+    // compuerta de calidad de arriba (publicable.filtrar + verificarLink) ya
+    // descarto -- alertaAsesor.js las aparta del "mandale ESTO YA" en vez de
+    // ofrecerlas como si hubieran pasado.
+    { link: linkAviso, carrilAmoblados: carrilEsDelPedido, descartadosCalidad: descartadosDm }
   );
   if (!texto) {
     await feedComando.registrar(org, señalParaFeed, veredicto, matches).catch((e) =>
@@ -932,6 +1026,14 @@ async function aprobarManual(org, signalId) {
   // supervision, es si el radar sigue prestando atencion a ese grupo.
   if (grupo.modo === "ignorar") return { resultado: "grupo_no_habilitado" };
 
+  // El interruptor del carril SI aplica a la aprobacion manual: apagar un
+  // carril es dejar de recibir, no distinguir poblaciones. El umbral NO
+  // aplica — la persona que aprueba reemplaza al puntaje, igual que el
+  // `umbral: 0` de mas abajo.
+  if (carrilArriendo.esDelCarril(signal) && !carrilArriendo.carrilActivo()) {
+    return { resultado: "carril_apagado" };
+  }
+
   // BUG real (Juan, 2026-08-20): "aun no puedo enviar mensajes que el bot
   // callo". La causa: esto seguia exigiendo el mismo umbral de puntaje (70)
   // que el camino 100% automatico, asi que aprobar un pedido que se callo por
@@ -1105,6 +1207,10 @@ async function responderPorDmManual(org, signalId, { sesion = null, refs = null 
   if (!signal) return { resultado: "no_encontrada" };
   if (signal.respondida_at) return { resultado: "ya_respondida" };
   if (signal.clase !== "demanda") return { resultado: "no_es_demanda" };
+
+  if (carrilArriendo.esDelCarril(signal) && !carrilArriendo.carrilActivo()) {
+    return { resultado: "carril_apagado" };
+  }
 
   // El grupo ya no se usa para resolver el telefono: desde el 2026-09-04
   // directorio.telefonoDe es 100% local (directorio_lids + la pista del

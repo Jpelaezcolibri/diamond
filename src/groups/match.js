@@ -11,6 +11,7 @@
 const organizations = require("../data/organizations");
 const properties = require("../data/properties");
 const allyProperties = require("../data/ally-properties");
+const { esAmoblada } = require("./amoblado");
 
 // Los dos modulos usan claves distintas para lo mismo: properties espera
 // precio_max / habitaciones_min y ally-properties espera precioMax. Sin
@@ -217,6 +218,21 @@ function evaluarCandidata(p, c, fuente) {
   if (!mismaOperacion(p, c)) return null;
   if (c.tipo && !String(p.tipo || "").toLowerCase().includes(String(c.tipo).toLowerCase())) return null;
 
+  // ── Amoblado: compuerta en las DOS direcciones ──────────────────────────
+  //
+  // Wasi no expone el dato (ver src/groups/amoblado.js), asi que la certeza es
+  // asimetrica y por eso son tres estados y no dos:
+  //   · true  -> lo sabemos, se declara en positivo y suma.
+  //   · false -> lo sabemos y NO cumple: descarta, en cualquiera de los dos
+  //              sentidos. El pedido "SIN muebles" es real y esta en la base.
+  //   · null  -> no lo sabemos: NO descarta. El pedido tiene que llegar igual
+  //              a la asesora; lo que impide que salga solo es la marca
+  //              `amoblado_sin_confirmar`, que lee publicable.js.
+  const amoblada = esAmoblada(p);
+  const pideAmoblado = String(c.amoblado || "").trim().toLowerCase();
+  if (pideAmoblado === "si" && amoblada === false) return null;
+  if (pideAmoblado === "no" && amoblada === true) return null;
+
   const ubicacion = ubicacionCoincide(p, c);
   if (!ubicacion) return null;
 
@@ -226,6 +242,13 @@ function evaluarCandidata(p, c, fuente) {
   // (ver la nota de CASTIGO_CORTO arriba): sumado adentro, el tope se lo
   // volveria a tragar y estariamos donde empezamos.
   let castigos = 0;
+
+  // 8 puntos, en linea con el area (8) y por debajo de las alcobas (10): es un
+  // requisito verificado del pedido, no el que define el producto.
+  if (pideAmoblado === "si" && amoblada === true) {
+    puntaje += 8;
+    razones.push("amoblada");
+  }
 
   // Descuento por fuente no verificable (Juan, 2026-08-20 — auditoria del
   // veredicto de Sofi en modo asistido): distinto de "lo desconocido no
@@ -409,6 +432,15 @@ function evaluarCandidata(p, c, fuente) {
     // ficha de Sofi pueda confirmar en positivo lo que antes era siempre
     // "sin_confirmar". La ausencia sigue sin significar "no tiene".
     caracteristicas: fuente === "diamond" ? p.caracteristicas || null : null,
+    // Las tres marcas que lee publicable.js (2026-09-07). Se estampan ACA
+    // porque esta es la unica funcion que ve el pedido Y la propiedad:
+    // `esPublicable(match)` recibe solo el match y no tiene forma de saber
+    // que pidio el colega.
+    amoblado: amoblada,
+    amoblado_sin_confirmar: pideAmoblado === "si" && amoblada === null,
+    // El plazo es del PEDIDO, no de la propiedad — viaja en el match por la
+    // misma razon que el de arriba: es el unico camino hasta publicable.js.
+    periodo_no_soportado: String(c.periodo || "").trim().toLowerCase() === "corta",
     // El castigo se resta DESPUES del tope (ver CASTIGO_CORTO arriba): es lo
     // que hace que 100 vuelva a significar "cumple todo lo que se pudo
     // verificar". Piso en 0 porque una zona muy castigada mas dos huecos

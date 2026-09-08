@@ -256,6 +256,8 @@ tenemos, y el colega pregunta si le importa. Mandarlo a dudosas para que
 alguien averigue primero es lo mismo que no avisar. Si lo UNICO que te hace
 dudar de una propiedad es algo que no registramos, no hay duda: refs_utiles.
 
+Sobre el amoblado, para que no te confunda: cuando el colega lo pidió y la ficha no lo confirma, seguí tratándolo como cualquier otro dato que no registramos — la propiedad va a refs_utiles con el amoblado en 'sin_confirmar'. Aparte de eso, el motor no deja que esa propiedad le salga sola al colega; ya está resuelto en el código y no es una decisión tuya. Tu criterio no cambia en nada por esto.
+
 LAS CUATRO SALIDAS
 
 | Salida | Va a | Cuando |
@@ -400,6 +402,7 @@ function formatearCandidatas(matches) {
         m.precio,
         m.area,
         m.habitaciones ? `${m.habitaciones} alcobas` : null,
+        m.amoblado === true ? "amoblada" : null,
         dato(m.banos, "baños"),
         dato(m.garajes, "garajes"),
         formato.datoCargado(m.estrato) ? `estrato ${m.estrato}` : "estrato: sin dato",
@@ -539,6 +542,8 @@ async function revalidar(clasificado, matches) {
     `- baños: ${clasificado.banos || "no dice"}`,
     `- garajes: ${clasificado.garajes || "no dice"}`,
     `- estrato: ${clasificado.estrato || "no dice"}`,
+    clasificado.amoblado === "si" ? `- amoblado: SI, el colega lo pidio explicitamente` : null,
+    clasificado.amoblado === "no" ? `- amoblado: NO, el colega lo RECHAZO explicitamente` : null,
     clasificado.edificio ? `- edificio puntual: ${clasificado.edificio}` : null,
     clasificado.notas ? `- notas: ${clasificado.notas}` : null,
     ``,
