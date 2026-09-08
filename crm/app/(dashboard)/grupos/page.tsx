@@ -417,6 +417,15 @@ export default async function GruposPage() {
       pedido_original: s?.texto_original ?? null,
       pedido_respondida_at: s?.respondida_at ?? null,
       propiedad: ref ? propiedadDmPorRef.get(ref) ?? { ref, titulo: null, link: null } : null,
+      // "Hay señal ligada, pero no la puedo ver" es un estado distinto de "no
+      // hay señal ligada", y el panel los mostraba iguales (revisión final,
+      // 2026-09-08). Las señales del radar en vivo se persisten con el
+      // advisor_id de la dueña de la línea, así que para cualquier otra
+      // asesora no-admin `señalPorId` sale vacío y TODOS los hilos decían
+      // "sin pedido ligado" — culpando al dato cuando lo que falta es
+      // permiso. El aislamiento de mias() no se toca: solo se deja de mentir
+      // sobre por qué.
+      pedido_restringido: Boolean(m.senal_id) && !s,
     };
   });
 

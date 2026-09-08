@@ -29,6 +29,12 @@ export type DmMensaje = {
    *  → properties). Es lo que convierte esto en seguimiento de propiedades y
    *  no en un inbox más. */
   propiedad?: { ref: string; titulo: string | null; link: string | null } | null;
+  /** Hay `senal_id`, pero la señal no vino en el enriquecimiento porque
+   *  `mias()` la filtró: el pedido existe y este usuario no puede verlo. Es un
+   *  estado DISTINTO de "nunca hubo pedido ligado", y confundirlos hacía que
+   *  el panel culpara al dato en vez del permiso (revisión final,
+   *  2026-09-08). Lo calcula page.tsx, que es quien sabe qué se filtró. */
+  pedido_restringido?: boolean;
 };
 
 const AVANCE_LABEL: Record<string, { texto: string; clase: string }> = {
@@ -88,6 +94,10 @@ function Hilo({ hilo }: { hilo: Hilo }) {
   const pedido = conPedido?.pedido_original ?? null;
   const propiedad = conPedido?.propiedad ?? null;
   const dmSalio = conPedido?.pedido_respondida_at ?? null;
+  // El hilo lo ve todo el equipo, pero el pedido y la propiedad siguen
+  // pasando por mias(): si la señal es de otra asesora, el hilo se ve y su
+  // pedido no. Decir "sin pedido ligado" ahí es falso.
+  const pedidoRestringido = !pedido && !propiedad && hilo.mensajes.some((m) => m.pedido_restringido);
   const quien = hilo.nombre || (hilo.identidad.telefono ? `+${hilo.identidad.telefono}` : null) || "Colega sin nombre";
 
   return (
@@ -101,7 +111,9 @@ function Hilo({ hilo }: { hilo: Hilo }) {
                 Ref {propiedad.ref}
               </span>
             ) : (
-              <span className="ml-2 text-xs font-normal text-slate-400">sin propiedad ligada</span>
+              <span className="ml-2 text-xs font-normal text-slate-400">
+                {pedidoRestringido ? "propiedad no visible" : "sin propiedad ligada"}
+              </span>
             )}
           </p>
           <p className="truncate text-sm text-slate-500">{ultimo.texto || "(imagen o adjunto)"}</p>
@@ -133,6 +145,10 @@ function Hilo({ hilo }: { hilo: Hilo }) {
           <p className="rounded bg-slate-100 px-3 py-2 text-sm text-slate-600">
             <span className="font-medium">Pedido original: </span>
             {pedido}
+          </p>
+        ) : pedidoRestringido ? (
+          <p className="text-xs text-slate-400">
+            El pedido de esta señal no es visible con tu usuario — lo publicó una señal de otra asesora.
           </p>
         ) : (
           <p className="text-xs text-slate-400">Sin pedido ligado — puede ser alguien que nunca publicó, o un pedido anterior al 4-sep.</p>
