@@ -168,11 +168,24 @@ test("sin senal_id pero el colega SI tiene DM: es un hueco de atribucion, no 'po
   assert.strictEqual(suelto.sinDm, "sin_atribuir");
 });
 
-test("con senal_id que no vino entre los DM (mias() lo filtro): restringido", () => {
+test("con pedido_restringido: es un problema de PERMISO, y lo dice", () => {
   const mensajes = [msg("m1", "2026-09-08T18:20:00Z", { senal_id: "s-ajena", pedido_restringido: true })];
   const [hilo] = armarHilos(mensajes, new Map());
   const bloque = hilo.visibles.find((i) => i.dm === null);
   assert.strictEqual(bloque.sinDm, "restringido");
+});
+
+// El motivo "restringido" lo afirma page.tsx, que es quien sabe que la
+// consulta funciono y que mias() filtro esa senal. Un mensaje con senal_id
+// cuyo DM simplemente no vino (quedo fuera del limite de filas, o salio a
+// otra identidad) NO es un problema de permiso, y decir que lo es seria
+// inventar una explicacion.
+test("con senal_id pero SIN pedido_restringido: es un hueco de atribucion, no un permiso", () => {
+  const mensajes = [msg("m1", "2026-09-08T18:20:00Z", { senal_id: "s-desconocida" })];
+  const dms = new Map([[LID, [dm("s1", "2026-09-08T15:52:00Z")]]]);
+  const [hilo] = armarHilos(mensajes, dms);
+  const bloque = hilo.visibles.find((i) => i.dm === null);
+  assert.strictEqual(bloque.sinDm, "sin_atribuir");
 });
 
 test("un lid y un telefono con los mismos digitos son DOS hilos, no uno", () => {
@@ -323,8 +336,12 @@ export function armarHilos(mensajes: DmMensaje[], dmsPorClave: Map<string, DmEnv
       if (m.senal_id && conocidas.has(m.senal_id)) {
         if (!porSenal.has(m.senal_id)) porSenal.set(m.senal_id, []);
         porSenal.get(m.senal_id)!.push(m);
-      } else if (m.senal_id) {
-        // Tiene señal, pero no vino entre los DM: mias() la filtró.
+      } else if (m.pedido_restringido) {
+        // Restringido SOLO cuando page.tsx lo afirma: es quien sabe que la
+        // consulta funcionó y que mias() filtró esa señal. Deducirlo acá de
+        // "tiene senal_id y no vino el DM" sería inventar una explicación de
+        // permisos donde puede haber otra causa — la señal fuera del límite
+        // de 500 filas, o un DM que salió a otra identidad.
         restringidos.push(m);
       } else {
         sueltos.push(m);
@@ -388,12 +405,12 @@ export function armarHilos(mensajes: DmMensaje[], dmsPorClave: Map<string, DmEnv
 - [ ] **Step 4: Correr los tests**
 
 Run: `node --test test/linea-dm-hilo.test.js`
-Expected: PASS, 9 tests.
+Expected: PASS, 10 tests.
 
 - [ ] **Step 5: Confirmar que no rompiste la suite ni el typecheck**
 
 Run (raíz): `npm test`
-Expected: 1739 pass, 0 fail (1730 de base + 9 nuevos).
+Expected: 1740 pass, 0 fail (1730 de base + 10 nuevos).
 
 Run (desde `crm/`): `npx tsc --noEmit`
 Expected: sin salida. `linea-dm-inbox.tsx` todavía define su propio `DmMensaje`; eso es esperado y lo resuelve la Task 3.
@@ -543,7 +560,7 @@ Run (desde `crm/`): `npx tsc --noEmit`
 Expected: errores esperados en `LineaDmInbox` porque todavía no acepta la prop `dmsPorClave` — eso lo resuelve la Task 3. Si aparece **TS2589** en alguna consulta a `group_signals`, es la lista de columnas: confirmar que se usó `select("*")`.
 
 Run (raíz): `npm test`
-Expected: 1739 pass, 0 fail. En particular `test/crm-grupos-aislamiento.test.js` en verde: exige que las **tres** consultas a `group_signals` de `page.tsx` estén envueltas en `mias(`.
+Expected: 1740 pass, 0 fail. En particular `test/crm-grupos-aislamiento.test.js` en verde: exige que las **tres** consultas a `group_signals` de `page.tsx` estén envueltas en `mias(`.
 
 - [ ] **Step 5: Commit**
 
@@ -811,7 +828,7 @@ Run (desde `crm/`): `npm run build`
 Expected: build completo, `/grupos` en la lista de rutas.
 
 Run (raíz): `npm test`
-Expected: 1739 pass, 0 fail.
+Expected: 1740 pass, 0 fail.
 
 - [ ] **Step 6: Commit**
 
@@ -831,7 +848,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 - [ ] **Step 1: Correr la suite completa una vez más**
 
-Run (raíz): `npm test` → Expected: 1739 pass, 0 fail.
+Run (raíz): `npm test` → Expected: 1740 pass, 0 fail.
 Run (desde `crm/`): `npx tsc --noEmit` y `npm run build` → Expected: los dos limpios.
 
 - [ ] **Step 2: Actualizar el CLAUDE.md**
