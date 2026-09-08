@@ -40,16 +40,17 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
   El clasificador de citas (`RADAR_DM_CLASIFICAR`) queda **apagado** — fase 1
   es solo leer. **No hay backfill:** lo que llegó antes de este cambio no
   quedó ni en log, el panel arranca vacío. Suite completa en verde
-  (1723/1723, `npm test` 2026-09-08, despues de la revision final). La migración
-  `2026-09-08_linea_dm_lid.sql` (columna `remitente_lid` en `linea_dm`) está
-  **PENDIENTE de correr en Supabase** — la corre Juan a mano en el SQL
-  editor del proyecto `qwqmlmyyswpdypdfvmiv`; el código se degrada solo si
-  falta la columna, no rompe — `src/data/linea-dm.js` reintenta el insert sin
-  `remitente_lid` (la fila se guarda igual, el hilo simplemente no se agrupa
-  por lid) y avisa UNA vez por proceso en el log. Falta además el `git push` / merge a `main` —
-  eso también lo decide Juan. **Supuesto no probado:** que la respuesta del
-  colega llegue etiquetada `@lid`; si a las 48 h de desplegar no entra
-  ninguna fila en `linea_dm`, hay que mirar los eventos crudos de WAHA.
+  (1730/1730, `npm test` 2026-09-08, después de la revisión final y dos olas
+  de arreglos). **Desplegado el 2026-09-08** (merge a `main` + push, commit
+  `1b15c5f`), con la migración `2026-09-08_linea_dm_lid.sql` **corrida por
+  Juan y verificada por REST el mismo día**: `select remitente_lid` responde,
+  y el filtro `.eq("remitente_lid", …)` también — o sea que el índice y el
+  camino real de `historialDe` funcionan, no solo que la columna existe.
+  **Supuesto no probado:** que la respuesta del colega llegue etiquetada
+  `@lid`; si a las 48 h no entra ninguna fila en `linea_dm`, hay que mirar
+  los eventos crudos de WAHA antes de concluir cualquier otra cosa.
+  Al desplegar: `linea_dm` en 0 filas y 88 señales con destino de DM
+  registrado — ese es el denominador contra el que se mide si esto funcionó.
   **Hallazgo de la revisión, pendiente de decisión de Juan:**
   `group_signals.respuesta_destino_lid` se escribe hoy con DOS formatos según
   el camino — `src/groups/vivo.js:657` (automático) guarda el lid crudo CON
@@ -108,10 +109,10 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
   `2026-09-07_amoblado.sql` (columnas `amoblado` y `periodo` en
   `group_signals`) corrida por Juan y **verificada por REST** el 2026-09-07:
   la consulta devuelve `{"amoblado":null,"periodo":null}`, no un 42703.
-  **Migración pendiente:** `2026-09-08_linea_dm_lid.sql` (columna
-  `remitente_lid` en `linea_dm`) — todavía NO se ha corrido en Supabase, la
-  corre Juan a mano. No desplegar la rama `linea-dm-lid` hasta que esté
-  verificada por REST.
+  `2026-09-08_linea_dm_lid.sql` (columna `remitente_lid` en `linea_dm`)
+  corrida por Juan y **verificada por REST** el 2026-09-08: `select
+  remitente_lid` responde y el filtro `.eq("remitente_lid", …)` también.
+  **No hay migraciones pendientes.**
   Regla: antes de declarar una migración "pendiente" acá, verificarla con un
   `select` por REST — esta lista estuvo desactualizada del 2026-08-18 al
   2026-09-03.
