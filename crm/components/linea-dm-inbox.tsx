@@ -108,7 +108,7 @@ function Hilo({ hilo }: { hilo: Hilo }) {
   const quien = hilo.nombre || (hilo.identidad.telefono ? `+${hilo.identidad.telefono}` : null) || "Colega sin nombre";
 
   return (
-    <details id={anclaHilo(hilo.identidad)} className="group scroll-mt-24 px-4 py-3 open:bg-slate-50">
+    <details id={anclaHilo(hilo.identidad, hilo.mensajes[0].id)} className="group scroll-mt-24 px-4 py-3 open:bg-slate-50">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate font-medium text-slate-900">

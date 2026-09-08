@@ -225,8 +225,11 @@ export async function getCalendarEvents(supabase: any): Promise<{
       propertyRef: m.senal_id ? refPorSeñal.get(m.senal_id) ?? null : null,
       origen: "avance_colega" as const,
       // Misma ancla que crm/components/linea-dm-inbox.tsx#anclaHilo (se
-      // importa, no se duplica): lid sin sufijo si lo hay, si no el teléfono.
-      linkChat: `/grupos#${anclaHilo({ lid: m.remitente_lid, telefono: m.remitente_telefono })}`,
+      // importa, no se duplica): lid sin sufijo si lo hay, si no el teléfono,
+      // si no el id de esta fila (revisión final, 2026-09-08) — acá `m` es
+      // siempre una fila suelta de linea_dm, así que `m.id` es el mismo
+      // mensaje único que ese hilo tiene del otro lado.
+      linkChat: `/grupos#${anclaHilo({ lid: m.remitente_lid, telefono: m.remitente_telefono }, m.id)}`,
       autoAgendada: false,
       // El colega ya confirmó fecha/hora por la línea: tampoco tiene estados.
       estado: "confirmada" as const,
