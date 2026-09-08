@@ -140,7 +140,11 @@ async function historialDe(orgId, identidad, { limite = 10 } = {}) {
   if (error) {
     // Tabla o columna faltante: el hilo se degrada a vacio (el clasificador
     // trabaja con el mensaje suelto) en vez de tumbar todo el procesamiento.
-    if (esTablaFaltante(error) || esColumnaFaltante(error)) return [];
+    // Antes esto se tragaba en silencio (revision final, 2026-09-08): si
+    // manana se revierte o renombra una columna, el hilo se degrada para
+    // siempre y nada en el log lo dice.
+    if (esTablaFaltante(error)) { avisarFaltaTabla(); return []; }
+    if (esColumnaFaltante(error)) { avisarFaltaColumna(); return []; }
     throw error;
   }
   return (data || []).reverse();
@@ -158,7 +162,11 @@ async function guardarClasificacion(orgId, id, { tieneCita, avanceTipo = null, f
     .eq("org_id", orgId)
     .eq("id", id);
   if (error) {
-    if (esTablaFaltante(error) || esColumnaFaltante(error)) return false;
+    // Tabla o columna faltante: degradacion silenciosa (revision final,
+    // 2026-09-08) — el clasificador siguio corriendo pero su veredicto nunca
+    // quedaba guardado, y nada en el log lo decia.
+    if (esTablaFaltante(error)) { avisarFaltaTabla(); return false; }
+    if (esColumnaFaltante(error)) { avisarFaltaColumna(); return false; }
     console.error("[linea-dm] No se pudo guardar la clasificacion:", error.message);
     return false;
   }
@@ -209,9 +217,11 @@ async function ultimaCitaAlertada(orgId, identidad) {
   if (error) {
     // Sin la columna no hay como saber que se alerto antes. Devolver null es
     // lo mismo que hacia el throw (dm.js lo atrapa con .catch(() => null)),
-    // pero sin ruido: el efecto es que el dedup del aviso no frena nada
-    // mientras la migracion siga pendiente.
-    if (esTablaFaltante(error) || esColumnaFaltante(error)) return null;
+    // pero sin ruido en el log (revision final, 2026-09-08): el efecto real
+    // es que el dedup del aviso no frena nada mientras la migracion siga
+    // pendiente, y esto SI queda dicho.
+    if (esTablaFaltante(error)) { avisarFaltaTabla(); return null; }
+    if (esColumnaFaltante(error)) { avisarFaltaColumna(); return null; }
     throw error;
   }
   return clave(data);

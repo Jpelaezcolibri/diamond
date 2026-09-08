@@ -116,6 +116,18 @@ export function bogotaDateKey(iso: string): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Bogota" }).format(new Date(iso));
 }
 
+// Un aviso por proceso, no uno por render (revisión final, 2026-09-08):
+// getCalendarEvents corre en CADA carga de /calendario, así que sin esta
+// bandera el warning de abajo se imprime en cada una mientras la migración
+// de linea_dm siga pendiente. Mismo patrón que create() en
+// src/data/linea-dm.js del lado del bot.
+let avisoMigracionLineaDmPendiente = false;
+function avisarMigracionLineaDmPendiente(codigo: string) {
+  if (avisoMigracionLineaDmPendiente) return;
+  avisoMigracionLineaDmPendiente = true;
+  console.warn("[calendario:linea_dm] Falta una migración de linea_dm: el calendario va sin los avances de colegas.", codigo);
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function getCalendarEvents(supabase: any): Promise<{
   events: CalendarEvent[];
@@ -152,8 +164,8 @@ export async function getCalendarEvents(supabase: any): Promise<{
   const CODIGOS_MIGRACION_PENDIENTE = ["42P01", "PGRST205", "42703", "PGRST204"];
   if (dmRes.error && CODIGOS_MIGRACION_PENDIENTE.includes(dmRes.error.code)) {
     // Tolerado, pero no mudo: el log dice qué falta correr, no un mensaje
-    // crudo de Postgres que hay que ir a traducir.
-    console.warn("[calendario:linea_dm] Falta una migración de linea_dm: el calendario va sin los avances de colegas.", dmRes.error.code);
+    // crudo de Postgres que hay que ir a traducir. Una sola vez por proceso.
+    avisarMigracionLineaDmPendiente(dmRes.error.code);
   } else if (dmRes.error) {
     console.error("[calendario:linea_dm]", dmRes.error.message);
   }

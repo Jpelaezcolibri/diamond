@@ -280,3 +280,100 @@ test("ultimaCitaAlertada se degrada a null si falta la columna", async (t) => {
   t.mock.method(supabase, "from", () => chain({ data: null, error: { code: "PGRST204", message: "columna faltante" } }));
   assert.strictEqual(await lineaDm.ultimaCitaAlertada(ORG, { telefono: null, lid: "276467766300904@lid" }), null);
 });
+
+// ── Logs en la degradacion silenciosa (revision final, 2026-09-08) ────────
+//
+// Escenario: manana se revierte o renombra una columna => ultimaCitaAlertada
+// devuelve null para siempre => el dedup del aviso muere => inundacion de
+// alertas, y hasta ahora nada en el log lo decia. historialDe,
+// guardarClasificacion y ultimaCitaAlertada degradaban en silencio; create()
+// ya avisaba (una vez por proceso) y es el mismo aviso que ahora comparten.
+//
+// El aviso es una bandera de MODULO (una vez por proceso, no por llamada) —
+// y para el momento en que se llega aca en este archivo, otro test mas
+// arriba ("create reintenta sin remitente_lid...") ya la prendio, asi que
+// probar "avisa" contra el `lineaDm` compartido del archivo daria un falso
+// negativo (el aviso ya salio antes, avisarFaltaColumna ya es un no-op).
+// Se carga una instancia FRESCA del modulo por test, con su propia bandera
+// en cero, para poder afirmar el disparo real.
+const lineaDmPath = require.resolve("../src/data/linea-dm");
+function lineaDmFresca() {
+  delete require.cache[lineaDmPath];
+  return require("../src/data/linea-dm");
+}
+
+test("historialDe avisa (una vez) cuando falta la columna, en vez de degradar mudo", async (t) => {
+  const fresca = lineaDmFresca();
+  t.after(() => { delete require.cache[lineaDmPath]; });
+  t.mock.method(supabase, "from", () => chain({ data: null, error: { code: "42703", message: 'column "remitente_lid" does not exist' } }));
+  const avisos = [];
+  t.mock.method(console, "warn", (m) => avisos.push(String(m)));
+
+  await fresca.historialDe(ORG, { telefono: null, lid: "276467766300904@lid" });
+  await fresca.historialDe(ORG, { telefono: null, lid: "276467766300904@lid" });
+
+  assert.strictEqual(avisos.filter((a) => a.includes("2026-09-08_linea_dm_lid.sql")).length, 1);
+});
+
+test("guardarClasificacion avisa (una vez) cuando falta la columna, en vez de degradar mudo", async (t) => {
+  const fresca = lineaDmFresca();
+  t.after(() => { delete require.cache[lineaDmPath]; });
+  t.mock.method(supabase, "from", () => chain({ data: null, error: { code: "PGRST204", message: "columna faltante" } }));
+  const avisos = [];
+  t.mock.method(console, "warn", (m) => avisos.push(String(m)));
+
+  const ok = await fresca.guardarClasificacion(ORG, "dm-1", { tieneCita: true, avanceTipo: "agendando" });
+  await fresca.guardarClasificacion(ORG, "dm-1", { tieneCita: true, avanceTipo: "agendando" });
+
+  assert.strictEqual(ok, false);
+  assert.strictEqual(avisos.filter((a) => a.includes("2026-09-08_linea_dm_lid.sql")).length, 1);
+});
+
+test("ultimaCitaAlertada avisa (una vez) cuando falta la columna, en vez de degradar mudo", async (t) => {
+  const fresca = lineaDmFresca();
+  t.after(() => { delete require.cache[lineaDmPath]; });
+  t.mock.method(supabase, "from", () => chain({ data: null, error: { code: "42703", message: "columna faltante" } }));
+  const avisos = [];
+  t.mock.method(console, "warn", (m) => avisos.push(String(m)));
+
+  const clave = await fresca.ultimaCitaAlertada(ORG, { telefono: null, lid: "276467766300904@lid" });
+  await fresca.ultimaCitaAlertada(ORG, { telefono: null, lid: "276467766300904@lid" });
+
+  assert.strictEqual(clave, null);
+  assert.strictEqual(avisos.filter((a) => a.includes("2026-09-08_linea_dm_lid.sql")).length, 1);
+});
+
+// ── faltaColumnaLid (revision final, 2026-09-08) ───────────────────────────
+//
+// Lectura de solo-lectura para que src/groups/dm.js pueda cortar ANTES del
+// clasificador cuando la migracion sigue pendiente (ver test/group-dm.test.js).
+
+test("faltaColumnaLid empieza en false y se prende cuando create() topa con la columna faltante", async (t) => {
+  const fresca = lineaDmFresca();
+  t.after(() => { delete require.cache[lineaDmPath]; });
+  // Primer insert (con remitente_lid) falla por columna faltante; el
+  // reintento de create() sin esa columna SI tiene que poder guardar la
+  // fila — mismo patron que "create reintenta sin remitente_lid..." arriba.
+  const inserts = [];
+  t.mock.method(supabase, "from", () => {
+    const c = chain({ data: null, error: null });
+    c.insert = (row) => {
+      inserts.push(row);
+      const esElPrimero = inserts.length === 1;
+      c.single = () =>
+        Promise.resolve(
+          esElPrimero
+            ? { data: null, error: { code: "42703", message: 'column "remitente_lid" of relation "linea_dm" does not exist' } }
+            : { data: { id: "dm-flag-1", ...row }, error: null }
+        );
+      return c;
+    };
+    return c;
+  });
+  t.mock.method(console, "warn", () => {});
+
+  assert.strictEqual(fresca.faltaColumnaLid(), false);
+  const { mensaje } = await fresca.create(ORG, { waMessageId: "wamid-flag-1", remitenteLid: "276467766300904@lid" });
+  assert.ok(mensaje);
+  assert.strictEqual(fresca.faltaColumnaLid(), true);
+});
