@@ -40,6 +40,8 @@ const mandatosData = require("../data/mandatos");
 const whatsappGroups = require("../data/whatsapp-groups");
 const revalidar = require("../groups/revalidar");
 const alertaAsesor = require("../groups/alerta-asesor");
+const publicable = require("../groups/publicable");
+const syncEstado = require("../data/sync-estado");
 const carrilArriendo = require("../groups/carril-arriendo");
 const digest = require("../groups/digest-avisos");
 const linkAvisoLib = require("../lib/link-aviso");
@@ -59,6 +61,56 @@ const VIGENCIA_HORAS = Number(process.env.AVISOS_VIGENCIA_HORAS || 12);
 let timer = null;
 let corriendo = false;
 
+// LA COMPUERTA DE CALIDAD TAMBIEN CORRE POR ESTE CAMINO (Juan, 2026-09-07).
+//
+// EL RESIDUO QUE ESTO CIERRA: esta bandeja reconstruye el aviso desde la fila
+// guardada, y hasta hoy lo armaba SIN recalcular la compuerta. Resultado: el
+// aviso decia el motivo por el que la propiedad se freno (`politica_motivo`
+// viene de la señal y vivo.js ya lo habia corregido a la razon real) y acto
+// seguido le entregaba a la asesora esa misma propiedad para reenviar, como
+// si estuviera limpia. Se llega aca en la RAFAGA — cuando a la asesora se le
+// escribio hace menos de VENTANA_MIN — que es justo el caso para el que este
+// archivo existe, asi que no era un camino raro.
+//
+// La fila trae todo lo que hace falta: `select("*")` devuelve `matches` con
+// sus banderas (`periodo_no_soportado`, `amoblado_sin_confirmar`, precio,
+// zona, linkWasi...) y `revalidacion` con las refs que Sofi aprobo. Se corre
+// la MISMA `publicable.filtrar` con los MISMOS parametros que vivo.js#asistir
+// (umbral 0: el veredicto de Sofi reemplaza al puntaje; las barreras de dato
+// siguen duras) para que los dos caminos produzcan lo mismo.
+//
+// LO QUE NO SE REPITE: verificar-link.js. Es una llamada HTTP por propiedad y
+// esto corre cada minuto sobre todo lo pendiente; el link ya se verifico al
+// detectar el pedido, minutos antes, y su resultado esta cacheado en ese
+// modulo. Un `link_no_abre` de ese momento no se recalcula aca.
+async function calidadDePedido(org, senal) {
+  const refsUtiles = (senal.revalidacion && senal.revalidacion.refs_utiles) || [];
+  const utilesSegunSofi = refsUtiles
+    .map((ref) => (senal.matches || []).find((m) => String(m.ref) === String(ref)))
+    .filter(Boolean);
+  if (utilesSegunSofi.length === 0) return { descartados: [], ofrecibles: 0 };
+
+  // Si no se puede leer el estado del sync se asume viejo: `sync_viejo` es un
+  // motivo de PUBLICACION, asi que no esconde nada — solo agrega la salvedad,
+  // que es la direccion segura.
+  const inventario = await syncEstado
+    .estadoDelInventario(org.id, { ahora: new Date() })
+    .catch(() => ({ fresco: false }));
+
+  const { descartados } = publicable.filtrar(utilesSegunSofi, {
+    syncFresco: inventario.fresco,
+    umbral: 0,
+  });
+
+  const frenadas = new Map(descartados.map((d) => [String(d.ref), publicable.clasificarMotivos(d.motivos || [])]));
+  const ofrecibles = utilesSegunSofi.filter((m) => {
+    const clase = frenadas.get(String(m.ref));
+    return !clase || clase.ofrecible;
+  }).length;
+
+  return { descartados, ofrecibles };
+}
+
 // Reconstruye el aviso completo de UN pedido, con las mismas piezas que usaba
 // vivo.js#asistir: el veredicto y los matches estan guardados en la señal, y
 // el telefono se vuelve a resolver contra el directorio (que desde el
@@ -69,6 +121,7 @@ async function textoDePedido(org, senal, grupos, sesion) {
     .telefonoDe(org.id, senal.autor_telefono, { sesion, jid: grupo.jid })
     .catch(() => null);
   const link = linkAvisoLib.urlDeAviso(await groupSignals.asegurarToken(org.id, senal.id));
+  const { descartados } = await calidadDePedido(org, senal);
   return alertaAsesor.construir(
     {
       grupo_nombre: grupo.nombre || grupo.jid || null,
@@ -102,7 +155,15 @@ async function textoDePedido(org, senal, grupos, sesion) {
     // con el mismo criterio que vivo.js (operacion === 'arriendo'), no se lee
     // de la señal porque esDelCarril no depende de nada que cambie entre el
     // momento en que se detecto el pedido y el momento en que se avisa.
-    { link, carrilAmoblados: carrilArriendo.esDelCarril({ operacion: senal.operacion }) }
+    // descartadosCalidad: lo mismo que vivo.js#asistir le pasa en linea. Sin
+    // esto, este camino ofrecia para reenviar exactamente lo que el otro
+    // apartaba, y explicaba el freno en la misma pantalla en la que lo
+    // contradecia.
+    {
+      link,
+      carrilAmoblados: carrilArriendo.esDelCarril({ operacion: senal.operacion }),
+      descartadosCalidad: descartados,
+    }
   );
 }
 
@@ -162,21 +223,31 @@ async function procesarOrg(org, ahora) {
     const mandatos = new Map(
       (await mandatosData.listarActivos(org.id).catch(() => [])).map((m) => [m.id, m.cliente_nombre])
     );
-    texto = digest.construir(
-      String(asesor.name || "").split(" ")[0],
-      pedidos.map((s) => ({
+    // "N para ofrecer" TIENE QUE SER LO OFRECIBLE (Juan, 2026-09-07). Se
+    // contaba `refs_utiles.length` crudo -- lo que Sofi aprobo -- asi que un
+    // pedido cuya unica ref estaba bloqueada o con el precio corrupto se le
+    // anunciaba a la asesora como "1 para ofrecer", y al abrir la ficha no
+    // habia nada. Se cuenta con la MISMA compuerta que usa el aviso completo.
+    const lineasPedido = [];
+    for (const s of pedidos) {
+      const { ofrecibles } = await calidadDePedido(org, s);
+      lineasPedido.push({
         id: s.id,
         colega: s.autor_nombre,
         operacion: s.operacion,
         tipo: s.tipo,
         zona: Array.isArray(s.zonas) && s.zonas.length ? s.zonas.join(", ") : s.zona,
         precioMax: s.precio_max,
-        utiles: (s.revalidacion && s.revalidacion.refs_utiles ? s.revalidacion.refs_utiles.length : 0),
+        utiles: ofrecibles,
         dudosas: (s.revalidacion && s.revalidacion.refs_dudosas ? s.revalidacion.refs_dudosas.length : 0),
         // Por que le toca a ella y no lo resolvio el bot (Juan, 2026-09-02).
         motivo: s.politica_motivo,
         link: links.get(s.id) || null,
-      })),
+      });
+    }
+    texto = digest.construir(
+      String(asesor.name || "").split(" ")[0],
+      lineasPedido,
       alertas.map((a) => ({
         id: a.id,
         mandato: mandatos.get(a.mandato_id) || "un cliente",

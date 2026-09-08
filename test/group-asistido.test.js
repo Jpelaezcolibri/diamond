@@ -762,7 +762,14 @@ test("carril de arriendo (Sofi no aprobo nada util): con utiles vacio no se inve
 //   4. Peor: el bloque "mandale ESTO YA" se armaba con `refs_utiles` CRUDO,
 //      asi que la asesora recibia la ORDEN de reenviarle al colega la ref
 //      que el propio bot acababa de decidir que no se podia ofrecer.
-test("compuerta de calidad (periodo no soportado): el motivo real llega a la asesora y la ref descartada no sale en el mensaje para reenviar", async () => {
+//
+// REVISION 2026-09-07 (decision de Juan): `periodo_no_soportado` frena la
+// PUBLICACION sin supervision, no la propiedad. Al colega no se le manda solo
+// -- eso no cambia -- pero la asesora SI la ve, con la salvedad pegada, y el
+// borrador la lleva adentro ("está cotizada por mes, no por días ni semanas").
+// Lo que se le esconde es el dato corrupto o ajeno, no esto. Ver
+// publicable.js#clasificarMotivos y la regresion que documenta.
+test("compuerta de calidad (periodo no soportado): al colega no le sale solo, pero la asesora lo ve con la salvedad adentro del borrador", async () => {
   // Sin telefono resuelto, solo el lid del autor -- el 98% de los colegas,
   // y el camino por el que decidirDm SI dice "ok" (ver politica.js#decidirDm).
   telefonoColegaResuelto = null;
@@ -789,9 +796,15 @@ test("compuerta de calidad (periodo no soportado): el motivo real llega a la ase
   assert.match(texto, /Por qué no salió solo/, "antes del fix esta linea faltaba del todo");
   assert.match(texto, /por días o semanas/i, "el motivo real, traducido");
 
-  // (a) la ref que la compuerta descarto NUNCA puede aparecer en el bloque
-  // de reenvio -- antes del fix, este bloque SI aparecia con esa ref.
-  assert.doesNotMatch(texto, /mandale ESTO YA/i, "sin nada limpio que ofrecer, no puede haber mensaje para reenviar");
+  // (a) la propiedad SIGUE en su lista, con la razon pegada: ella es quien
+  // resuelve un plazo, y esconderselo le borra el negocio.
+  assert.match(texto, /Le puede servir:/);
+  assert.match(texto, /⚠️ .*cotizado por mes/i, "la razon, pegada a la ficha");
+
+  // (b) y el borrador que ella reenvia NUNCA la presenta como si estuviera
+  // limpia -- antes de 9078af4 este bloque salia sin una palabra del plazo.
+  const borrador = texto.slice(texto.indexOf("mandale ESTO YA"));
+  assert.match(borrador, /Aclaración:.*cotizada por mes, no por días ni semanas/);
 });
 
 // ── SIN TELEFONO, SE MANDA POR EL LID (Juan, 2026-09-04) ────────────────

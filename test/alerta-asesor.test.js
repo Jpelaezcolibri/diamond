@@ -604,67 +604,62 @@ test("construirAvisoPostDm: sin campos del pedido ni por_que, sale como antes --
   assert.ok(!/\n\n\n/.test(texto), "sin renglones vacios de mas");
 });
 
-// ── FIX CRITICO (review de fin de rama, 2026-09-07) ─────────────────────
+// ── LA COMPUERTA DE CALIDAD TIENE DOS CLASES DE "NO" (Juan, 2026-09-07) ──
 //
-// EL BUG: el bloque "mandale ESTO YA" se armaba con `veredicto.refs_utiles`
-// CRUDO -- lo que Sofi aprobo -- nunca con lo que publicable.filtrar +
-// verificar-link.js (la compuerta de calidad que vivo.js YA corre antes del
-// DM automatico) dejaba pasar. Una ref con el periodo que no soportamos, el
-// precio corrupto o el link caido se colaba igual en el texto que la asesora
-// reenvia tal cual al colega. Reproducido: "Busco amoblado 15 dias" -> Sofi
-// aprueba, la compuerta descarta por `periodo_no_soportado`, y sin este fix
-// el aviso decia "mandale ESTO YA" con un apartamento de arriendo mensual
-// como si el plazo calzara.
+// PRIMER FIX (9078af4): el bloque "mandale ESTO YA" se armaba con
+// `veredicto.refs_utiles` CRUDO -- lo que Sofi aprobo -- nunca con lo que
+// publicable.filtrar + verificar-link.js dejaba pasar. Una ref con el precio
+// corrupto o el link caido se colaba en el texto que la asesora reenvia tal
+// cual al colega.
 //
-// `descartadosCalidad` (nuevo, opcional) es exactamente lo que vivo.js ya
-// calculaba y solo mandaba a `console.warn` -- ver la nota de "COMPUERTA DE
-// CALIDAD" en src/groups/vivo.js#asistir.
+// LA REGRESION QUE ESE FIX INTRODUJO: metio en la misma bolsa los frenos que
+// SOLO impiden publicar sin supervision (zona, puntaje, sync viejo, plazo,
+// amoblado sin confirmar, campos faltantes). Esos son exactamente los que una
+// persona resuelve, y src/groups/ubicacion.js:134-137 dice explicitamente que
+// un match `otra_zona` entra al aviso A PROPOSITO, con su aclaracion al lado.
+// Escondiendolos, la asesora perdia la lista entera en dos casos comunes: un
+// pedido sin barrio (todo grada `ciudad`) y una caida del sync de Wasi (todo
+// `sync_viejo`).
+//
+// LA DECISION DE JUAN: "ella ve la propiedad, con la salvedad al lado. Se
+// queda en su lista con su razon pegada, y el borrador listo para reenviar
+// lleva esa misma salvedad adentro. Ella decide. Solo se le esconde el dato
+// corrupto o ajeno."
 
-test("compuerta de calidad: la ref que Sofi aprobo pero la compuerta descarto NO aparece en el mensaje para reenviar", () => {
+const { MOTIVOS_LEGIBLES } = require("../src/groups/publicable");
+
+test("motivo de PUBLICACION: la propiedad sigue en la lista de la asesora, con su razon pegada", () => {
   const texto = construir(
     senal(),
     VEREDICTO, // refs_utiles: ["AP004"]
     [matchUtil({ linkWasi: "https://info.wasi.co/apartamento-venta-ap004/9744456" })],
-    null, // sin telefono resuelto -- el caso donde normalmente SI se arma el mensaje listo (98% de los colegas)
+    null,
     null,
     "periodo_no_soportado",
     { descartadosCalidad: [{ ref: "AP004", motivos: ["periodo_no_soportado"] }] }
   );
-  assert.ok(texto, "el aviso tiene que salir igual: la asesora necesita saber que el pedido existio");
-  assert.doesNotMatch(texto, /mandale ESTO YA/i, "sin nada limpio que ofrecer, no hay mensaje para reenviar");
-  assert.doesNotMatch(texto, /▸ Ref AP004/, "tampoco puede listarse como ofrecible en el bloque normal");
+  assert.match(texto, /Le puede servir:/, "no se le esconde: ella decide");
+  assert.match(texto, /▸ Ref AP004/);
+  assert.match(texto, /⚠️ .*cotizado por mes/i, "la razon va pegada a la ficha, no en un bloque aparte");
+  assert.doesNotMatch(texto, /⛔ Ref AP004/, "un freno de publicacion no la aparta");
 });
 
-test("compuerta de calidad: la asesora ve un 'Por qué no salió solo' con el motivo REAL, nunca un aviso mudo", () => {
+test("motivo de PUBLICACION: el borrador para reenviar lleva la MISMA salvedad adentro", () => {
   const texto = construir(
     senal(),
     VEREDICTO,
-    [matchUtil()],
-    "573001234567",
+    [matchUtil({ linkWasi: "https://info.wasi.co/apartamento-venta-ap004/9744456" })],
+    null, // sin telefono resuelto -- el 98% de los colegas, y el caso donde SI se arma el borrador
     null,
     "periodo_no_soportado",
     { descartadosCalidad: [{ ref: "AP004", motivos: ["periodo_no_soportado"] }] }
   );
-  assert.match(texto, /Por qué no salió solo:/, "antes del fix esta linea faltaba del todo (PORQUE no tenia 'periodo_no_soportado')");
-  assert.match(texto, /por días o semanas/i, "el motivo real, traducido -- la misma traduccion de publicable.js");
+  const borrador = texto.slice(texto.indexOf("mandale ESTO YA"));
+  assert.ok(borrador.includes("AP004"), "la propiedad va en el borrador");
+  assert.match(borrador, /Aclaración:.*cotizada por mes, no por días ni semanas/, "nunca se presenta como si estuviera limpia");
 });
 
-test("compuerta de calidad: la ref descartada se lista con su razon real (⛔), no se esconde ni se generaliza", () => {
-  const texto = construir(
-    senal(),
-    VEREDICTO,
-    [matchUtil()],
-    "573001234567",
-    null,
-    "periodo_no_soportado",
-    { descartadosCalidad: [{ ref: "AP004", motivos: ["periodo_no_soportado"] }] }
-  );
-  assert.match(texto, /⛔ Ref AP004/);
-  assert.match(texto, /no la ofrezcas hasta confirmar/i);
-  assert.doesNotMatch(texto, /dato mal cargado en Wasi/, "esa razon es solo para REFS_BLOQUEADAS, no para la compuerta de calidad");
-});
-
-test("compuerta de calidad: con dos refs aprobadas y solo una descartada, la buena SI se reenvia y la mala no", () => {
+test("motivo de NUNCA OFRECER (precio corrupto): se aparta con ⛔ y no llega al borrador", () => {
   const veredictoDosRefs = { ...VEREDICTO, refs_utiles: ["AP004", "AP009"] };
   const buena = matchUtil({ linkWasi: "https://info.wasi.co/ap004" });
   const mala = matchUtil({ ref: "AP009", titulo: "Apartamento en Sabaneta", zona: "Sabaneta", linkWasi: "https://info.wasi.co/ap009" });
@@ -675,17 +670,166 @@ test("compuerta de calidad: con dos refs aprobadas y solo una descartada, la bue
     null,
     null,
     null,
-    { descartadosCalidad: [{ ref: "AP009", motivos: ["sin_precio"] }] }
+    { descartadosCalidad: [{ ref: "AP009", motivos: ["precio_fuera_de_rango"] }] }
   );
-  const inicioMensajeListo = texto.indexOf("mandale ESTO YA");
-  assert.notStrictEqual(inicioMensajeListo, -1, "la buena si tiene que generar el mensaje para reenviar");
-  const mensajeListo = texto.slice(inicioMensajeListo);
-  assert.match(mensajeListo, /AP004/);
-  assert.doesNotMatch(mensajeListo, /AP009|Sabaneta/, "la descartada por calidad no puede aparecer en el texto que se reenvia al colega");
+  assert.match(texto, /⛔ Ref AP009/);
+  assert.match(texto, /dato corrupto en Wasi/i);
+  const borrador = texto.slice(texto.indexOf("mandale ESTO YA"));
+  assert.match(borrador, /AP004/);
+  assert.doesNotMatch(borrador, /AP009|Sabaneta/, "el dato corrupto no se ofrece ni por mano de la asesora");
+});
+
+test("motivo de NUNCA OFRECER: sin nada limpio no hay borrador, pero la asesora igual se entera", () => {
+  const texto = construir(
+    senal(),
+    VEREDICTO,
+    [matchUtil({ linkWasi: "https://info.wasi.co/apartamento-venta-ap004/9744456" })],
+    null,
+    null,
+    "sin_precio",
+    { descartadosCalidad: [{ ref: "AP004", motivos: ["sin_precio"] }] }
+  );
+  assert.ok(texto, "el aviso sale igual: el pedido existio");
+  assert.doesNotMatch(texto, /mandale ESTO YA/i);
+  assert.doesNotMatch(texto, /▸ Ref AP004/, "no se lista como ofrecible");
+  assert.match(texto, /⛔ Ref AP004/);
+});
+
+test("mezcla: uno se aparta y el otro sigue ofrecible con su salvedad", () => {
+  const veredictoDos = { ...VEREDICTO, refs_utiles: ["AP004", "AP009"] };
+  const conReparo = matchUtil({ linkWasi: "https://info.wasi.co/ap004" });
+  const corrupta = matchUtil({ ref: "AP009", titulo: "Apartamento en Sabaneta", zona: "Sabaneta", linkWasi: "https://info.wasi.co/ap009" });
+  const texto = construir(senal(), veredictoDos, [conReparo, corrupta], null, null, null, {
+    descartadosCalidad: [
+      { ref: "AP004", motivos: ["amoblado_sin_confirmar"] },
+      { ref: "AP009", motivos: ["link_ajeno"] },
+    ],
+  });
+  assert.match(texto, /▸ Ref AP004/);
+  assert.match(texto, /⚠️ .*amoblado/i);
+  assert.match(texto, /⛔ Ref AP009/);
+  assert.doesNotMatch(texto, /⛔ Ref AP004/);
+  assert.doesNotMatch(texto, /▸ Ref AP009/);
+});
+
+// ── EL CARRIL DE VENTA, RESTAURADO A COMO ESTABA ANTES DE 9078af4 ────────
+//
+// Es el carril vivo en produccion hoy. Un pedido de venta con un match
+// `otra_zona` es el caso que el invariante de ubicacion.js:134-137 protege:
+// la propiedad ENTRA al aviso, con su aclaracion de zona. Entre 9078af4 y
+// este fix desaparecian las dos cosas.
+test("VENTA con match otra_zona: la propiedad y su aclaracion de zona siguen ahi", () => {
+  const pedido = senal({
+    texto_original: "Busco apartamento en Laureles para cliente, hasta 900 millones",
+    operacion: "venta",
+    tipo: "apartamento",
+    zonas: ["Laureles"],
+    precio_max: 900000000,
+  });
+  const enBelen = matchUtil({
+    ref: "AP777",
+    titulo: "Apartamento en Venta Belén",
+    zona: "Belén",
+    ciudad: "Medellín",
+    ubicacion: "otra_zona",
+    precio: "$820.000.000",
+    linkWasi: "https://info.wasi.co/apartamento-venta-belen-ap777",
+  });
+  const veredicto = { ...VEREDICTO, refs_utiles: ["AP777"] };
+
+  const texto = construir(pedido, veredicto, [enBelen], null, null, null, {
+    // Lo que publicable.filtrar devuelve para un match otra_zona.
+    descartadosCalidad: [{ ref: "AP777", motivos: ["zona_no_publicable"] }],
+  });
+
+  assert.match(texto, /Le puede servir:/, "la lista no puede quedar vacia por la zona");
+  assert.match(texto, /▸ Ref AP777/, "la propiedad sigue listada");
+  const borrador = texto.slice(texto.indexOf("mandale ESTO YA"));
+  assert.match(borrador, /Aclaración: queda en Belén, no en Laureles/, "el disclaimer de zona, textual");
+  assert.doesNotMatch(texto, /⛔ Ref AP777/, "la zona nunca la aparta del aviso a la asesora");
+});
+
+test("VENTA sin barrio en el pedido (todo grada ciudad): no se le borra la lista a la asesora", () => {
+  // El multiplicador del bug: un pedido que no nombra barrio grada TODO como
+  // `ciudad`, asi que publicable.js frena todas por zona_no_publicable y la
+  // asesora perdia la lista entera detras de una razon que ademas es falsa
+  // -- el colega no pidio ninguna zona.
+  const pedido = senal({ texto_original: "Busco apartamento en Medellín hasta 900 millones", operacion: "venta" });
+  const veredictoDos = { ...VEREDICTO, refs_utiles: ["AP004", "AP009"] };
+  const uno = matchUtil({ ubicacion: "ciudad", linkWasi: "https://info.wasi.co/ap004" });
+  const dos = matchUtil({ ref: "AP009", ubicacion: "ciudad", linkWasi: "https://info.wasi.co/ap009" });
+  const texto = construir(pedido, veredictoDos, [uno, dos], null, null, null, {
+    descartadosCalidad: [
+      { ref: "AP004", motivos: ["zona_no_publicable"] },
+      { ref: "AP009", motivos: ["zona_no_publicable"] },
+    ],
+  });
+  assert.match(texto, /Le pueden servir:/);
+  assert.match(texto, /▸ Ref AP004/);
+  assert.match(texto, /▸ Ref AP009/);
+  assert.ok(!texto.includes("⛔"), `nada se aparta por una zona que el colega no pidio:\n${texto}`);
+});
+
+test("sync de Wasi caido: el aviso no se convierte en un muro de ⛔", () => {
+  // El otro multiplicador: con el sync detenido publicable.js marca TODO con
+  // sync_viejo. Es justo el dia en que el respaldo humano mas importa.
+  const veredictoDos = { ...VEREDICTO, refs_utiles: ["AP004", "AP009"] };
+  const uno = matchUtil({ linkWasi: "https://info.wasi.co/ap004" });
+  const dos = matchUtil({ ref: "AP009", linkWasi: "https://info.wasi.co/ap009" });
+  const texto = construir(senal(), veredictoDos, [uno, dos], null, null, "sync_viejo", {
+    descartadosCalidad: [
+      { ref: "AP004", motivos: ["sync_viejo"] },
+      { ref: "AP009", motivos: ["sync_viejo"] },
+    ],
+  });
+  assert.match(texto, /▸ Ref AP004/);
+  assert.match(texto, /▸ Ref AP009/);
+  assert.ok(!texto.includes("⛔"));
+  const borrador = texto.slice(texto.indexOf("mandale ESTO YA"));
+  assert.match(borrador, /Aclaración:.*confirmame disponibilidad/, "el colega igual lee la salvedad");
+});
+
+// ── El encabezado, el punto final y el motivo sin traducir ───────────────
+
+test("el encabezado que ORDENA escribir YA no puede encabezar un aviso sin nada ofrecible", () => {
+  const texto = construir(senal(), VEREDICTO, [matchUtil()], "573001234567", null, "sin_telefono", {
+    descartadosCalidad: [{ ref: "AP004", motivos: ["ref_bloqueada"] }],
+  });
+  assert.doesNotMatch(texto, /OPORTUNIDAD APROBADA/, "no hay nada confirmable que mandarle");
+  assert.match(texto, /🎯 Oportunidad en un grupo/);
+  assert.match(texto, /⛔ Ref AP004/, "pero se le dice que existia y por que no sale");
+});
+
+test("con algo ofrecible y el DM frenado, el encabezado urgente SI sale", () => {
+  const texto = construir(senal(), VEREDICTO, [matchUtil()], "573001234567", null, "sin_telefono");
+  assert.match(texto, /🚨🚨 OPORTUNIDAD APROBADA/);
+});
+
+test("el motivo de la compuerta no se pega con la frase de urgencia: lleva punto final", () => {
+  const texto = construir(senal(), VEREDICTO, [matchUtil()], "573001234567", null, "periodo_no_soportado", {
+    descartadosCalidad: [{ ref: "AP004", motivos: ["periodo_no_soportado"] }],
+  });
+  assert.match(texto, /cotizado por mes\. Es una oportunidad/, "antes salia '...cotizado por mes Es una oportunidad'");
+  assert.ok(!/mes Es una/.test(texto));
+});
+
+test("un motivo sin traduccion nunca sale crudo hacia la asesora, ni en el ⛔ ni en el 'por qué'", () => {
+  assert.ok(!MOTIVOS_LEGIBLES.motivo_inventado_2026, "el test necesita un motivo que de verdad no exista");
+  const texto = construir(senal(), VEREDICTO, [matchUtil()], "573001234567", null, "motivo_inventado_2026", {
+    descartadosCalidad: [{ ref: "AP004", motivos: ["motivo_inventado_2026"] }],
+  });
+  assert.ok(!texto.includes("motivo_inventado_2026"), `el identificador crudo llego a una persona:\n${texto}`);
+  assert.match(texto, /⛔ Ref AP004/, "un motivo desconocido igual aparta la ref: ante la duda, no");
+  assert.match(texto, /la compuerta de calidad la apartó/);
 });
 
 test("sin descartadosCalidad (llamador viejo), construir sigue funcionando exactamente igual que antes", () => {
   const texto = construir(senal(), VEREDICTO, [matchUtil()], "573001234567", null, "ok");
   assert.match(texto, /Ref AP004/);
   assert.ok(!texto.includes("Por qué no salió solo"), "'ok' sigue sin inventar una explicacion");
+});
+
+test("sin ningun freno, la ficha no gana un ⚠️ de la nada", () => {
+  const texto = construir(senal(), VEREDICTO, [matchUtil()], "573001234567");
+  assert.ok(!texto.includes("⚠️"), `aparecio una salvedad inventada:\n${texto}`);
 });

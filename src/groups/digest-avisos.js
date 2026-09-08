@@ -58,7 +58,20 @@ function lineaPedido(p, i) {
   const que = [p.operacion, p.tipo, p.zona, p.precioMax ? `hasta ${millones(p.precioMax)}` : null]
     .filter(Boolean)
     .join(" · ");
-  const cuantas = p.utiles > 0 ? `${p.utiles} para ofrecer` : `${p.dudosas} para revisar`;
+  // `p.utiles` es lo OFRECIBLE, no lo que Sofi aprobo (Juan, 2026-09-07): lo
+  // cuenta avisos-salida.js#calidadDePedido con la misma compuerta que arma el
+  // aviso completo. Antes venia de `refs_utiles.length` crudo, y un pedido con
+  // su unica ref apartada por dato corrupto se anunciaba como "1 para
+  // ofrecer": la asesora abria la ficha y no habia nada.
+  //
+  // El tercer caso no existia y hacia falta: sin nada ofrecible Y sin dudosas,
+  // "0 para revisar" no dice que paso ni que hacer.
+  const cuantas =
+    p.utiles > 0
+      ? `${p.utiles} para ofrecer`
+      : p.dudosas > 0
+        ? `${p.dudosas} para revisar`
+        : `nada para ofrecer todavía — abrí la ficha para ver por qué`;
   const porque = PORQUE_CORTO[p.motivo];
   const base = `${i}. ${p.colega || "un colega"} — ${que || "sin detalle"}\n   ${cuantas}${porque ? ` · ${porque}` : ""}`;
   // El link de cada pedido (Juan, 2026-09-02, opcion D). Solo si lo tiene.

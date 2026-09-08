@@ -261,7 +261,7 @@ test("aprobar_pedido_radar: si ya no pasa la compuerta de calidad, dice por que 
   // se entiende es un motivo que se reemplaza por una explicacion inventada:
   // fue exactamente lo que paso cuando Sofi atribuyo a un telefono faltante
   // una ref que en realidad estaba apartada por dato malo en Wasi.
-  assert.match(out, /precio esta fuera de rango/);
+  assert.match(out, /precio está fuera de rango/);
   assert.doesNotMatch(out, /precio_fuera_de_rango/);
 });
 

@@ -184,24 +184,28 @@ function filtrar(matches, opciones = {}) {
 // persona tienen que decir algo que esa persona pueda ACCIONAR, y sobre todo
 // tienen que salir: un motivo que no se traduce es un motivo que quien lo lea
 // va a reemplazar por una explicacion inventada.
+//
+// CON TILDES (2026-09-07). Estos textos dejaron de ser solo de auditoria: se
+// imprimen al lado de la propiedad en el aviso que lee Natalia. El codigo de
+// este repo se comenta sin tildes; lo que sale hacia una persona, no.
 const MOTIVOS_LEGIBLES = {
-  ref_bloqueada: "esta apartada a proposito porque tiene un dato mal cargado en Wasi (GRUPOS_REFS_BLOQUEADAS). Se corrige en Wasi y se saca de la lista; mientras tanto no sale a ningun colega",
+  ref_bloqueada: "está apartada a propósito porque tiene un dato mal cargado en Wasi (GRUPOS_REFS_BLOQUEADAS). Se corrige en Wasi y se saca de la lista; mientras tanto no sale a ningún colega",
   no_es_inventario_propio: "es de la red de aliados, no es nuestra: no se ofrece en el gremio",
-  zona_no_publicable: "la zona no calza con lo que pidio el colega",
+  zona_no_publicable: "la zona no calza con lo que pidió el colega — mirá si igual le sirve",
   amoblado_sin_confirmar: "el colega pidió amoblado y no tenemos confirmado que ésta lo esté: Wasi sólo lo dice en el título y esta ficha no lo trae",
   periodo_no_soportado: "el pedido es por días o semanas y nuestro inventario está cotizado por mes",
-  puntaje_bajo: "el puntaje quedo por debajo del umbral para salir sola",
+  puntaje_bajo: "el puntaje quedó por debajo del umbral para salir sola",
   sin_ref: "no tiene referencia",
-  sin_titulo: "no tiene titulo cargado",
+  sin_titulo: "no tiene título cargado",
   sin_precio: "no tiene precio cargado",
-  precio_fuera_de_rango: "el precio esta fuera de rango sano: casi seguro es un dato corrupto en Wasi",
+  precio_fuera_de_rango: "el precio está fuera de rango sano: casi seguro es un dato corrupto en Wasi",
   sin_zona: "no tiene zona cargada",
-  sin_area: "no tiene area cargada",
+  sin_area: "no tiene área cargada",
   sin_link: "no tiene link propio",
   link_ajeno: "el link apunta a un dominio que no es el nuestro",
   sin_link_wasi: "no tiene link de Wasi para verificar",
   link_no_abre: "el link no abre",
-  sync_viejo: "el sync de Wasi esta viejo, asi que el dato puede no ser el actual",
+  sync_viejo: "el sync de Wasi está viejo, así que el dato puede no ser el actual",
 };
 
 // Traduce una lista de motivos. Un motivo que no este en el mapa se devuelve
@@ -210,4 +214,145 @@ function explicarMotivos(motivos) {
   return (motivos || []).map((m) => MOTIVOS_LEGIBLES[m] || m).join("; ");
 }
 
-module.exports = { esPublicable, filtrar, UMBRAL_DEFAULT, RANGOS, REFS_BLOQUEADAS, MOTIVOS_LEGIBLES, explicarMotivos };
+// Igual que explicarMotivos pero NUNCA devuelve un identificador crudo: si
+// ninguno de los motivos tiene traduccion, devuelve null y quien llama decide
+// que decir. Se usa en todo lo que sale HACIA UNA PERSONA.
+//
+// Por que hacen falta las dos (Juan, 2026-09-06): explicarMotivos existe para
+// auditar (un identificador feo es mejor que un hueco en un log). Un aviso a
+// la asesora es otra cosa: "amoblado_sin_confirmar" en medio de una frase en
+// castellano no se lee como un motivo, se lee como un error del sistema, y
+// quien lo lea va a reemplazarlo por una explicacion inventada — que es
+// exactamente el bug que cerro el commit b0f62ea.
+function explicarMotivosSeguro(motivos) {
+  const conocidos = (motivos || []).filter((m) => MOTIVOS_LEGIBLES[m]);
+  return conocidos.length ? explicarMotivos(conocidos) : null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// LAS DOS CLASES DE "NO" (Juan, 2026-09-07). No son la misma cosa y tratarlas
+// igual costo una regresion en el carril de venta, que es el que esta vivo.
+//
+// Este archivo responde UNA pregunta: "¿esto puede salir SOLO, a un grupo de
+// 80 competidores, sin que nadie lo revise?". La respuesta "no" tiene dos
+// causas muy distintas:
+//
+//   1. NO SE PUEDE PUBLICAR SIN SUPERVISION. La propiedad es real y el dato es
+//      nuestro; lo que falta es criterio humano — la zona no es la pedida, el
+//      puntaje no alcanza para salir sola, el sync viene atrasado, el plazo
+//      del pedido es por dias, no sabemos si esta amoblada, falta un campo de
+//      la ficha. UNA PERSONA ES EXACTAMENTE QUIEN RESUELVE ESO. Esconderselo
+//      es quitarle el negocio que el modulo existe para encontrar.
+//   2. NUNCA SE OFRECE, NI SIQUIERA A UNA PERSONA. El dato esta corrupto
+//      (precio fuera de rango, sin precio), la propiedad es ajena
+//      (no_es_inventario_propio, link_ajeno), esta apartada a mano
+//      (ref_bloqueada) o el link no abre. Ahi no hay juicio que aplicar: es
+//      basura, y ofrecerla es el mismo error se lo mande el bot o la asesora.
+//
+// EL INVARIANTE QUE ESTO PROTEGE vive en src/groups/ubicacion.js:134-137 y en
+// la nota de `zona_no_publicable` de este mismo archivo: desde el 2026-08-18
+// la zona dejo de ser compuerta en match.js, y un match `otra_zona` ENTRA AL
+// AVISO DE LA ASESORA A PROPOSITO, con su aclaracion al lado ("queda en Belén,
+// no en Laureles"). El aviso pasa por Sofi y por una persona; el grupo no.
+// Tratar `zona_no_publicable` como "nunca se ofrece" borraba de la lista de
+// Natalia justo esas propiedades — y con dos multiplicadores: un pedido sin
+// barrio grada TODO como `ciudad`, asi que perdia la lista entera detras de
+// una razon falsa; y con el sync de Wasi caido `sync_viejo` descartaba todo,
+// convirtiendo cada aviso en un muro de ⛔ el dia en que el respaldo humano
+// mas importa.
+//
+// La clasificacion vive ACA, al lado de los motivos que describe, y no en
+// cada llamador: si mañana se agrega un motivo, se decide su clase en el mismo
+// lugar donde se decide que exista (lo fija test/motivos-legibles.test.js).
+const MOTIVOS_SOLO_PUBLICACION = new Set([
+  "zona_no_publicable",
+  "puntaje_bajo",
+  "sync_viejo",
+  "periodo_no_soportado",
+  "amoblado_sin_confirmar",
+  "sin_area",
+  "sin_zona",
+  "sin_titulo",
+  "sin_link",
+  "sin_link_wasi",
+]);
+
+const MOTIVOS_NUNCA_OFRECER = new Set([
+  "ref_bloqueada",
+  "precio_fuera_de_rango",
+  "no_es_inventario_propio",
+  "link_ajeno",
+  "link_no_abre",
+  "sin_precio",
+  // sin_ref / sin_match: no hay ficha que ofrecer ni con que identificarla.
+  "sin_ref",
+  "sin_match",
+]);
+
+// Parte los motivos de un descarte en las dos clases de arriba.
+//
+// Un motivo DESCONOCIDO cae en `nuncaOfrecer`, no en `soloPublicacion`: la
+// regla de este archivo sigue siendo "ante la duda, no". Un motivo nuevo sin
+// clasificar se comporta como el caso severo hasta que alguien lo decida, y
+// el test de motivos-legibles lo hace notar antes de que llegue a produccion.
+function clasificarMotivos(motivos) {
+  const lista = (motivos || []).filter(Boolean);
+  const soloPublicacion = lista.filter((m) => MOTIVOS_SOLO_PUBLICACION.has(m));
+  const nuncaOfrecer = lista.filter((m) => !MOTIVOS_SOLO_PUBLICACION.has(m));
+  return { soloPublicacion, nuncaOfrecer, ofrecible: nuncaOfrecer.length === 0 };
+}
+
+// LA MISMA SALVEDAD, PERO DICHA AL COLEGA (Juan, 2026-09-07): "el borrador
+// listo para reenviar lleva esa misma aclaracion adentro". MOTIVOS_LEGIBLES
+// esta redactado para la asesora y habla DEL colega en tercera persona ("el
+// colega pidió amoblado"); pegarlo tal cual en el mensaje que ella le reenvia
+// a el se leeria como una nota interna filtrada. Estos textos son los mismos
+// hechos, dichos de frente y en positivo, y entran por el MISMO canal que ya
+// usa la aclaracion de zona: `le_falta` -> redactar.js#ficha -> "Aclaración:".
+//
+// `null` significa "no hay nada honesto que aclararle al colega por este
+// motivo", no "se omite":
+//   · zona_no_publicable — la aclaracion de zona ya la CALCULA
+//     redactar.js#desvios contra el pedido real ("queda en Belén, no en
+//     Laureles"); repetirla aca imprimiria lo mismo dos veces en la misma
+//     linea. Y cuando el pedido no nombro barrio (grado `ciudad`) no hay
+//     desvio que aclarar: no se le puede decir "no queda donde pediste" a
+//     quien no pidio ninguna zona.
+//   · sin_link_wasi — esa ref nunca llega al borrador: mensajeListoParaReenviar
+//     filtra por linkWasi antes de armar nada.
+const ACLARACIONES_COLEGA = {
+  zona_no_publicable: null,
+  puntaje_bajo: "no pude verificar todo lo que pediste — confirmame lo que te falte",
+  sync_viejo: "confirmame disponibilidad antes de mostrarla",
+  periodo_no_soportado: "está cotizada por mes, no por días ni semanas",
+  amoblado_sin_confirmar: "no tengo confirmado que esté amoblada",
+  sin_area: "no tengo el área registrada",
+  sin_zona: "no tengo la zona registrada",
+  sin_titulo: "el nombre puede estar incompleto en mi sistema",
+  sin_link: "no tengo ficha propia cargada todavía",
+  sin_link_wasi: null,
+};
+
+// La aclaracion que va DENTRO del borrador que la asesora le reenvia al
+// colega, o null si no hay ninguna. Solo mira los motivos de publicacion: uno
+// de la otra clase nunca llega hasta aca porque esa ref no se ofrece.
+function aclaracionParaColega(motivos) {
+  const textos = (motivos || []).map((m) => ACLARACIONES_COLEGA[m]).filter(Boolean);
+  return textos.length ? [...new Set(textos)].join(" · ") : null;
+}
+
+module.exports = {
+  esPublicable,
+  filtrar,
+  UMBRAL_DEFAULT,
+  RANGOS,
+  REFS_BLOQUEADAS,
+  MOTIVOS_LEGIBLES,
+  explicarMotivos,
+  explicarMotivosSeguro,
+  MOTIVOS_SOLO_PUBLICACION,
+  MOTIVOS_NUNCA_OFRECER,
+  clasificarMotivos,
+  ACLARACIONES_COLEGA,
+  aclaracionParaColega,
+};
