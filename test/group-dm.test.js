@@ -59,6 +59,7 @@ test.beforeEach((t) => {
   t.mock.method(lineaDm, "guardarClasificacion", async () => true);
   t.mock.method(lineaDm, "marcarAlertado", async () => true);
   t.mock.method(lineaDm, "ultimaCitaAlertada", async () => null);
+  t.mock.method(lineaDm, "faltaColumnaLid", () => false);
 });
 
 test("un mensaje duplicado no se vuelve a procesar", async (t) => {
@@ -262,6 +263,53 @@ test("un mensaje que llega por lid se liga con buscarPorLid, no por telefono, y 
   assert.strictEqual(creado.remitenteLid, "276467766300904@lid");
   assert.strictEqual(creado.remitenteTelefono, null);
   assert.strictEqual(creado.senalId, "sig-lid");
+});
+
+// ── Guard: no clasificar si falta la columna (revision final, 2026-09-08) ──
+//
+// Escenario real: alguien prende RADAR_DM_CLASIFICAR en Railway (fase 2)
+// mientras db/migrations/2026-09-08_linea_dm_lid.sql sigue pendiente. Sin
+// esto, ultimaCitaAlertada() devuelve null SIEMPRE (nunca encuentra el hilo
+// por lid) => el dedup de alertas nunca frena => sale UNA ALERTA POR CADA
+// MENSAJE del hilo, por la linea OFICIAL de Sofi (cap de ~300 msj/mes). Un
+// colega coordinando una visita en 8 mensajes son 8 alertas: esto no
+// degrada, inunda.
+
+test("con la columna lid faltante, el clasificador NUNCA se llama y no sale ninguna alerta", async (t) => {
+  t.mock.method(lineaDm, "faltaColumnaLid", () => true);
+  let iaLlamada = false;
+  _setClientForTests({ messages: { create: async () => { iaLlamada = true; throw new Error("no debia llamarse"); } } });
+  t.after(() => _setClientForTests(null));
+  let seEnvio = false;
+  t.mock.method(mensajeAsesor, "enviarYRegistrar", async () => { seEnvio = true; return { ok: true }; });
+  const historial = t.mock.method(lineaDm, "historialDe", async () => []);
+
+  const r = await dm.procesarMensaje(ORG, mensaje());
+
+  assert.strictEqual(r.resultado, "guardado_sin_columna");
+  assert.strictEqual(r.dmId, "dm-1");
+  assert.strictEqual(iaLlamada, false);
+  assert.strictEqual(seEnvio, false);
+  assert.strictEqual(historial.mock.callCount(), 0);
+});
+
+test("con la columna lid faltante y el clasificador APAGADO, se sigue viendo el 'guardado' normal de fase 1", async (t) => {
+  delete process.env.RADAR_DM_CLASIFICAR;
+  t.mock.method(lineaDm, "faltaColumnaLid", () => true);
+  const r = await dm.procesarMensaje(ORG, mensaje());
+  assert.strictEqual(r.resultado, "guardado");
+});
+
+test("con la columna lid presente, el clasificador prendido sigue funcionando normal", async (t) => {
+  t.mock.method(lineaDm, "faltaColumnaLid", () => false);
+  mockVeredicto(t, veredicto({ hay_avance: true, tipo: "agendando", resumen: "coordinando" }));
+  let seEnvio = false;
+  t.mock.method(mensajeAsesor, "enviarYRegistrar", async () => { seEnvio = true; return { ok: true }; });
+
+  const r = await dm.procesarMensaje(ORG, mensaje());
+
+  assert.strictEqual(r.resultado, "alertado");
+  assert.strictEqual(seEnvio, true);
 });
 
 test("con el clasificador prendido, el hilo y el dedup se consultan por la identidad (lid), no por telefono", async (t) => {

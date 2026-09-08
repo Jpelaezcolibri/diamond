@@ -58,6 +58,18 @@ function avisarFaltaColumna() {
   );
 }
 
+// Lectura de solo-lectura de la bandera de arriba (revision final,
+// 2026-09-08). La usa src/groups/dm.js para cortar ANTES del clasificador:
+// sin remitente_lid, ultimaCitaAlertada() de mas abajo devuelve null
+// SIEMPRE (nunca encuentra el hilo), el dedup de alertas nunca frena y sale
+// una alerta de WhatsApp por CADA mensaje del hilo, por la linea OFICIAL de
+// Sofi. Si nunca se guardo un DM en este proceso todavia no se sabe si la
+// columna existe — por eso devuelve false hasta el primer intento real, no
+// una verdad universal.
+function faltaColumnaLid() {
+  return faltaColumna;
+}
+
 // Alta con dedup por wa_message_id (mismo criterio que group-signals.js).
 async function create(orgId, fields) {
   const row = {
@@ -205,4 +217,4 @@ async function ultimaCitaAlertada(orgId, identidad) {
   return clave(data);
 }
 
-module.exports = { create, historialDe, guardarClasificacion, marcarAlertado, ultimaCitaAlertada, columnaDeIdentidad };
+module.exports = { create, historialDe, guardarClasificacion, marcarAlertado, ultimaCitaAlertada, columnaDeIdentidad, faltaColumnaLid };

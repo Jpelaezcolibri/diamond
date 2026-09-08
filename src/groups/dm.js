@@ -162,6 +162,23 @@ async function procesarMensaje(org, mensaje, { ahora = new Date() } = {}) {
   // de guardar y ligar, y antes de cualquier llamada a la IA.
   if (!clasificadorActivo()) return { resultado: "guardado", dmId: guardado.id };
 
+  // GUARD: falta la migracion 2026-09-08_linea_dm_lid.sql (revision final,
+  // 2026-09-08). El escenario real es prender RADAR_DM_CLASIFICAR en Railway
+  // (fase 2) mientras esa migracion sigue pendiente: sin remitente_lid,
+  // ultimaCitaAlertada() de mas abajo devuelve null SIEMPRE (nunca encuentra
+  // el hilo por lid), el dedup del aviso nunca frena, y sale UNA ALERTA DE
+  // WHATSAPP POR CADA MENSAJE del hilo, por la linea OFICIAL de Sofi (cap de
+  // ~300 mensajes por mes calendario). Un colega coordinando una visita en 8
+  // mensajes son 8 alertas — esto no degrada, inunda. Se corta aca, igual
+  // que la fase 1, para que prender el interruptor con la migracion
+  // pendiente deje pasar como mucho la primera alerta, nunca N.
+  if (lineaDm.faltaColumnaLid()) {
+    console.warn(
+      "[linea-dm] RADAR_DM_CLASIFICAR prendido con la migracion 2026-09-08_linea_dm_lid.sql pendiente: se guarda el mensaje pero no se clasifica ni se alerta (sin remitente_lid, el dedup de avisos no puede funcionar)."
+    );
+    return { resultado: "guardado_sin_columna", dmId: guardado.id };
+  }
+
   const historial = await lineaDm.historialDe(org.id, identidad, { limite: 10 });
   const hilo = historial.length ? historial : [{ texto: mensaje.texto, created_at: guardado.created_at }];
   const veredicto = await clasificarAvance(hilo, ahora);
