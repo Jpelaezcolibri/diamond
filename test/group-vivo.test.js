@@ -609,10 +609,11 @@ test("aprobarManual: responde al PRIVADO del colega y lo marca respondido", asyn
 // El hueco que quedaba (Juan, 2026-09-04): un DM aprobado a mano desde el CRM
 // tambien tiene que dejar constancia de a quien salio, igual que el DM
 // automatico (asistir) y el DM manual posterior (responderPorDmManual) --
-// las otras dos vias de este archivo. señal.autor_telefono es el @lid crudo
-// (destinoLid), nunca un telefono pese al nombre; telefonoColegaManual es el
-// numero real que resuelve el directorio (destinoTelefono).
-test("aprobarManual: marcarRespondida queda con destinoTelefono y destinoLid del colega", async () => {
+// las otras dos vias de este archivo. Cuando el DM sale por TELEFONO,
+// destinoLid queda en null (Juan, 2026-09-08): no se inventa un lid que no
+// se uso -- el @lid crudo de la señal solo se guarda cuando de verdad fue el
+// destino del envio (ver el test de "sin telefono pero con lid" mas abajo).
+test("aprobarManual: marcarRespondida queda con destinoTelefono del colega y destinoLid en null", async () => {
   señalParaAprobar = señalCallada({ autor_telefono: "141746805670125" });
   grupoParaAprobar = grupoHabilitado();
   telefonoColegaManual = "573001234567";
@@ -621,7 +622,7 @@ test("aprobarManual: marcarRespondida queda con destinoTelefono y destinoLid del
 
   assert.strictEqual(marcadas.length, 1);
   assert.strictEqual(marcadas[0].destinoTelefono, "573001234567");
-  assert.strictEqual(marcadas[0].destinoLid, "141746805670125");
+  assert.strictEqual(marcadas[0].destinoLid, null);
 });
 
 // SE SIGUE PREFIRIENDO EL TELEFONO cuando hay los dos (Juan, 2026-09-04):
@@ -660,7 +661,13 @@ test("aprobarManual: sin telefono pero con lid, manda por lid — igual que el c
   assert.deepStrictEqual(enviosDmManual[0].opciones, { lid: "141746805670125" });
   assert.strictEqual(marcadas.length, 1);
   assert.strictEqual(marcadas[0].destinoTelefono, null);
-  assert.strictEqual(marcadas[0].destinoLid, "141746805670125");
+  // Con el sufijo @lid (Juan, 2026-09-08): group-signals.js#buscarPorLid
+  // compara respuesta_destino_lid por IGUALDAD EXACTA contra el lid crudo
+  // que trae el mensaje entrante (que siempre llega con su sufijo, ver la
+  // nota en asistir mas arriba). Sin el sufijo aca, esa comparacion nunca
+  // encuentra la señal y el hilo queda "sin pedido ligado" pese a que el DM
+  // si salio por este lid.
+  assert.strictEqual(marcadas[0].destinoLid, "141746805670125@lid");
 });
 
 // LA REGLA (Juan, 2026-09-02): "necesito que me asegures que las respuestas no
@@ -896,12 +903,14 @@ test("responderPorDmManual: manda el DM cuando hay telefono y la señal pasa la 
   assert.strictEqual(enviosDmManual[0].telefono, "573001234567");
   assert.match(enviosDmManual[0].texto, /Ref AP004/);
   // destinoTelefono/destinoLid: registro de a quien salio el DM, para poder
-  // contactarlo a futuro (Juan, 2026-09-04). señal.autor_telefono es el @lid
-  // crudo (destinoLid); telefonoColegaManual es el numero real (destinoTelefono).
+  // contactarlo a futuro (Juan, 2026-09-04). Cuando el DM sale por TELEFONO,
+  // destinoLid queda en null (Juan, 2026-09-08) -- no se inventa un lid que
+  // no fue el destino del envio (ver el test de "sin telefono" mas abajo,
+  // donde destinoLid SI lleva el @lid crudo con su sufijo).
   assert.deepStrictEqual(marcadas, [
     {
       id: "sig-callada", texto: enviosDmManual[0].texto, wamid: "wm-dm-manual", modo: "auto", refs: ["AP004"],
-      destinoTelefono: "573001234567", destinoLid: "141746805670125",
+      destinoTelefono: "573001234567", destinoLid: null,
     },
   ]);
   // SE SIGUE PREFIRIENDO EL TELEFONO cuando hay los dos disponibles (Juan,
@@ -930,7 +939,11 @@ test("responderPorDmManual: sin telefono resuelto pero con lid, manda por lid �
   assert.deepStrictEqual(enviosDmManual[0].opciones, { lid: "141746805670125" });
   assert.strictEqual(marcadas.length, 1);
   assert.strictEqual(marcadas[0].destinoTelefono, null);
-  assert.strictEqual(marcadas[0].destinoLid, "141746805670125");
+  // Con el sufijo @lid (Juan, 2026-09-08): group-signals.js#buscarPorLid
+  // compara respuesta_destino_lid por IGUALDAD EXACTA contra el lid crudo
+  // que trae el mensaje entrante (que siempre llega con su sufijo). Sin el
+  // sufijo aca, esa comparacion nunca encuentra la señal.
+  assert.strictEqual(marcadas[0].destinoLid, "141746805670125@lid");
 });
 
 // Falla cerrado SOLO cuando de verdad no hay ningun destino: ni telefono
