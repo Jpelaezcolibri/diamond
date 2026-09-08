@@ -238,18 +238,28 @@ const esGrupo = (chatId) => typeof chatId === "string" && chatId.endsWith("@g.us
 const esDM = (chatId) => typeof chatId === "string" && (chatId.endsWith("@c.us") || chatId.endsWith("@lid"));
 const soloDigitos = (jid) => String(jid || "").replace(/\D/g, "") || null;
 
-// QUIEN escribe en un chat 1 a 1, separado en lo que ES: un telefono solo si
-// vino por @c.us y tiene forma de celular colombiano; un lid solo si vino
-// por @lid. Nunca los dos, y nunca un lid disfrazado de telefono — es el
-// error que db/migrations/2026-09-04_dm_destinatario.sql advierte, y que
-// hasta hoy `soloDigitos(ev.chatId)` cometia a ciegas. `id` es el chatId
-// crudo, con sufijo: la unica clave que no confunde a nadie.
+// QUIEN escribe en un chat 1 a 1, separado en lo que ES: un telefono si vino
+// por @c.us; un lid si vino por @lid. Nunca los dos, y nunca un lid
+// disfrazado de telefono — es el error que
+// db/migrations/2026-09-04_dm_destinatario.sql advierte, y que hasta hoy
+// `soloDigitos(ev.chatId)` cometia a ciegas. `id` es el chatId crudo, con
+// sufijo: la unica clave que no confunde a nadie.
+//
+// Un @c.us pone SIEMPRE sus digitos en `telefono`, sin filtrar por forma de
+// celular colombiano (revision final, 2026-09-08). Un chat @c.us ES una
+// direccion telefonica —fijo, extranjero o celular—, asi que guardar sus
+// digitos es honesto. Filtrarlos dejaba la fila con las DOS columnas en null
+// para el caso mas normal que hay despues del celular: una inmobiliaria con
+// WhatsApp Business sobre un fijo (57604...). Y una fila sin identidad no es
+// un dato menos: claveHilo devuelve null y el CRM parte la conversacion en
+// una tarjeta por mensaje, y en fase 2 ultimaCitaAlertada devuelve siempre
+// null, o sea que el dedup del aviso nunca dispara y sale una alerta por
+// mensaje. `esCelularColombiano` sigue donde sirve: en el camino de ENVIO
+// (waha.enviarDm), donde marcar un numero que no existe si cuesta.
 function identidadDM(chatId) {
   const id = String(chatId || "");
   if (id.endsWith("@lid")) return { id, telefono: null, lid: id };
-  const digitos = soloDigitos(id);
-  const telefono = id.endsWith("@c.us") && esCelularColombiano(digitos) ? digitos : null;
-  return { id, telefono, lid: null };
+  return { id, telefono: id.endsWith("@c.us") ? soloDigitos(id) : null, lid: null };
 }
 
 // Procesa el mensaje despues de haber respondido 200. WAHA reintenta si el

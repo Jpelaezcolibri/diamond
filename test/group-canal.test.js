@@ -354,10 +354,25 @@ test("_identidadDM separa telefono de lid y nunca mete un lid donde dice telefon
   assert.deepStrictEqual(canal._identidadDM("276467766300904@lid"), {
     id: "276467766300904@lid", telefono: null, lid: "276467766300904@lid",
   });
-  // Un @c.us que NO tiene forma de celular colombiano se guarda igual, pero
-  // sin telefono: no se inventa un dato que despues alguien va a marcar.
+  // Un chat @c.us ES una direccion telefonica -- celular, fijo o extranjero.
+  // Guardar sus digitos en remitente_telefono es honesto, no una invencion, y
+  // es lo unico que le da IDENTIDAD a la fila (revision final, 2026-09-08).
+  // Sin identidad, claveHilo devuelve null y el CRM parte la conversacion en
+  // una tarjeta por mensaje; y en fase 2 ultimaCitaAlertada devuelve siempre
+  // null, o sea que el dedup del aviso nunca dispara. `esCelularColombiano`
+  // vive en el camino de ENVIO (waha.enviarDm), no en el de lectura.
   assert.deepStrictEqual(canal._identidadDM("14155550100@c.us"), {
-    id: "14155550100@c.us", telefono: null, lid: null,
+    id: "14155550100@c.us", telefono: "14155550100", lid: null,
+  });
+  // El caso realista no es un gringo: es una inmobiliaria con WhatsApp
+  // Business sobre un fijo de Medellin.
+  assert.deepStrictEqual(canal._identidadDM("576044441234@c.us"), {
+    id: "576044441234@c.us", telefono: "576044441234", lid: null,
+  });
+  // Lo que sigue sin identidad es lo que no es ni @c.us ni @lid: no se le
+  // fabrica un telefono a un chat que ni siquiera es un chat 1 a 1.
+  assert.deepStrictEqual(canal._identidadDM("573001112222@g.us"), {
+    id: "573001112222@g.us", telefono: null, lid: null,
   });
 });
 
