@@ -161,11 +161,15 @@ Juan, 2026-09-08: *"luego implementamos que solo entren los mensajes que
 contestan a un dm y que esta informacion genera un dato de cuantos se
 contestan y cuantos se agendan visita para tener trazabilidad de todo"*.
 
-- **Filtro de entrada: sólo mensajes que contestan un DM.** Dejaría fuera al
-  colega que escribe por su cuenta (el caso "Catalina" del mockup).
-  **Contrapartida a decidir con datos:** hoy no sabemos cuántos son, porque
-  hasta el 2026-09-08 no entró ninguno. Con una semana de datos reales se
-  puede ver si son ruido o leads. Decidir antes sería adivinar.
+- ~~**Filtro de entrada: sólo mensajes que contestan un DM.**~~ **DESCARTADO
+  el mismo día.** Juan lo propuso y después lo revirtió: *"tienes razón con lo
+  de solo los que responden al dm, pongamos todo"*. Entra todo. El motivo:
+  filtrar dejaría fuera al colega que escribe por su cuenta (el caso
+  "Catalina" del mockup), y hoy no sabemos cuántos son ni si son ruido o
+  leads, porque hasta el 2026-09-08 no entró ninguno. Un colega que escribe
+  sin que le hayamos escrito es, si acaso, **más** interesante que uno que
+  contesta. Se guarda todo y el panel lo marca; si algún día son ruido
+  medible, se decide con el número a la vista.
 - **Métrica de contestados.** El conteo por colega de esta spec ya es el
   insumo; falta el agregado.
 - **Métrica de visitas agendadas.** Depende del clasificador
