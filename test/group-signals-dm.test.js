@@ -39,9 +39,10 @@ test("dmsHoyLinea sin supabase (modo memoria/test) devuelve 0", async () => {
 function construirQuery(resultado) {
   const llamadas = [];
   const q = {};
-  for (const metodo of ["select", "eq", "gte", "order", "limit", "update"]) {
+  for (const metodo of ["select", "eq", "gte", "order", "limit", "update", "or"]) {
     q[metodo] = (...args) => { llamadas.push([metodo, ...args]); return q; };
   }
+  q.maybeSingle = () => Promise.resolve(resultado);
   // El builder real de supabase-js es "thenable": awaitarlo dispara la query.
   q.then = (resolve) => resolve(resultado);
   return { q, llamadas };
@@ -227,4 +228,66 @@ test("el aviso de migracion pendiente se emite UNA sola vez, no en cada DM", asy
 
   const delDestino = avisos.filter((a) => a.includes("2026-09-04_dm_destinatario.sql"));
   assert.strictEqual(delDestino.length, 1, `se aviso ${delDestino.length} veces: ${avisos.join(" / ")}`);
+});
+
+// ── Atribuir la respuesta de un colega al DM que la origino (Juan, 2026-09-08) ──
+//
+// "Al DM mas reciente de ese colega", sin ventana de tiempo. El lid crudo
+// (con sufijo) es lo que marcarRespondida guardo en respuesta_destino_lid.
+
+test("buscarPorLid sin lid no consulta nada", async () => {
+  assert.strictEqual(await groupSignals.buscarPorLid("org-1", null), null);
+  assert.strictEqual(await groupSignals.buscarPorLid("org-1", ""), null);
+});
+
+test("buscarPorLid en memoria devuelve la señal MAS RECIENTE con ese respuesta_destino_lid", async () => {
+  const memory = require("../src/data/memory");
+  const antes = memory.groupSignals.length;
+  memory.groupSignals.push(
+    { id: "s-vieja", org_id: "org-1", clase: "demanda", respuesta_destino_lid: "276467766300904@lid", created_at: "2026-09-01T10:00:00Z" },
+    { id: "s-nueva", org_id: "org-1", clase: "demanda", respuesta_destino_lid: "276467766300904@lid", created_at: "2026-09-08T10:00:00Z" },
+    { id: "s-otro", org_id: "org-1", clase: "demanda", respuesta_destino_lid: "111@lid", created_at: "2026-09-09T10:00:00Z" }
+  );
+  try {
+    const s = await groupSignals.buscarPorLid("org-1", "276467766300904@lid");
+    assert.strictEqual(s.id, "s-nueva");
+  } finally {
+    memory.groupSignals.length = antes;
+  }
+});
+
+test("buscarPorLid con supabase filtra por org y por respuesta_destino_lid, ordenado por created_at desc, limit 1", async () => {
+  const { mod, llamadasPorTabla } = instalarConSupabase({ data: { id: "s-1", texto_original: "Busco apto" }, error: null });
+  const s = await mod.buscarPorLid("org-9", "276467766300904@lid");
+  assert.strictEqual(s.id, "s-1");
+  const llamadas = llamadasPorTabla[0].llamadas;
+  assert.deepStrictEqual(llamadas.filter(([m]) => m === "eq"), [
+    ["eq", "org_id", "org-9"],
+    ["eq", "respuesta_destino_lid", "276467766300904@lid"],
+  ]);
+  assert.ok(llamadas.some(([m, col, opts]) => m === "order" && col === "created_at" && opts && opts.ascending === false));
+  assert.ok(llamadas.some(([m, n]) => m === "limit" && n === 1));
+});
+
+test("buscarPorTelefono tambien encuentra la señal por respuesta_destino_telefono (el colega publico con lid y contesta desde @c.us)", async () => {
+  const { mod, llamadasPorTabla } = instalarConSupabase({ data: { id: "s-2" }, error: null });
+  const s = await mod.buscarPorTelefono("org-9", "573205938640");
+  assert.strictEqual(s.id, "s-2");
+  const llamadas = llamadasPorTabla[0].llamadas;
+  const or = llamadas.find(([m]) => m === "or");
+  assert.ok(or, "tiene que usar .or() para mirar las dos columnas");
+  assert.strictEqual(or[1], "autor_telefono.eq.573205938640,respuesta_destino_telefono.eq.573205938640");
+});
+
+// El filtro por clase protege a src/agent/engine.js:236, que usa esta misma
+// funcion para meter `ultimoPedido` DENTRO del system prompt de Sofi: sin el,
+// una OFERTA del colega entraria al prompt como si fuera un pedido suyo.
+test("buscarPorTelefono sigue filtrando por clase=demanda -- una oferta nunca puede volverse 'el ultimo pedido'", async () => {
+  const { mod, llamadasPorTabla } = instalarConSupabase({ data: { id: "s-2" }, error: null });
+  await mod.buscarPorTelefono("org-9", "573205938640");
+  const eqs = llamadasPorTabla[0].llamadas.filter(([m]) => m === "eq");
+  assert.ok(
+    eqs.some(([, col, val]) => col === "clase" && val === "demanda"),
+    "el filtro por clase no se puede quitar: engine.js depende de el"
+  );
 });
