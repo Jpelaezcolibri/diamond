@@ -4,6 +4,8 @@ import {
   extractPropertyEntries,
   normalizeArea,
   normalizeOperacionYPrecio,
+  parseSearchPage,
+  verificarDescartes,
   toCanonicalProperty,
   wasiApiPropertySchema
 } from "../../src/sync/wasi-api.source.js";
@@ -333,5 +335,92 @@ describe("extractFeatures / caracteristicas", () => {
   it("toCanonicalProperty lleva las features a caracteristicas", () => {
     const canonical = toCanonicalProperty(wasiApiPropertySchema.parse(conFeatures));
     expect(canonical.caracteristicas).toBe("Admite mascotas, Balcón, Vista panorámica, Urbanización cerrada, Terraza");
+  });
+});
+
+/**
+ * Incidente del 2026-09-09: el sync de Wasi fallo sus 5 corridas del dia con
+ * `seen: 0` y el radar quedo mudo 37 h (cuatro pedidos con match descartados
+ * por `sync_viejo` esa manana). Causa: Wasi empezo a mandar `main_image` como
+ * array en al menos una propiedad, el esquema lo declaraba objeto, y el parse
+ * de la pagina era un `.parse()` que lanza dentro de un `.map()` — UNA
+ * propiedad rota tumbaba el inventario COMPLETO de la cuenta.
+ *
+ * Dos defensas, porque son dos fallos distintos:
+ *  1. el esquema tolera la forma nueva (esta salida concreta);
+ *  2. una propiedad irreparable se descarta sin arrastrar a las demas
+ *     (la proxima sorpresa de Wasi, que no sabemos cual va a ser).
+ *
+ * Y la tercera regla, que es la que impide cambiar un fallo ruidoso por uno
+ * callado: lo descartado NO se puede tratar como "ya no esta en Wasi", porque
+ * el sync marca vendida toda propiedad que no vuelve a ver.
+ */
+describe("una propiedad rota no puede tumbar el inventario (incidente 2026-09-09)", () => {
+  it("main_image como array vacio: no lanza, y la propiedad queda sin fotos", () => {
+    const raw = wasiApiPropertySchema.parse({ id_property: 10113016, main_image: [] });
+    expect(extractImages(raw)).toEqual({ imageKeys: [], imageUrls: [] });
+  });
+
+  it("main_image como array con fotos: se toma la primera valida", () => {
+    const raw = wasiApiPropertySchema.parse({
+      id_property: 5,
+      main_image: [{ id: 12, url_original: "https://images.wasi.co/inmuebles/desde-array.jpeg" }]
+    });
+    expect(extractImages(raw).imageUrls).toEqual(["https://images.wasi.co/inmuebles/desde-array.jpeg"]);
+  });
+
+  it("parseSearchPage aisla la entrada irreparable y devuelve las sanas", () => {
+    const { properties, descartes } = parseSearchPage({
+      "0": { id_property: 1, reference: "REF-1" },
+      "1": { id_property: 2, bedrooms: { roto: true } },
+      "2": { id_property: 3 },
+      total: 3,
+      status: "success"
+    });
+    expect(properties.map((p) => String(p.id_property))).toEqual(["1", "3"]);
+    expect(descartes).toHaveLength(1);
+    expect(descartes[0]!.ref).toBe("2");
+  });
+
+  it("la descartada conserva su ref para que NO se marque como retirada", () => {
+    const { descartes } = parseSearchPage({ "0": { id_property: 9, reference: "  CASA-9 ", area: { roto: true } } });
+    expect(descartes[0]!.ref).toBe("CASA-9");
+  });
+
+  it("una entrada sin id recuperable deja ref null — no hay como protegerla", () => {
+    const { descartes } = parseSearchPage({ "0": { titulo: "sin id" } });
+    expect(descartes).toHaveLength(1);
+    expect(descartes[0]!.ref).toBeNull();
+  });
+
+  it("el motivo del descarte nombra el campo, para no quedar adivinando", () => {
+    const { descartes } = parseSearchPage({ "0": { id_property: 7, bathrooms: { roto: true } } });
+    expect(descartes[0]!.motivo).toContain("bathrooms");
+  });
+});
+
+describe("umbral de descartes: un inventario mutilado NO se da por bueno", () => {
+  it("acepta la corrida si los descartes estan por debajo del umbral", () => {
+    expect(() => verificarDescartes(100, 4)).not.toThrow();
+  });
+
+  it("lanza si pasan el umbral, en vez de sincronizar medio inventario en silencio", () => {
+    expect(() => verificarDescartes(100, 20)).toThrow(/aborta la corrida/i);
+  });
+
+  it("lanza si Wasi respondio y NADA se pudo parsear", () => {
+    expect(() => verificarDescartes(0, 12)).toThrow(/aborta la corrida/i);
+  });
+
+  it("una corrida legitimamente vacia (cuenta sin arriendos) no es un error", () => {
+    expect(() => verificarDescartes(0, 0)).not.toThrow();
+  });
+
+  it("en una cuenta chica manda el piso, no el porcentaje: 1 de 3 no aborta", () => {
+    expect(() => verificarDescartes(2, 1)).not.toThrow();
+  });
+
+  it("pero el piso tiene fondo: 3 de 5 sigue siendo un inventario mutilado", () => {
+    expect(() => verificarDescartes(2, 3)).toThrow(/aborta la corrida/i);
   });
 });

@@ -56,7 +56,12 @@ export const wasiApiPropertySchema = z
     zone_label: z.string().nullable().optional(),
     city_label: z.string().nullable().optional(),
     link: z.string().nullable().optional(),
-    main_image: wasiImageSchema.nullable().optional(),
+    // Wasi manda `main_image` como objeto casi siempre, pero el 2026-09-09
+    // aparecio como array (vacio, o con la foto adentro) en al menos una
+    // propiedad de la cuenta. Declararlo solo objeto tumbo las 5 corridas del
+    // dia con `seen: 0` y dejo el radar mudo 37 h. La forma real se resuelve
+    // en mainImageDe().
+    main_image: z.union([wasiImageSchema, z.array(z.unknown())]).nullable().optional(),
     // Peculiaridad de la API (verificada contra produccion): `galleries` es un
     // array con UN solo elemento, que es un objeto con las fotos en llaves
     // numericas ("0","1",...) MEZCLADAS con metadata del album (`id`, etc.).
@@ -79,6 +84,97 @@ export function extractPropertyEntries(raw: unknown): unknown[] {
   return Object.entries(raw as Record<string, unknown>)
     .filter(([key]) => /^\d+$/.test(key))
     .map(([, value]) => value);
+}
+
+/** Una entrada de Wasi que no se pudo parsear, con lo poco que se le pudo leer. */
+export type DescarteWasi = { ref: string | null; motivo: string };
+
+/**
+ * Cuantas entradas irreparables se toleran antes de dar la corrida por
+ * invalida. Bajo a proposito: por encima de esto ya no es "una propiedad
+ * rara", es que la API cambio de forma, y sincronizar el resto seria
+ * publicar un inventario mutilado sin que nada avise.
+ */
+const MAX_RATIO_DESCARTES = 0.05;
+
+/**
+ * Piso absoluto de descartes tolerados, pase lo que pase con el porcentaje.
+ * Sin el, una cuenta chica (Paraiso tiene 2 propiedades en alquiler) abortaria
+ * la corrida ante una sola rareza y el aislamiento no serviria de nada: el
+ * ratio solo empieza a mandar cuando el inventario es grande. Una descartada
+ * no se borra ni se marca vendida — solo no se actualiza, y queda en el log.
+ */
+const MIN_DESCARTES_TOLERADOS = 2;
+
+/**
+ * La ref que tendria la entrada si hubiera parseado — misma regla que
+ * toCanonicalProperty. Se lee a mano, sin zod, porque justamente lo que falla
+ * es el parse. Sirve para NO marcar como retirada una propiedad que sigue en
+ * Wasi y solo llego con un campo raro.
+ */
+function refDeEntradaCruda(entry: unknown): string | null {
+  if (!entry || typeof entry !== "object") return null;
+  const e = entry as Record<string, unknown>;
+  const reference = typeof e.reference === "string" ? e.reference.trim() : "";
+  if (reference) return reference;
+  const id = e.id_property;
+  if (typeof id === "string" && id.trim()) return id.trim();
+  if (typeof id === "number" && Number.isFinite(id)) return String(id);
+  return null;
+}
+
+/**
+ * Parsea una pagina de /property/search AISLANDO cada entrada.
+ *
+ * POR QUE (incidente del 2026-09-09): esto era
+ * `entries.map((e) => wasiApiPropertySchema.parse(e))` — un `.parse()` que
+ * lanza dentro de un `.map()`. Wasi mando `main_image` como array en UNA
+ * propiedad y se perdio el inventario COMPLETO de la cuenta: 5 corridas
+ * fallidas con `seen: 0`, 37 h sin sync y el radar callado ante cuatro
+ * pedidos con match. La proxima sorpresa de Wasi no sabemos cual va a ser;
+ * lo que si sabemos es que no puede costar el inventario entero.
+ *
+ * No se traga el fallo: cada descarte se cuenta y verificarDescartes() tumba
+ * la corrida si son demasiados.
+ */
+export function parseSearchPage(raw: unknown): { properties: WasiApiProperty[]; descartes: DescarteWasi[] } {
+  const properties: WasiApiProperty[] = [];
+  const descartes: DescarteWasi[] = [];
+  for (const entry of extractPropertyEntries(raw)) {
+    const parsed = wasiApiPropertySchema.safeParse(entry);
+    if (parsed.success) {
+      properties.push(parsed.data);
+      continue;
+    }
+    const motivo = parsed.error.issues
+      .map((i) => `${i.path.join(".") || "(raiz)"}: ${i.message}`)
+      .join(" | ");
+    descartes.push({ ref: refDeEntradaCruda(entry), motivo });
+  }
+  return { properties, descartes };
+}
+
+/**
+ * Decide si una corrida con descartes sigue siendo confiable. Lanza si no.
+ *
+ * Aislar la entrada rota evita perder el inventario por una propiedad; este
+ * umbral evita el fallo contrario, que es peor: dar por buena una corrida a
+ * la que le falta medio inventario y dejar que el resto del sistema lo trate
+ * como la verdad. Cero descartes es el caso normal y no dice nada.
+ */
+export function verificarDescartes(parseadas: number, descartadas: number): void {
+  if (descartadas === 0) return;
+  const total = parseadas + descartadas;
+  const ratio = descartadas / total;
+  const tope = Math.max(MIN_DESCARTES_TOLERADOS, Math.floor(total * MAX_RATIO_DESCARTES));
+  if (parseadas === 0 || descartadas > tope) {
+    throw new Error(
+      `Wasi devolvio ${total} propiedades y ${descartadas} no se pudieron parsear ` +
+        `(${Math.round(ratio * 100)}%, tope ${tope}). ` +
+        "Se aborta la corrida: sincronizar el resto seria publicar un inventario mutilado. " +
+        "Revisa wasiApiPropertySchema contra la forma actual de la API."
+    );
+  }
 }
 
 function toNumberOrNull(value: string | number | null | undefined): number | null {
@@ -124,6 +220,24 @@ function parseWasiImage(raw: unknown): WasiImage | null {
 }
 
 /**
+ * `main_image` en su forma util. Wasi lo manda como objeto, pero tambien como
+ * array —vacio cuando no hay foto principal, o con la foto adentro— y un `[]`
+ * es truthy en JS: sin esto, `images = [[]]` se colaba y salia una foto
+ * fantasma sin url. Devuelve la primera imagen valida, o null.
+ */
+export function mainImageDe(p: WasiApiProperty): WasiImage | null {
+  const raw = p.main_image;
+  if (Array.isArray(raw)) {
+    for (const item of raw) {
+      const img = parseWasiImage(item);
+      if (img) return img;
+    }
+    return null;
+  }
+  return raw ? parseWasiImage(raw) : null;
+}
+
+/**
  * `galleries[0]` mezcla las fotos (llaves numericas "0","1",...) con metadata
  * del album (`id` del gallery, etc.) — descubierto en produccion: el primer
  * intento asumio que un `id` directo significaba "una sola foto" y dejo las
@@ -140,8 +254,9 @@ export function extractImages(p: WasiApiProperty): { imageKeys: string[]; imageU
       .map(([, value]) => parseWasiImage(value))
       .filter((img): img is WasiImage => img !== null);
   }
-  if (images.length === 0 && p.main_image) {
-    images = [p.main_image];
+  const principal = mainImageDe(p);
+  if (images.length === 0 && principal) {
+    images = [principal];
   }
 
   const sorted = [...images].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
@@ -269,16 +384,23 @@ export class WasiApiSource implements WasiSource {
       // El catalogo es un enriquecimiento: si falla, el sync sigue sin tipo.
     }
 
+    const descartes: DescarteWasi[] = [];
     const fetchPaginated = async (extraParams: Record<string, string>): Promise<WasiApiProperty[]> => {
       const results: WasiApiProperty[] = [];
       let skip = 0;
       for (;;) {
         const body = await query("/property/search", { take: String(PAGE_SIZE), skip: String(skip), ...extraParams });
-        const entries = extractPropertyEntries(body).map((entry) => wasiApiPropertySchema.parse(entry));
-        if (entries.length === 0) break;
-        results.push(...entries);
+        const pagina = parseSearchPage(body);
+        // La paginacion se corta por ENTRADAS de la pagina, no por las que
+        // parsearon: si una se descarta, `properties.length < PAGE_SIZE` haria
+        // creer que esta fue la ultima pagina y truncaria el inventario en
+        // silencio — el mismo tipo de fallo callado que este arreglo combate.
+        const enLaPagina = pagina.properties.length + pagina.descartes.length;
+        if (enLaPagina === 0) break;
+        results.push(...pagina.properties);
+        descartes.push(...pagina.descartes);
         skip += PAGE_SIZE;
-        if (entries.length < PAGE_SIZE) break;
+        if (enLaPagina < PAGE_SIZE) break;
       }
       return results;
     };
@@ -303,6 +425,13 @@ export class WasiApiSource implements WasiSource {
         allProperties.push(property);
       }
     }
+
+    // Cada descarte se nombra en el log ANTES de decidir si la corrida vale:
+    // si el umbral la tumba, el log ya dice cual propiedad y que campo.
+    for (const d of descartes) {
+      console.warn(`[sync] Propiedad de Wasi descartada (ref ${d.ref ?? "desconocida"}): ${d.motivo}`);
+    }
+    verificarDescartes(allProperties.length, descartes.length);
 
     const existing = await listPropertiesByOrg(orgId);
     const existingByRef = new Map(existing.map((p) => [p.ref, p.id]));
@@ -334,7 +463,11 @@ export class WasiApiSource implements WasiSource {
 
     // Retiros: propiedades Wasi de la org, aun disponibles, que ya no estan
     // en el inventario de la API (vendidas o despublicadas en Wasi).
+    // Las descartadas van al set: siguen estando en Wasi, solo llegaron con un
+    // campo que no supimos leer. Marcarlas `gone` seria decirle al resto del
+    // sistema que se vendieron — un dato falso salido de un bug nuestro.
     const fetchedRefs = new Set(candidates.map((c) => c.data!.ref));
+    for (const d of descartes) if (d.ref) fetchedRefs.add(d.ref);
     for (const property of existing) {
       if (!property.disponible) continue;
       if (fetchedRefs.has(property.ref)) continue;
