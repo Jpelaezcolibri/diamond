@@ -184,6 +184,13 @@ test("upsert reintenta si el insert choca con la carrera del unique(org_id, lid)
 });
 
 test("upsert no reintenta infinito: un 23505 persistente (no una carrera real) se propaga como fallo, no como exito", async (t) => {
+  // Silenciado (Juan, 2026-09-10): este 23505 persistente SI cae en el
+  // console.error real de upsert (no es una migracion pendiente, es un fallo
+  // de escritura) — sin silenciar, `npm test` deja este log suelto en una
+  // corrida en verde.
+  const original = console.error;
+  console.error = () => {};
+
   t.mock.method(supabase, "from", () => ({
     select() { return this; },
     eq() { return this; },
@@ -191,8 +198,12 @@ test("upsert no reintenta infinito: un 23505 persistente (no una carrera real) s
     insert: () => Promise.resolve({ error: { code: "23505", message: "duplicate key value violates unique constraint" } }),
   }));
 
-  const guardado = await colegas.upsert("org-1", { lid: "444555666", telefono: "573004445566" });
-  assert.strictEqual(guardado, false, "un solo reintento agotado sigue siendo un fallo, no un exito silencioso");
+  try {
+    const guardado = await colegas.upsert("org-1", { lid: "444555666", telefono: "573004445566" });
+    assert.strictEqual(guardado, false, "un solo reintento agotado sigue siendo un fallo, no un exito silencioso");
+  } finally {
+    console.error = original;
+  }
 });
 
 test("upsert devuelve false (no undefined) ante un error real de escritura, y lo deja en el log", async (t) => {
@@ -255,6 +266,154 @@ test("esSoloLlamada devuelve null (no false) si la base falla: falla cerrado", a
   t.mock.method(supabase, "from", () => cadenaQueResuelve({ data: null, error: { message: "boom" } }, []));
   try {
     assert.strictEqual(await colegas.esSoloLlamada(ORG, { lid: "266150634110990" }), null);
+  } finally {
+    console.error = original;
+  }
+});
+
+// ── marcarSoloLlamada contra la base (Juan, 2026-09-10) ──────────────────
+//
+// Este es el camino que de verdad escribe en produccion: la revision de esta
+// tarea encontro que solo estaba probada la rama en memoria
+// (test/colegas-solo-llamada.test.js). Cubre el select por telefono, el
+// fallback a directorio_lids cuando la fila no tiene telefono, el update que
+// de verdad marca la fila, y el no_encontrado / error que NUNCA deben
+// terminar en un update disparado a ciegas.
+
+// update(patch).in(col, vals) — cadena separada de cadenaQueResuelve porque
+// el update no lee filtros de eq/in previos, solo el patch y el .in() final.
+function cadenaUpdateQueResuelve(resultado, llamadas) {
+  return {
+    update: (patch) => {
+      llamadas.push({ patch });
+      return {
+        in: (col, vals) => {
+          llamadas.push({ metodo: "in", col, vals });
+          return Promise.resolve(resultado);
+        },
+      };
+    },
+  };
+}
+
+test("marcarSoloLlamada: la encuentra por telefono, actualiza esa fila y no toca directorio_lids", async (t) => {
+  const tablas = [];
+  const filtrosSelect = [];
+  const llamadasUpdate = [];
+
+  t.mock.method(supabase, "from", (tabla) => {
+    tablas.push(tabla);
+    if (tablas.filter((x) => x === "colegas_grupos").length === 1) {
+      // Primera vez que se toca colegas_grupos: el select por telefono.
+      return cadenaQueResuelve(
+        { data: [{ id: "c-angela", lid: "266150634110990", telefono: "573146399667", nombre: "Angela" }], error: null },
+        filtrosSelect
+      );
+    }
+    return cadenaUpdateQueResuelve({ error: null }, llamadasUpdate);
+  });
+
+  const r = await colegas.marcarSoloLlamada(ORG, { telefono: "573146399667" });
+
+  assert.ok(!tablas.includes("directorio_lids"), "si la encontro por telefono no hace falta cruzar el directorio");
+
+  assert.ok(filtrosSelect.some((f) => f[0] === "eq" && f[1] === "org_id" && f[2] === ORG));
+  const inTelefono = filtrosSelect.find((f) => f[0] === "in" && f[1] === "telefono");
+  assert.ok(inTelefono, "debe filtrar colegas_grupos por telefono, no traer la tabla completa");
+  assert.ok(
+    inTelefono[2].includes("573146399667") && inTelefono[2].includes("3146399667"),
+    `las variantes deberian incluir el numero con y sin indicativo, vinieron: ${inTelefono[2]}`
+  );
+
+  assert.strictEqual(llamadasUpdate.length, 2, "un update(patch) y un .in(id,...)");
+  const [{ patch }, { metodo, col, vals }] = llamadasUpdate;
+  assert.strictEqual(patch.solo_llamada, true);
+  assert.strictEqual(typeof patch.solo_llamada_at, "string");
+  assert.ok(!Number.isNaN(Date.parse(patch.solo_llamada_at)), "solo_llamada_at debe ser una fecha ISO valida");
+  assert.strictEqual(metodo, "in");
+  assert.strictEqual(col, "id");
+  assert.deepStrictEqual(vals, ["c-angela"], "debe actualizar exactamente la fila que encontro, no todas");
+
+  assert.deepStrictEqual(r, { ok: true, colega: { nombre: "Angela", telefono: "573146399667", lid: "266150634110990" } });
+});
+
+test("marcarSoloLlamada: sin fila por telefono, cruza directorio_lids y marca la que aparece por lid", async (t) => {
+  const tablas = [];
+  const filtrosDir = [];
+  const filtrosColPorLid = [];
+  const llamadasUpdate = [];
+  let vecesColegas = 0;
+
+  t.mock.method(supabase, "from", (tabla) => {
+    tablas.push(tabla);
+    if (tabla === "directorio_lids") {
+      return cadenaQueResuelve({ data: [{ lid: "266150634110990" }], error: null }, filtrosDir);
+    }
+    assert.strictEqual(tabla, "colegas_grupos");
+    vecesColegas += 1;
+    if (vecesColegas === 1) {
+      // Nadie tiene ese telefono guardado directamente.
+      return cadenaQueResuelve({ data: [], error: null }, []);
+    }
+    if (vecesColegas === 2) {
+      // Segunda pasada: por el lid que trajo directorio_lids.
+      return cadenaQueResuelve(
+        { data: [{ id: "c-angela", lid: "266150634110990", telefono: null, nombre: "Angela" }], error: null },
+        filtrosColPorLid
+      );
+    }
+    return cadenaUpdateQueResuelve({ error: null }, llamadasUpdate);
+  });
+
+  const r = await colegas.marcarSoloLlamada(ORG, { telefono: "3146399667" });
+
+  assert.ok(tablas.includes("directorio_lids"), "sin fila por telefono debe caer al directorio");
+  assert.ok(filtrosDir.some((f) => f[0] === "eq" && f[1] === "org_id" && f[2] === ORG), "directorio_lids tambien se filtra por org");
+  const dirInTelefono = filtrosDir.find((f) => f[0] === "in" && f[1] === "telefono");
+  assert.ok(dirInTelefono && dirInTelefono[2].includes("3146399667"));
+
+  const colInLid = filtrosColPorLid.find((f) => f[0] === "in" && f[1] === "lid");
+  assert.ok(colInLid, "la segunda consulta a colegas_grupos debe filtrar por el lid que trajo el directorio");
+  assert.deepStrictEqual(colInLid[2], ["266150634110990"]);
+
+  assert.strictEqual(llamadasUpdate.length, 2);
+  assert.strictEqual(llamadasUpdate[0].patch.solo_llamada, true);
+  assert.deepStrictEqual(llamadasUpdate[1].vals, ["c-angela"]);
+
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(r.colega.lid, "266150634110990");
+});
+
+test("marcarSoloLlamada: no aparece ni por telefono ni por directorio_lids -- no_encontrado, y jamas llama a update", async (t) => {
+  let updateFueLlamado = false;
+
+  t.mock.method(supabase, "from", (tabla) => {
+    if (tabla === "directorio_lids") {
+      return cadenaQueResuelve({ data: [], error: null }, []);
+    }
+    assert.strictEqual(tabla, "colegas_grupos");
+    return {
+      select: () => ({ eq: () => ({ in: () => ({ limit: () => Promise.resolve({ data: [], error: null }) }) }) }),
+      update: () => {
+        updateFueLlamado = true;
+        return { in: () => Promise.resolve({ error: null }) };
+      },
+    };
+  });
+
+  const r = await colegas.marcarSoloLlamada(ORG, { telefono: "573146399667" });
+
+  assert.deepStrictEqual(r, { ok: false, motivo: "no_encontrado" });
+  assert.strictEqual(updateFueLlamado, false, "sin fila que marcar, nunca debe llegar a escribir en la base");
+});
+
+test("marcarSoloLlamada: un error de consulta contra la base es 'error', no un falso no_encontrado", async (t) => {
+  const original = console.error;
+  console.error = () => {};
+  t.mock.method(supabase, "from", () => cadenaQueResuelve({ data: null, error: { message: "boom" } }, []));
+  try {
+    const r = await colegas.marcarSoloLlamada(ORG, { telefono: "573146399667" });
+    assert.deepStrictEqual(r, { ok: false, motivo: "error" });
   } finally {
     console.error = original;
   }
