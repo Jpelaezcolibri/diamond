@@ -160,7 +160,7 @@ test("enviarDm manda a un celular colombiano real, como @c.us", async (t) => {
     return { ok: true, status: 200, text: async () => JSON.stringify({ id: { _serialized: "wamid-dm-1" } }) };
   });
 
-  const r = await waha.enviarDm("RADA-NATALIA", "573001234567", "hola colega, vi tu solicitud");
+  const r = await waha.enviarDm("RADA-NATALIA", "573001234567", "hola colega, vi tu solicitud", { orgId: "org-1" });
   assert.strictEqual(r.ok, true);
   assert.strictEqual(r.wamid, "wamid-dm-1");
   assert.strictEqual(ultimoBody.session, "RADA-NATALIA");
@@ -179,7 +179,7 @@ test("enviarDm normaliza un celular sin el 57 antes de armar el chatId", async (
     return { ok: true, status: 200, text: async () => JSON.stringify({ id: "wamid-dm-2" }) };
   });
 
-  await waha.enviarDm("sesion", "300 123 4567", "hola");
+  await waha.enviarDm("sesion", "300 123 4567", "hola", { orgId: "org-1" });
   assert.strictEqual(ultimoBody.chatId, "573001234567@c.us");
 });
 
@@ -187,7 +187,7 @@ test("sin configuracion de WAHA, enviarDm tampoco intenta nada", async () => {
   const url = process.env.WAHA_URL;
   delete process.env.WAHA_URL;
   const waha = require("../src/lib/waha");
-  const r = await waha.enviarDm("sesion", "573001234567", "hola");
+  const r = await waha.enviarDm("sesion", "573001234567", "hola", { orgId: "org-1" });
   assert.strictEqual(r.ok, false);
   assert.match(r.error, /WAHA_URL/);
   if (url) process.env.WAHA_URL = url;
@@ -204,7 +204,7 @@ test("enviarDm no reintenta: un fallo es una sola llamada, nunca dos", async (t)
     return { ok: false, status: 500, text: async () => JSON.stringify({ message: "boom" }) };
   });
 
-  const r = await waha.enviarDm("sesion", "573001234567", "hola");
+  const r = await waha.enviarDm("sesion", "573001234567", "hola", { orgId: "org-1" });
   assert.strictEqual(r.ok, false);
   assert.strictEqual(llamadas, 1, "un DM que quiza si salio no se reintenta: duplicaria el mensaje al privado");
 });

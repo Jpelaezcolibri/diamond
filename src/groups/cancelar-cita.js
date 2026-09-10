@@ -82,7 +82,7 @@ async function avisarAlColega(org, lead, texto, { sesion = null, queCambio = "Ci
     // cubrir. Y NO se mandan los dos — la guarda de waha.js exige que un lid
     // entre solo por la opcion explicita.
     const destino = esTelefono ? lead.phone : null;
-    const opcionesDm = esTelefono ? {} : { lid: lead.phone };
+    const opcionesDm = esTelefono ? { orgId: org && org.id } : { lid: lead.phone, orgId: org && org.id };
     const porWaha = await waha.enviarDm(sesion, destino, texto, opcionesDm).catch((e) => ({ ok: false, error: e.message }));
     if (porWaha && porWaha.ok) aviso = "linea_natalia";
   }

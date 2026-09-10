@@ -406,7 +406,7 @@ router.post("/api/grupos/waha/prueba-lid", async (req, res) => {
     const sesiones = await whatsappGroups.listSessions(org.id).catch(() => []);
     const activa = sesiones.find((s) => s.estado === "activa");
     if (!activa) return res.status(409).json({ error: "No hay una sesion activa" });
-    const r = await waha.enviarDm(activa.nombre, null, texto, { lid });
+    const r = await waha.enviarDm(activa.nombre, null, texto, { lid, orgId: org.id });
     console.log(`[waha] PRUEBA lid ${lid} desde ${activa.nombre}: ${r.ok ? "ENTREGADO a WAHA, wamid " + r.wamid : "FALLO " + r.error}`);
     res.status(r.ok ? 200 : 502).json(r);
   } catch (e) {
@@ -502,7 +502,7 @@ router.post("/api/grupos/probar-dm", async (req, res) => {
         : "Prueba del radar: este es un mensaje directo enviado por la linea del radar. " +
           "Si lo estas leyendo, el DM al colega funciona.";
 
-    const envio = await waha.enviarDm(sesiones[0].nombre, destino, texto);
+    const envio = await waha.enviarDm(sesiones[0].nombre, destino, texto, { orgId: org.id });
     res.json({ destino: `***${destino.slice(-4)}`, sesion: sesiones[0].nombre, ...envio });
   } catch (e) {
     res.status(500).json({ error: e.message });

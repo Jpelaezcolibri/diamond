@@ -641,7 +641,7 @@ test("aprobarManual: con telefono Y lid disponibles, sigue prefiriendo el telefo
   assert.strictEqual(r.resultado, "publicado");
   assert.strictEqual(enviosDmManual.length, 1);
   assert.strictEqual(enviosDmManual[0].telefono, "573001234567");
-  assert.deepStrictEqual(enviosDmManual[0].opciones, {});
+  assert.deepStrictEqual(enviosDmManual[0].opciones, { orgId: "org-1" });
 });
 
 // EL HUECO QUE ESTE CAMBIO CIERRA (Juan, 2026-09-04): "un pedido que el radar
@@ -659,7 +659,7 @@ test("aprobarManual: sin telefono pero con lid, manda por lid — igual que el c
 
   assert.strictEqual(r.resultado, "publicado");
   assert.strictEqual(enviosDmManual.length, 1, "salio por DM, por la via del lid");
-  assert.deepStrictEqual(enviosDmManual[0].opciones, { lid: "141746805670125" });
+  assert.deepStrictEqual(enviosDmManual[0].opciones, { lid: "141746805670125", orgId: "org-1" });
   assert.strictEqual(marcadas.length, 1);
   assert.strictEqual(marcadas[0].destinoTelefono, null);
   // Con el sufijo @lid (Juan, 2026-09-08): group-signals.js#buscarPorLid
@@ -918,7 +918,7 @@ test("responderPorDmManual: manda el DM cuando hay telefono y la señal pasa la 
   // 2026-09-04) -- mismo criterio que aprobarManual y que asistir: el
   // telefono es el destino verificado, el lid solo entra cuando no hay otra
   // via.
-  assert.deepStrictEqual(enviosDmManual[0].opciones, {});
+  assert.deepStrictEqual(enviosDmManual[0].opciones, { orgId: "org-1" });
 });
 
 // EL HUECO QUE ESTE CAMBIO CIERRA (Juan, 2026-09-04): "un pedido que el radar
@@ -937,7 +937,7 @@ test("responderPorDmManual: sin telefono resuelto pero con lid, manda por lid �
 
   assert.strictEqual(r.resultado, "dm_enviado");
   assert.strictEqual(enviosDmManual.length, 1, "salio por DM, por la via del lid");
-  assert.deepStrictEqual(enviosDmManual[0].opciones, { lid: "141746805670125" });
+  assert.deepStrictEqual(enviosDmManual[0].opciones, { lid: "141746805670125", orgId: "org-1" });
   assert.strictEqual(marcadas.length, 1);
   assert.strictEqual(marcadas[0].destinoTelefono, null);
   // Con el sufijo @lid (Juan, 2026-09-08): group-signals.js#buscarPorLid

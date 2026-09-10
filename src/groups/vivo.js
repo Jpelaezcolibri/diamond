@@ -632,7 +632,7 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
       // waha.enviarDm: con { lid } el chatId es `<lid>@lid`, sin el es
       // `<telefono>@c.us`. No se pasan los dos: la guarda de waha.js exige que
       // un lid entre SOLO por la opcion explicita, nunca por `telefono`.
-      const opcionesDm = decisionDm.via === "lid" ? { lid: lidColega } : {};
+      const opcionesDm = decisionDm.via === "lid" ? { lid: lidColega, orgId: org.id } : { orgId: org.id };
       let envioDm = await waha.enviarDm(sesion, telefonoColega, textoDm, opcionesDm).catch((e) => ({ ok: false, error: e.message }));
       // UN solo reintento, y solo si el fallo fue ANTES de que el mensaje
       // saliera (WAHA lo rechazo, o la conexion ni se establecio -- ver
@@ -660,7 +660,7 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
       // conducta por la que a uno lo reportan.
       if (envioDm && !envioDm.ok && envioDm.previoAlEnvio && decisionDm.via === "lid" && telefonoColega) {
         console.warn(`[radar] El DM por lid no salio (${envioDm.error}); se reintenta por el telefono resuelto.`);
-        envioDm = await waha.enviarDm(sesion, telefonoColega, textoDm, {}).catch((e) => ({ ok: false, error: e.message }));
+        envioDm = await waha.enviarDm(sesion, telefonoColega, textoDm, { orgId: org.id }).catch((e) => ({ ok: false, error: e.message }));
       }
 
       if (envioDm && envioDm.ok) {
@@ -1169,7 +1169,7 @@ async function aprobarManual(org, signalId) {
   const lidColega = !telefonoColega ? signal.autor_telefono || null : null;
   if (!telefonoColega && !lidColega) return { resultado: "sin_telefono", texto, publicables };
 
-  const opcionesDm = lidColega ? { lid: lidColega } : {};
+  const opcionesDm = lidColega ? { lid: lidColega, orgId: org.id } : { orgId: org.id };
   const envio = await waha.enviarDm(activas[0].nombre, telefonoColega, texto, opcionesDm);
   if (!envio || !envio.ok) return { resultado: "error_envio", error: envio && envio.error };
 
@@ -1371,7 +1371,7 @@ async function responderPorDmManual(org, signalId, { sesion = null, refs = null 
   // esperando a la asesora igual que antes.
   if (await cuotaAgotada(sesion)) return { resultado: "cuota_whatsapp_agotada" };
 
-  const opcionesDm = lidColega ? { lid: lidColega } : {};
+  const opcionesDm = lidColega ? { lid: lidColega, orgId: org.id } : { orgId: org.id };
   const envioDm = await waha.enviarDm(sesion, telefonoColega, texto, opcionesDm).catch((e) => ({ ok: false, error: e.message }));
   if (!envioDm || !envioDm.ok) return { resultado: "error_envio", error: envioDm && envioDm.error };
 
