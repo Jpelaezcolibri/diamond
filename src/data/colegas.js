@@ -10,6 +10,7 @@
 const supabase = require("./supabase");
 const memory = require("./memory");
 const { mismoTelefono } = require("./advisors");
+const { telefonoEnTexto } = require("../lib/contacto");
 
 const soloDigitos = (t) => String(t || "").replace(/\D/g, "") || null;
 
@@ -258,4 +259,148 @@ async function listarSinTelefono(orgId) {
   }
 }
 
-module.exports = { upsert, porTelefono, listarConTelefono, listarSinTelefono };
+// ── "Solo llamada" (Juan, 2026-09-10) ────────────────────────────────────
+//
+// El caso: Angela Moscoso le pidio a Sofi que la contacten SOLO por llamada.
+// Sofi dijo "ya esta anotado" sin guardar nada, y dos horas despues el radar le
+// mando un DM. Decision de Juan: permanente, ningun DM, cada pedido suyo va al
+// aviso de la asesora para que la llame. Ver
+// docs/superpowers/specs/2026-09-10-colega-solo-llamada-design.md.
+//
+// TRES LLAVES, NO UNA (Juan: "que no se nos filtren los mensajes porque queda
+// marcado el colega pero de pronto el lid sigue disponible"). El DM puede salir
+// por lid o por telefono; si la marca se buscara por una sola llave, el DM
+// saldria por la otra. Se reconoce por el lid, por el telefono (con el cruce de
+// directorio_lids en los dos sentidos) y por el celular que el colega firma en
+// su pedido — eso ultimo cubre que publique desde otra cuenta. Un falso
+// positivo solo desvia el pedido a la asesora, que es el lado seguro.
+
+function filtroLidsOTelefonos(lids, tels) {
+  const partes = [];
+  if (lids.size) partes.push(`lid.in.(${[...lids].join(",")})`);
+  if (tels.size) partes.push(`telefono.in.(${[...tels].join(",")})`);
+  return partes.join(",");
+}
+
+/**
+ * ¿Este colega pidio que lo contacten solo por llamada?
+ * @returns true | false | null — null = no se pudo verificar. Quien llama lo
+ *          trata como marcado (no sale DM): FALLA CERRADO. Nunca lanza.
+ */
+async function esSoloLlamada(orgId, { lid = null, telefono = null, textoPedido = null } = {}) {
+  if (!orgId) return null;
+  const lids = new Set();
+  const tels = new Set();
+  const l = soloDigitos(lid);
+  if (l) lids.add(l);
+  for (const t of [soloDigitos(telefono), telefonoEnTexto(textoPedido)]) {
+    if (t && t.length >= 10) for (const v of variantesTelefono(t)) tels.add(v);
+  }
+  if (!lids.size && !tels.size) return false;
+
+  if (!supabase) {
+    for (const d of memory.directorioLids || []) {
+      if (d.org_id !== orgId) continue;
+      if (lids.has(d.lid)) for (const v of variantesTelefono(d.telefono)) tels.add(v);
+      if (tels.has(d.telefono)) lids.add(d.lid);
+    }
+    return memory.colegasGrupos.some(
+      (c) => c.org_id === orgId && c.solo_llamada === true && (lids.has(c.lid) || (c.telefono && tels.has(c.telefono)))
+    );
+  }
+
+  try {
+    const { data: dir, error: e1 } = await supabase
+      .from("directorio_lids")
+      .select("lid, telefono")
+      .eq("org_id", orgId)
+      .or(filtroLidsOTelefonos(lids, tels))
+      .limit(20);
+    if (e1) throw e1;
+    for (const d of dir || []) {
+      lids.add(d.lid);
+      for (const v of variantesTelefono(d.telefono)) tels.add(v);
+    }
+
+    const { data, error } = await supabase
+      .from("colegas_grupos")
+      .select("id")
+      .eq("org_id", orgId)
+      .eq("solo_llamada", true)
+      .or(filtroLidsOTelefonos(lids, tels))
+      .limit(1);
+    if (error) throw error;
+    return (data || []).length > 0;
+  } catch (e) {
+    console.error(`[colegas] No se pudo verificar si el colega pidio solo llamada (org ${orgId}):`, e.message);
+    return null;
+  }
+}
+
+/**
+ * Marca al colega que escribe desde `telefono` como "solo llamada". Lo busca
+ * por telefono y, si su fila no lo tiene, por el lid que directorio_lids le
+ * asocia. Nunca inventa una fila: sin encontrarlo devuelve no_encontrado.
+ */
+async function marcarSoloLlamada(orgId, { telefono = null } = {}) {
+  const tel = soloDigitos(telefono);
+  if (!orgId || !tel || tel.length < 10) return { ok: false, motivo: "sin_telefono" };
+  const tels = variantesTelefono(tel);
+  const ahora = new Date().toISOString();
+
+  if (!supabase) {
+    let fila = memory.colegasGrupos.find((c) => c.org_id === orgId && c.telefono && tels.includes(c.telefono));
+    if (!fila) {
+      const dir = (memory.directorioLids || []).find((d) => d.org_id === orgId && tels.includes(d.telefono));
+      if (dir) fila = memory.colegasGrupos.find((c) => c.org_id === orgId && c.lid === dir.lid);
+    }
+    if (!fila) return { ok: false, motivo: "no_encontrado" };
+    fila.solo_llamada = true;
+    fila.solo_llamada_at = ahora;
+    return { ok: true, colega: { nombre: fila.nombre || null, telefono: fila.telefono || tel, lid: fila.lid } };
+  }
+
+  try {
+    let { data: filas, error } = await supabase
+      .from("colegas_grupos")
+      .select("id, lid, telefono, nombre")
+      .eq("org_id", orgId)
+      .in("telefono", tels)
+      .limit(5);
+    if (error) throw error;
+    if (!filas || !filas.length) {
+      const { data: dir, error: e2 } = await supabase
+        .from("directorio_lids")
+        .select("lid")
+        .eq("org_id", orgId)
+        .in("telefono", tels)
+        .limit(5);
+      if (e2) throw e2;
+      const lidsDir = (dir || []).map((d) => d.lid);
+      if (lidsDir.length) {
+        const r3 = await supabase
+          .from("colegas_grupos")
+          .select("id, lid, telefono, nombre")
+          .eq("org_id", orgId)
+          .in("lid", lidsDir)
+          .limit(5);
+        if (r3.error) throw r3.error;
+        filas = r3.data || [];
+      }
+    }
+    if (!filas || !filas.length) return { ok: false, motivo: "no_encontrado" };
+
+    const { error: e4 } = await supabase
+      .from("colegas_grupos")
+      .update({ solo_llamada: true, solo_llamada_at: ahora })
+      .in("id", filas.map((f) => f.id));
+    if (e4) throw e4;
+    const f = filas[0];
+    return { ok: true, colega: { nombre: f.nombre || null, telefono: f.telefono || tel, lid: f.lid } };
+  } catch (e) {
+    console.error(`[colegas] No se pudo marcar solo llamada (org ${orgId}):`, e.message);
+    return { ok: false, motivo: "error" };
+  }
+}
+
+module.exports = { upsert, porTelefono, listarConTelefono, listarSinTelefono, esSoloLlamada, marcarSoloLlamada };

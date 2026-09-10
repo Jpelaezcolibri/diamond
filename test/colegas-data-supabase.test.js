@@ -215,3 +215,47 @@ test("upsert devuelve false (no undefined) ante un error real de escritura, y lo
     console.error = original;
   }
 });
+
+// ── esSoloLlamada contra la base (Juan, 2026-09-10) ──────────────────────
+
+function cadenaQueResuelve(resultado, filtros) {
+  const c = {
+    select: () => c,
+    eq: (col, val) => { filtros.push(["eq", col, val]); return c; },
+    or: (f) => { filtros.push(["or", f]); return c; },
+    in: (col, vals) => { filtros.push(["in", col, vals]); return c; },
+    limit: () => Promise.resolve(resultado),
+  };
+  return c;
+}
+
+test("esSoloLlamada cruza directorio_lids y consulta colegas_grupos por lid O telefono", async (t) => {
+  const filtrosDir = [];
+  const filtrosCol = [];
+  t.mock.method(supabase, "from", (tabla) => {
+    if (tabla === "directorio_lids") {
+      return cadenaQueResuelve({ data: [{ lid: "266150634110990", telefono: "573146399667" }], error: null }, filtrosDir);
+    }
+    assert.strictEqual(tabla, "colegas_grupos");
+    return cadenaQueResuelve({ data: [{ id: "c-angela" }], error: null }, filtrosCol);
+  });
+
+  const r = await colegas.esSoloLlamada(ORG, { lid: "266150634110990" });
+  assert.strictEqual(r, true);
+  assert.ok(filtrosCol.some((f) => f[0] === "eq" && f[1] === "org_id" && f[2] === ORG), "filtra por org");
+  assert.ok(filtrosCol.some((f) => f[0] === "eq" && f[1] === "solo_llamada" && f[2] === true));
+  const or = filtrosCol.find((f) => f[0] === "or")[1];
+  assert.match(or, /lid\.in\.\([^)]*266150634110990/);
+  assert.match(or, /telefono\.in\.\([^)]*3146399667/, "el telefono que dio el directorio entra al filtro");
+});
+
+test("esSoloLlamada devuelve null (no false) si la base falla: falla cerrado", async (t) => {
+  const original = console.error;
+  console.error = () => {};
+  t.mock.method(supabase, "from", () => cadenaQueResuelve({ data: null, error: { message: "boom" } }, []));
+  try {
+    assert.strictEqual(await colegas.esSoloLlamada(ORG, { lid: "266150634110990" }), null);
+  } finally {
+    console.error = original;
+  }
+});
