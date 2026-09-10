@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { numeroPedido } from "@/lib/pedido";
 
 // La pantalla que abre la asesora desde el aviso de WhatsApp (Juan,
 // 2026-09-02, opción D). Reproduce el mockup aprobado: una isla oscura arriba
@@ -115,6 +116,10 @@ export default function AvisoCelular({ datos, token }: { datos: DatosAviso; toke
   }
 
   const telLegible = telefonoLlamada ? telefonoLlamada.replace(/^57/, "").replace(/(\d{3})(\d{3})(\d{4})/, "$1 $2 $3") : null;
+  // Con el número de pedido en el encabezado (mockup aprobado, Juan
+  // 2026-09-10): mismo dato que ve el asesor en /grupos, mismo lector
+  // (numeroPedido en @/lib/pedido) que usa el DM al colega.
+  const numero = numeroPedido(senal.texto_original);
 
   const nombre = primerNombre(senal.autor_nombre);
   const chips = [
@@ -131,7 +136,11 @@ export default function AvisoCelular({ datos, token }: { datos: DatosAviso; toke
     <main className="mx-auto min-h-dvh max-w-md bg-white pb-40 text-slate-900">
       <header className="bg-gradient-to-br from-[#0b1526] to-[#15213a] px-5 pb-4 pt-5 text-slate-100">
         <div className="text-[11px] font-bold uppercase tracking-wider text-[#f2d58a]">
-          {soloLlamada ? "📞 Pidió solo llamada" : aprobada ? "🚨 Aprobada por Sofi · sin salir" : "🎯 Oportunidad · para revisar"}
+          {soloLlamada
+            ? `📞 Pidió solo llamada${numero ? ` · Pedido N° ${numero}` : ""}`
+            : aprobada
+              ? "🚨 Aprobada por Sofi · sin salir"
+              : "🎯 Oportunidad · para revisar"}
         </div>
         <h1 className="font-display mt-1 text-lg font-extrabold leading-tight">
           {senal.autor_nombre || "Un colega"} busca {senal.tipo || "propiedad"}

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { fechaHora } from "@/lib/fecha";
 import { formatearArea, formatearPrecio, pluralAlcobas } from "@/lib/formato";
+import { numeroPedido } from "@/lib/pedido";
 
 export type Match = {
   fuente: string; // "diamond" (inventario propio) | "aliado" (red de colegas)
@@ -252,13 +253,9 @@ function borrador(s: Signal, matches: Match[]) {
 
   // A qué pedido le contestamos (Juan, 2026-09-10). Misma regla que
   // src/groups/pedido.js#numeroPedido (fuente de verdad del bot): "pedido" +
-  // número, o el código C_647; nunca un # suelto. Sin \p{} para no depender del
-  // target de TypeScript del CRM.
-  const texto = s.texto_original || "";
-  const numero =
-    texto.match(/pedido[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9]{0,8}(\d{2,6})(?!\d)/i)?.[1] ||
-    texto.match(/(?:^|[^A-Za-z0-9])C_(\d{2,6})(?!\d)/)?.[1] ||
-    null;
+  // número, o el código C_647; nunca un # suelto. Vive en @/lib/pedido para
+  // que la comparta con el encabezado del aviso de solo-llamada.
+  const numero = numeroPedido(s.texto_original);
   const referencia = numero ? `te respondo tu PEDIDO ${numero}` : "vi tu solicitud en el grupo";
 
   return (
