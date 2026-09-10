@@ -42,6 +42,7 @@ const colegas = require("../data/colegas");
 const waha = require("../lib/waha");
 const formato = require("../lib/formato");
 const { numeroPedido } = require("./pedido");
+const { telefonoEnTexto } = require("../lib/contacto");
 // Se importa el MODULO y no la funcion suelta: destructurar congela la
 // referencia y deja los tests sin forma de mockear el envio.
 const canalWhatsapp = require("../channels/whatsapp");
@@ -1041,6 +1042,18 @@ async function aprobarManual(org, signalId) {
   if (signal.respondida_at) return { resultado: "ya_respondida" };
   if (signal.clase !== "demanda") return { resultado: "no_es_demanda" };
 
+  // SOLO LLAMADA (Juan, 2026-09-10): "ningun DM, por ningun camino". Una
+  // aprobacion humana reemplaza al puntaje, no a lo que el colega pidio. Se va
+  // antes de cualquier consulta de envio; el telefono viaja para que quien lo
+  // muestre pueda decir a donde llamar. null (no se pudo verificar) tambien
+  // frena: falla cerrado.
+  const soloLlamadaManual = await colegas
+    .esSoloLlamada(org.id, { lid: signal.autor_telefono, textoPedido: signal.texto_original })
+    .catch(() => null);
+  if (soloLlamadaManual !== false) {
+    return { resultado: "colega_solo_llamada", telefono: telefonoEnTexto(signal.texto_original) };
+  }
+
   const grupo = await whatsappGroups.obtenerGrupo(org.id, signal.group_id);
   if (!grupo) return { resultado: "grupo_no_encontrado" };
   // OJO: aca NO se exige grupo.responde=true (a diferencia del camino
@@ -1238,6 +1251,14 @@ async function responderPorDmManual(org, signalId, { sesion = null, refs = null 
   if (!signal) return { resultado: "no_encontrada" };
   if (signal.respondida_at) return { resultado: "ya_respondida" };
   if (signal.clase !== "demanda") return { resultado: "no_es_demanda" };
+
+  // SOLO LLAMADA (Juan, 2026-09-10): mismo freno que aprobarManual.
+  const soloLlamadaManual = await colegas
+    .esSoloLlamada(org.id, { lid: signal.autor_telefono, textoPedido: signal.texto_original })
+    .catch(() => null);
+  if (soloLlamadaManual !== false) {
+    return { resultado: "colega_solo_llamada", telefono: telefonoEnTexto(signal.texto_original) };
+  }
 
   if (carrilArriendo.esDelCarril(signal) && !carrilArriendo.carrilActivo()) {
     return { resultado: "carril_apagado" };

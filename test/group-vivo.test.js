@@ -11,6 +11,7 @@ const path = require("node:path");
 
 const RUTA = (m) => require.resolve(path.join("..", "src", m));
 const mandatosData = require("../src/data/mandatos");
+const memory = require("../src/data/memory");
 
 // ── Dobles de las dependencias con IO ────────────────────────────────────
 let claseDevuelta = "demanda";
@@ -1608,3 +1609,45 @@ test("aprobarManual: deja registrada SU decision, no la del intento automatico a
   // Nunca puede quedar como motivo final un "no" cuando el mensaje si salio.
   assert.strictEqual(marcadas.length, 1, "y el mensaje salio de verdad");
 });
+
+// ── SOLO LLAMADA en los caminos manuales (Juan, 2026-09-10) ─────────────
+// "Ningun DM, por ningun camino": aprobar desde el chat de Sofi y el DM
+// manual del CRM tampoco le escriben a un colega marcado.
+function conColegaMarcado(fn) {
+  return async () => {
+    memory.colegasGrupos.push({
+      id: "c1", org_id: "org-1", lid: "141746805670125", telefono: null,
+      nombre: "Camilo", grupos: [], solo_llamada: true,
+    });
+    try {
+      await fn();
+    } finally {
+      memory.colegasGrupos.length = 0;
+    }
+  };
+}
+
+test("aprobarManual: a un colega marcado no le escribe ni lo marca respondido", conColegaMarcado(async () => {
+  señalParaAprobar = señalCallada({ autor_telefono: "141746805670125", texto_original: "busco apto 📲 314 639 9667" });
+  grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = "573001234567";
+
+  const r = await vivo.aprobarManual({ id: "org-1" }, "sig-callada");
+
+  assert.strictEqual(r.resultado, "colega_solo_llamada");
+  assert.strictEqual(r.telefono, "573146399667");
+  assert.strictEqual(enviosDmManual.length, 0);
+  assert.strictEqual(marcadas.length, 0);
+}));
+
+test("responderPorDmManual: a un colega marcado no le escribe ni lo marca respondido", conColegaMarcado(async () => {
+  señalParaAprobar = señalCallada({ autor_telefono: "141746805670125" });
+  grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = "573001234567";
+
+  const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
+
+  assert.strictEqual(r.resultado, "colega_solo_llamada");
+  assert.strictEqual(enviosDmManual.length, 0);
+  assert.strictEqual(marcadas.length, 0);
+}));

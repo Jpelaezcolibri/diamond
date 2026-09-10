@@ -1366,6 +1366,10 @@ async function aprobarPedidoRadar(input, ctx) {
     // veia el token crudo "carril_apagado" en vez de una frase.
     case "carril_apagado":
       return "No se publicó: el carril de amoblados está apagado ahora mismo (variable RADAR_AMOBLADO_ACTIVO en Railway) — nada sale solo por ese carril hasta que la actives.";
+    // SOLO LLAMADA (Juan, 2026-09-10): el colega pidio que lo contacten solo
+    // por llamada. No se mando nada y no se tiene que mandar.
+    case "colega_solo_llamada":
+      return `No se mandó nada: este colega pidió que lo contacten SOLO por llamada.${r.telefono ? ` Llamá al +${r.telefono}.` : " Llamá vos."} No le escribas por WhatsApp.`;
     default:
       return `No se pudo publicar (${r.resultado}).`;
   }

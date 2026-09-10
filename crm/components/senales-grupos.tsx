@@ -149,6 +149,8 @@ const MENSAJE_RESULTADO_DM: Record<string, string> = {
   // existe justamente para que una persona lo gaste a conciencia.
   cuota_whatsapp_agotada:
     "La línea agotó su cuota de mensajes de WhatsApp de este mes. No es un límite nuestro: hasta que arranque el próximo ciclo, WhatsApp los rechaza. Escribile a mano.",
+  // Solo llamada (Juan, 2026-09-10): permanente, ningún mensaje por ningún camino.
+  colega_solo_llamada: "Este colega pidió contacto solo por llamada: no se le mandó nada. Llamá vos.",
   error_envio: "El envío falló. Se puede volver a intentar.",
   ya_respondida: "Este pedido ya tiene una respuesta registrada.",
   no_es_demanda: "Esto no es un pedido (demanda).",
