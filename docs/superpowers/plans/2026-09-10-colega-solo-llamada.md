@@ -1979,7 +1979,7 @@ const colegas = require("../data/colegas");
     input_schema: {
       type: "object",
       properties: {
-        detalle: { type: "string", description: "Lo que pidió el colega, en sus palabras (ej. 'que la llamen al 314..., no mensajes')" },
+        detalle: { type: "string", description: "Lo que pidió el colega, en sus palabras (ej. 'que llamen al 314..., no mensajes')" },
       },
     },
   },
@@ -2024,7 +2024,7 @@ async function marcarColegaSoloLlamada(input, ctx) {
         detalle,
       ]
     : [
-        `📞 ${nombre} (${tel}) pidió contacto SOLO por llamada, pero NO pude guardar la marca en el sistema${r.motivo === "no_encontrado" ? " (no lo encuentro entre los colegas de los grupos)" : ""}.`,
+        `📞 ${nombre} (${tel}) pidió contacto SOLO por llamada, pero NO pude guardar la marca en el sistema${r.motivo === "no_encontrado" ? " (no aparece entre los colegas de los grupos)" : ""}.`,
         ``,
         `Si el radar le escribe, es por esto. Llamá vos y avisale al administrador.`,
         detalle,
