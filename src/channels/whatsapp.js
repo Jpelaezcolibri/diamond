@@ -6,7 +6,9 @@ const groupSignals = require("../data/group-signals");
 const supabase = require("../data/supabase");
 const leads = require("../data/leads");
 const advisors = require("../data/advisors");
-const { procesarMensaje } = require("../agent/engine");
+// Por el modulo y no desestructurado: asi un test puede reemplazar
+// procesarMensaje y meter un webhook de Meta real por el handler.
+const engine = require("../agent/engine");
 const { verifyMetaSignature } = require("../lib/signature");
 const { enqueue } = require("../lib/user-queue");
 
@@ -25,6 +27,27 @@ function credsFor(org, overridePhoneId) {
 const SEND_TIMEOUT_MS = 15000;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// USUARIOS SIN TELEFONO (Juan, 2026-09-10). Desde jun-2026 WhatsApp deja que
+// una persona active un "nombre de usuario" y oculte su numero: entonces Meta
+// manda el mensaje SIN `from` y con `from_user_id` (un id por negocio, ej.
+// "CO.13491208655302741918"). Hasta hoy `userPhone` quedaba `undefined`, el
+// insert del lead reventaba contra el NOT NULL de leads.phone y el mensaje se
+// perdia sin respuesta ni rastro en el CRM — 3 en 4 minutos el 2026-09-10,
+// todos "Hola, quiero informacion sobre sus propiedades". Ese id hace de
+// telefono en todo el camino (lead, cola, conversacion) y para contestarle
+// Meta pide `recipient` en vez de `to`.
+const ID_DE_USUARIO = /^[A-Z]{2}\.[A-Za-z0-9.]+$/;
+
+function remitenteDe(value, message) {
+  return message?.from || message?.from_user_id || value?.contacts?.[0]?.user_id || null;
+}
+
+function conDestino(body) {
+  if (!ID_DE_USUARIO.test(String(body.to || ""))) return body;
+  const { to, ...resto } = body;
+  return { ...resto, recipient: to };
+}
+
 // POST comun a /messages con timeout + 1 reintento con backoff corto ante
 // error de red o 5xx (un 4xx — ej. numero invalido, plantilla no aprobada —
 // no se reintenta, es un fallo permanente). Devuelve SIEMPRE {ok, wamid,
@@ -38,7 +61,7 @@ async function graphSendMessage(phoneId, token, body, label) {
       const res = await fetch(`https://graph.facebook.com/v18.0/${phoneId}/messages`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify(conDestino(body)),
         signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
       });
       const json = await res.json().catch(() => ({}));
@@ -157,7 +180,7 @@ async function sendWhatsAppMedia(org, to, { type, mediaId, caption, contextWaId,
   const res = await fetch(`https://graph.facebook.com/v18.0/${phoneId}/messages`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify(conDestino(body)),
   });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(`Meta media send: ${res.status} ${JSON.stringify(json)}`);
@@ -302,7 +325,11 @@ router.post("/webhook", async (req, res) => {
       return;
     }
 
-    const userPhone = message.from;
+    const userPhone = remitenteDe(value, message);
+    if (!userPhone) {
+      console.error("[whatsapp] Mensaje sin remitente (ni from ni from_user_id) — descartado:", JSON.stringify(message).slice(0, 300));
+      return;
+    }
 
     // Serializa TODO el procesamiento de este cliente (incluye el envio de
     // la respuesta): sin esto, 2-3 mensajes seguidos del mismo numero
@@ -367,7 +394,7 @@ router.post("/webhook", async (req, res) => {
       // anuncio de clic-a-WhatsApp (Meta adjunta este objeto automaticamente).
       const adReferral = message.referral || null;
 
-      const { reply, transfer, allyAlert, appointmentAlert, captadorAlert, assistantMessageId } = await procesarMensaje({
+      const { reply, transfer, allyAlert, appointmentAlert, captadorAlert, assistantMessageId } = await engine.procesarMensaje({
         org,
         phone: userPhone,
         text: userText,
