@@ -69,3 +69,9 @@ test("si el colega pide solo llamada, el prompt le da la herramienta y le prohib
   assert.match(p, /marcar_colega_solo_llamada/);
   assert.match(p, /nunca digas "quedó anotado"/i);
 });
+
+test("si el colega pide hablar con una persona, el prompt le da pedir_contacto_asesora sin ofrecerlo por su cuenta", () => {
+  const p = texto(buildSystemPrompt({ org, lead, qualified: false, now: null, colega }));
+  assert.match(p, /pedir_contacto_asesora/);
+  assert.match(p, /NUNCA le ofrezcas "conectarlo con un asesor"/);
+});
