@@ -42,6 +42,10 @@ const formato = require("../lib/formato");
 const { normalizarTitulo } = require("../lib/formato");
 const { linkWhatsappEstricto, linkContactoOficial, tocarNombreEnGrupo, telefonoEnTexto } = require("../lib/contacto");
 const redactar = require("./redactar");
+// El pedido se describe en un solo lugar (2026-09-10): el DM al colega y este
+// aviso tienen que hablar del MISMO pedido. queBusca vivia aca; ahora es
+// pedido.js#resumenPedido, sin cambios de comportamiento.
+const { resumenPedido: queBusca, numeroPedido } = require("./pedido");
 const {
   REFS_BLOQUEADAS,
   explicarMotivosSeguro,
@@ -265,30 +269,6 @@ function porqueNoSalioSolo(motivo, hayUtiles) {
   if (!traducido) return null;
   const conPunto = /[.!?…]$/.test(traducido) ? traducido : `${traducido}.`;
   return `🚨 ${conPunto} ${URGENCIA}`;
-}
-
-// Lo que busca el colega, en una linea (Juan, 2026-09-02): "que entienda que
-// busca el colega". El texto crudo ya iba, pero un pedido de WhatsApp viene
-// con emojis, saltos y adornos — leerlo entero para sacar tres datos es
-// trabajo que el clasificador ya hizo. Se muestran SOLO los campos que el
-// pedido menciono: una linea con huecos ("hasta $0", "0 alcobas") seria peor
-// que no ponerla.
-function queBusca(senal) {
-  const zonas = Array.isArray(senal.zonas) && senal.zonas.length ? senal.zonas.join(", ") : senal.zona;
-  const partes = [
-    senal.operacion,
-    senal.tipo,
-    zonas,
-    formato.datoCargado(senal.precio_max) ? `hasta ${formato.formatearPrecio(senal.precio_max)}` : null,
-    formato.datoCargado(senal.habitaciones)
-      ? `${formato.pluralizar(senal.habitaciones, "alcoba")}${senal.flexible_habitaciones ? " (o una menos con estudio)" : ""}`
-      : null,
-    formato.datoCargado(senal.area_min) ? `desde ${senal.area_min} m²` : null,
-    formato.pluralizar(senal.banos, "baño", "baños"),
-    formato.pluralizar(senal.garajes, "garaje"),
-    formato.datoCargado(senal.estrato) ? `estrato ${senal.estrato}` : null,
-  ].filter(Boolean);
-  return partes.length ? partes.join(" · ") : null;
 }
 
 /**
