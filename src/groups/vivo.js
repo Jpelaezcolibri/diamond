@@ -1555,8 +1555,17 @@ async function prepararAviso(org, signalId, { sesion = null } = {}) {
     .telefonoDe(org.id, signal.autor_telefono, { sesion, jid: grupo && grupo.jid })
     .catch(() => null);
 
+  // SOLO LLAMADA (Juan, 2026-09-10): para un colega marcado la pagina no arma
+  // mensaje — no hay nada que mandarle — y dice a que numero llamar. null (no
+  // se pudo verificar) cuenta como marcado, igual que en el resto del radar.
+  const marca = await colegas
+    .esSoloLlamada(org.id, { lid: signal.autor_telefono, telefono: telefonoColega, textoPedido: signal.texto_original })
+    .catch(() => null);
+  const soloLlamada = marca !== false;
+  const motivo = marca === true ? "colega_solo_llamada" : marca === null ? "solo_llamada_no_verificable" : signal.politica_motivo || null;
+
   const aprobada = utiles.length > 0;
-  const mensaje = aprobada
+  const mensaje = aprobada && !soloLlamada
     ? redactar.mensajeGrupo({ autor_nombre: signal.autor_nombre }, utiles, {
         org,
         sinConfirmar: rev.sin_confirmar || [],
@@ -1592,8 +1601,10 @@ async function prepararAviso(org, signalId, { sesion = null } = {}) {
     descartados,
     mensaje,
     telefonoColega,
-    motivo: signal.politica_motivo || null,
-    porque: alertaAsesor.porqueNoSalioSolo(signal.politica_motivo, aprobada),
+    soloLlamada,
+    telefonoLlamada: soloLlamada ? telefonoColega || telefonoEnTexto(signal.texto_original) || null : null,
+    motivo,
+    porque: alertaAsesor.porqueNoSalioSolo(motivo, aprobada),
     aprobada,
   };
 }

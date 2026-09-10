@@ -1651,3 +1651,31 @@ test("responderPorDmManual: a un colega marcado no le escribe ni lo marca respon
   assert.strictEqual(enviosDmManual.length, 0);
   assert.strictEqual(marcadas.length, 0);
 }));
+
+test("prepararAviso: para un colega marcado no arma mensaje y dice a que numero llamar", conColegaMarcado(async () => {
+  señalParaAprobar = señalCallada({
+    autor_telefono: "141746805670125",
+    texto_original: "PEDIDO 👉 645 busco apto 📲 314 639 9667",
+    revalidacion: { refs_utiles: ["AP004"], sin_confirmar: [] },
+  });
+  grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = null;
+
+  const r = await vivo.prepararAviso({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
+
+  assert.strictEqual(r.resultado, "ok");
+  assert.strictEqual(r.soloLlamada, true);
+  assert.strictEqual(r.mensaje, null, "no hay mensaje para mandarle");
+  assert.strictEqual(r.telefonoLlamada, "573146399667");
+  assert.strictEqual(r.motivo, "colega_solo_llamada");
+  assert.match(r.porque, /^📞/);
+}));
+
+test("prepararAviso: un colega sin marca sigue recibiendo el mensaje armado", async () => {
+  señalParaAprobar = señalCallada({ revalidacion: { refs_utiles: ["AP004"], sin_confirmar: [] } });
+  grupoParaAprobar = grupoHabilitado();
+  const r = await vivo.prepararAviso({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
+  assert.strictEqual(r.soloLlamada, false);
+  assert.ok(r.mensaje);
+  assert.strictEqual(r.telefonoLlamada, null);
+});
