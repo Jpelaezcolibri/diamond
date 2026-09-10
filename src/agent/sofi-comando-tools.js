@@ -941,7 +941,7 @@ async function aprobarPedidoRadarComando(input, ctx) {
     case "sin_telefono":
       return "No pude escribirle: esa señal no tiene ni telefono ni @lid del colega, que son las dos vias de envio. NO es que falte el numero de telefono — con el @lid alcanza, y aca tampoco hay. Deciselo asi, sin atribuirlo a un telefono faltante.";
     case "colega_solo_llamada":
-      return `No se aprobó: este colega pidió que lo contacten SOLO por llamada (Juan, 2026-09-10), así que el sistema no le escribe por ningún camino.${r.telefono ? ` Su número: +${r.telefono}.` : ""} Hay que llamarlo.`;
+      return `No se aprobó: este colega pidió contacto SOLO por llamada, así que el sistema no le escribe por ningún camino.${r.telefono ? ` Su número: +${r.telefono}.` : ""} Hay que llamar por teléfono.`;
     case "ya_respondida":
       return "Ese pedido ya tenia una respuesta — no se puede aprobar de nuevo.";
     case "grupo_no_habilitado":
