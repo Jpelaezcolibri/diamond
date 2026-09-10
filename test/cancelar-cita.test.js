@@ -11,6 +11,7 @@ const assert = require("node:assert");
 const path = require("node:path");
 
 const RUTA = (m) => require.resolve(path.join("..", "src", m));
+const memory = require("../src/data/memory");
 
 let leadGuardado = null;
 let busquedas = [];
@@ -412,4 +413,29 @@ test("no se reprograma una cita cancelada: ni se mueve ni se le avisa a nadie", 
   assert.strictEqual(enviosOficial.length, 0);
   assert.strictEqual(enviosWaha.length, 0);
   assert.strictEqual(disponibilidades.length, 0, "ni se le pregunta a la agenda por una cita muerta");
+});
+
+// SOLO LLAMADA (Juan, 2026-09-10): la cancelacion sale primero por la Cloud API
+// oficial, que no pasa por waha.enviarDm (el candado). Por eso este camino
+// tiene su propio chequeo: a un colega marcado no le sale nada por ninguna de
+// las dos lineas, y se le avisa al equipo para que lo llame.
+test("colega solo llamada: la cita se cancela, no se le escribe y el equipo recibe la orden de llamar", async () => {
+  memory.colegasGrupos.push({
+    id: "c1", org_id: "org-1", lid: "63402340827320", telefono: "573147815403",
+    nombre: "Miguel", grupos: [], solo_llamada: true,
+  });
+  try {
+    const mod = instalar(CITA);
+    const r = await mod.cancelar(ORG, "lead-1", { motivo: "ya se vendio", sesion: "RADA-NATALIA" });
+    assert.strictEqual(r.resultado, "cancelada");
+    assert.strictEqual(r.aviso, "solo_llamada");
+    assert.strictEqual(leadGuardado.cita.estado, "cancelada", "el registro cambia igual");
+    assert.strictEqual(enviosOficial.length, 0, "ni la linea oficial");
+    assert.strictEqual(enviosWaha.length, 0, "ni la linea de Natalia");
+    assert.strictEqual(alertas.length, 1);
+    assert.match(alertas[0].texto, /llamá a Miguel/);
+    assert.match(alertas[0].texto, /solo por llamada/);
+  } finally {
+    memory.colegasGrupos.length = 0;
+  }
 });

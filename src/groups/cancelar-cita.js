@@ -21,6 +21,7 @@ const canalWhatsapp = require("../channels/whatsapp");
 const waha = require("../lib/waha");
 const mensajeAsesor = require("../lib/mensaje-asesor");
 const contacto = require("../lib/contacto");
+const colegas = require("../data/colegas");
 
 const ALERTA_TO = () => (process.env.RADAR_WATCHDOG_TO || "").split(",").map((t) => t.trim()).filter(Boolean);
 
@@ -51,7 +52,7 @@ async function buscarLead(orgId, leadId) {
 // las dos mitades y no en la otra. `queCambio` es lo unico que difiere, y solo
 // para que la alerta al equipo diga que paso.
 //
-// Devuelve "oficial" | "linea_natalia" | "no_se_pudo". Nunca lanza: el aviso es
+// Devuelve "oficial" | "linea_natalia" | "no_se_pudo" | "solo_llamada". Nunca lanza: el aviso es
 // best-effort y el registro ya cambio antes de llegar aca.
 async function avisarAlColega(org, lead, texto, { sesion = null, queCambio = "Cita cancelada" } = {}) {
   let aviso = "no_se_pudo";
@@ -65,6 +66,27 @@ async function avisarAlColega(org, lead, texto, { sesion = null, queCambio = "Ci
   // es un lid. Se calcula una sola vez y se reusa en los tres lugares de
   // abajo que necesitan distinguirlo (Juan, 2026-09-04).
   const esTelefono = contacto.esCelularColombiano(lead.phone);
+
+  // SOLO LLAMADA (Juan, 2026-09-10): un colega que pidio que lo contacten solo
+  // por llamada no recibe este aviso por ninguna de las dos lineas. La linea
+  // oficial NO pasa por el candado de waha.enviarDm, asi que el chequeo tiene
+  // que estar aca. El registro de la cita ya cambio antes (regla 1): lo unico
+  // que cambia es que en vez de escribirle, se le pide al equipo que llame.
+  // null (no se pudo verificar) tambien frena.
+  const marca = org && org.id
+    ? await colegas.esSoloLlamada(org.id, esTelefono ? { telefono: lead.phone } : { lid: lead.phone }).catch(() => null)
+    : false;
+  if (marca !== false) {
+    const numero = esTelefono ? `+${String(lead.phone).replace(/\D/g, "")}` : "sin teléfono visible";
+    const quien = lead.nombre || "el colega";
+    const alerta = `📞 ${queCambio} — llamá a ${quien} (${numero}) para avisarle: pidió contacto solo por llamada. No se le mandó ningún mensaje.`;
+    for (const to of ALERTA_TO()) {
+      await mensajeAsesor.enviarYRegistrar(org, to, alerta).catch((e) =>
+        console.warn("[citas] no se pudo pedir la llamada al equipo:", e.message)
+      );
+    }
+    return "solo_llamada";
+  }
 
   // PROBLEMA 2 (review 2026-09-04): la linea oficial es Meta Cloud API — no
   // entiende un lid, un lid ahi esta GARANTIZADO a fallar. Llamarla igual no
