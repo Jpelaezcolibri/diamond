@@ -1504,14 +1504,14 @@ En `src/agent/tools.js`, en el `switch (r.resultado)` de `aprobarPedidoRadar`, a
     // SOLO LLAMADA (Juan, 2026-09-10): el colega pidio que lo contacten solo
     // por llamada. No se mando nada y no se tiene que mandar.
     case "colega_solo_llamada":
-      return `No se mandó nada: este colega pidió que lo contacten SOLO por llamada.${r.telefono ? ` Llamá al +${r.telefono}.` : " Llamá vos."} No le escribas por WhatsApp.`;
+      return `No se mandó nada: este colega pidió contacto SOLO por llamada.${r.telefono ? ` Llamá al +${r.telefono}.` : " Llamá vos."} No le escribas por WhatsApp.`;
 ```
 
 En `src/agent/sofi-comando-tools.js`, en el `switch (r.resultado)` de `aprobarPedidoRadarComando`, antes de `case "ya_respondida":`, agregar:
 
 ```js
     case "colega_solo_llamada":
-      return `No se aprobó: este colega pidió que lo contacten SOLO por llamada (Juan, 2026-09-10), así que el sistema no le escribe por ningún camino.${r.telefono ? ` Su número: +${r.telefono}.` : ""} Hay que llamarlo.`;
+      return `No se aprobó: este colega pidió contacto SOLO por llamada, así que el sistema no le escribe por ningún camino.${r.telefono ? ` Su número: +${r.telefono}.` : ""} Hay que llamar por teléfono.`;
 ```
 
 En `crm/components/senales-grupos.tsx`, en `MENSAJE_RESULTADO_DM`, antes de `error_envio:`, agregar:
@@ -1822,7 +1822,7 @@ En `avisarAlColega`, justo después de `const esTelefono = contacto.esCelularCol
   if (marca !== false) {
     const numero = esTelefono ? `+${String(lead.phone).replace(/\D/g, "")}` : "sin teléfono visible";
     const quien = lead.nombre || "el colega";
-    const alerta = `📞 ${queCambio} — llamá a ${quien} (${numero}) para avisarle: pidió que lo contacten solo por llamada. No se le mandó ningún mensaje.`;
+    const alerta = `📞 ${queCambio} — llamá a ${quien} (${numero}) para avisarle: pidió contacto solo por llamada. No se le mandó ningún mensaje.`;
     for (const to of ALERTA_TO()) {
       await mensajeAsesor.enviarYRegistrar(org, to, alerta).catch((e) =>
         console.warn("[citas] no se pudo pedir la llamada al equipo:", e.message)
@@ -1929,11 +1929,11 @@ test("con un colega que esta en los grupos: lo marca, avisa a la asesora y Sofi 
 test("si no lo encuentra, NO le da a Sofi un texto para decir 'anotado', y avisa igual a la asesora", async (t) => {
   mockAviso(t);
   const out = await executeTool("marcar_colega_solo_llamada", {}, ctxColega());
-  assert.match(out, /NO lo pude guardar/);
+  assert.match(out, /NO se pudo guardar/);
   assert.match(out, /NO le digas que quedó anotado/);
   assert.doesNotMatch(out, /quedó guardado/);
   assert.strictEqual(avisos.length, 1);
-  assert.match(avisos[0].texto, /NO lo pude marcar/);
+  assert.match(avisos[0].texto, /NO pude guardar la marca/);
 });
 
 test("con alguien que no es colega, no aplica", async (t) => {
@@ -1975,7 +1975,7 @@ const colegas = require("../data/colegas");
   {
     name: "marcar_colega_solo_llamada",
     description:
-      "Úsala SOLO con un colega de otra inmobiliaria que pide que lo contacten únicamente por llamada, o que no le manden más mensajes. Deja la marca guardada: desde ese momento el radar nunca le escribe por WhatsApp y cada pedido suyo le llega a la asesora para que lo llame. No la uses con un cliente ni con un asesor de la casa.",
+      "Úsala SOLO con un colega de otra inmobiliaria que pide contacto únicamente por llamada, o que no le manden más mensajes. Deja la marca guardada: desde ese momento el radar nunca le escribe por WhatsApp y cada pedido suyo le llega a la asesora para que llame. No la uses con un cliente ni con un asesor de la casa.",
     input_schema: {
       type: "object",
       properties: {
@@ -2009,7 +2009,7 @@ const colegas = require("../data/colegas");
 // guardado.
 async function marcarColegaSoloLlamada(input, ctx) {
   if (!ctx.colega) {
-    return "No aplica: esta herramienta es solo para un colega de otra inmobiliaria que pide que lo llamen.";
+    return "No aplica: esta herramienta es solo para un colega de otra inmobiliaria que pide contacto por llamada.";
   }
   const r = await colegas.marcarSoloLlamada(ctx.org.id, { telefono: ctx.lead.phone });
   const nombre = (r.colega && r.colega.nombre) || ctx.colega.nombre || "Un colega";
@@ -2018,13 +2018,13 @@ async function marcarColegaSoloLlamada(input, ctx) {
 
   const texto = r.ok
     ? [
-        `📞 ${nombre} pidió que lo contacten SOLO por llamada.`,
+        `📞 ${nombre} pidió contacto SOLO por llamada.`,
         ``,
         `Desde ahora el radar no le escribe: cada pedido suyo te llega a vos para que llames al ${tel}.`,
         detalle,
       ]
     : [
-        `📞 ${nombre} (${tel}) pidió que lo contacten SOLO por llamada, pero NO lo pude marcar en el sistema${r.motivo === "no_encontrado" ? " (no lo encuentro entre los colegas de los grupos)" : ""}.`,
+        `📞 ${nombre} (${tel}) pidió contacto SOLO por llamada, pero NO pude guardar la marca en el sistema${r.motivo === "no_encontrado" ? " (no lo encuentro entre los colegas de los grupos)" : ""}.`,
         ``,
         `Si el radar le escribe, es por esto. Llamá vos y avisale al administrador.`,
         detalle,
@@ -2040,9 +2040,9 @@ async function marcarColegaSoloLlamada(input, ctx) {
   }
 
   if (r.ok) {
-    return "Listo, quedó guardado: el radar ya no le escribe por WhatsApp y la asesora lo va a llamar. Confirmáselo con tus palabras, corto.";
+    return "Listo, quedó guardado: el radar ya no le escribe por WhatsApp y la asesora va a llamar. Confirmáselo con tus palabras, corto.";
   }
-  return "NO lo pude guardar en el sistema. NO le digas que quedó anotado ni registrado: decile solamente que le pasaste el pedido a la asesora para que lo llame.";
+  return "NO se pudo guardar en el sistema. NO le digas que quedó anotado ni registrado: decile solamente que le pasaste el pedido a la asesora para que llame.";
 }
 ```
 
@@ -2053,7 +2053,7 @@ async function marcarColegaSoloLlamada(input, ctx) {
 En `src/agent/prompts.js`, dentro de `promptColega`, en el texto `stable`, justo después del párrafo que empieza con `PARA TODO LO DEMAS QUE NO ES UNA VISITA AGENDADA` (y antes de `LO QUE NO SABES:`), agregar:
 
 ```
-SI TE PIDE QUE NO LE ESCRIBAN O QUE SOLO LO LLAMEN: usa marcar_colega_solo_llamada. Solo con el resultado de esa herramienta podes decirle que quedo guardado; si la herramienta dice que no se pudo, deciselo como ella indica. Nunca digas "quedó anotado" o "ya quedó registrado" sobre algo que no hiciste con una herramienta.
+SI TE PIDE QUE NO LE ESCRIBAN, O CONTACTO SOLO POR LLAMADA: usa marcar_colega_solo_llamada. Solo con el resultado de esa herramienta podes decirle que quedo guardado; si la herramienta dice que no se pudo, deciselo como ella indica. Nunca digas "quedó anotado" o "ya quedó registrado" sobre algo que no hiciste con una herramienta.
 ```
 
 - [ ] **Step 5: Run tests to verify they pass**
