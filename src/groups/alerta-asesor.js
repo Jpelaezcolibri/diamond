@@ -198,6 +198,13 @@ function mensajeListoParaReenviar(senal, veredicto, utiles, org, aclaracionesCol
       zona: senal.zona || null,
       habitaciones: senal.habitaciones || null,
       areaMin: senal.area_min || null,
+      // Mismo saludo que el DM automatico (2026-09-10): el borrador que la
+      // asesora reenvia tambien dice a que pedido le contesta.
+      operacion: senal.operacion || null,
+      tipo: senal.tipo || null,
+      precio_max: senal.precio_max || null,
+      texto: senal.texto_original || null,
+      numero: numeroPedido(senal.texto_original),
     },
   });
 }

@@ -152,7 +152,9 @@ test("sin telefono resuelto, el aviso incluye el mensaje listo para reenviar al 
   // El mensaje listo saluda por el nombre del colega (redactar.js#primerNombre)
   // y trae la salvedad de lo que no se pudo confirmar -- es el mismo contrato
   // que ya prueba redactar.test.js, aca solo se verifica que llegue armado.
-  assert.match(texto, /Hola Patricia, vi tu solicitud/);
+  // senal() no trae campos clasificados: el saludo cita sus primeras palabras
+  // (Juan, 2026-09-10 — el colega tiene que saber a que pedido le contestamos).
+  assert.match(texto, /Hola Patricia, te respondo tu pedido «Busco apartamento en Laureles, 3 alcobas»/);
   assert.match(texto, /No tengo confirmado si tiene vista ni balcón/);
   assert.match(texto, /https:\/\/info\.wasi\.co\/apartamento-venta-ap004\/9744456/);
 });

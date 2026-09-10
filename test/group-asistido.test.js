@@ -556,7 +556,9 @@ test("el DM al colega usa el mismo texto que antes iba al grupo (redactar.mensaj
   await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
 
   const t = enviosDm[0].texto;
-  assert.match(t, /Hola Patricia, vi tu solicitud/);
+  // El saludo dice a que pedido responde (Juan, 2026-09-10): el clasificador
+  // de este archivo devuelve apartamento / laureles / 900M / 3 alcobas.
+  assert.match(t, /Hola Patricia, te respondo tu pedido de apartamento en Laureles, hasta \$900\.000\.000, 3 alcobas\./);
   assert.match(t, /Comision compartida/);
   assert.match(t, /Sofi, asistente virtual/);
   assert.doesNotMatch(t, /Diamond/i, "el mensaje blanqueado nunca menciona Diamond");

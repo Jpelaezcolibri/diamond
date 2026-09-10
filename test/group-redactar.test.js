@@ -316,3 +316,69 @@ test("la ficha lleva las caracteristicas registradas, hasta 6, y nada si no hay"
   assert.ok(!/·  ·|caracteristicas/i.test(sin));
   assert.strictEqual(sin.split("\n").length, con.split("\n").length - 1, "sin caracteristicas la ficha tiene una linea menos, no una vacia");
 });
+
+// A QUE PEDIDO LE CONTESTAMOS (Juan, 2026-09-10). Caso Angela Moscoso: "me
+// estan enviando opciones pero no me describen para que pedido es". Solo el
+// 3,8 % de los pedidos trae numero: la descripcion es lo principal.
+const AHORA = new Date("2026-09-10T15:00:00Z");
+
+test("con numero de pedido, el saludo lo nombra y describe el pedido", () => {
+  const texto = redactar.mensajeGrupo({ autor_nombre: "Angela Moscoso" }, [match()], {
+    ahora: AHORA,
+    pedido: {
+      numero: "645", tipo: "apartamento", zonas: ["envigado", "itagüí", "la estrella", "sabaneta"],
+      precio_max: 350000000, habitaciones: 2, fecha: "2026-09-10T14:00:00Z",
+    },
+  });
+  assert.match(
+    texto,
+    /^Hola Angela, te respondo tu PEDIDO 645 \(apartamento en Envigado, Itagüí, La Estrella o Sabaneta, hasta \$350\.000\.000, 2 alcobas\)\. Tengo esta opcion que puede servirte:/
+  );
+});
+
+test("sin numero, el saludo describe el pedido", () => {
+  const texto = redactar.mensajeGrupo({ autor_nombre: "Eugenia Alonso" }, [match(), match({ ref: "B" })], {
+    ahora: AHORA,
+    pedido: { tipo: "apartamento", zonas: ["laureles", "poblado", "fátima"], precio_max: 400000000, habitaciones: 2 },
+  });
+  assert.match(
+    texto,
+    /^Hola Eugenia, te respondo tu pedido de apartamento en Laureles, Poblado o Fátima, hasta \$400\.000\.000, 2 alcobas\. Tengo 2 opciones que pueden servirte:/
+  );
+});
+
+test("sin nada reconocible del clasificador, cita las primeras palabras del colega", () => {
+  const texto = redactar.mensajeGrupo({ autor_nombre: "Ana" }, [match()], {
+    ahora: AHORA,
+    pedido: { texto: "🏭 *Busco bodega* para renta" },
+  });
+  assert.match(texto, /^Hola Ana, te respondo tu pedido «Busco bodega para renta»\./);
+});
+
+test("sin pedido, queda el saludo de siempre", () => {
+  const texto = redactar.mensajeGrupo({ autor_nombre: "Ana" }, [match()], { ahora: AHORA });
+  assert.match(texto, /^Hola Ana, vi tu solicitud\./);
+});
+
+test("si el DM sale otro dia que el pedido, dice de que dia es", () => {
+  const conNumero = redactar.mensajeGrupo({ autor_nombre: "Ana" }, [match()], {
+    ahora: AHORA,
+    pedido: { numero: "201", tipo: "casa", zona: "envigado", fecha: "2026-09-08T20:00:00Z" },
+  });
+  assert.match(conNumero, /^Hola Ana, te respondo tu PEDIDO 201 del 8 de septiembre \(casa en Envigado\)\./);
+
+  const sinNumero = redactar.mensajeGrupo({ autor_nombre: "Ana" }, [match()], {
+    ahora: AHORA,
+    pedido: { tipo: "casa", zona: "envigado", fecha: "2026-09-08T20:00:00Z" },
+  });
+  assert.match(sinNumero, /^Hola Ana, te respondo tu pedido del 8 de septiembre: casa en Envigado\./);
+});
+
+test("el saludo nuevo no mete Diamond ni el nombre del grupo (mensaje blanqueado)", () => {
+  const texto = redactar.mensajeGrupo({ autor_nombre: "Ana" }, [match()], {
+    ahora: AHORA,
+    pedido: { numero: "645", tipo: "apartamento", zona: "laureles" },
+  });
+  assert.ok(!texto.toLowerCase().includes("diamond"));
+  assert.ok(!texto.includes("grupo"));
+});

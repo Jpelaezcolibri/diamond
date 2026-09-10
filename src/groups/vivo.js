@@ -38,6 +38,7 @@ const avisoCercano = require("./aviso-cercano");
 const directorio = require("./directorio");
 const waha = require("../lib/waha");
 const formato = require("../lib/formato");
+const { numeroPedido } = require("./pedido");
 // Se importa el MODULO y no la funcion suelta: destructurar congela la
 // referencia y deja los tests sin forma de mockear el envio.
 const canalWhatsapp = require("../channels/whatsapp");
@@ -356,17 +357,30 @@ function textoParaColega(autorNombre, utiles, org, sinConfirmar = [], leFalta = 
   return redactar.mensajeGrupo({ autor_nombre: autorNombre }, utiles, { org, sinConfirmar, leFalta, pedido });
 }
 
-// Lo que el colega pidio, en la forma que espera redactar.desvios: sirve tanto
-// para la clasificacion recien hecha (`c`) como para una señal releida de la
-// base, que guarda los mismos campos. Se comparte para que el DM automatico y
-// los dos caminos manuales no diverjan en lo que le aclaran al colega.
-function pedidoDe(fuente) {
+// Lo que el colega pidio, en la forma que esperan redactar.desvios y el saludo
+// del DM: sirve tanto para la clasificacion recien hecha (`c`) como para una
+// señal releida de la base, que guarda los mismos campos. Se comparte para que
+// el DM automatico y los dos caminos manuales no diverjan en lo que le aclaran
+// al colega.
+//
+// numero/tipo/operacion/precio_max/texto/fecha (Juan, 2026-09-10): el saludo
+// del DM dice a que pedido le contestamos. La clasificacion en vivo no trae el
+// texto ni la fecha del mensaje, por eso van en `extra`; una señal de la base
+// los tiene en texto_original y fecha_mensaje.
+function pedidoDe(fuente, { texto = null, fechaIso = null } = {}) {
   if (!fuente) return null;
+  const textoPedido = texto || fuente.texto_original || null;
   return {
     zonas: Array.isArray(fuente.zonas) && fuente.zonas.length ? fuente.zonas : null,
     zona: fuente.zona || null,
     habitaciones: fuente.habitaciones || null,
     areaMin: fuente.area_min || null,
+    operacion: fuente.operacion || null,
+    tipo: fuente.tipo || null,
+    precio_max: fuente.precio_max || null,
+    texto: textoPedido,
+    numero: numeroPedido(textoPedido),
+    fecha: fechaIso || fuente.fecha_mensaje || fuente.created_at || null,
   };
 }
 
@@ -595,7 +609,7 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
       org,
       veredicto.sin_confirmar || [],
       veredicto.le_falta || [],
-      pedidoDe(c)
+      pedidoDe(c, { texto: mensaje.texto, fechaIso: mensaje.instanteIso })
     );
     if (textoDm) {
       // POR CUAL VIA SALE. `decidirDm` ya eligio (prefiere el telefono, que es

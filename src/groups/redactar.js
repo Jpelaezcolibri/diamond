@@ -70,6 +70,7 @@
 
 const formato = require("../lib/formato");
 const { linkContactoOficial } = require("../lib/contacto");
+const { frasePedido, fragmentoPedido, fechaSiEsOtroDia } = require("./pedido");
 // Solo para ubicacionCoincide (ver gradoDeZona): la definicion de "misma
 // zona" vive en el motor y aca no se reimplementa. Se importa del modulo
 // hoja ./ubicacion.js y NO de ./match.js: match.js esta en un ciclo de
@@ -305,16 +306,42 @@ function lineaSalvedad(sinConfirmar, cantidadPropiedades) {
 // conocemos. Se indexa por ref y cada aclaracion se imprime dentro de SU
 // ficha. Una ref que no esta en `publicables` simplemente no se usa; una
 // propiedad sin entrada sale exactamente igual que antes de este cambio.
+//
+// A QUE PEDIDO LE CONTESTAMOS (Juan, 2026-09-10). Caso Angela Moscoso: "me
+// estan enviando opciones pero no me describen para que pedido es" — publica
+// varios pedidos por dia y un DM que dice solo "vi tu solicitud" no le sirve.
+// Medido ese dia: solo el 3,8 % de los pedidos trae numero, asi que el numero
+// va cuando exista y la descripcion es lo principal. En orden:
+//   1. con numero: "te respondo tu PEDIDO 645 (apartamento en ...)."
+//   2. con algo clasificado: "te respondo tu pedido de apartamento en ..."
+//   3. con su texto: "te respondo tu pedido «Busco bodega para renta…»"
+//   4. sin nada: el saludo de siempre, "vi tu solicitud".
+// Si el DM sale OTRO dia que el pedido (los caminos manuales), se dice cual.
+// Nunca lleva el nombre del grupo ni "Diamond": el colega reenvia esto a su
+// cliente (mensaje blanqueado).
+function saludoDelPedido(nombre, pedido, ahora) {
+  const hola = nombre ? `Hola ${nombre}` : "Hola";
+  const p = pedido || {};
+  const dia = fechaSiEsOtroDia(p.fecha, ahora);
+  const delDia = dia ? ` del ${dia}` : "";
+  const frase = frasePedido(p);
+  if (p.numero) return `${hola}, te respondo tu PEDIDO ${p.numero}${delDia}${frase ? ` (${frase})` : ""}.`;
+  if (frase) return dia ? `${hola}, te respondo tu pedido${delDia}: ${frase}.` : `${hola}, te respondo tu pedido de ${frase}.`;
+  const fragmento = fragmentoPedido(p.texto);
+  if (fragmento) return `${hola}, te respondo tu pedido${delDia} «${fragmento}».`;
+  return `${hola}, vi tu solicitud.`;
+}
+
 function mensajeGrupo(
   senal,
   publicables,
-  { maxPropiedades = MAX_PROPIEDADES, org = null, sinConfirmar = [], leFalta = [], pedido = null } = {}
+  { maxPropiedades = MAX_PROPIEDADES, org = null, sinConfirmar = [], leFalta = [], pedido = null, ahora = new Date() } = {}
 ) {
   const props = (publicables || []).slice(0, maxPropiedades);
   if (props.length === 0) return null;
 
   const nombre = primerNombre(senal && senal.autor_nombre);
-  const saludo = nombre ? `Hola ${nombre}, vi tu solicitud.` : "Hola, vi tu solicitud.";
+  const saludo = saludoDelPedido(nombre, pedido, ahora);
   const encabezado =
     props.length === 1
       ? `${saludo} Tengo esta opcion que puede servirte:`
