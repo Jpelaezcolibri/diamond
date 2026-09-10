@@ -29,6 +29,8 @@ const dm = require("../src/groups/dm");
 const groupSignals = require("../src/data/group-signals");
 const lineaDm = require("../src/data/linea-dm");
 const mensajeAsesor = require("../src/lib/mensaje-asesor");
+const whatsappGroups = require("../src/data/whatsapp-groups");
+const advisors = require("../src/data/advisors");
 
 const ORG = { id: "org-1" };
 const mensaje = (extra = {}) => ({
@@ -210,6 +212,72 @@ test("el pedido de grupo del mismo telefono viaja en la alerta cuando se resuelv
 test("clasificarAvance sin mensajes no llama a la IA", async () => {
   const r = await dm.clasificarAvance([], new Date());
   assert.strictEqual(r, null);
+});
+
+// ── El nombre de la asesora sale del dato, no de "Natalia" a mano (Juan,
+// 2026-09-10: la linea paso a otra asesora) ────────────────────────────────
+
+test("construirAlerta con nombre de linea dice 'la línea de <nombre>' y nunca 'Natalia'", () => {
+  const texto = dm.construirAlerta(
+    mensaje(),
+    veredicto({ hay_avance: true, tipo: "cita_confirmada", resumen: "Quedaron" }),
+    null,
+    "Daiana Zea"
+  );
+  assert.match(texto, /la línea de Daiana Zea/);
+  assert.doesNotMatch(texto, /Natalia/);
+});
+
+test("construirAlerta sin nombre de linea cae a 'la línea del radar'", () => {
+  const texto = dm.construirAlerta(
+    mensaje(),
+    veredicto({ hay_avance: true, tipo: "agendando", resumen: "coordinando" }),
+    null
+  );
+  assert.match(texto, /la línea del radar/);
+  assert.doesNotMatch(texto, /Natalia/);
+});
+
+test("el titulo de FALLBACK (tipo sin match en TITULOS) tambien usa el nombre de la linea", () => {
+  const texto = dm.construirAlerta(
+    mensaje(),
+    veredicto({ hay_avance: true, tipo: "tipo-raro-sin-titulo", resumen: "algo" }),
+    null,
+    "Daiana Zea"
+  );
+  assert.match(texto, /Avance en la línea de Daiana Zea/);
+});
+
+test("procesarMensaje resuelve el nombre de la asesora de la sesion y lo pasa a la alerta", async (t) => {
+  mockVeredicto(t, veredicto({ hay_avance: true, tipo: "cita_confirmada", fecha_hora_iso: "2026-08-25T15:00:00-05:00" }));
+  t.mock.method(whatsappGroups, "sesionPorNombre", async (orgId, nombre) => {
+    assert.strictEqual(orgId, ORG.id);
+    assert.strictEqual(nombre, "RADA-NATALIA");
+    return { id: "sess-1", nombre: "RADA-NATALIA", advisor_id: "adv-daiana" };
+  });
+  t.mock.method(advisors, "findById", async (orgId, id) => {
+    assert.strictEqual(orgId, ORG.id);
+    assert.strictEqual(id, "adv-daiana");
+    return { id: "adv-daiana", name: "Daiana Zea" };
+  });
+  let recibido = null;
+  t.mock.method(mensajeAsesor, "enviarYRegistrar", async (org, telefono, texto) => { recibido = texto; return { ok: true }; });
+
+  await dm.procesarMensaje(ORG, mensaje());
+
+  assert.match(recibido, /la línea de Daiana Zea/);
+});
+
+test("si no se puede resolver la sesion o el asesor, la alerta sigue saliendo (con 'la línea del radar')", async (t) => {
+  mockVeredicto(t, veredicto({ hay_avance: true, tipo: "cita_confirmada", fecha_hora_iso: "2026-08-25T15:00:00-05:00" }));
+  t.mock.method(whatsappGroups, "sesionPorNombre", async () => { throw new Error("caido"); });
+  let recibido = null;
+  t.mock.method(mensajeAsesor, "enviarYRegistrar", async (org, telefono, texto) => { recibido = texto; return { ok: true }; });
+
+  const r = await dm.procesarMensaje(ORG, mensaje());
+
+  assert.strictEqual(r.resultado, "alertado");
+  assert.match(recibido, /la línea del radar/);
 });
 
 // ── Fase 1: leer, no interpretar (Juan, 2026-09-08) ──────────────────────

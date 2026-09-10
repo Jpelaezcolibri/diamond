@@ -14,6 +14,7 @@ const avisarMandato = require("../src/groups/avisar-mandato");
 const leads = require("../src/data/leads");
 const conversations = require("../src/data/conversations");
 const mensajeAsesor = require("../src/lib/mensaje-asesor");
+const advisors = require("../src/data/advisors");
 
 const ORG = { id: "org-1", name: "Diamond" };
 
@@ -193,6 +194,72 @@ test("compra: dos mensajes viejos (ninguno despues de entregado_at) -- SI escala
 
   assert.strictEqual(r.sent, 1);
   assert.strictEqual(escalado, true);
+});
+
+// ── El nombre de la asesora sale del dato, no de "Natalia" a mano (Juan,
+// 2026-09-10: la linea paso a otra asesora) ────────────────────────────────
+
+test("textoEscaladoVenta con nombre de asesora arranca con '⚠️ <nombre> no respondió'", () => {
+  const texto = silencio.textoEscaladoVenta({ texto_original: "busco apto" }, "Daiana Zea");
+  assert.match(texto, /^⚠️ Daiana Zea no respondió/);
+});
+
+test("textoEscaladoVenta sin nombre arranca con '⚠️ La asesora no respondió'", () => {
+  const texto = silencio.textoEscaladoVenta({ texto_original: "busco apto" });
+  assert.match(texto, /^⚠️ La asesora no respondió/);
+});
+
+test("venta: el nombre de la asesora se resuelve UNA vez por org (findByPhone) y llega al texto escalado", async (t) => {
+  t.mock.method(organizations, "listActive", async () => [ORG]);
+  t.mock.method(groupSignals, "candidatosEscaladoSilencio", async () => [
+    { id: "sig-1", aviso_advisor_id: "adv-daiana", texto_original: "busco apto en Laureles" },
+    { id: "sig-2", aviso_advisor_id: "adv-daiana", texto_original: "busco casa en Envigado" },
+  ]);
+  t.mock.method(signalEvents, "ultimoPorSenal", async () => new Map());
+  t.mock.method(mandatosData, "pendientesDeSilencio", async () => []);
+  t.mock.method(groupSignals, "claimEscaladoSilencio", async () => true);
+  let llamadas = 0;
+  t.mock.method(advisors, "findByPhone", async (orgId, telefono) => {
+    llamadas++;
+    assert.strictEqual(orgId, ORG.id);
+    assert.strictEqual(telefono, "573001878024");
+    return { id: "adv-daiana", name: "Daiana Zea" };
+  });
+  const enviados = [];
+  t.mock.method(mensajeAsesor, "enviarYRegistrar", async (org, to, texto) => {
+    enviados.push(texto);
+    return { ok: true, wamid: "w1" };
+  });
+
+  const r = await silencio.runOnce();
+
+  assert.strictEqual(r.sent, 2);
+  assert.strictEqual(llamadas, 1);
+  for (const texto of enviados) {
+    assert.match(texto, /^⚠️ Daiana Zea no respondió/);
+    assert.doesNotMatch(texto, /Natalia/);
+  }
+});
+
+test("venta: si no se puede resolver el nombre de la asesora, el escalado sigue saliendo (con 'La asesora')", async (t) => {
+  t.mock.method(organizations, "listActive", async () => [ORG]);
+  t.mock.method(groupSignals, "candidatosEscaladoSilencio", async () => [
+    { id: "sig-1", aviso_advisor_id: "adv-1", texto_original: "busco apto" },
+  ]);
+  t.mock.method(signalEvents, "ultimoPorSenal", async () => new Map());
+  t.mock.method(mandatosData, "pendientesDeSilencio", async () => []);
+  t.mock.method(groupSignals, "claimEscaladoSilencio", async () => true);
+  t.mock.method(advisors, "findByPhone", async () => { throw new Error("caido"); });
+  const enviados = [];
+  t.mock.method(mensajeAsesor, "enviarYRegistrar", async (org, to, texto) => {
+    enviados.push(texto);
+    return { ok: true, wamid: "w1" };
+  });
+
+  const r = await silencio.runOnce();
+
+  assert.strictEqual(r.sent, 1);
+  assert.match(enviados[0], /^⚠️ La asesora no respondió/);
 });
 
 test("compra: dos corridas seguidas sobre el mismo match solo escalan una vez (pendientesDeSilencio deja de traerlo tras marcar escalado_a)", async (t) => {
