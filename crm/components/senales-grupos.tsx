@@ -250,8 +250,19 @@ function borrador(s: Signal, matches: Match[]) {
     return `• ${encabezado}\n  ${ficha}${m.linkWasi ? `\n  ${m.linkWasi}` : ""}`;
   });
 
+  // A qué pedido le contestamos (Juan, 2026-09-10). Misma regla que
+  // src/groups/pedido.js#numeroPedido (fuente de verdad del bot): "pedido" +
+  // número, o el código C_647; nunca un # suelto. Sin \p{} para no depender del
+  // target de TypeScript del CRM.
+  const texto = s.texto_original || "";
+  const numero =
+    texto.match(/pedido[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9]{0,8}(\d{2,6})(?!\d)/i)?.[1] ||
+    texto.match(/(?:^|[^A-Za-z0-9])C_(\d{2,6})(?!\d)/)?.[1] ||
+    null;
+  const referencia = numero ? `te respondo tu PEDIDO ${numero}` : "vi tu solicitud en el grupo";
+
   return (
-    `${quien}vi tu solicitud en el grupo. Tengo esto disponible que te puede servir:\n\n` +
+    `${quien}${referencia}. Tengo esto disponible que te puede servir:\n\n` +
     `${lineas.join("\n\n")}\n\n` +
     `Comisión compartida.`
   );
