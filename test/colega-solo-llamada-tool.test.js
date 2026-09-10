@@ -60,6 +60,8 @@ test("si no lo encuentra, NO le da a Sofi un texto para decir 'anotado', y avisa
   assert.doesNotMatch(out, /quedó guardado/);
   assert.strictEqual(avisos.length, 1);
   assert.match(avisos[0].texto, /NO pude guardar la marca/);
+  assert.match(avisos[0].texto, /no aparece entre los colegas de los grupos/);
+  assert.doesNotMatch(avisos[0].texto, /\blo encuentro\b/, "copy neutro: sin 'lo' referido al colega");
 });
 
 test("con alguien que no es colega, no aplica", async (t) => {
