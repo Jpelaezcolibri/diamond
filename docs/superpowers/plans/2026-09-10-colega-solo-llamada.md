@@ -2486,3 +2486,316 @@ Después del deploy (confirmar en los logs de Railway que arrancó el commit nue
 3. Los DM a otros colegas posteriores al deploy: `respuesta_texto` empieza con "Hola …, te respondo tu PEDIDO …" o "… te respondo tu pedido …".
 
 Dejar el resultado de cada punto (con números) en la entrada de `CLAUDE.md` y en la memoria del proyecto.
+
+---
+
+### Task 13: El colega que pide hablar con una persona le llega a la asesora en el momento
+
+> Agregada el 2026-09-10 (spec: [docs/superpowers/specs/2026-09-10-colega-pide-asesora-design.md](../specs/2026-09-10-colega-pide-asesora-design.md)). **Se ejecuta antes de los Steps 1-6 de la Task 12**, para que la suite, la revisión final y el despliegue la incluyan.
+
+**Files:**
+- Modify: `src/agent/tools.js` (`TOOL_DEFINITIONS`, dispatch en `executeTool`, función nueva, `module.exports`)
+- Modify: `src/agent/prompts.js` (`promptColega`, texto estable)
+- Test: `test/colega-pide-asesora.test.js` (nuevo), `test/colega-escribe-a-sofi.test.js`
+
+**Interfaces:**
+- Consumes: `advisors.findAsesorPrincipalRadar(org)`, `advisors.mismoTelefono(a, b)`, `groupSignals.buscarPorTelefono(orgId, telefono)`, `colegas.esSoloLlamada(orgId, { telefono })` (Task 3), `mensajeAsesor.enviarYRegistrar(org, telefono, texto)` (require tardío), `contacto.linkWhatsappEstricto(telefono)`.
+- Produces: tool `pedir_contacto_asesora` (input opcional `{ motivo: string }`); `pedirContactoAsesora(input, ctx) -> Promise<string>` y `_resetPedidosContacto()` exportadas.
+
+**Regla de staging:** agregar SOLO los archivos de esta tarea (`git add src/agent/tools.js src/agent/prompts.js test/colega-pide-asesora.test.js test/colega-escribe-a-sofi.test.js`). Nunca `git add -A` / `git add .`: en la carpeta hay documentos que no van al repo.
+
+- [ ] **Step 1: Write the failing tests**
+
+Crear `test/colega-pide-asesora.test.js`:
+
+```js
+// El colega que pide hablar con una persona (Juan, 2026-09-10). Caso real:
+// Santiago pregunto "¿Es posible hablar con alguien?", Sofi le dijo "te puedo
+// conectar con un asesor" y no le aviso a nadie. Lo que se fija: el aviso sale
+// en el momento a la asesora principal del radar con copia al escalado (igual
+// que una cita de colega), no se repite en 30 minutos, y Sofi nunca recibe un
+// texto que le permita decir "ya le avise" si el aviso no salio.
+const { test, beforeEach, afterEach } = require("node:test");
+const assert = require("node:assert");
+
+const memory = require("../src/data/memory");
+const tools = require("../src/agent/tools");
+const { executeTool, TOOL_DEFINITIONS } = tools;
+const advisors = require("../src/data/advisors");
+const groupSignals = require("../src/data/group-signals");
+const mensajeAsesor = require("../src/lib/mensaje-asesor");
+
+const DAIANA = { id: "adv-daiana", name: "Daiana Zea", phone: "573011880668" };
+const ctxColega = (extra = {}) => ({
+  org: { id: "org-1", name: "Diamond" },
+  lead: { id: "lead-santiago", phone: "573125802350", nombre: null },
+  colega: { lid: "111111111111111", telefono: "573125802350", nombre: "Santiago" },
+  ...extra,
+});
+
+let envios;
+let escaladoAntes;
+beforeEach(() => {
+  envios = [];
+  tools._resetPedidosContacto();
+  memory.colegasGrupos.length = 0;
+  escaladoAntes = process.env.RADAR_ESCALADO_PHONE;
+  process.env.RADAR_ESCALADO_PHONE = "573028536489";
+});
+afterEach(() => {
+  if (escaladoAntes === undefined) delete process.env.RADAR_ESCALADO_PHONE;
+  else process.env.RADAR_ESCALADO_PHONE = escaladoAntes;
+});
+
+function mocks(t, { enviarOk = true, asesora = DAIANA, pedido = null } = {}) {
+  t.mock.method(advisors, "findAsesorPrincipalRadar", async () => asesora);
+  t.mock.method(groupSignals, "buscarPorTelefono", async () => pedido);
+  t.mock.method(mensajeAsesor, "enviarYRegistrar", async (org, telefono, texto) => {
+    envios.push({ telefono, texto });
+    return enviarOk ? { ok: true } : { ok: false, error: "fuera de la ventana de 24h" };
+  });
+}
+
+test("la tool esta declarada y separa al colega del cliente", () => {
+  const def = TOOL_DEFINITIONS.find((d) => d.name === "pedir_contacto_asesora");
+  assert.ok(def);
+  assert.match(def.description, /transferir_a_asesor/);
+});
+
+test("un colega pide hablar con alguien: aviso inmediato a la asesora con copia al escalado, y Sofi recibe el contacto", async (t) => {
+  mocks(t, { pedido: { texto_original: "Busco apto en Laureles 3 alcobas", respuesta_refs: ["9921137", "10129664"] } });
+
+  const out = await executeTool("pedir_contacto_asesora", { motivo: "coordinar una visita" }, ctxColega());
+
+  assert.deepStrictEqual(envios.map((e) => e.telefono), ["573011880668", "573028536489"], "asesora y copia al escalado");
+  const aviso = envios[0].texto;
+  assert.match(aviso, /^🙋 Un colega pide hablar con una asesora — comunicate ya/);
+  assert.match(aviso, /Colega: Santiago/);
+  assert.match(aviso, /Contacto: https:\/\/wa\.me\/573125802350/);
+  assert.match(aviso, /Para qué: coordinar una visita/);
+  assert.match(aviso, /Busco apto en Laureles/);
+  assert.match(aviso, /Ref 9921137, Ref 10129664/);
+  assert.doesNotMatch(aviso, /contactalo|llamalo|llamala/i, "copy neutro");
+  assert.match(out, /^Listo: ya le avisé a Daiana Zea/);
+  assert.match(out, /\+57 301 188 0668/);
+});
+
+test("si lo vuelve a pedir en 30 minutos no sale un segundo aviso", async (t) => {
+  mocks(t);
+  await executeTool("pedir_contacto_asesora", {}, ctxColega());
+  const out = await executeTool("pedir_contacto_asesora", {}, ctxColega());
+  assert.strictEqual(envios.length, 2, "solo los dos envios del primer pedido (asesora + copia)");
+  assert.match(out, /^Ya le avisé a Daiana Zea hace un rato/);
+});
+
+test("un colega 'solo llamada': el aviso trae el numero para marcar, no un link para escribirle", async (t) => {
+  mocks(t);
+  memory.colegasGrupos.push({ id: "c1", org_id: "org-1", lid: "111111111111111", telefono: "573125802350", nombre: "Santiago", grupos: [], solo_llamada: true });
+  await executeTool("pedir_contacto_asesora", {}, ctxColega());
+  assert.match(envios[0].texto, /Contacto: 📞 \+57 312 580 2350 — pidió contacto solo por llamada: llamá, no le escribas/);
+  assert.doesNotMatch(envios[0].texto, /wa\.me/);
+});
+
+test("si el aviso no llega, Sofi NO puede decir que aviso, y el pedido no queda marcado como repetido", async (t) => {
+  mocks(t, { enviarOk: false });
+  const out = await executeTool("pedir_contacto_asesora", {}, ctxColega());
+  assert.match(out, /^NO le llegó el aviso a Daiana Zea/);
+  assert.match(out, /NO le digas al colega que ya le avisaste/);
+  assert.doesNotMatch(out, /^Listo/);
+
+  const reintento = await executeTool("pedir_contacto_asesora", {}, ctxColega());
+  assert.doesNotMatch(reintento, /^Ya le avisé/, "un aviso que no salio no cuenta como repetido");
+});
+
+test("con alguien que no es colega no aplica y no avisa a nadie", async (t) => {
+  mocks(t);
+  const out = await executeTool("pedir_contacto_asesora", {}, ctxColega({ colega: null }));
+  assert.match(out, /^No aplica/);
+  assert.strictEqual(envios.length, 0);
+});
+
+test("sin asesora configurada, texto honesto y ningun envio", async (t) => {
+  mocks(t, { asesora: null });
+  const out = await executeTool("pedir_contacto_asesora", {}, ctxColega());
+  assert.match(out, /^NO pude avisarle a nadie/);
+  assert.strictEqual(envios.length, 0);
+});
+```
+
+En `test/colega-escribe-a-sofi.test.js`, agregar al final:
+
+```js
+test("si el colega pide hablar con una persona, el prompt le da pedir_contacto_asesora sin ofrecerlo por su cuenta", () => {
+  const p = texto(buildSystemPrompt({ org, lead, qualified: false, now: null, colega }));
+  assert.match(p, /pedir_contacto_asesora/);
+  assert.match(p, /NUNCA le ofrezcas "conectarlo con un asesor"/);
+});
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `node --test test/colega-pide-asesora.test.js test/colega-escribe-a-sofi.test.js`
+Expected: FAIL — la tool no existe (`tools._resetPedidosContacto is not a function`).
+
+- [ ] **Step 3: Implement the tool**
+
+En `src/agent/tools.js`:
+
+1. En `TOOL_DEFINITIONS`, justo antes del objeto con `name: "registrar_mandato_compra",`, agregar:
+
+```js
+  {
+    name: "pedir_contacto_asesora",
+    description:
+      "Úsala SOLO con un colega de otra inmobiliaria que pide hablar con una persona del equipo (una asesora, alguien real, una llamada). Le avisa en el momento a la asesora que atiende a los colegas para que se comunique, y te devuelve su nombre y celular para que se los pases. No la uses con un cliente (para eso está transferir_a_asesor) ni con un asesor de la casa.",
+    input_schema: {
+      type: "object",
+      properties: {
+        motivo: { type: "string", description: "Para qué quiere hablar, en pocas palabras (ej. 'coordinar la visita de mañana', 'la comisión de la ref 9702941')" },
+      },
+    },
+  },
+```
+
+2. En `executeTool`, justo después del bloque `if (name === "marcar_colega_solo_llamada") { ... }`, agregar:
+
+```js
+  if (name === "pedir_contacto_asesora") {
+    return pedirContactoAsesora(input, ctx);
+  }
+```
+
+3. Encima de `module.exports = {`, agregar:
+
+```js
+// El colega que pide hablar con una persona (Juan, 2026-09-10). Caso real:
+// Santiago pregunto "¿Es posible hablar con alguien?", Sofi le dijo "te puedo
+// conectar con un asesor" y no le aviso a nadie — Daiana lo vio por su cuenta
+// en el CRM cuatro minutos despues. Esto avisa en el momento a la asesora
+// principal del radar con copia al escalado, el mismo patron que
+// armarAvisoCitaColega, y le devuelve a Sofi el nombre y el celular para que
+// se los pase. Si el aviso no salio, el texto le prohibe decir que aviso.
+//
+// Repetidos: un colega que insiste en el mismo rato no dispara un aviso por
+// mensaje. La marca vive en memoria del proceso (un reinicio la borra, y eso
+// solo puede costar un aviso de mas, nunca uno de menos) y se pone solo si el
+// aviso principal salio.
+const VENTANA_REPETIDO_CONTACTO_MS = 30 * 60 * 1000;
+const pedidosContactoRecientes = new Map();
+
+function celularLegible(telefono) {
+  const d = String(telefono || "").replace(/\D/g, "");
+  const n = d.length === 10 ? `57${d}` : d;
+  return n.length === 12 ? `+57 ${n.slice(2, 5)} ${n.slice(5, 8)} ${n.slice(8)}` : `+${n}`;
+}
+
+async function pedirContactoAsesora(input, ctx) {
+  if (!ctx.colega) {
+    return "No aplica: esta herramienta es solo para un colega de otra inmobiliaria. Con un cliente se usa transferir_a_asesor.";
+  }
+  const asesora = await advisors.findAsesorPrincipalRadar(ctx.org).catch(() => null);
+  if (!asesora || !asesora.phone) {
+    return "NO pude avisarle a nadie: no hay una asesora configurada para los colegas. NO le digas que ya le avisaste; decile que el equipo le escribe apenas pueda.";
+  }
+  const nombreAsesora = asesora.name || "la asesora";
+  const celularAsesora = celularLegible(asesora.phone);
+
+  const clave = `${ctx.org.id}:${ctx.lead.id}`;
+  const antes = pedidosContactoRecientes.get(clave);
+  if (antes && Date.now() - antes < VENTANA_REPETIDO_CONTACTO_MS) {
+    return `Ya le avisé a ${nombreAsesora} hace un rato; no hace falta otro aviso. Decile al colega que ya tiene el aviso y repetile el contacto: ${nombreAsesora}, ${celularAsesora}.`;
+  }
+
+  const telColega = String(ctx.lead.phone || "").replace(/\D/g, "");
+  const nombreColega = ctx.colega.nombre || ctx.lead.nombre || "Un colega";
+  // Solo `true` cambia el formato: esto es informacion para la asesora, no un
+  // envio al colega, asi que una consulta fallida no justifica afirmar que
+  // pidio solo llamadas.
+  const soloLlamada = await colegas.esSoloLlamada(ctx.org.id, { telefono: telColega }).catch(() => null);
+  const pedido = await groupSignals.buscarPorTelefono(ctx.org.id, telColega).catch(() => null);
+  const refs = pedido && Array.isArray(pedido.respuesta_refs) ? pedido.respuesta_refs.filter(Boolean) : [];
+  const { linkWhatsappEstricto } = require("../lib/contacto");
+  const contacto = soloLlamada === true
+    ? `📞 ${celularLegible(telColega)} — pidió contacto solo por llamada: llamá, no le escribas`
+    : linkWhatsappEstricto(telColega) || celularLegible(telColega);
+
+  const texto = [
+    `🙋 Un colega pide hablar con una asesora — comunicate ya`,
+    ``,
+    `Colega: ${nombreColega}`,
+    `Contacto: ${contacto}`,
+    input && input.motivo ? `Para qué: ${String(input.motivo).trim()}` : null,
+    pedido && pedido.texto_original
+      ? `Su último pedido: "${String(pedido.texto_original).replace(/\s+/g, " ").slice(0, 150)}"`
+      : null,
+    refs.length ? `Le respondimos: ${refs.map((r) => `Ref ${r}`).join(", ")}` : null,
+    ``,
+    `Lo pidió en el chat con Sofi. Es un negocio compartido con otra inmobiliaria, no un cliente propio.`,
+  ].filter((l) => l !== null).join("\n");
+
+  // Require tardio (mismo motivo que avisarCitaAutoAgendada, arriba).
+  const mensajeAsesor = require("../lib/mensaje-asesor");
+  const principal = await mensajeAsesor
+    .enviarYRegistrar(ctx.org, String(asesora.phone).replace(/\D/g, ""), texto)
+    .catch((e) => ({ ok: false, error: e.message }));
+
+  // Copia al escalado, como las citas de colega (armarAvisoCitaColega). Una
+  // copia que no sale nunca tumba el aviso principal.
+  const escalado = String(process.env.RADAR_ESCALADO_PHONE || "").replace(/\D/g, "");
+  if (escalado && !advisors.mismoTelefono(escalado, asesora.phone)) {
+    await mensajeAsesor
+      .enviarYRegistrar(ctx.org, escalado, texto)
+      .catch((e) => console.warn("[tools] No se pudo copiar al escalado el pedido de contacto:", e.message));
+  }
+
+  if (!principal || !principal.ok) {
+    console.warn(`[tools] No le llego a ${nombreAsesora} el pedido de contacto del colega:`, principal && principal.error);
+    return `NO le llegó el aviso a ${nombreAsesora} (WhatsApp lo rechazó). NO le digas al colega que ya le avisaste: pasale directamente el contacto, ${nombreAsesora}, ${celularAsesora}, para que se comunique directo.`;
+  }
+
+  pedidosContactoRecientes.set(clave, Date.now());
+  return `Listo: ya le avisé a ${nombreAsesora} y se va a comunicar con el colega. Decíselo con su nombre y su celular: ${nombreAsesora}, ${celularAsesora}.`;
+}
+
+function _resetPedidosContacto() {
+  pedidosContactoRecientes.clear();
+}
+```
+
+4. Agregar `pedirContactoAsesora, _resetPedidosContacto` al `module.exports`.
+
+- [ ] **Step 4: Implement the prompt rule**
+
+En `src/agent/prompts.js`, dentro de `promptColega`, reemplazar la línea
+
+```
+- NUNCA le ofrezcas "conectarlo con un asesor". El es asesor.
+```
+
+por
+
+```
+- NUNCA le ofrezcas "conectarlo con un asesor" por tu cuenta: el es asesor. Pero si EL pide hablar con una persona del equipo (una asesora, alguien real, una llamada), usa pedir_contacto_asesora y pasale el nombre y el celular que te devuelva. Nunca digas que ya avisaste sin haberla usado.
+```
+
+- [ ] **Step 5: Run tests to verify they pass**
+
+Run: `node --test test/colega-pide-asesora.test.js test/colega-escribe-a-sofi.test.js test/colega-solo-llamada-tool.test.js test/citas-colega.test.js`
+Expected: PASS. Luego `npm test` una vez: todo en verde.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/agent/tools.js src/agent/prompts.js test/colega-pide-asesora.test.js test/colega-escribe-a-sofi.test.js
+git commit -m "$(cat <<'EOF'
+feat(sofi): pedir_contacto_asesora -- el colega que pide una persona le llega a la asesora en el momento
+
+Caso Santiago (2026-09-10): Sofi le ofrecio conectarlo y no aviso a nadie.
+Ahora avisa a la asesora principal del radar con copia al escalado, como
+las citas de colega; no repite en 30 minutos y nunca dice "avise" si el
+aviso no salio.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+EOF
+)"
+```
