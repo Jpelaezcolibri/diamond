@@ -10,6 +10,8 @@ const assert = require("node:assert");
 // Ver la nota en group-avisar-mandato.test.js: el freno de ritmo es de proceso.
 const ritmo = require("../src/lib/ritmo-avisos");
 const path = require("node:path");
+const memory = require("../src/data/memory");
+const colegasData = require("../src/data/colegas");
 
 const RUTA = (m) => require.resolve(path.join("..", "src", m));
 
@@ -1054,4 +1056,43 @@ test("un veredicto VIEJO sin el campo 'le_falta' no rompe el DM -- se degrada a 
 
   assert.strictEqual(r.resultado, "dm_enviado");
   assert.doesNotMatch(enviosDm[0].texto, /Aclaración:/);
+});
+
+// ── SOLO LLAMADA (Juan, 2026-09-10) ──────────────────────────────────────
+// Caso Angela Moscoso: pidio que la contacten solo por llamada y el radar le
+// mando un DM dos horas despues. Un colega marcado no recibe NINGUN DM: el
+// pedido cae al aviso de la asesora, con el formato de llamada.
+test("un colega marcado 'solo llamada' no recibe DM: el pedido va al aviso 📞 LLAMAR", async () => {
+  telefonoColegaResuelto = "573001234567";
+  memory.colegasGrupos.push({
+    id: "c1", org_id: "org-1", lid: "141746805670125", telefono: null,
+    nombre: "Patricia Gomez", grupos: [], solo_llamada: true,
+  });
+  try {
+    const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+    assert.strictEqual(enviosDm.length, 0, "no sale ningun DM");
+    assert.strictEqual(marcadasRespondidas.length, 0);
+    assert.ok(politicasGuardadas.some((p) => p.motivo === "colega_solo_llamada"), JSON.stringify(politicasGuardadas));
+    assert.strictEqual(r.resultado, "avisada");
+    assert.match(enviadosPorSofi[0].texto, /^📞 LLAMAR/);
+    assert.match(enviadosPorSofi[0].texto, /\+57 300 123 4567/);
+  } finally {
+    memory.colegasGrupos.length = 0;
+  }
+});
+
+test("si no se puede verificar la marca, tampoco sale el DM (falla cerrado)", async (t) => {
+  telefonoColegaResuelto = "573001234567";
+  t.mock.method(colegasData, "esSoloLlamada", async () => null);
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+  assert.strictEqual(enviosDm.length, 0);
+  assert.ok(politicasGuardadas.some((p) => p.motivo === "solo_llamada_no_verificable"));
+  assert.strictEqual(r.resultado, "avisada");
+});
+
+test("un colega sin marca sigue recibiendo su DM como siempre", async () => {
+  telefonoColegaResuelto = "573001234567";
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+  assert.strictEqual(r.resultado, "dm_enviado");
+  assert.strictEqual(enviosDm.length, 1);
 });

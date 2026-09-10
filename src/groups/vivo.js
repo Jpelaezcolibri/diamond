@@ -36,6 +36,9 @@ const advisors = require("../data/advisors");
 const linkAvisoLib = require("../lib/link-aviso");
 const avisoCercano = require("./aviso-cercano");
 const directorio = require("./directorio");
+// Se importa el MODULO (no la funcion suelta) para que los tests puedan
+// mockear esSoloLlamada, igual que canalWhatsapp mas abajo.
+const colegas = require("../data/colegas");
 const waha = require("../lib/waha");
 const formato = require("../lib/formato");
 const { numeroPedido } = require("./pedido");
@@ -528,6 +531,16 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
       })
     : null;
 
+  // SOLO LLAMADA (Juan, 2026-09-10): un colega que pidio que lo contacten solo
+  // por llamada no recibe ningun DM — el pedido cae al aviso de la asesora
+  // para que lo llame. Se consulta con las TRES llaves que hay a mano (el lid
+  // del autor, el telefono resuelto y el texto del pedido, que suele traer su
+  // celular) para que la marca no se esquive por la via que no se miro.
+  // esSoloLlamada no lanza; el catch es por si un doble de test lo hace.
+  const soloLlamada = await colegas
+    .esSoloLlamada(org.id, { lid: lidColega, telefono: telefonoColega, textoPedido: mensaje.texto })
+    .catch(() => null);
+
   const decisionDm = politica.decidirDm({
     telefono: telefonoColega,
     lid: lidColega,
@@ -536,6 +549,7 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
     dmsHoyColega: dmsColegaHoy,
     dmsHoyLinea: dmsLineaHoy,
     cuotaLinea,
+    soloLlamada,
   });
 
   // LA COMPUERTA DE CALIDAD TAMBIEN CORRIGE EL MOTIVO (fix critico, revision
