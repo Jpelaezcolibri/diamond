@@ -341,3 +341,26 @@ test("con cuota holgada el DM sale y queda registrada en la traza", () => {
 test("no poder leer la cuota no frena el DM: queda el tope diario de la linea", () => {
   assert.strictEqual(politica.decidirDm(escenarioDm({ cuotaLinea: null })).enviarDm, true);
 });
+
+// ── SOLO LLAMADA (Juan, 2026-09-10) ──────────────────────────────────────
+// Caso Angela Moscoso: pidio que la contacten solo por llamada y el radar le
+// mando un DM dos horas despues. La marca va PRIMERO, antes de elegir la via:
+// si se evaluara despues del lid/telefono, un cambio de orden la esquivaria.
+test("un colega marcado 'solo llamada' nunca recibe DM, y se corta antes de elegir la via", () => {
+  const d = politica.decidirDm(escenarioDm({ soloLlamada: true, lid: "141746805670125" }));
+  assert.strictEqual(d.enviarDm, false);
+  assert.strictEqual(d.motivo, "colega_solo_llamada");
+  assert.strictEqual(d.via, null);
+  assert.ok(!d.traza.some((t) => t.startsWith("destino:")), d.traza.join(","));
+});
+
+test("si no se pudo verificar la marca (null), falla cerrado con su propio motivo", () => {
+  const d = politica.decidirDm(escenarioDm({ soloLlamada: null }));
+  assert.strictEqual(d.enviarDm, false);
+  assert.strictEqual(d.motivo, "solo_llamada_no_verificable");
+});
+
+test("sin marca (false o sin el campo), el DM sale igual que siempre", () => {
+  assert.strictEqual(politica.decidirDm(escenarioDm({ soloLlamada: false })).enviarDm, true);
+  assert.strictEqual(politica.decidirDm(escenarioDm()).enviarDm, true);
+});
