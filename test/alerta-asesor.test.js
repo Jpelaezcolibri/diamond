@@ -152,7 +152,9 @@ test("sin telefono resuelto, el aviso incluye el mensaje listo para reenviar al 
   // El mensaje listo saluda por el nombre del colega (redactar.js#primerNombre)
   // y trae la salvedad de lo que no se pudo confirmar -- es el mismo contrato
   // que ya prueba redactar.test.js, aca solo se verifica que llegue armado.
-  assert.match(texto, /Hola Patricia, vi tu solicitud/);
+  // senal() no trae campos clasificados: el saludo cita sus primeras palabras
+  // (Juan, 2026-09-10 — el colega tiene que saber a que pedido le contestamos).
+  assert.match(texto, /Hola Patricia, te respondo tu pedido «Busco apartamento en Laureles, 3 alcobas»/);
   assert.match(texto, /No tengo confirmado si tiene vista ni balcón/);
   assert.match(texto, /https:\/\/info\.wasi\.co\/apartamento-venta-ap004\/9744456/);
 });
@@ -832,4 +834,70 @@ test("sin descartadosCalidad (llamador viejo), construir sigue funcionando exact
 test("sin ningun freno, la ficha no gana un ⚠️ de la nada", () => {
   const texto = construir(senal(), VEREDICTO, [matchUtil()], "573001234567");
   assert.ok(!texto.includes("⚠️"), `aparecio una salvedad inventada:\n${texto}`);
+});
+
+// ── SOLO LLAMADA (Juan, 2026-09-10) ──────────────────────────────────────
+// Caso Angela Moscoso: su forma de pedir es el numero de pedido, y pidio que
+// la contacten solo por llamada. El aviso tiene que decir LLAMAR, con el
+// numero de pedido y el telefono para marcar — y nada que invite a escribirle.
+const { porqueNoSalioSolo } = require("../src/groups/alerta-asesor");
+
+const SENAL_ANGELA = () =>
+  senal({
+    autor_nombre: "tengotuinmueblecomercial1",
+    autor_telefono: "266150634110990",
+    texto_original: "🟢🟢🟢🟢 _*PEDIDO 👉 645*_ 🔎 _*BUSCO*_ APARTAMENTO 🙋 _*Angela Moscoso*_ 📲 _*314 639 9667*_",
+  });
+
+test("solo llamada: LLAMAR con el numero de pedido y el telefono para marcar, sin nada para escribirle", () => {
+  process.env.CONTACT_WHATSAPP_NUMBER = "573044653609";
+  const texto = construir(
+    SENAL_ANGELA(),
+    VEREDICTO,
+    [matchUtil({ linkWasi: "https://info.wasi.co/apartamento-venta-ap004/9744456" })],
+    null,
+    null,
+    "colega_solo_llamada"
+  );
+  assert.match(texto, /^📞 LLAMAR — Pedido N° 645/);
+  assert.match(texto, /Contacto: 📞 \+57 314 639 9667 — llamá, no le escribas/);
+  assert.match(texto, /Por qué no salió solo: 📞 Este colega pidió contacto SOLO por llamada/);
+  assert.match(texto, /llamá con urgencia/);
+  assert.doesNotMatch(texto, /wa\.me/, "ni link de WhatsApp al colega ni invitacion a Sofi");
+  assert.doesNotMatch(texto, /mandale ESTO YA/i);
+  assert.doesNotMatch(texto, /escribirle a Sofi/);
+  assert.match(texto, /Ref AP004/, "las propiedades siguen, para que sepa de que hablarle");
+});
+
+test("solo llamada sin numero de pedido en el texto: la cabecera no inventa uno", () => {
+  const texto = construir(senal(), VEREDICTO, [matchUtil()], "573001234567", null, "colega_solo_llamada");
+  assert.match(texto, /^📞 LLAMAR — pedido de un colega/);
+  assert.match(texto, /Contacto: 📞 \+57 300 123 4567/);
+});
+
+test("solo llamada sin ningun telefono: dice que lo busque en el grupo y llame", () => {
+  const texto = construir(senal({ texto_original: "Busco apto en Laureles" }), VEREDICTO, [matchUtil()], null, null, "colega_solo_llamada");
+  assert.match(texto, /Contacto: no tenemos su número — buscalo en el grupo "Inmobiliarias Medellin" y llamá/);
+});
+
+test("no se pudo verificar la marca: mismo formato de llamada, con su propia razon", () => {
+  const texto = construir(SENAL_ANGELA(), VEREDICTO, [matchUtil()], null, null, "solo_llamada_no_verificable");
+  assert.match(texto, /^📞 LLAMAR — Pedido N° 645/);
+  assert.match(texto, /No pudimos confirmar si este colega acepta mensajes/);
+});
+
+test("un aviso normal con numero de pedido suma la linea 'Pedido: N°'", () => {
+  const texto = construir(SENAL_ANGELA(), VEREDICTO, [matchUtil()], null, null, "sin_telefono");
+  assert.match(texto, /OPORTUNIDAD APROBADA/);
+  assert.match(texto, /\nPedido: N° 645\n/);
+});
+
+test("un aviso normal sin numero de pedido no agrega la linea", () => {
+  const texto = construir(senal(), VEREDICTO, [matchUtil()], "573001234567");
+  assert.doesNotMatch(texto, /Pedido: N°/);
+});
+
+test("porqueNoSalioSolo: solo llamada sin nada aprobado pide decidir si vale la pena llamar", () => {
+  assert.match(porqueNoSalioSolo("colega_solo_llamada", false), /^📞 .*decidí vos si vale la pena llamar/);
+  assert.doesNotMatch(porqueNoSalioSolo("colega_solo_llamada", true), /escribile/);
 });

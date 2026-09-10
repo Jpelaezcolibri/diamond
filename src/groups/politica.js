@@ -214,6 +214,9 @@ const LIMITES_DM_DEFAULT = {
  *                         { usados, total, fraccion } (waha.cuotaDeLinea), o
  *                         null si no se pudo leer. `null` NO frena (ver la
  *                         nota mas abajo).
+ * @param soloLlamada       el colega pidio que lo contacten SOLO por llamada
+ *                         (src/data/colegas.js#esSoloLlamada): true | false,
+ *                         o null si no se pudo verificar — null FRENA.
  *
  * Devuelve { enviarDm, motivo, via, traza }, donde `via` es "telefono" | "lid"
  * | null: por cual de los dos destinos sale el mensaje. Ante cualquier duda
@@ -228,10 +231,19 @@ function decidirDm({
   dmsHoyColega = null,
   dmsHoyLinea = null,
   cuotaLinea = null,
+  soloLlamada = false,
   limites = LIMITES_DM_DEFAULT,
 } = {}) {
   const traza = [];
   const no = (motivo) => ({ enviarDm: false, motivo, via: null, traza: [...traza, `NO:${motivo}`] });
+
+  // SOLO LLAMADA (Juan, 2026-09-10): permanente, ningun DM. Va PRIMERO, antes
+  // de elegir la via, para que ni el lid ni el telefono puedan esquivarla.
+  // null = no se pudo verificar la marca, y ante la duda no se escribe (el
+  // principio 2 de este archivo). Los dos desvian a la asesora, como todo "no"
+  // de esta funcion.
+  if (soloLlamada === true) return no("colega_solo_llamada");
+  if (soloLlamada === null) return no("solo_llamada_no_verificable");
 
   // EL DESTINO: TELEFONO, Y SI NO, EL LID (Juan, 2026-09-04). Literal: "todo
   // lo que se pueda resolver con el lids lo hacemos por ahi (...) y si

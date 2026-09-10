@@ -63,3 +63,15 @@ test("el prompt de colega se cachea igual que los otros", () => {
   const bloques = buildSystemPrompt({ org, lead, qualified: false, now: null, colega });
   assert.ok(bloques.some((b) => b.cache_control), "el bloque estable tiene que ir cacheado");
 });
+
+test("si el colega pide solo llamada, el prompt le da la herramienta y le prohibe decir 'anotado' sin ella", () => {
+  const p = texto(buildSystemPrompt({ org, lead, qualified: false, now: null, colega }));
+  assert.match(p, /marcar_colega_solo_llamada/);
+  assert.match(p, /nunca digas "quedó anotado"/i);
+});
+
+test("si el colega pide hablar con una persona, el prompt le da pedir_contacto_asesora sin ofrecerlo por su cuenta", () => {
+  const p = texto(buildSystemPrompt({ org, lead, qualified: false, now: null, colega }));
+  assert.match(p, /pedir_contacto_asesora/);
+  assert.match(p, /NUNCA le ofrezcas "conectarlo con un asesor"/);
+});

@@ -36,8 +36,13 @@ const advisors = require("../data/advisors");
 const linkAvisoLib = require("../lib/link-aviso");
 const avisoCercano = require("./aviso-cercano");
 const directorio = require("./directorio");
+// Se importa el MODULO (no la funcion suelta) para que los tests puedan
+// mockear esSoloLlamada, igual que canalWhatsapp mas abajo.
+const colegas = require("../data/colegas");
 const waha = require("../lib/waha");
 const formato = require("../lib/formato");
+const { numeroPedido } = require("./pedido");
+const { telefonoEnTexto } = require("../lib/contacto");
 // Se importa el MODULO y no la funcion suelta: destructurar congela la
 // referencia y deja los tests sin forma de mockear el envio.
 const canalWhatsapp = require("../channels/whatsapp");
@@ -356,17 +361,30 @@ function textoParaColega(autorNombre, utiles, org, sinConfirmar = [], leFalta = 
   return redactar.mensajeGrupo({ autor_nombre: autorNombre }, utiles, { org, sinConfirmar, leFalta, pedido });
 }
 
-// Lo que el colega pidio, en la forma que espera redactar.desvios: sirve tanto
-// para la clasificacion recien hecha (`c`) como para una señal releida de la
-// base, que guarda los mismos campos. Se comparte para que el DM automatico y
-// los dos caminos manuales no diverjan en lo que le aclaran al colega.
-function pedidoDe(fuente) {
+// Lo que el colega pidio, en la forma que esperan redactar.desvios y el saludo
+// del DM: sirve tanto para la clasificacion recien hecha (`c`) como para una
+// señal releida de la base, que guarda los mismos campos. Se comparte para que
+// el DM automatico y los dos caminos manuales no diverjan en lo que le aclaran
+// al colega.
+//
+// numero/tipo/operacion/precio_max/texto/fecha (Juan, 2026-09-10): el saludo
+// del DM dice a que pedido le contestamos. La clasificacion en vivo no trae el
+// texto ni la fecha del mensaje, por eso van en `extra`; una señal de la base
+// los tiene en texto_original y fecha_mensaje.
+function pedidoDe(fuente, { texto = null, fechaIso = null } = {}) {
   if (!fuente) return null;
+  const textoPedido = texto || fuente.texto_original || null;
   return {
     zonas: Array.isArray(fuente.zonas) && fuente.zonas.length ? fuente.zonas : null,
     zona: fuente.zona || null,
     habitaciones: fuente.habitaciones || null,
     areaMin: fuente.area_min || null,
+    operacion: fuente.operacion || null,
+    tipo: fuente.tipo || null,
+    precio_max: fuente.precio_max || null,
+    texto: textoPedido,
+    numero: numeroPedido(textoPedido),
+    fecha: fechaIso || fuente.fecha_mensaje || fuente.created_at || null,
   };
 }
 
@@ -514,6 +532,16 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
       })
     : null;
 
+  // SOLO LLAMADA (Juan, 2026-09-10): un colega que pidio que lo contacten solo
+  // por llamada no recibe ningun DM — el pedido cae al aviso de la asesora
+  // para que lo llame. Se consulta con las TRES llaves que hay a mano (el lid
+  // del autor, el telefono resuelto y el texto del pedido, que suele traer su
+  // celular) para que la marca no se esquive por la via que no se miro.
+  // esSoloLlamada no lanza; el catch es por si un doble de test lo hace.
+  const soloLlamada = await colegas
+    .esSoloLlamada(org.id, { lid: lidColega, telefono: telefonoColega, textoPedido: mensaje.texto })
+    .catch(() => null);
+
   const decisionDm = politica.decidirDm({
     telefono: telefonoColega,
     lid: lidColega,
@@ -522,6 +550,7 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
     dmsHoyColega: dmsColegaHoy,
     dmsHoyLinea: dmsLineaHoy,
     cuotaLinea,
+    soloLlamada,
   });
 
   // LA COMPUERTA DE CALIDAD TAMBIEN CORRIGE EL MOTIVO (fix critico, revision
@@ -595,7 +624,7 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
       org,
       veredicto.sin_confirmar || [],
       veredicto.le_falta || [],
-      pedidoDe(c)
+      pedidoDe(c, { texto: mensaje.texto, fechaIso: mensaje.instanteIso })
     );
     if (textoDm) {
       // POR CUAL VIA SALE. `decidirDm` ya eligio (prefiere el telefono, que es
@@ -603,7 +632,7 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
       // waha.enviarDm: con { lid } el chatId es `<lid>@lid`, sin el es
       // `<telefono>@c.us`. No se pasan los dos: la guarda de waha.js exige que
       // un lid entre SOLO por la opcion explicita, nunca por `telefono`.
-      const opcionesDm = decisionDm.via === "lid" ? { lid: lidColega } : {};
+      const opcionesDm = decisionDm.via === "lid" ? { lid: lidColega, orgId: org.id } : { orgId: org.id };
       let envioDm = await waha.enviarDm(sesion, telefonoColega, textoDm, opcionesDm).catch((e) => ({ ok: false, error: e.message }));
       // UN solo reintento, y solo si el fallo fue ANTES de que el mensaje
       // saliera (WAHA lo rechazo, o la conexion ni se establecio -- ver
@@ -631,7 +660,7 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
       // conducta por la que a uno lo reportan.
       if (envioDm && !envioDm.ok && envioDm.previoAlEnvio && decisionDm.via === "lid" && telefonoColega) {
         console.warn(`[radar] El DM por lid no salio (${envioDm.error}); se reintenta por el telefono resuelto.`);
-        envioDm = await waha.enviarDm(sesion, telefonoColega, textoDm, {}).catch((e) => ({ ok: false, error: e.message }));
+        envioDm = await waha.enviarDm(sesion, telefonoColega, textoDm, { orgId: org.id }).catch((e) => ({ ok: false, error: e.message }));
       }
 
       if (envioDm && envioDm.ok) {
@@ -1013,6 +1042,18 @@ async function aprobarManual(org, signalId) {
   if (signal.respondida_at) return { resultado: "ya_respondida" };
   if (signal.clase !== "demanda") return { resultado: "no_es_demanda" };
 
+  // SOLO LLAMADA (Juan, 2026-09-10): "ningun DM, por ningun camino". Una
+  // aprobacion humana reemplaza al puntaje, no a lo que el colega pidio. Se va
+  // antes de cualquier consulta de envio; el telefono viaja para que quien lo
+  // muestre pueda decir a donde llamar. null (no se pudo verificar) tambien
+  // frena: falla cerrado.
+  const soloLlamadaManual = await colegas
+    .esSoloLlamada(org.id, { lid: signal.autor_telefono, textoPedido: signal.texto_original })
+    .catch(() => null);
+  if (soloLlamadaManual !== false) {
+    return { resultado: "colega_solo_llamada", telefono: telefonoEnTexto(signal.texto_original) };
+  }
+
   const grupo = await whatsappGroups.obtenerGrupo(org.id, signal.group_id);
   if (!grupo) return { resultado: "grupo_no_encontrado" };
   // OJO: aca NO se exige grupo.responde=true (a diferencia del camino
@@ -1128,7 +1169,7 @@ async function aprobarManual(org, signalId) {
   const lidColega = !telefonoColega ? signal.autor_telefono || null : null;
   if (!telefonoColega && !lidColega) return { resultado: "sin_telefono", texto, publicables };
 
-  const opcionesDm = lidColega ? { lid: lidColega } : {};
+  const opcionesDm = lidColega ? { lid: lidColega, orgId: org.id } : { orgId: org.id };
   const envio = await waha.enviarDm(activas[0].nombre, telefonoColega, texto, opcionesDm);
   if (!envio || !envio.ok) return { resultado: "error_envio", error: envio && envio.error };
 
@@ -1210,6 +1251,14 @@ async function responderPorDmManual(org, signalId, { sesion = null, refs = null 
   if (!signal) return { resultado: "no_encontrada" };
   if (signal.respondida_at) return { resultado: "ya_respondida" };
   if (signal.clase !== "demanda") return { resultado: "no_es_demanda" };
+
+  // SOLO LLAMADA (Juan, 2026-09-10): mismo freno que aprobarManual.
+  const soloLlamadaManual = await colegas
+    .esSoloLlamada(org.id, { lid: signal.autor_telefono, textoPedido: signal.texto_original })
+    .catch(() => null);
+  if (soloLlamadaManual !== false) {
+    return { resultado: "colega_solo_llamada", telefono: telefonoEnTexto(signal.texto_original) };
+  }
 
   if (carrilArriendo.esDelCarril(signal) && !carrilArriendo.carrilActivo()) {
     return { resultado: "carril_apagado" };
@@ -1322,7 +1371,7 @@ async function responderPorDmManual(org, signalId, { sesion = null, refs = null 
   // esperando a la asesora igual que antes.
   if (await cuotaAgotada(sesion)) return { resultado: "cuota_whatsapp_agotada" };
 
-  const opcionesDm = lidColega ? { lid: lidColega } : {};
+  const opcionesDm = lidColega ? { lid: lidColega, orgId: org.id } : { orgId: org.id };
   const envioDm = await waha.enviarDm(sesion, telefonoColega, texto, opcionesDm).catch((e) => ({ ok: false, error: e.message }));
   if (!envioDm || !envioDm.ok) return { resultado: "error_envio", error: envioDm && envioDm.error };
 
@@ -1506,8 +1555,17 @@ async function prepararAviso(org, signalId, { sesion = null } = {}) {
     .telefonoDe(org.id, signal.autor_telefono, { sesion, jid: grupo && grupo.jid })
     .catch(() => null);
 
+  // SOLO LLAMADA (Juan, 2026-09-10): para un colega marcado la pagina no arma
+  // mensaje — no hay nada que mandarle — y dice a que numero llamar. null (no
+  // se pudo verificar) cuenta como marcado, igual que en el resto del radar.
+  const marca = await colegas
+    .esSoloLlamada(org.id, { lid: signal.autor_telefono, telefono: telefonoColega, textoPedido: signal.texto_original })
+    .catch(() => null);
+  const soloLlamada = marca !== false;
+  const motivo = marca === true ? "colega_solo_llamada" : marca === null ? "solo_llamada_no_verificable" : signal.politica_motivo || null;
+
   const aprobada = utiles.length > 0;
-  const mensaje = aprobada
+  const mensaje = aprobada && !soloLlamada
     ? redactar.mensajeGrupo({ autor_nombre: signal.autor_nombre }, utiles, {
         org,
         sinConfirmar: rev.sin_confirmar || [],
@@ -1543,8 +1601,10 @@ async function prepararAviso(org, signalId, { sesion = null } = {}) {
     descartados,
     mensaje,
     telefonoColega,
-    motivo: signal.politica_motivo || null,
-    porque: alertaAsesor.porqueNoSalioSolo(signal.politica_motivo, aprobada),
+    soloLlamada,
+    telefonoLlamada: soloLlamada ? telefonoColega || telefonoEnTexto(signal.texto_original) || null : null,
+    motivo,
+    porque: alertaAsesor.porqueNoSalioSolo(motivo, aprobada),
     aprobada,
   };
 }

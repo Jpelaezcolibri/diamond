@@ -468,7 +468,7 @@ async function enviarTexto(sesion, chatId, texto, { replyTo = null } = {}) {
 // intacta para el camino normal: un lid nunca entra por `telefono`. Es la
 // prueba de si WhatsApp entrega un DM a un participante cuyo numero no se ve
 // — si entrega, el boton de la pagina del aviso puede mandar sin numero.
-async function enviarDm(sesion, telefono, texto, { lid = null } = {}) {
+async function enviarDm(sesion, telefono, texto, { lid = null, orgId = null } = {}) {
   if (!configurado()) return { ok: false, error: "Falta WAHA_URL o WAHA_API_KEY" };
 
   // UN solo destino, resuelto antes de tocar la red, y UN solo envio abajo:
@@ -495,6 +495,22 @@ async function enviarDm(sesion, telefono, texto, { lid = null } = {}) {
     const digitos = String(telefono).replace(/\D/g, "");
     chatId = `${digitos.length === 10 ? `57${digitos}` : digitos}@c.us`;
   }
+
+  // EL CANDADO (Juan, 2026-09-10): esta es la unica puerta de los DM, y aca
+  // se revisa por ultima vez que el destino no sea un colega que pidio que lo
+  // contacten SOLO por llamada — por lid o por telefono, que es por donde
+  // podria escaparse (Juan: "que no se nos filtren los mensajes"). Los caminos
+  // de arriba (politica.js#decidirDm, vivo.js, cancelar-cita.js) ya frenan
+  // antes; esto existe para que un camino nuevo, o el endpoint de prueba, no
+  // la esquive. Sin orgId no hay contra que org verificar: no se envia.
+  // previoAlEnvio false: nadie debe reintentar por la otra via.
+  //
+  // Require tardio a proposito: evita el ciclo con los modulos de datos y deja
+  // que los tests mockeen esSoloLlamada sobre el modulo.
+  if (!orgId) return { ok: false, error: "Falta orgId para verificar al destinatario", previoAlEnvio: false, destino: chatId };
+  const colegas = require("../data/colegas");
+  const marcado = await colegas.esSoloLlamada(orgId, lid ? { lid } : { telefono });
+  if (marcado !== false) return { ok: false, error: "colega_solo_llamada", previoAlEnvio: false, destino: chatId };
 
   try {
     const r = await pedir("/api/sendText", {

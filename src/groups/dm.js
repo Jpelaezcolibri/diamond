@@ -26,6 +26,8 @@
 const groupSignals = require("../data/group-signals");
 const lineaDm = require("../data/linea-dm");
 const mensajeAsesor = require("../lib/mensaje-asesor");
+const whatsappGroups = require("../data/whatsapp-groups");
+const advisors = require("../data/advisors");
 const { getClient } = require("../lib/anthropic");
 
 const MODELO = process.env.CLAUDE_MODEL_GRUPOS || "claude-haiku-4-5";
@@ -106,14 +108,15 @@ async function clasificarAvance(mensajes, ahora) {
   }
 }
 
-function construirAlerta(mensaje, veredicto, señal) {
+function construirAlerta(mensaje, veredicto, señal, nombreLinea = null) {
+  const linea = nombreLinea ? `la línea de ${nombreLinea}` : "la línea del radar";
   const TITULOS = {
-    cita_confirmada: "📅 Cita confirmada por la línea de Natalia",
-    agendando: "🗓️ Un colega esta coordinando una visita por la línea de Natalia",
-    interes_avanzado: "🔥 Señal de posible venta por la línea de Natalia",
+    cita_confirmada: `📅 Cita confirmada por ${linea}`,
+    agendando: `🗓️ Un colega esta coordinando una visita por ${linea}`,
+    interes_avanzado: `🔥 Señal de posible venta por ${linea}`,
   };
   const partes = [
-    TITULOS[veredicto.tipo] || "🔔 Avance en la línea de Natalia",
+    TITULOS[veredicto.tipo] || `🔔 Avance en ${linea}`,
     ``,
     `Colega: ${mensaje.remitenteNombre || mensaje.remitenteTelefono || "sin nombre (escribe por lid)"}`,
     veredicto.fecha_hora_iso
@@ -126,6 +129,21 @@ function construirAlerta(mensaje, veredicto, señal) {
     `\nUltimo mensaje: "${mensaje.texto}"`,
   ];
   return partes.filter(Boolean).join("\n");
+}
+
+// Nombre de la asesora dueña de la línea que recibió el mensaje (Juan,
+// 2026-09-10: la línea del radar pasó a otra asesora; el nombre sale del
+// dato, no del código). Cualquier falla o ausencia devuelve null — un
+// nombre que no se pudo resolver no puede bloquear la alerta.
+async function nombreLineaDe(orgId, nombreSesion) {
+  try {
+    const sesion = await whatsappGroups.sesionPorNombre(orgId, nombreSesion);
+    if (!sesion || !sesion.advisor_id) return null;
+    const advisor = await advisors.findById(orgId, sesion.advisor_id);
+    return (advisor && advisor.name) || null;
+  } catch (e) {
+    return null;
+  }
 }
 
 /**
@@ -202,7 +220,8 @@ async function procesarMensaje(org, mensaje, { ahora = new Date() } = {}) {
 
   if (!VISITAS_ALERTA_TO) return { resultado: "sin_destinatario", dmId: guardado.id };
 
-  const texto = construirAlerta(mensaje, veredicto, señal);
+  const nombreLinea = await nombreLineaDe(org.id, mensaje.sesion);
+  const texto = construirAlerta(mensaje, veredicto, señal, nombreLinea);
   const envio = await mensajeAsesor.enviarYRegistrar(org, VISITAS_ALERTA_TO, texto).catch((e) => ({ ok: false, error: e.message }));
   if (envio && envio.ok) await lineaDm.marcarAlertado(org.id, guardado.id).catch(() => {});
 

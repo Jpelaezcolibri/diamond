@@ -107,7 +107,7 @@ async function runParaOrg(org) {
 
   if (await cuotaAgotada(sesion)) return { org: org.name, resultado: "cuota_agotada" };
 
-  const r = await waha.enviarDm(sesion, NUMERO_SOFI(), TEXTO_VENTANA);
+  const r = await waha.enviarDm(sesion, NUMERO_SOFI(), TEXTO_VENTANA, { orgId: org.id });
   if (!r || !r.ok) {
     console.warn(`[ventana-asesora] no se pudo abrir la ventana de ${asesora.name}: ${r && r.error}`);
     return { org: org.name, resultado: "fallo_envio" };

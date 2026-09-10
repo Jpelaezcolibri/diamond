@@ -49,6 +49,8 @@ const PORQUE_CORTO = {
   limite_linea_no_verificable: "no se pudo verificar el volumen de la línea",
   sin_fecha_mensaje: "el pedido llegó sin fecha",
   dm_fallido: "WhatsApp rechazó el envío al colega",
+  colega_solo_llamada: "pidió contacto solo por llamada",
+  solo_llamada_no_verificable: "no se pudo confirmar si acepta mensajes",
 };
 
 // Una linea por pedido de colega. Lo que la asesora necesita para decidir si

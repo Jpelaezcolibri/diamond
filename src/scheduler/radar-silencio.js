@@ -21,6 +21,7 @@ const avisarMandato = require("../groups/avisar-mandato");
 const leads = require("../data/leads");
 const conversations = require("../data/conversations");
 const mensajeAsesor = require("../lib/mensaje-asesor");
+const advisors = require("../data/advisors");
 
 const RADAR_REVISOR_PHONE = () => process.env.RADAR_REVISOR_PHONE || "";
 const RADAR_ESCALADO_PHONE = () => process.env.RADAR_ESCALADO_PHONE || "";
@@ -32,10 +33,12 @@ function resumenPedido(señal) {
   return texto.length > 100 ? `${texto.slice(0, 100)}...` : texto;
 }
 
-function textoEscaladoVenta(señal) {
+// El nombre de la revisora sale del dato, no de un "Natalia" escrito a mano
+// (Juan, 2026-09-10: la línea del radar pasó a otra asesora).
+function textoEscaladoVenta(señal, nombreRevisora = null) {
   const resumen = resumenPedido(señal);
   return [
-    `⚠️ Natalia no respondio en el tiempo configurado el aviso de este pedido${resumen ? ` ("${resumen}")` : ""}.`,
+    `⚠️ ${nombreRevisora || "La asesora"} no respondió en el tiempo configurado el aviso de este pedido${resumen ? ` ("${resumen}")` : ""}.`,
     "¿Le puedes dar seguimiento?",
   ].join("\n");
 }
@@ -84,10 +87,15 @@ async function runVenta(org, cutoffIso) {
   const to = RADAR_ESCALADO_PHONE();
   if (!to) return sent;
 
+  // Se resuelve UNA vez por org, no por señal: el nombre no cambia entre
+  // candidatos de la misma corrida (Juan, 2026-09-10).
+  const revisora = await advisors.findByPhone(org.id, RADAR_REVISOR_PHONE()).catch(() => null);
+  const nombreRevisora = revisora && revisora.name;
+
   for (const señal of candidatos) {
     try {
       if (!(await groupSignals.claimEscaladoSilencio(org.id, señal.id))) continue;
-      const { ok, error } = await mensajeAsesor.enviarYRegistrar(org, to, textoEscaladoVenta(señal));
+      const { ok, error } = await mensajeAsesor.enviarYRegistrar(org, to, textoEscaladoVenta(señal, nombreRevisora));
       if (ok) sent++;
       else console.warn(`[radar-silencio] no se pudo escalar la señal ${señal.id}:`, error);
     } catch (e) {

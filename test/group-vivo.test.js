@@ -11,6 +11,7 @@ const path = require("node:path");
 
 const RUTA = (m) => require.resolve(path.join("..", "src", m));
 const mandatosData = require("../src/data/mandatos");
+const memory = require("../src/data/memory");
 
 // ── Dobles de las dependencias con IO ────────────────────────────────────
 let claseDevuelta = "demanda";
@@ -640,7 +641,7 @@ test("aprobarManual: con telefono Y lid disponibles, sigue prefiriendo el telefo
   assert.strictEqual(r.resultado, "publicado");
   assert.strictEqual(enviosDmManual.length, 1);
   assert.strictEqual(enviosDmManual[0].telefono, "573001234567");
-  assert.deepStrictEqual(enviosDmManual[0].opciones, {});
+  assert.deepStrictEqual(enviosDmManual[0].opciones, { orgId: "org-1" });
 });
 
 // EL HUECO QUE ESTE CAMBIO CIERRA (Juan, 2026-09-04): "un pedido que el radar
@@ -658,7 +659,7 @@ test("aprobarManual: sin telefono pero con lid, manda por lid — igual que el c
 
   assert.strictEqual(r.resultado, "publicado");
   assert.strictEqual(enviosDmManual.length, 1, "salio por DM, por la via del lid");
-  assert.deepStrictEqual(enviosDmManual[0].opciones, { lid: "141746805670125" });
+  assert.deepStrictEqual(enviosDmManual[0].opciones, { lid: "141746805670125", orgId: "org-1" });
   assert.strictEqual(marcadas.length, 1);
   assert.strictEqual(marcadas[0].destinoTelefono, null);
   // Con el sufijo @lid (Juan, 2026-09-08): group-signals.js#buscarPorLid
@@ -917,7 +918,7 @@ test("responderPorDmManual: manda el DM cuando hay telefono y la señal pasa la 
   // 2026-09-04) -- mismo criterio que aprobarManual y que asistir: el
   // telefono es el destino verificado, el lid solo entra cuando no hay otra
   // via.
-  assert.deepStrictEqual(enviosDmManual[0].opciones, {});
+  assert.deepStrictEqual(enviosDmManual[0].opciones, { orgId: "org-1" });
 });
 
 // EL HUECO QUE ESTE CAMBIO CIERRA (Juan, 2026-09-04): "un pedido que el radar
@@ -936,7 +937,7 @@ test("responderPorDmManual: sin telefono resuelto pero con lid, manda por lid �
 
   assert.strictEqual(r.resultado, "dm_enviado");
   assert.strictEqual(enviosDmManual.length, 1, "salio por DM, por la via del lid");
-  assert.deepStrictEqual(enviosDmManual[0].opciones, { lid: "141746805670125" });
+  assert.deepStrictEqual(enviosDmManual[0].opciones, { lid: "141746805670125", orgId: "org-1" });
   assert.strictEqual(marcadas.length, 1);
   assert.strictEqual(marcadas[0].destinoTelefono, null);
   // Con el sufijo @lid (Juan, 2026-09-08): group-signals.js#buscarPorLid
@@ -1607,4 +1608,74 @@ test("aprobarManual: deja registrada SU decision, no la del intento automatico a
   assert.ok(Array.isArray(suya[0].traza));
   // Nunca puede quedar como motivo final un "no" cuando el mensaje si salio.
   assert.strictEqual(marcadas.length, 1, "y el mensaje salio de verdad");
+});
+
+// ── SOLO LLAMADA en los caminos manuales (Juan, 2026-09-10) ─────────────
+// "Ningun DM, por ningun camino": aprobar desde el chat de Sofi y el DM
+// manual del CRM tampoco le escriben a un colega marcado.
+function conColegaMarcado(fn) {
+  return async () => {
+    memory.colegasGrupos.push({
+      id: "c1", org_id: "org-1", lid: "141746805670125", telefono: null,
+      nombre: "Camilo", grupos: [], solo_llamada: true,
+    });
+    try {
+      await fn();
+    } finally {
+      memory.colegasGrupos.length = 0;
+    }
+  };
+}
+
+test("aprobarManual: a un colega marcado no le escribe ni lo marca respondido", conColegaMarcado(async () => {
+  señalParaAprobar = señalCallada({ autor_telefono: "141746805670125", texto_original: "busco apto 📲 314 639 9667" });
+  grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = "573001234567";
+
+  const r = await vivo.aprobarManual({ id: "org-1" }, "sig-callada");
+
+  assert.strictEqual(r.resultado, "colega_solo_llamada");
+  assert.strictEqual(r.telefono, "573146399667");
+  assert.strictEqual(enviosDmManual.length, 0);
+  assert.strictEqual(marcadas.length, 0);
+}));
+
+test("responderPorDmManual: a un colega marcado no le escribe ni lo marca respondido", conColegaMarcado(async () => {
+  señalParaAprobar = señalCallada({ autor_telefono: "141746805670125" });
+  grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = "573001234567";
+
+  const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
+
+  assert.strictEqual(r.resultado, "colega_solo_llamada");
+  assert.strictEqual(enviosDmManual.length, 0);
+  assert.strictEqual(marcadas.length, 0);
+}));
+
+test("prepararAviso: para un colega marcado no arma mensaje y dice a que numero llamar", conColegaMarcado(async () => {
+  señalParaAprobar = señalCallada({
+    autor_telefono: "141746805670125",
+    texto_original: "PEDIDO 👉 645 busco apto 📲 314 639 9667",
+    revalidacion: { refs_utiles: ["AP004"], sin_confirmar: [] },
+  });
+  grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = null;
+
+  const r = await vivo.prepararAviso({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
+
+  assert.strictEqual(r.resultado, "ok");
+  assert.strictEqual(r.soloLlamada, true);
+  assert.strictEqual(r.mensaje, null, "no hay mensaje para mandarle");
+  assert.strictEqual(r.telefonoLlamada, "573146399667");
+  assert.strictEqual(r.motivo, "colega_solo_llamada");
+  assert.match(r.porque, /^📞/);
+}));
+
+test("prepararAviso: un colega sin marca sigue recibiendo el mensaje armado", async () => {
+  señalParaAprobar = señalCallada({ revalidacion: { refs_utiles: ["AP004"], sin_confirmar: [] } });
+  grupoParaAprobar = grupoHabilitado();
+  const r = await vivo.prepararAviso({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
+  assert.strictEqual(r.soloLlamada, false);
+  assert.ok(r.mensaje);
+  assert.strictEqual(r.telefonoLlamada, null);
 });

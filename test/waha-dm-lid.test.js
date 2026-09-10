@@ -31,7 +31,7 @@ function restaurar() {
 test("con { lid }, el DM sale a <lid>@lid por sendText", async () => {
   const llamadas = conWaha({ cuerpo: { id: { _serialized: "true_269230108872829@lid_ABC" } } });
   try {
-    const r = await waha.enviarDm("RADA-NATALIA", null, "hola", { lid: "269230108872829@lid" });
+    const r = await waha.enviarDm("RADA-NATALIA", null, "hola", { lid: "269230108872829@lid", orgId: "org-1" });
     assert.strictEqual(r.ok, true);
     assert.strictEqual(r.destino, "269230108872829@lid");
     assert.strictEqual(r.wamid, "true_269230108872829@lid_ABC");
@@ -69,7 +69,7 @@ test("un lid demasiado corto se rechaza antes de tocar la red", async () => {
 test("si WAHA rechaza el lid, se dice previoAlEnvio para que quien llame decida", async () => {
   conWaha({ status: 422, cuerpo: { message: "chatId not found" } });
   try {
-    const r = await waha.enviarDm("RADA-NATALIA", null, "hola", { lid: "269230108872829" });
+    const r = await waha.enviarDm("RADA-NATALIA", null, "hola", { lid: "269230108872829", orgId: "org-1" });
     assert.strictEqual(r.ok, false);
     assert.strictEqual(r.previoAlEnvio, true);
     assert.match(r.error, /chatId not found/);
@@ -94,6 +94,55 @@ test("versionInfo es solo lectura y no revienta si WAHA no responde", async () =
     const v = await waha.versionInfo();
     assert.strictEqual(v.version, null);
     assert.match(v.error, /boom/);
+  } finally {
+    restaurar();
+  }
+});
+
+// ── EL CANDADO (Juan, 2026-09-10) ────────────────────────────────────────
+// enviarDm es la unica puerta de los DM: aca se revisa, por ultima vez, que el
+// destino no sea un colega marcado "solo llamada" — sea por lid o por
+// telefono. Asi ni un camino nuevo ni el endpoint de prueba la esquivan.
+const memory = require("../src/data/memory");
+const colegasData = require("../src/data/colegas");
+
+test("a un colega marcado no le sale nada, ni por lid ni por telefono", async () => {
+  memory.colegasGrupos.push({ id: "c1", org_id: "org-1", lid: "269230108872829", telefono: "573146399667", nombre: "X", grupos: [], solo_llamada: true });
+  const llamadas = conWaha({ cuerpo: {} });
+  try {
+    const porLid = await waha.enviarDm("RADA-NATALIA", null, "hola", { lid: "269230108872829", orgId: "org-1" });
+    const porTel = await waha.enviarDm("RADA-NATALIA", "573146399667", "hola", { orgId: "org-1" });
+    assert.strictEqual(porLid.ok, false);
+    assert.strictEqual(porLid.error, "colega_solo_llamada");
+    assert.strictEqual(porLid.previoAlEnvio, false, "nadie debe reintentar por la otra via");
+    assert.strictEqual(porTel.error, "colega_solo_llamada");
+    assert.strictEqual(llamadas.length, 0, "no se toco la red");
+  } finally {
+    restaurar();
+    memory.colegasGrupos.length = 0;
+  }
+});
+
+test("si no se puede verificar la marca, no sale (falla cerrado)", async (t) => {
+  t.mock.method(colegasData, "esSoloLlamada", async () => null);
+  const llamadas = conWaha({ cuerpo: {} });
+  try {
+    const r = await waha.enviarDm("RADA-NATALIA", "573001234567", "hola", { orgId: "org-1" });
+    assert.strictEqual(r.ok, false);
+    assert.strictEqual(r.error, "colega_solo_llamada");
+    assert.strictEqual(llamadas.length, 0);
+  } finally {
+    restaurar();
+  }
+});
+
+test("sin orgId no se puede verificar al destinatario: no sale", async () => {
+  const llamadas = conWaha({ cuerpo: {} });
+  try {
+    const r = await waha.enviarDm("RADA-NATALIA", "573001234567", "hola");
+    assert.strictEqual(r.ok, false);
+    assert.match(r.error, /orgId/);
+    assert.strictEqual(llamadas.length, 0);
   } finally {
     restaurar();
   }

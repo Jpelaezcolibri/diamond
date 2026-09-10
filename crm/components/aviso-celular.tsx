@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { numeroPedido } from "@/lib/pedido";
 
 // La pantalla que abre la asesora desde el aviso de WhatsApp (Juan,
 // 2026-09-02, opción D). Reproduce el mockup aprobado: una isla oscura arriba
@@ -52,6 +53,10 @@ export type DatosAviso = {
   dudosas: Match[];
   mensaje: string | null;
   telefonoColega: string | null;
+  // Solo llamada (Juan, 2026-09-10): el colega pidió que lo contacten solo por
+  // llamada. Sin mensaje que mandar; el botón llama.
+  soloLlamada?: boolean;
+  telefonoLlamada?: string | null;
   motivo: string | null;
   porque: string | null;
   aprobada: boolean;
@@ -71,7 +76,7 @@ const haceCuanto = (iso: string) => {
 };
 
 export default function AvisoCelular({ datos, token }: { datos: DatosAviso; token: string }) {
-  const { senal, utiles, dudosas, mensaje, telefonoColega, porque, aprobada } = datos;
+  const { senal, utiles, dudosas, mensaje, telefonoColega, porque, aprobada, soloLlamada = false, telefonoLlamada = null } = datos;
   const [texto, setTexto] = useState(mensaje || "");
   const [gestion, setGestion] = useState<string | null>(senal.gestion);
   const [ocupado, setOcupado] = useState(false);
@@ -105,6 +110,17 @@ export default function AvisoCelular({ datos, token }: { datos: DatosAviso; toke
     window.location.href = `whatsapp://send?text=${encodeURIComponent(texto)}`;
   }
 
+  async function llamar() {
+    await registrar("envio");
+    if (telefonoLlamada) window.location.href = `tel:+${telefonoLlamada}`;
+  }
+
+  const telLegible = telefonoLlamada ? telefonoLlamada.replace(/^57/, "").replace(/(\d{3})(\d{3})(\d{4})/, "$1 $2 $3") : null;
+  // Con el número de pedido en el encabezado (mockup aprobado, Juan
+  // 2026-09-10): mismo dato que ve el asesor en /grupos, mismo lector
+  // (numeroPedido en @/lib/pedido) que usa el DM al colega.
+  const numero = numeroPedido(senal.texto_original);
+
   const nombre = primerNombre(senal.autor_nombre);
   const chips = [
     senal.operacion,
@@ -120,7 +136,11 @@ export default function AvisoCelular({ datos, token }: { datos: DatosAviso; toke
     <main className="mx-auto min-h-dvh max-w-md bg-white pb-40 text-slate-900">
       <header className="bg-gradient-to-br from-[#0b1526] to-[#15213a] px-5 pb-4 pt-5 text-slate-100">
         <div className="text-[11px] font-bold uppercase tracking-wider text-[#f2d58a]">
-          {aprobada ? "🚨 Aprobada por Sofi · sin salir" : "🎯 Oportunidad · para revisar"}
+          {soloLlamada
+            ? `📞 Pidió solo llamada${numero ? ` · Pedido N° ${numero}` : ""}`
+            : aprobada
+              ? "🚨 Aprobada por Sofi · sin salir"
+              : "🎯 Oportunidad · para revisar"}
         </div>
         <h1 className="font-display mt-1 text-lg font-extrabold leading-tight">
           {senal.autor_nombre || "Un colega"} busca {senal.tipo || "propiedad"}
@@ -131,7 +151,7 @@ export default function AvisoCelular({ datos, token }: { datos: DatosAviso; toke
         </div>
         {gestion ? (
           <div className="mt-2 inline-block rounded-full border border-emerald-300/50 bg-emerald-400/10 px-2 py-0.5 text-[11px] text-emerald-200">
-            ✅ {gestion === "envio" ? "Ya le escribiste" : "Marcado: no sirve"}
+            ✅ {gestion === "envio" ? (soloLlamada ? "Ya llamaste" : "Ya le escribiste") : "Marcado: no sirve"}
           </div>
         ) : (
           <div className="mt-2 inline-block rounded-full border border-[#d4a53a]/40 bg-[#d4a53a]/15 px-2 py-0.5 text-[11px] text-[#f2d58a]">
@@ -139,6 +159,12 @@ export default function AvisoCelular({ datos, token }: { datos: DatosAviso; toke
           </div>
         )}
       </header>
+
+      {soloLlamada && (
+        <section className="border-b border-amber-200 bg-amber-50 px-5 py-3">
+          <p className="text-sm font-semibold text-amber-900">📞 Este colega pidió contacto solo por llamada. No le escribas por WhatsApp.</p>
+        </section>
+      )}
 
       {porque && (
         <section className="border-b border-slate-200 px-5 py-3">
@@ -213,7 +239,7 @@ export default function AvisoCelular({ datos, token }: { datos: DatosAviso; toke
         </section>
       )}
 
-      {mensaje && (
+      {mensaje && !soloLlamada && (
         <section className="border-b border-slate-200 px-5 py-3">
           <p className="mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-400">El mensaje para {nombre}</p>
           <textarea
@@ -227,8 +253,18 @@ export default function AvisoCelular({ datos, token }: { datos: DatosAviso; toke
       )}
 
       <section className="px-5 py-3">
-        <p className="mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-400">Cómo se la mandás</p>
-        {telefonoColega ? (
+        <p className="mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-400">{soloLlamada ? "Contacto" : "Cómo se la mandás"}</p>
+        {soloLlamada ? (
+          telLegible ? (
+            <p className="text-sm text-slate-600">
+              Llamá a <b className="text-slate-900">{senal.autor_nombre || "el colega"}</b> al <b className="text-slate-900">{telLegible}</b>. Tené a mano el número de pedido: así es como pide la información.
+            </p>
+          ) : (
+            <p className="text-sm text-slate-600">
+              No tenemos su número: buscalo en <b className="text-slate-900">{senal.grupo_nombre || "el grupo"}</b> y llamá.
+            </p>
+          )
+        ) : telefonoColega ? (
           <p className="text-sm text-slate-600">
             <b className="text-slate-900">{senal.autor_nombre}</b> · {telefonoColega.replace(/^57/, "")}. Se abre el chat con el mensaje ya escrito; solo tocás enviar.
           </p>
@@ -245,14 +281,24 @@ export default function AvisoCelular({ datos, token }: { datos: DatosAviso; toke
       </section>
 
       <div className="fixed inset-x-0 bottom-0 mx-auto grid max-w-md gap-2 border-t border-slate-200 bg-white px-4 pb-5 pt-3">
-        {mensaje && (
+        {soloLlamada ? (
           <button
-            onClick={enviar}
-            disabled={ocupado}
+            onClick={llamar}
+            disabled={ocupado || !telefonoLlamada}
             className="rounded-2xl bg-[#25d366] px-4 py-3 text-[15px] font-bold text-[#0b3d22] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d4a53a] disabled:opacity-60"
           >
-            {telefonoColega ? "💬 Enviar por WhatsApp" : "📋 Copiar y abrir WhatsApp"}
+            📞 Llamar a {nombre}
           </button>
+        ) : (
+          mensaje && (
+            <button
+              onClick={enviar}
+              disabled={ocupado}
+              className="rounded-2xl bg-[#25d366] px-4 py-3 text-[15px] font-bold text-[#0b3d22] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d4a53a] disabled:opacity-60"
+            >
+              {telefonoColega ? "💬 Enviar por WhatsApp" : "📋 Copiar y abrir WhatsApp"}
+            </button>
+          )
         )}
         <button
           onClick={() => registrar("no_sirve")}
@@ -261,7 +307,7 @@ export default function AvisoCelular({ datos, token }: { datos: DatosAviso; toke
         >
           {gestion === "no_sirve" ? "Marcado como no sirve" : "No sirve para este colega"}
         </button>
-        <p className="text-center text-[11px] text-slate-400">Al tocar el botón verde queda registrado como gestionado.</p>
+        <p className="text-center text-[11px] text-slate-400">{soloLlamada ? "Al tocar Llamar queda registrado como gestionado." : "Al tocar el botón verde queda registrado como gestionado."}</p>
       </div>
     </main>
   );

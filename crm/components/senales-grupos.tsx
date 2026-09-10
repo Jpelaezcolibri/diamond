@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { fechaHora } from "@/lib/fecha";
 import { formatearArea, formatearPrecio, pluralAlcobas } from "@/lib/formato";
+import { numeroPedido } from "@/lib/pedido";
 
 export type Match = {
   fuente: string; // "diamond" (inventario propio) | "aliado" (red de colegas)
@@ -149,6 +150,8 @@ const MENSAJE_RESULTADO_DM: Record<string, string> = {
   // existe justamente para que una persona lo gaste a conciencia.
   cuota_whatsapp_agotada:
     "La línea agotó su cuota de mensajes de WhatsApp de este mes. No es un límite nuestro: hasta que arranque el próximo ciclo, WhatsApp los rechaza. Escribile a mano.",
+  // Solo llamada (Juan, 2026-09-10): permanente, ningún mensaje por ningún camino.
+  colega_solo_llamada: "Este colega pidió contacto solo por llamada: no se le mandó nada. Llamá vos.",
   error_envio: "El envío falló. Se puede volver a intentar.",
   ya_respondida: "Este pedido ya tiene una respuesta registrada.",
   no_es_demanda: "Esto no es un pedido (demanda).",
@@ -248,8 +251,15 @@ function borrador(s: Signal, matches: Match[]) {
     return `• ${encabezado}\n  ${ficha}${m.linkWasi ? `\n  ${m.linkWasi}` : ""}`;
   });
 
+  // A qué pedido le contestamos (Juan, 2026-09-10). Misma regla que
+  // src/groups/pedido.js#numeroPedido (fuente de verdad del bot): "pedido" +
+  // número, o el código C_647; nunca un # suelto. Vive en @/lib/pedido para
+  // que la comparta con el encabezado del aviso de solo-llamada.
+  const numero = numeroPedido(s.texto_original);
+  const referencia = numero ? `te respondo tu PEDIDO ${numero}` : "vi tu solicitud en el grupo";
+
   return (
-    `${quien}vi tu solicitud en el grupo. Tengo esto disponible que te puede servir:\n\n` +
+    `${quien}${referencia}. Tengo esto disponible que te puede servir:\n\n` +
     `${lineas.join("\n\n")}\n\n` +
     `Comisión compartida.`
   );

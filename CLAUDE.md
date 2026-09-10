@@ -28,7 +28,25 @@ Equipo: 1 dev (Juan) + Claude Code. Idioma de la app: español (Colombia).
 Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
 `docs:`, `config:`).
 
-## 2. Estado actual (2026-09-08)
+## 2. Estado actual (2026-09-10)
+
+- **Rama `colega-solo-llamada` (2026-09-10), lista y SIN desplegar.** Caso
+  Ángela Moscoso: pidió contacto solo por llamada, Sofi dijo "anotado" sin
+  herramienta y el radar le mandó un DM dos horas después. Ahora
+  `colegas_grupos.solo_llamada` (migración `2026-09-10_colega_solo_llamada.sql`,
+  **corrida y verificada por REST el 2026-09-10**; Ángela ya marcada) frena
+  todos los DM: `decidirDm`, los dos caminos manuales, citas y un candado en
+  `waha.enviarDm` (que ahora exige `orgId`). La marca se reconoce por lid,
+  teléfono (con `directorio_lids`) y el celular escrito en el pedido. Sofi
+  tiene `marcar_colega_solo_llamada` y `pedir_contacto_asesora` (el colega
+  que pide hablar con una persona le llega a la asesora en el momento, con
+  copia al escalado). Todo DM dice "te respondo tu PEDIDO N" o describe el
+  pedido (solo el 3,8 % trae número). Specs y plan en `docs/superpowers/`.
+- **La línea del radar es DaianaDiamond (301 188 0668) desde el 2026-09-10.**
+  Asesora principal = Daiana Zea (`RADAR_REVISOR_PHONE` y
+  `RADAR_VISITAS_ALERTA_TO` en Railway); `RADA-NATALIA` desvinculada;
+  Natalia Velez inactiva. El sistema asume UNA sola línea activa: con dos,
+  el DM manual, aprobar desde Sofi y la ventana de 24 h fallan en silencio.
 
 - **Línea de Natalia: código listo para que empiece a recibir respuestas,
   aún sin desplegar (2026-09-08, rama `linea-dm-lid`, sin mergear a `main`).**

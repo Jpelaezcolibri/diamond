@@ -144,3 +144,11 @@ test("un pendiente ya rechazado no cuenta como pendiente de aprobacion", async (
   const out = await executeTool("aprobar_pedido_radar", {}, ctxAsesor());
   assert.match(out, /No encuentro ningun pedido/);
 });
+
+test("colega solo llamada: le dice a la asesora que llame, no que escriba", async (t) => {
+  t.mock.method(vivo, "aprobarManual", async () => ({ resultado: "colega_solo_llamada", telefono: "573146399667" }));
+  const out = await executeTool("aprobar_pedido_radar", {}, ctxAsesor({ radarSignalId: "sig-1" }));
+  assert.match(out, /SOLO por llamada/);
+  assert.match(out, /\+573146399667/);
+  assert.doesNotMatch(out, /publicado/i);
+});

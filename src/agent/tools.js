@@ -16,6 +16,7 @@ const whatsappGroups = require("../data/whatsapp-groups");
 const { cruzar: cruzarGrupos } = require("../groups/match");
 const { plano } = require("../groups/texto");
 const mandatos = require("../data/mandatos");
+const colegas = require("../data/colegas");
 
 const TOOL_DEFINITIONS = [
   {
@@ -176,6 +177,28 @@ const TOOL_DEFINITIONS = [
         detalle: { type: "string", description: "Resto del pedido en pocas palabras (area, banos, garaje, urgencia)" },
       },
       required: ["contacto_nombre"],
+    },
+  },
+  {
+    name: "marcar_colega_solo_llamada",
+    description:
+      "Úsala SOLO con un colega de otra inmobiliaria que pide contacto únicamente por llamada, o que no le manden más mensajes. Deja la marca guardada: desde ese momento el radar nunca le escribe por WhatsApp y cada pedido suyo le llega a la asesora para que llame. No la uses con un cliente ni con un asesor de la casa.",
+    input_schema: {
+      type: "object",
+      properties: {
+        detalle: { type: "string", description: "Lo que pidió el colega, en sus palabras (ej. 'que llamen al 314..., no mensajes')" },
+      },
+    },
+  },
+  {
+    name: "pedir_contacto_asesora",
+    description:
+      "Úsala SOLO con un colega de otra inmobiliaria que pide hablar con una persona del equipo (una asesora, alguien real, una llamada). Le avisa en el momento a la asesora que atiende a los colegas para que se comunique, y te devuelve su nombre y celular para que se los pases. No la uses con un cliente (para eso está transferir_a_asesor) ni con un asesor de la casa.",
+    input_schema: {
+      type: "object",
+      properties: {
+        motivo: { type: "string", description: "Para qué quiere hablar, en pocas palabras (ej. 'coordinar la visita de mañana', 'la comisión de la ref 9702941')" },
+      },
     },
   },
   {
@@ -874,6 +897,14 @@ async function executeTool(name, input, ctx) {
     return rechazarPedidoRadar(input, ctx);
   }
 
+  if (name === "marcar_colega_solo_llamada") {
+    return marcarColegaSoloLlamada(input, ctx);
+  }
+
+  if (name === "pedir_contacto_asesora") {
+    return pedirContactoAsesora(input, ctx);
+  }
+
   return `Herramienta desconocida: ${name}`;
 }
 
@@ -1366,6 +1397,10 @@ async function aprobarPedidoRadar(input, ctx) {
     // veia el token crudo "carril_apagado" en vez de una frase.
     case "carril_apagado":
       return "No se publicó: el carril de amoblados está apagado ahora mismo (variable RADAR_AMOBLADO_ACTIVO en Railway) — nada sale solo por ese carril hasta que la actives.";
+    // SOLO LLAMADA (Juan, 2026-09-10): el colega pidio que lo contacten solo
+    // por llamada. No se mando nada y no se tiene que mandar.
+    case "colega_solo_llamada":
+      return `No se mandó nada: este colega pidió contacto SOLO por llamada.${r.telefono ? ` Llamá al +${r.telefono}.` : " Llamá vos."} No le escribas por WhatsApp.`;
     default:
       return `No se pudo publicar (${r.resultado}).`;
   }
@@ -1419,7 +1454,150 @@ async function rechazarPedidoRadar(input, ctx) {
   return "Listo, quedo registrado que no sirve. Gracias por responder — asi el radar no queda con dudas de que paso con este pedido.";
 }
 
+// El colega que pide que lo contacten SOLO por llamada (Juan, 2026-09-10).
+// Caso Angela Moscoso: Sofi le contesto "ya esta anotado" sin llamar ninguna
+// herramienta — no habia donde anotarlo — y dos horas despues el radar le
+// mando un DM. Esta herramienta guarda la marca de verdad (colegas_grupos.
+// solo_llamada, que frena todos los DM) y le avisa a la asesora principal del
+// radar, que desde ahi es quien llama.
+//
+// Si no se pudo guardar, el texto que vuelve le PROHIBE a Sofi decir
+// "anotado": es exactamente la mentira que origino esto. La asesora se entera
+// igual, con la aclaracion, para que no dependa de que el sistema lo haya
+// guardado.
+async function marcarColegaSoloLlamada(input, ctx) {
+  if (!ctx.colega) {
+    return "No aplica: esta herramienta es solo para un colega de otra inmobiliaria que pide contacto por llamada.";
+  }
+  const r = await colegas.marcarSoloLlamada(ctx.org.id, { telefono: ctx.lead.phone });
+  const nombre = (r.colega && r.colega.nombre) || ctx.colega.nombre || "Un colega";
+  const tel = `+${String(ctx.lead.phone || "").replace(/\D/g, "")}`;
+  const detalle = input && input.detalle ? `Lo dijo así: "${String(input.detalle).trim()}"` : null;
+
+  const texto = r.ok
+    ? [
+        `📞 ${nombre} pidió contacto SOLO por llamada.`,
+        ``,
+        `Desde ahora el radar no le escribe: cada pedido suyo te llega a vos para que llames al ${tel}.`,
+        detalle,
+      ]
+    : [
+        `📞 ${nombre} (${tel}) pidió contacto SOLO por llamada, pero NO pude guardar la marca en el sistema${r.motivo === "no_encontrado" ? " (no aparece entre los colegas de los grupos)" : ""}.`,
+        ``,
+        `Si el radar le escribe, es por esto. Llamá vos y avisale al administrador.`,
+        detalle,
+      ];
+
+  const asesora = await advisors.findAsesorPrincipalRadar(ctx.org).catch(() => null);
+  if (asesora && asesora.phone) {
+    // Require tardio (mismo motivo que avisarCitaAutoAgendada, arriba).
+    const mensajeAsesor = require("../lib/mensaje-asesor");
+    await mensajeAsesor
+      .enviarYRegistrar(ctx.org, String(asesora.phone).replace(/\D/g, ""), texto.filter((l) => l !== null).join("\n"))
+      .catch((e) => console.warn("[tools] No se pudo avisar el pedido de solo llamada:", e.message));
+  }
+
+  if (r.ok) {
+    return "Listo, quedó guardado: el radar ya no le escribe por WhatsApp y la asesora va a llamar. Confirmáselo con tus palabras, corto.";
+  }
+  return "NO se pudo guardar en el sistema. NO le digas que quedó anotado ni registrado: decile solamente que le pasaste el pedido a la asesora para que llame.";
+}
+
+// El colega que pide hablar con una persona (Juan, 2026-09-10). Caso real:
+// Santiago pregunto "¿Es posible hablar con alguien?", Sofi le dijo "te puedo
+// conectar con un asesor" y no le aviso a nadie — Daiana lo vio por su cuenta
+// en el CRM cuatro minutos despues. Esto avisa en el momento a la asesora
+// principal del radar con copia al escalado, el mismo patron que
+// armarAvisoCitaColega, y le devuelve a Sofi el nombre y el celular para que
+// se los pase. Si el aviso no salio, el texto le prohibe decir que aviso.
+//
+// Repetidos: un colega que insiste en el mismo rato no dispara un aviso por
+// mensaje. La marca vive en memoria del proceso (un reinicio la borra, y eso
+// solo puede costar un aviso de mas, nunca uno de menos) y se pone solo si el
+// aviso principal salio.
+const VENTANA_REPETIDO_CONTACTO_MS = 30 * 60 * 1000;
+const pedidosContactoRecientes = new Map();
+
+function celularLegible(telefono) {
+  const d = String(telefono || "").replace(/\D/g, "");
+  const n = d.length === 10 ? `57${d}` : d;
+  return n.length === 12 ? `+57 ${n.slice(2, 5)} ${n.slice(5, 8)} ${n.slice(8)}` : `+${n}`;
+}
+
+async function pedirContactoAsesora(input, ctx) {
+  if (!ctx.colega) {
+    return "No aplica: esta herramienta es solo para un colega de otra inmobiliaria. Con un cliente se usa transferir_a_asesor.";
+  }
+  const asesora = await advisors.findAsesorPrincipalRadar(ctx.org).catch(() => null);
+  if (!asesora || !asesora.phone) {
+    return "NO pude avisarle a nadie: no hay una asesora configurada para los colegas. NO le digas que ya le avisaste; decile que el equipo le escribe apenas pueda.";
+  }
+  const nombreAsesora = asesora.name || "la asesora";
+  const celularAsesora = celularLegible(asesora.phone);
+
+  const clave = `${ctx.org.id}:${ctx.lead.id}`;
+  const antes = pedidosContactoRecientes.get(clave);
+  if (antes && Date.now() - antes < VENTANA_REPETIDO_CONTACTO_MS) {
+    return `Ya le avisé a ${nombreAsesora} hace un rato; no hace falta otro aviso. Decile al colega que ya tiene el aviso y repetile el contacto: ${nombreAsesora}, ${celularAsesora}.`;
+  }
+
+  const telColega = String(ctx.lead.phone || "").replace(/\D/g, "");
+  const nombreColega = ctx.colega.nombre || ctx.lead.nombre || "Un colega";
+  // Solo `true` cambia el formato: esto es informacion para la asesora, no un
+  // envio al colega, asi que una consulta fallida no justifica afirmar que
+  // pidio solo llamadas.
+  const soloLlamada = await colegas.esSoloLlamada(ctx.org.id, { telefono: telColega }).catch(() => null);
+  const pedido = await groupSignals.buscarPorTelefono(ctx.org.id, telColega).catch(() => null);
+  const refs = pedido && Array.isArray(pedido.respuesta_refs) ? pedido.respuesta_refs.filter(Boolean) : [];
+  const { linkWhatsappEstricto } = require("../lib/contacto");
+  const contacto = soloLlamada === true
+    ? `📞 ${celularLegible(telColega)} — pidió contacto solo por llamada: llamá, no le escribas`
+    : linkWhatsappEstricto(telColega) || celularLegible(telColega);
+
+  const texto = [
+    `🙋 Un colega pide hablar con una asesora — comunicate ya`,
+    ``,
+    `Colega: ${nombreColega}`,
+    `Contacto: ${contacto}`,
+    input && input.motivo ? `Para qué: ${String(input.motivo).trim()}` : null,
+    pedido && pedido.texto_original
+      ? `Su último pedido: "${String(pedido.texto_original).replace(/\s+/g, " ").slice(0, 150)}"`
+      : null,
+    refs.length ? `Le respondimos: ${refs.map((r) => `Ref ${r}`).join(", ")}` : null,
+    ``,
+    `Lo pidió en el chat con Sofi. Es un negocio compartido con otra inmobiliaria, no un cliente propio.`,
+  ].filter((l) => l !== null).join("\n");
+
+  // Require tardio (mismo motivo que avisarCitaAutoAgendada, arriba).
+  const mensajeAsesor = require("../lib/mensaje-asesor");
+  const principal = await mensajeAsesor
+    .enviarYRegistrar(ctx.org, String(asesora.phone).replace(/\D/g, ""), texto)
+    .catch((e) => ({ ok: false, error: e.message }));
+
+  // Copia al escalado, como las citas de colega (armarAvisoCitaColega). Una
+  // copia que no sale nunca tumba el aviso principal.
+  const escalado = String(process.env.RADAR_ESCALADO_PHONE || "").replace(/\D/g, "");
+  if (escalado && !advisors.mismoTelefono(escalado, asesora.phone)) {
+    await mensajeAsesor
+      .enviarYRegistrar(ctx.org, escalado, texto)
+      .catch((e) => console.warn("[tools] No se pudo copiar al escalado el pedido de contacto:", e.message));
+  }
+
+  if (!principal || !principal.ok) {
+    console.warn(`[tools] No le llego a ${nombreAsesora} el pedido de contacto del colega:`, principal && principal.error);
+    return `NO le llegó el aviso a ${nombreAsesora} (WhatsApp lo rechazó). NO le digas al colega que ya le avisaste: pasale directamente el contacto, ${nombreAsesora}, ${celularAsesora}, para que se comunique directo.`;
+  }
+
+  pedidosContactoRecientes.set(clave, Date.now());
+  return `Listo: ya le avisé a ${nombreAsesora} y se va a comunicar con el colega. Decíselo con su nombre y su celular: ${nombreAsesora}, ${celularAsesora}.`;
+}
+
+function _resetPedidosContacto() {
+  pedidosContactoRecientes.clear();
+}
+
 module.exports = {
   TOOL_DEFINITIONS, executeTool, maybeCaptadorAlert, registrarDemandaColega, consultarRadarGrupos,
   registrarResultadoRadar, registrarResultadosCierre, aprobarPedidoRadar, rechazarPedidoRadar, registrarMandatoCompra,
+  marcarColegaSoloLlamada, pedirContactoAsesora, _resetPedidosContacto,
 };
