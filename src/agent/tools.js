@@ -16,6 +16,7 @@ const whatsappGroups = require("../data/whatsapp-groups");
 const { cruzar: cruzarGrupos } = require("../groups/match");
 const { plano } = require("../groups/texto");
 const mandatos = require("../data/mandatos");
+const colegas = require("../data/colegas");
 
 const TOOL_DEFINITIONS = [
   {
@@ -176,6 +177,17 @@ const TOOL_DEFINITIONS = [
         detalle: { type: "string", description: "Resto del pedido en pocas palabras (area, banos, garaje, urgencia)" },
       },
       required: ["contacto_nombre"],
+    },
+  },
+  {
+    name: "marcar_colega_solo_llamada",
+    description:
+      "Úsala SOLO con un colega de otra inmobiliaria que pide contacto únicamente por llamada, o que no le manden más mensajes. Deja la marca guardada: desde ese momento el radar nunca le escribe por WhatsApp y cada pedido suyo le llega a la asesora para que llame. No la uses con un cliente ni con un asesor de la casa.",
+    input_schema: {
+      type: "object",
+      properties: {
+        detalle: { type: "string", description: "Lo que pidió el colega, en sus palabras (ej. 'que la llamen al 314..., no mensajes')" },
+      },
     },
   },
   {
@@ -874,6 +886,10 @@ async function executeTool(name, input, ctx) {
     return rechazarPedidoRadar(input, ctx);
   }
 
+  if (name === "marcar_colega_solo_llamada") {
+    return marcarColegaSoloLlamada(input, ctx);
+  }
+
   return `Herramienta desconocida: ${name}`;
 }
 
@@ -1423,7 +1439,57 @@ async function rechazarPedidoRadar(input, ctx) {
   return "Listo, quedo registrado que no sirve. Gracias por responder — asi el radar no queda con dudas de que paso con este pedido.";
 }
 
+// El colega que pide que lo contacten SOLO por llamada (Juan, 2026-09-10).
+// Caso Angela Moscoso: Sofi le contesto "ya esta anotado" sin llamar ninguna
+// herramienta — no habia donde anotarlo — y dos horas despues el radar le
+// mando un DM. Esta herramienta guarda la marca de verdad (colegas_grupos.
+// solo_llamada, que frena todos los DM) y le avisa a la asesora principal del
+// radar, que desde ahi es quien llama.
+//
+// Si no se pudo guardar, el texto que vuelve le PROHIBE a Sofi decir
+// "anotado": es exactamente la mentira que origino esto. La asesora se entera
+// igual, con la aclaracion, para que no dependa de que el sistema lo haya
+// guardado.
+async function marcarColegaSoloLlamada(input, ctx) {
+  if (!ctx.colega) {
+    return "No aplica: esta herramienta es solo para un colega de otra inmobiliaria que pide contacto por llamada.";
+  }
+  const r = await colegas.marcarSoloLlamada(ctx.org.id, { telefono: ctx.lead.phone });
+  const nombre = (r.colega && r.colega.nombre) || ctx.colega.nombre || "Un colega";
+  const tel = `+${String(ctx.lead.phone || "").replace(/\D/g, "")}`;
+  const detalle = input && input.detalle ? `Lo dijo así: "${String(input.detalle).trim()}"` : null;
+
+  const texto = r.ok
+    ? [
+        `📞 ${nombre} pidió contacto SOLO por llamada.`,
+        ``,
+        `Desde ahora el radar no le escribe: cada pedido suyo te llega a vos para que llames al ${tel}.`,
+        detalle,
+      ]
+    : [
+        `📞 ${nombre} (${tel}) pidió contacto SOLO por llamada, pero NO pude guardar la marca en el sistema${r.motivo === "no_encontrado" ? " (no lo encuentro entre los colegas de los grupos)" : ""}.`,
+        ``,
+        `Si el radar le escribe, es por esto. Llamá vos y avisale al administrador.`,
+        detalle,
+      ];
+
+  const asesora = await advisors.findAsesorPrincipalRadar(ctx.org).catch(() => null);
+  if (asesora && asesora.phone) {
+    // Require tardio (mismo motivo que avisarCitaAutoAgendada, arriba).
+    const mensajeAsesor = require("../lib/mensaje-asesor");
+    await mensajeAsesor
+      .enviarYRegistrar(ctx.org, String(asesora.phone).replace(/\D/g, ""), texto.filter((l) => l !== null).join("\n"))
+      .catch((e) => console.warn("[tools] No se pudo avisar el pedido de solo llamada:", e.message));
+  }
+
+  if (r.ok) {
+    return "Listo, quedó guardado: el radar ya no le escribe por WhatsApp y la asesora va a llamar. Confirmáselo con tus palabras, corto.";
+  }
+  return "NO se pudo guardar en el sistema. NO le digas que quedó anotado ni registrado: decile solamente que le pasaste el pedido a la asesora para que llame.";
+}
+
 module.exports = {
   TOOL_DEFINITIONS, executeTool, maybeCaptadorAlert, registrarDemandaColega, consultarRadarGrupos,
   registrarResultadoRadar, registrarResultadosCierre, aprobarPedidoRadar, rechazarPedidoRadar, registrarMandatoCompra,
+  marcarColegaSoloLlamada,
 };
