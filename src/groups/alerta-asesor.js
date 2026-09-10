@@ -40,7 +40,7 @@
 
 const formato = require("../lib/formato");
 const { normalizarTitulo } = require("../lib/formato");
-const { linkWhatsappEstricto, linkContactoOficial, tocarNombreEnGrupo, telefonoEnTexto } = require("../lib/contacto");
+const { linkWhatsappEstricto, linkContactoOficial, tocarNombreEnGrupo, telefonoEnTexto, telefonoNormalizado } = require("../lib/contacto");
 const redactar = require("./redactar");
 // El pedido se describe en un solo lugar (2026-09-10): el DM al colega y este
 // aviso tienen que hablar del MISMO pedido. queBusca vivia aca; ahora es
@@ -238,6 +238,10 @@ const PORQUE = {
   // match de 98 con el interruptor apagado no puede contarse como "no llego
   // al puntaje". Nunca reusar el texto de carril_umbral aca.
   carril_apagado: "El carril de amoblados está apagado en este momento, así que ningún match sale solo por ese carril, sin importar el puntaje. Vos decidís si escribirle al colega.",
+  // SOLO LLAMADA (Juan, 2026-09-10): permanente, el colega no quiere mensajes.
+  // Copy neutro en genero: el nombre de WhatsApp no dice como se identifica.
+  colega_solo_llamada: "Este colega pidió contacto SOLO por llamada — nada de mensajes. El bot no le escribió.",
+  solo_llamada_no_verificable: "No pudimos confirmar si este colega acepta mensajes, así que el bot no le escribió.",
 };
 
 // Cuando Sofi APROBO y aun asi el bot no pudo escribirle al colega, el aviso
@@ -247,7 +251,25 @@ const PORQUE = {
 // bandeja es la unica perdida real de todo el radar.
 const URGENCIA = "Es una oportunidad YA APROBADA por Sofi: escribile vos con urgencia.";
 
+// Los motivos que convierten el aviso en un "LLAMAR" (Juan, 2026-09-10): ni
+// link de WhatsApp al colega, ni borrador para reenviar, ni invitacion a Sofi.
+const MOTIVOS_LLAMADA = new Set(["colega_solo_llamada", "solo_llamada_no_verificable"]);
+
+// El numero para MARCAR, legible: "+57 314 639 9667". Mismas tres fuentes que
+// contactoPara, en el mismo orden (directorio, autor, lo que firmo en el texto).
+function telefonoParaLlamar(telefonoColega, autorTelefono, textoOriginal) {
+  const d = telefonoNormalizado(telefonoColega) || telefonoNormalizado(autorTelefono) || telefonoEnTexto(textoOriginal);
+  if (!d) return null;
+  const n = d.length === 10 ? `57${d}` : d;
+  return `+57 ${n.slice(2, 5)} ${n.slice(5, 8)} ${n.slice(8)}`;
+}
+
 function porqueNoSalioSolo(motivo, hayUtiles) {
+  if (MOTIVOS_LLAMADA.has(motivo)) {
+    return hayUtiles
+      ? `📞 ${PORQUE[motivo]} Es una oportunidad YA APROBADA por Sofi: llamá con urgencia.`
+      : `📞 ${PORQUE[motivo]} Sofi no aprobó ninguna del todo: decidí vos si vale la pena llamar.`;
+  }
   if (!hayUtiles) {
     return "Sofi no aprobó ninguna del todo, así que no le escribió nada al colega. Estas quedan para que decidas vos.";
   }
@@ -406,6 +428,18 @@ function construir(
   const quien = senal.autor_nombre || "un colega";
   const contactoTexto = contactoPara(telefonoColega, senal.autor_telefono, quien, senal.texto_original);
 
+  // SOLO LLAMADA (Juan, 2026-09-10) y el numero de pedido (su forma de pedir
+  // informacion es ese numero): la asesora lo tiene que ver en la primera
+  // linea, y con el telefono para marcar en vez de un link para escribirle.
+  const soloLlamada = MOTIVOS_LLAMADA.has(motivoDm);
+  const numero = numeroPedido(senal.texto_original);
+  const telLlamada = soloLlamada ? telefonoParaLlamar(telefonoColega, senal.autor_telefono, senal.texto_original) : null;
+  const contactoLinea = soloLlamada
+    ? telLlamada
+      ? `📞 ${telLlamada} — llamá, no le escribas`
+      : `no tenemos su número — buscalo en el grupo "${senal.grupo_nombre || "del pedido"}" y llamá`
+    : contactoTexto;
+
   const busca = queBusca(senal);
   // `utilesSofi.length > 0`, NO `utiles.length > 0` (fix critico): "hay algo
   // aprobado por Sofi" no es lo mismo que "hay algo ofrecible". Si se usara
@@ -424,12 +458,19 @@ function construir(
   // contra `utilesSofi` unas lineas mas arriba, porque ahi la pregunta es
   // otra: si Sofi aprobo o no.
   const aprobadaSinSalir = utiles.length > 0 && Boolean(porque);
+  const titulo = soloLlamada
+    ? `📞 LLAMAR — ${numero ? `Pedido N° ${numero}` : "pedido de un colega"}`
+    : aprobadaSinSalir
+      ? `🚨🚨 OPORTUNIDAD APROBADA — el bot NO pudo escribirle al colega`
+      : `🎯 Oportunidad en un grupo`;
   const cabecera = [
-    aprobadaSinSalir ? `🚨🚨 OPORTUNIDAD APROBADA — el bot NO pudo escribirle al colega` : `🎯 Oportunidad en un grupo`,
+    titulo,
     ``,
     `Grupo: ${senal.grupo_nombre || "sin nombre"}`,
     `Colega: ${quien}`,
-    `Contacto: ${contactoTexto}`,
+    // En el aviso de llamada el numero ya va en la primera linea.
+    ...(numero && !soloLlamada ? [`Pedido: N° ${numero}`] : []),
+    `Contacto: ${contactoLinea}`,
     // El link (Juan, 2026-09-02, opcion D): arriba, antes del pedido, para
     // que sea lo primero que toca. Lo esencial sigue inline: si un dia no le
     // abre, no pierde el negocio por una metrica.
@@ -511,7 +552,7 @@ function construir(
   // nadie mas que un humano puede escribirle al colega -- se le entrega el
   // texto YA armado. Con telefono resuelto no hace falta: la asesora ya
   // tiene el link directo al privado arriba, en `Contacto:`.
-  const mensajeListo = utiles.length > 0 && !telefonoResuelto(telefonoColega, senal.autor_telefono)
+  const mensajeListo = !soloLlamada && utiles.length > 0 && !telefonoResuelto(telefonoColega, senal.autor_telefono)
     ? mensajeListoParaReenviar(senal, veredicto, utiles, org, aclaracionesColega)
     : null;
   const bloqueReenviar = mensajeListo
@@ -527,7 +568,8 @@ function construir(
   // trae su propia invitacion a escribirle a Sofi (viene de
   // redactar.js#mensajeGrupo). Agregarla aparte fue justo lo que hizo que un
   // aviso de 6 propiedades pasara el limite de 4096 caracteres de Meta.
-  const linkSofi = mensajeListo ? null : linkContactoOficial(org);
+  // Al colega "solo llamada" no se lo invita a escribirle a nadie.
+  const linkSofi = mensajeListo || soloLlamada ? null : linkContactoOficial(org);
   const bloqueSofi = linkSofi
     ? [
         ``,
