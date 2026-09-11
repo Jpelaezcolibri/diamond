@@ -981,7 +981,12 @@ async function executeTool(name, input, ctx) {
       confirmada_at: new Date().toISOString(),
       confirmada_por: ctx.advisor.name,
     };
-    await leads.update(lead.id, { cita });
+    try {
+      await leads.update(lead.id, { cita });
+    } catch (e) {
+      console.warn("[tools] No se pudo persistir la confirmacion de la cita:", e.message);
+      return "No pude confirmar la cita en el sistema ahorita, intentá de nuevo.";
+    }
 
     // AVISO AL CLIENTE/COLEGA, SIEMPRE POR LA LINEA OFICIAL (2026-09-11):
     // nunca por WAHA -- esta cita puede ser de un cliente final que nunca
@@ -993,7 +998,10 @@ async function executeTool(name, input, ctx) {
     const canalWhatsapp = require("../channels/whatsapp");
     const esColega = lead.source === "colega";
     const soloLlamada = esColega
-      ? await colegas.esSoloLlamada(ctx.org.id, { telefono: lead.phone }).catch(() => null)
+      ? await colegas.esSoloLlamada(ctx.org.id, { telefono: lead.phone }).catch((e) => {
+          console.warn("[tools] No se pudo verificar si el colega es solo-llamada:", e.message);
+          return null;
+        })
       : false;
 
     const fechaHora = formatCitaFechaHora(cita.fecha_hora);
@@ -1008,7 +1016,10 @@ async function executeTool(name, input, ctx) {
       return `Confirmada en el sistema la cita con ${quien}${refLinea} para ${cuando} — pidió que lo contacten solo por llamada, así que no le escribí: avisale vos por llamada.`;
     }
 
-    const envio = await canalWhatsapp.sendWhatsApp(ctx.org, lead.phone, textoCliente).catch((e) => ({ ok: false, error: e.message }));
+    const envio = await canalWhatsapp.sendWhatsApp(ctx.org, lead.phone, textoCliente).catch((e) => {
+      console.warn("[tools] No se pudo enviar el aviso de confirmacion de cita por WhatsApp:", e.message);
+      return { ok: false, error: e.message };
+    });
     if (envio && envio.ok) {
       return `Confirmada la cita con ${quien}${refLinea} para ${cuando}. Ya le avisé por WhatsApp.`;
     }

@@ -1,4 +1,4 @@
-const { test, beforeEach } = require("node:test");
+const { test } = require("node:test");
 const assert = require("node:assert");
 
 const { executeTool } = require("../src/agent/tools");
