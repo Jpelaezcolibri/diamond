@@ -312,6 +312,12 @@ const TOOL_DEFINITIONS = [
       },
     },
   },
+  {
+    name: "confirmar_cita",
+    description:
+      "SOLO para un asesor de la casa (ctx.advisor) confirmando SU PROPIA cita PROPUESTA. Usala cuando el asesor responda algo como 'OK CONFIRMADA', 'confirmado', 'dale, confirmada' a un aviso de cita, o cuando proponga otra hora tras ver el aviso. Busca sus citas propuestas mas proximas: si hay una sola, la confirma y avisa al cliente/colega; si hay varias, te devuelve la lista para que le preguntes cual.",
+    input_schema: { type: "object", properties: {} },
+  },
 ];
 
 // Si la propiedad de interes tiene captador, arma el aviso inmediato para su
@@ -937,6 +943,76 @@ async function executeTool(name, input, ctx) {
 
   if (name === "pedir_contacto_asesora") {
     return pedirContactoAsesora(input, ctx);
+  }
+
+  if (name === "confirmar_cita") {
+    // GATE (2026-09-11): esta herramienta SOLO existe para que un asesor
+    // confirme SU propia cita -- ctx.advisor se resuelve en engine.js igual
+    // que ctx.colega. Sin esto, cualquier cliente podria pedirle a Sofi que
+    // "confirme" algo que nadie de la casa reviso.
+    if (!ctx.advisor) {
+      return "Esta herramienta es solo para un asesor de la casa confirmando su propia cita.";
+    }
+    let pendientes;
+    try {
+      pendientes = await appointments.citasPendientesDeConfirmar(ctx.org.id, ctx.advisor.auth_user_id);
+    } catch (e) {
+      console.warn("[tools] No se pudieron leer las citas pendientes de confirmar:", e.message);
+      return "No pude leer tus citas pendientes ahorita. Intenta de nuevo en un momento.";
+    }
+    if (pendientes.length === 0) {
+      return "No tenes ninguna cita PROPUESTA pendiente de confirmar ahorita.";
+    }
+    if (pendientes.length > 1) {
+      const lista = pendientes
+        .map((l, i) => {
+          const fh = formatCitaFechaHora(l.cita.fecha_hora);
+          const cuando = fh ? `${fh.fecha} a las ${fh.hora}` : l.cita.descripcion || "sin fecha";
+          return `${i + 1}. ${l.nombre || `+${l.phone}`} — ${cuando}`;
+        })
+        .join("\n");
+      return `Tenes ${pendientes.length} citas propuestas pendientes. Preguntale cual es, y volve a contarme con mas detalle (nombre o fecha) para identificarla:\n${lista}`;
+    }
+
+    const lead = pendientes[0];
+    const cita = {
+      ...lead.cita,
+      estado: "confirmada",
+      confirmada_at: new Date().toISOString(),
+      confirmada_por: ctx.advisor.name,
+    };
+    await leads.update(lead.id, { cita });
+
+    // AVISO AL CLIENTE/COLEGA, SIEMPRE POR LA LINEA OFICIAL (2026-09-11):
+    // nunca por WAHA -- esta cita puede ser de un cliente final que nunca
+    // estuvo en un grupo. Un colega marcado "solo llamada" no recibe nada:
+    // se le pide al asesor que lo llame. Require tardio del canal (mismo
+    // motivo que src/channels/whatsapp.js#procesarBotonRadar con
+    // ../agent/tools): channels/whatsapp.js -> agent/engine.js -> este
+    // archivo forma un ciclo si se requiere arriba, al tope del modulo.
+    const canalWhatsapp = require("../channels/whatsapp");
+    const esColega = lead.source === "colega";
+    const soloLlamada = esColega
+      ? await colegas.esSoloLlamada(ctx.org.id, { telefono: lead.phone }).catch(() => null)
+      : false;
+
+    const fechaHora = formatCitaFechaHora(cita.fecha_hora);
+    const cuando = fechaHora ? `del ${fechaHora.fecha} a las ${fechaHora.hora}` : cita.descripcion || "acordada";
+    const refLinea = cita.ref ? ` a la ref ${cita.ref}` : "";
+    const textoCliente = `Tu visita ${cuando}${refLinea} quedó CONFIRMADA. Te recibe ${ctx.advisor.name}${
+      ctx.advisor.phone ? `, +${ctx.advisor.phone}` : ""
+    }.`;
+
+    const quien = lead.nombre || `+${lead.phone}`;
+    if (soloLlamada !== false) {
+      return `Confirmada en el sistema la cita con ${quien}${refLinea} para ${cuando} — pidió que lo contacten solo por llamada, así que no le escribí: avisale vos por llamada.`;
+    }
+
+    const envio = await canalWhatsapp.sendWhatsApp(ctx.org, lead.phone, textoCliente).catch((e) => ({ ok: false, error: e.message }));
+    if (envio && envio.ok) {
+      return `Confirmada la cita con ${quien}${refLinea} para ${cuando}. Ya le avisé por WhatsApp.`;
+    }
+    return `Confirmada en el sistema la cita con ${quien}${refLinea} para ${cuando}, pero no le pude avisar por acá (probablemente la ventana de 24h está cerrada) — avisale vos.`;
   }
 
   return `Herramienta desconocida: ${name}`;
