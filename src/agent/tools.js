@@ -708,8 +708,14 @@ async function executeTool(name, input, ctx) {
     // transferir_a_asesor) y validar SU agenda antes de confirmar. Sin
     // fecha_hora (cliente vago, sin proximo_disponible) no hay nada que
     // validar: se guarda como texto, como siempre.
+    // Declarada en el scope de la funcion (no solo del if/else if de abajo)
+    // para que la logica del coordinador, mas adelante, reuse este MISMO
+    // asesor resuelto en vez de volver a llamar a findAsesorPrincipalRadar
+    // (finding de code review, 2026-09-11): dos llamadas identicas podrian
+    // en teoria devolver personas distintas y desalinear a quien se le avisa
+    // de quien se le dice al colega que confirme.
+    let advisor = null;
     if (cita.fecha_hora) {
-      let advisor = null;
       try {
         advisor = await resolveLeadAdvisor(ctx, especialidad);
       } catch (e) {
@@ -750,7 +756,7 @@ async function executeTool(name, input, ctx) {
       // no hay un segundo momento en el que esta cita le llegue a alguien —
       // se perderia entera. Sin fecha_hora no hay agenda que validar: solo se
       // resuelve a quien avisarle. (Juan, 2026-09-04)
-      let advisor = null;
+      advisor = null;
       try {
         advisor = await resolveLeadAdvisor(ctx, especialidad);
       } catch (e) {
@@ -790,11 +796,16 @@ async function executeTool(name, input, ctx) {
     // linea de Natalia (invariante de citas-colega.test.js, Juan 2026-09-04) y
     // el texto que le llega a Sofi para el cliente ni siquiera nombra al
     // coordinador, asi que resolverlo ahi seria una consulta desperdiciada.
+    // Reusa el MISMO asesor ya resuelto arriba (el que quedo estampado en la
+    // cita y notificado) en vez de volver a llamar a findAsesorPrincipalRadar
+    // -- solo si esa resolucion fallo (advisor null) se repite la consulta,
+    // igual que antes de este fix (code review, 2026-09-11).
     const coordinador = ctx.appointmentAlert && ctx.colega
-      ? await advisors.findAsesorPrincipalRadar(ctx.org).catch((e) => {
+      ? advisor ||
+        (await advisors.findAsesorPrincipalRadar(ctx.org).catch((e) => {
           console.warn("[tools] No se pudo resolver el coordinador de visitas:", e.message);
           return null;
-        })
+        }))
       : null;
     const notificado = ctx.appointmentAlert
       ? " El asesor ya fue notificado, pero TODAVIA NO CONFIRMO la cita."
