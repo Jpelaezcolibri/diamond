@@ -4,7 +4,9 @@
 // src/data/*.
 const { test } = require("node:test");
 const assert = require("node:assert");
-const { dentroDeHorario, hayChoque, DEFAULT_HORARIO } = require("../src/data/appointments");
+const appointments = require("../src/data/appointments");
+const memory = require("../src/data/memory");
+const { dentroDeHorario, hayChoque, DEFAULT_HORARIO } = appointments;
 
 // 2026-07-23 es JUEVES. Horas en offset Colombia (-05:00).
 const juevesRef = (hhmm) => `2026-07-23T${hhmm}:00-05:00`;
@@ -111,4 +113,26 @@ test("una cita sin estado sigue bloqueando", async () => {
   const cuando = "2026-09-10T15:00:00-05:00";
   const vieja = [{ id: "lead-1", cita: { advisor_id: advisorId, fecha_hora: cuando } }];
   assert.strictEqual(appointments.hayChoque(vieja, advisorId, cuando), true);
+});
+
+// ── citasPendientesDeConfirmar ─────────────────────────────────────────────
+
+test("citasPendientesDeConfirmar: solo las propuesta del asesor dado, ordenadas por fecha", async () => {
+  memory.leads.length = 0;
+  memory.leads.push(
+    { id: "l1", org_id: "org-1", nombre: "Sebastian", phone: "573001111111", source: "whatsapp", cita: { estado: "propuesta", fecha_hora: "2026-09-12T15:00:00-05:00", advisor_id: "adv-catherine" } },
+    { id: "l2", org_id: "org-1", nombre: "Otro", phone: "573002222222", source: "whatsapp", cita: { estado: "propuesta", fecha_hora: "2026-09-12T10:00:00-05:00", advisor_id: "adv-catherine" } },
+    { id: "l3", org_id: "org-1", nombre: "Ya confirmado", phone: "573003333333", source: "whatsapp", cita: { estado: "confirmada", fecha_hora: "2026-09-12T09:00:00-05:00", advisor_id: "adv-catherine" } },
+    { id: "l4", org_id: "org-1", nombre: "De otro asesor", phone: "573004444444", source: "whatsapp", cita: { estado: "propuesta", fecha_hora: "2026-09-12T08:00:00-05:00", advisor_id: "adv-daiana" } }
+  );
+
+  const r = await appointments.citasPendientesDeConfirmar("org-1", "adv-catherine");
+
+  assert.deepStrictEqual(r.map((l) => l.id), ["l2", "l1"]);
+});
+
+test("citasPendientesDeConfirmar: sin advisorId, lista vacia", async () => {
+  memory.leads.length = 0;
+  const r = await appointments.citasPendientesDeConfirmar("org-1", null);
+  assert.deepStrictEqual(r, []);
 });

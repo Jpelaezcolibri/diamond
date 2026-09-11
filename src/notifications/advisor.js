@@ -275,7 +275,11 @@ function buildAppointmentAlert(advisor, lead, cita) {
   const idioma = idiomaLine(lead) ? `\n${idiomaLine(lead)}` : "";
   const calLink = buildCalendarLink(cita, lead);
   const cal = calLink ? `\nAgendar en tu calendario: ${calLink}` : "";
-  return `Nueva cita agendada!\nTienes ${tipoLabel} con ${clienteNombre}${clienteTelefono} ${cuando}.${inmueble}${idioma}${cal}`;
+  // CONFIRMACION DE VISITAS (2026-09-11): la cita todavia esta PROPUESTA -- sin
+  // esto, Sofi ya le habia dicho "confirmada" al cliente sin que nadie de la
+  // casa la hubiera visto. Respondele a Sofi con "OK CONFIRMADA" para que
+  // confirmar_cita la pase a confirmada y avise al cliente.
+  return `Nueva cita PROPUESTA!\nTienes ${tipoLabel} con ${clienteNombre}${clienteTelefono} ${cuando}.${inmueble}${idioma}${cal}\n\nRespondé *OK CONFIRMADA* para confirmarla, o decime otra hora.`;
 }
 
 // Aviso de una visita que pidio un COLEGA de otra inmobiliaria — hermano de
@@ -359,6 +363,8 @@ async function buildColegaAppointmentAlert({ org, colega, lead, cita, ref }) {
     "",
     calLink ? `Agendar en tu calendario: ${calLink}` : null,
     "Coordinala vos con el colega. Si se cierra, la comision se comparte y los terminos los acuerdan entre ustedes.",
+    "",
+    "Respondé *OK CONFIRMADA* para confirmarla, o decime otra hora.",
   ]
     .filter((l) => l !== null)
     .join("\n");

@@ -50,3 +50,28 @@ implementación** (rama nueva, después de desplegar `colega-solo-llamada`).
 Multi-tenant (nombres y teléfonos desde `advisors`); copy neutro en género;
 el aviso al colega no sale por la línea del radar (usa la oficial), y respeta
 "solo llamada".
+
+## 4. Addendum 2026-09-11 — a quién va la cita
+
+Juan: *"esto solo se confirma por WhatsApp con el asesor, sofi solo hace una
+previa pero la cita tiene que ir al asesor para validar disponibilidad,
+siempre las citas van al número de Daiana que tiene la ventana abierta"*.
+
+Caso que lo disparó: la visita de Sebastián Velásquez (11-sep, 3:00 p. m.)
+cayó en la rotación de transferencias. El aviso le llegó a Catherine, que
+tenía la ventana cerrada hacía 142 h, y se perdió sin que nada lo dijera.
+Además, Sofi le dijo al cliente "queda confirmada".
+
+1. **Toda cita, de cliente o de colega, va a quien coordina las visitas**
+   (`advisors.findAsesorPrincipalRadar`). Nunca va a la rotación.
+2. **El aviso sale con `entregarConRespaldo`.** Primero va al principal. Si
+   la ventana está cerrada, va a `RADAR_ESCALADO_PHONE`, que es la segunda
+   línea de quien coordina. Esto reemplaza las copias del 2026-09-04.
+3. **`proximo_disponible` se quita.** Sofi pregunta el día y la hora y nunca
+   escoge un espacio de la agenda.
+4. **Una franja no se convierte en hora.** Si el cliente dice "en la tarde",
+   Sofi le pregunta la hora exacta.
+5. **Configuración en producción, aplicada el 2026-09-11** con el sí de Juan:
+   - Daiana tiene `recibe_transferencias = true` y Catherine `false`.
+   - Hay una fila nueva, "Daiana Zea (línea 2)", con el 573001878024.
+   - `RADAR_ESCALADO_PHONE` es 573001878024.

@@ -109,4 +109,27 @@ async function claimAppointmentReminder(leadId) {
   return data === true;
 }
 
-module.exports = { findOrCreate, findById, update, claimFollowup, claimAppointmentReminder };
+// Citas PROPUESTA vencidas hace mas de `silenceMin` sin recordatorio todavia
+// (src/scheduler/citas-recordatorio.js). Volumen bajo, mismo criterio que
+// appointments.js#citasDeLaOrg: se trae y se filtra en JS.
+async function listConCitasPropuestasVencidas(silenceMin) {
+  const corteMs = Date.now() - silenceMin * 60 * 1000;
+  const citasData = require("./citas");
+  const filtro = (l) => {
+    const c = l.cita;
+    if (!c || citasData.estadoDe(c) !== "propuesta") return false;
+    if (c.recordatorio_confirmacion_enviado) return false;
+    const creada = new Date(c.creada_at || 0).getTime();
+    return !isNaN(creada) && creada <= corteMs;
+  };
+  if (!supabase) return memory.leads.filter(filtro);
+  const { data, error } = await supabase
+    .from("leads")
+    .select("id, org_id, nombre, phone, source, cita")
+    .not("cita", "is", null)
+    .limit(500);
+  if (error) throw error;
+  return (data || []).filter(filtro);
+}
+
+module.exports = { findOrCreate, findById, update, claimFollowup, claimAppointmentReminder, listConCitasPropuestasVencidas };

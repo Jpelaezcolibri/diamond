@@ -56,12 +56,27 @@ async function entregarConRespaldo(org, principal, texto) {
     return { ok: false, advisor: null, suplente: false, error };
   }
 
+  // EL RESPALDO CONFIGURADO VA PRIMERO (Juan, 2026-09-11): "el principal es
+  // el que tenemos con la automatizacion de la ventana abierta y luego al otro
+  // numero". RADAR_ESCALADO_PHONE (la segunda linea de quien coordina) va antes
+  // que el resto del equipo: con todo dirigido a una sola asesora, la rotacion
+  // ya no tiene a nadie mas, y sin esto el aviso se perdia igual. Se resuelve
+  // a su fila de advisors para que quien lo recibio quede identificado.
+  const suplentes = [];
+  const escalado = soloDigitos(process.env.RADAR_ESCALADO_PHONE);
+  if (escalado && escalado !== telPrincipal) {
+    const fila = await advisors.findByPhone(org.id, escalado).catch(() => null);
+    suplentes.push(fila || { id: null, name: null, phone: escalado });
+  }
   const equipo = await advisors
     .listElegibles(org.id, { especialidades: ["venta"] })
     .catch(() => []);
-  const suplentes = equipo.filter(
-    (a) => a.id !== (principal && principal.id) && soloDigitos(a.phone) && soloDigitos(a.phone) !== telPrincipal
-  );
+  for (const a of equipo) {
+    const tel = soloDigitos(a.phone);
+    if (a.id === (principal && principal.id) || !tel || tel === telPrincipal) continue;
+    if (suplentes.some((s) => soloDigitos(s.phone) === tel)) continue;
+    suplentes.push(a);
+  }
 
   for (const s of suplentes) {
     const aviso = [

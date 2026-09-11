@@ -79,23 +79,18 @@ const TOOL_DEFINITIONS = [
   {
     name: "agendar_cita",
     description:
-      "Registra la cita o preferencia de contacto del cliente con el asesor (dia y hora). Usala cuando el cliente indique cuando quiere que lo contacten, cuando quiere visitar un inmueble, o cuando agenda una asesoria (ej para vender). Si das fecha y hora concretas, el sistema valida la agenda del asesor (horario laboral y que no haya otra cita a esa hora): si el resultado dice que NO se pudo agendar, pidele al cliente otro dia u hora y vuelve a intentar — no insistas con el mismo horario ni inventes horas libres. Llamala ANTES de transferir_a_asesor cuando el cliente ya dio dia/hora, para que el asesor reciba todo junto. Si el cliente PREGUNTA cuando se puede ver (sin proponer el el mismo un dia/hora — ej '¿cuando se puede ver?', 'quiero verlo ya'), usa proximo_disponible=true en vez de preguntarle que dia le queda mejor: el sistema busca y agenda el primer espacio libre de una, y vos se lo confirmas.",
+      "Registra la SOLICITUD de cita del cliente (el dia y la hora que el pidio). Usala cuando el cliente diga cuando quiere que lo contacten, cuando quiere visitar un inmueble, o cuando agenda una asesoria (ej para vender). La cita queda SOLICITADA, no confirmada: le llega a quien coordina las visitas, que valida la disponibilidad y la confirma por WhatsApp. Si el resultado dice que NO se pudo agendar (fuera de horario o choque), pidele al cliente otro dia u hora y vuelve a intentar — no insistas con el mismo horario ni inventes horas libres. Llamala ANTES de transferir_a_asesor cuando el cliente ya dio dia/hora, para que el asesor reciba todo junto. Si el cliente pregunta cuando se puede ver sin proponer nada, preguntale que dia y a que hora le sirve: vos no escoges un espacio de la agenda.",
     input_schema: {
       type: "object",
       properties: {
         descripcion: {
           type: "string",
-          description: "La preferencia tal como la dijo el cliente, ej 'manana a las 8 am', 'el jueves en la tarde', 'este fin de semana'. Si usas proximo_disponible, poné algo como 'quiere ver la propiedad lo antes posible'.",
+          description: "La preferencia tal como la dijo el cliente, ej 'manana a las 8 am', 'el jueves a las 3 pm'.",
         },
         fecha_hora_iso: {
           type: "string",
           description:
-            "Fecha y hora en formato ISO 8601 con zona horaria de Colombia (-05:00), calculada a partir de la fecha y hora ACTUAL que se te indica en el contexto. Ej '2026-07-05T08:00:00-05:00'. Si el cliente fue vago (ej 'la otra semana') y no puedes fijar una hora exacta, omite este campo. No la mandes junto con proximo_disponible — son excluyentes.",
-        },
-        proximo_disponible: {
-          type: "boolean",
-          description:
-            "true cuando el cliente pregunta por ver la propiedad (o ser contactado) SIN proponer el un dia/hora concreto — el sistema busca el primer espacio libre en la agenda del asesor y lo agenda de una, sin preguntarle al cliente que dia prefiere primero. Omite fecha_hora_iso si usas esto.",
+            "Fecha y hora en formato ISO 8601 con zona horaria de Colombia (-05:00), calculada a partir de la fecha y hora ACTUAL que se te indica en el contexto. Ej '2026-07-05T08:00:00-05:00'. Si el cliente dio una franja y no una hora ('manana', 'en la tarde', 'la otra semana'), no la inventes: preguntale la hora antes de registrarla, u omite este campo si no la quiere dar.",
         },
         tipo: {
           type: "string",
@@ -312,6 +307,12 @@ const TOOL_DEFINITIONS = [
       },
     },
   },
+  {
+    name: "confirmar_cita",
+    description:
+      "SOLO para un asesor de la casa (ctx.advisor) confirmando SU PROPIA cita PROPUESTA. Usala cuando el asesor responda algo como 'OK CONFIRMADA', 'confirmado', 'dale, confirmada' a un aviso de cita, o cuando proponga otra hora tras ver el aviso. Busca sus citas propuestas mas proximas: si hay una sola, la confirma y avisa al cliente/colega; si hay varias, te devuelve la lista para que le preguntes cual.",
+    input_schema: { type: "object", properties: {} },
+  },
 ];
 
 // Si la propiedad de interes tiene captador, arma el aviso inmediato para su
@@ -347,7 +348,9 @@ async function maybeCaptadorAlert(ctx, property) {
 // 2. Asesor ya estampado en la cita — con la rotacion uno a uno, la cita y la
 //    transferencia deben caer en el MISMO asesor.
 // 3. Rotacion por especialidad (findForTransfer).
-// Lo usan agendar_cita y transferir_a_asesor para no divergir entre si.
+// Lo usa transferir_a_asesor. agendar_cita NO (Juan, 2026-09-11): toda cita
+// va a quien coordina las visitas (findAsesorPrincipalRadar), nunca a esta
+// rotacion.
 async function resolveLeadAdvisor(ctx, especialidad) {
   // COLEGA (Juan, 2026-09-04): "que todo llegue a Natalia... natalia sera la
   // encargada de todo en esa linea". Una visita que pide un colega de otra
@@ -380,19 +383,15 @@ async function resolveLeadAdvisor(ctx, especialidad) {
   return advisors.findForTransfer(ctx.org, especialidad);
 }
 
-// El aviso de una cita que pidio un COLEGA (Juan, 2026-09-04): va a la
-// asesora principal de la linea del gremio, con copia al escalado. Devuelve el
-// mismo shape de siempre ({advisorPhone, advisorAlert}) mas `copias`, para que
-// un canal que no conozca el campo siga funcionando igual.
+// El aviso de una cita que pidio un COLEGA (Juan, 2026-09-04): va a quien
+// coordina las visitas, con la ficha de la propiedad. Mismo shape que el aviso
+// de un cliente ({advisorPhone, advisorName, advisorId, advisorAlert}): el
+// canal lo entrega con respaldo (src/lib/entrega-asesor.js).
 //
-// RADAR_ESCALADO_PHONE se lee en cada llamada, no al cargar el modulo: los
-// telefonos de la linea se configuran en Railway y este archivo se carga una
-// sola vez por proceso. Si esta vacia, el aviso principal sale igual — una
-// copia que no se puede mandar nunca puede tumbar el aviso.
+// Sin copias desde 2026-09-11 (Juan: "el principal es el que tenemos con la
+// automatizacion de la ventana abierta y luego al otro numero"): el segundo
+// numero recibe lo que el primero no pudo, no una copia de todo.
 async function armarAvisoCitaColega(ctx, advisor, cita, ref) {
-  const escalado = String(process.env.RADAR_ESCALADO_PHONE || "").replace(/\D/g, "");
-  const copias =
-    escalado && !advisors.mismoTelefono(escalado, advisor.phone) ? [escalado] : [];
   const advisorAlert = await buildColegaAppointmentAlert({
     org: ctx.org,
     colega: ctx.colega,
@@ -400,40 +399,7 @@ async function armarAvisoCitaColega(ctx, advisor, cita, ref) {
     cita,
     ref,
   });
-  return { advisorPhone: advisor.phone, advisorAlert, copias };
-}
-
-// ALERTA DE CITA AUTO-AGENDADA (Juan, 2026-08-21): "me lo pones en el super
-// admin tambien y lo marcas para yo hacerle seguimiento... avisanos". Una
-// cita que agendo el sistema solo (nadie la reviso antes de confirmarsela al
-// cliente) necesita que Juan se entere, ademas del aviso normal al asesor —
-// para poder verificarla. Reusa RADAR_ALERTA_TO, el mismo numero que ya usa
-// src/groups/vivo.js para avisos de monitoreo/calibracion a Juan. Best-effort:
-// nunca bloquea la confirmacion al cliente ni la cita misma.
-const AUTO_AGENDA_ALERTA_TO = process.env.RADAR_ALERTA_TO || "";
-
-async function avisarCitaAutoAgendada(ctx, cita) {
-  const destinos = AUTO_AGENDA_ALERTA_TO.split(",").map((t) => t.trim().replace(/\D/g, "")).filter(Boolean);
-  if (destinos.length === 0) return;
-  const cuando = formatCitaFechaHora(cita.fecha_hora) || cita.fecha_hora;
-  const texto = [
-    `🤖 Cita auto-agendada — revisala`,
-    ``,
-    `Cliente: ${ctx.lead.nombre || `+${ctx.lead.phone}`}`,
-    `Propiedad: ${ctx.propertyInteres ? `${ctx.propertyInteres.titulo || "sin titulo"} (ref ${ctx.propertyInteres.ref})` : "sin propiedad de origen"}`,
-    `Cuando: ${cuando}`,
-    `Tipo: ${cita.tipo}`,
-    ``,
-    `El cliente pregunto cuando podia ver la propiedad y Sofi agendo sola el primer espacio libre. Confirmá con el asesor que le quede bien.`,
-  ].join("\n");
-  // Require tardio (mismo motivo que src/agent/tools.js#aprobarPedidoRadar):
-  // este archivo -> mensaje-asesor.js -> whatsapp.js -> engine.js -> este archivo.
-  const mensajeAsesor = require("../lib/mensaje-asesor");
-  for (const to of destinos) {
-    await mensajeAsesor.enviarYRegistrar(ctx.org, to, texto).catch((e) =>
-      console.warn(`[tools] No se pudo avisar la cita auto-agendada a ${to}:`, e.message)
-    );
-  }
+  return { advisorPhone: advisor.phone, advisorName: advisor.name || null, advisorId: advisor.id || null, advisorAlert };
 }
 
 // AVISO INMEDIATO cuando un COLEGA (no un asesor reenviando) le hace un
@@ -482,7 +448,7 @@ async function avisarDemandaColegaInmediata(ctx, { contacto, contactoTelefono, m
     `Escribile o llamalo vos, no Sofi: es un negocio compartido con otra inmobiliaria, no un cliente propio.`,
   ].filter(Boolean).join("\n");
 
-  // Require tardio (mismo motivo que avisarCitaAutoAgendada, arriba).
+  // Require tardio (ciclo: este archivo -> mensaje-asesor.js -> whatsapp.js -> engine.js -> este archivo).
   const mensajeAsesor = require("../lib/mensaje-asesor");
   await mensajeAsesor.enviarYRegistrar(ctx.org, revisor.phone, texto);
 }
@@ -653,19 +619,20 @@ async function executeTool(name, input, ctx) {
   }
 
   if (name === "agendar_cita") {
-    if (input.proximo_disponible && input.fecha_hora_iso) {
-      return "No mandes fecha_hora_iso junto con proximo_disponible — son excluyentes. Si el cliente ya dio un dia/hora, usa fecha_hora_iso solo; si no propuso nada, usa solo proximo_disponible.";
+    // SOFI NO ESCOGE LA HORA SOLA (Juan, 2026-09-11): "sofi solo hace una
+    // previa pero la cita tiene que ir al asesor para validar disponibilidad".
+    // proximo_disponible (2026-08-21) tomaba el primer espacio libre de la
+    // agenda y Sofi se lo confirmaba al cliente: se quito de la tool. Si un
+    // historial viejo la sigue mandando, no se agenda nada.
+    if (input.proximo_disponible) {
+      return "No escojas un espacio de la agenda por tu cuenta. Preguntale al cliente que dia y a que hora le sirve, y registra la cita con fecha_hora_iso cuando te lo diga: la asesora valida la disponibilidad y le confirma.";
     }
-
-    const ESP_POR_INTENCION = { vender: "venta", comprar: "venta", arrendar: "arriendo", vehiculos: "vehiculos" };
-    const especialidad =
-      ESP_POR_INTENCION[ctx.lead.intencion] || (ctx.propertyInteres?.operacion || "").toLowerCase() || "venta";
 
     const cita = {
       descripcion: input.descripcion,
       fecha_hora: input.fecha_hora_iso || null,
       tipo: input.tipo || "llamada",
-      estado: "solicitada",
+      estado: "propuesta",
       creada_at: new Date().toISOString(),
     };
     // La ref del inmueble de la cita, cuando la hay (Juan, 2026-09-04). Es el
@@ -674,89 +641,54 @@ async function executeTool(name, input, ctx) {
     // guarda solo si vino, para no cambiarle el shape a las citas de siempre.
     if (input.ref) cita.ref = String(input.ref).trim();
 
-    // PROXIMO DISPONIBLE (Juan, 2026-08-21): "todo lo que digan que cuando se
-    // puede ver inmediatamente se agenda... si el calendario esta todo
-    // disponible utilizalo y ocupa un espacio". El cliente pregunto por ver
-    // la propiedad SIN proponer dia/hora — en vez de preguntarle (como hacia
-    // antes), el sistema busca el primer espacio libre y lo agenda de una.
-    // Necesita el asesor resuelto ANTES de poder buscar en su agenda.
-    if (input.proximo_disponible) {
-      let advisor = null;
+    // A QUIEN VA LA CITA (Juan, 2026-09-11): "siempre las citas van al numero
+    // de Daiana que tiene la ventana abierta". Cliente o colega, la cita va a
+    // quien coordina las visitas (findAsesorPrincipalRadar, RADAR_REVISOR_PHONE)
+    // y nunca a la rotacion de transferencias: la visita de un cliente cayo
+    // ahi, le llego a una asesora con la ventana cerrada hacia 142 h y se
+    // perdio sin que nadie se enterara. Si ese numero no la puede recibir, el
+    // canal la pasa al respaldo (src/lib/entrega-asesor.js).
+    //
+    // Sin dia/hora solo se avisa a un colega: a el NUNCA se lo transfiere
+    // (transferir_a_asesor esta bloqueado para colegas), asi que no hay otro
+    // momento en que su cita le llegue a alguien. Al cliente le llega con la
+    // transferencia. (Juan, 2026-09-04)
+    let advisor = null;
+    if (cita.fecha_hora || ctx.colega) {
       try {
-        advisor = await resolveLeadAdvisor(ctx, especialidad);
+        advisor = await advisors.findAsesorPrincipalRadar(ctx.org);
       } catch (e) {
-        console.warn("[tools] No se pudo resolver el asesor para buscar el proximo disponible:", e.message);
+        console.warn("[tools] No se pudo resolver quien coordina las visitas:", e.message);
       }
-      if (!advisor) {
-        return "No pude resolver el asesor para buscar un espacio libre. Preguntale al cliente que dia y hora le queda mejor y agenda con fecha_hora_iso en vez de proximo_disponible.";
-      }
-      let slot = null;
-      try {
-        slot = await appointments.proximoDisponible(ctx.org.id, advisor);
-      } catch (e) {
-        console.warn("[tools] No se pudo buscar el proximo disponible:", e.message);
-      }
-      if (!slot) {
-        return "No encontre ningun espacio libre en las proximas semanas — la agenda del asesor esta muy llena. Preguntale al cliente que dia y hora le queda mejor y agenda con fecha_hora_iso en vez de proximo_disponible.";
-      }
-      cita.fecha_hora = slot;
-      cita.origen = "auto";
     }
-
-    // Con dia/hora concretos (dado por el cliente, o recien encontrado
-    // arriba): resolver el asesor de la especialidad (misma logica que
-    // transferir_a_asesor) y validar SU agenda antes de confirmar. Sin
-    // fecha_hora (cliente vago, sin proximo_disponible) no hay nada que
-    // validar: se guarda como texto, como siempre.
-    if (cita.fecha_hora) {
-      let advisor = null;
+    if (advisor && cita.fecha_hora) {
+      let dispo = { disponible: true };
       try {
-        advisor = await resolveLeadAdvisor(ctx, especialidad);
+        dispo = await appointments.checkAvailability(ctx.org.id, advisor, cita.fecha_hora, { excludeLeadId: ctx.lead.id });
       } catch (e) {
-        console.warn("[tools] No se pudo resolver el asesor para validar la agenda:", e.message);
+        console.warn("[tools] No se pudo validar la disponibilidad de la agenda:", e.message);
       }
-      if (advisor) {
-        let dispo = { disponible: true };
-        try {
-          dispo = await appointments.checkAvailability(ctx.org.id, advisor, cita.fecha_hora, { excludeLeadId: ctx.lead.id });
-        } catch (e) {
-          console.warn("[tools] No se pudo validar la disponibilidad de la agenda:", e.message);
-        }
-        if (!dispo.disponible) {
-          // proximoDisponible encontro un choque de ultimo momento (otra cita
-          // se agendo justo entre la busqueda y esta validacion): el error es
-          // nuestro, no del cliente — no tiene sentido pedirle otro horario.
-          if (cita.origen === "auto") {
-            return "El espacio que encontre se ocupo justo antes de confirmar. Volve a intentar con proximo_disponible.";
-          }
-          const motivo =
-            dispo.motivo === "fuera_de_horario"
-              ? "ese horario esta fuera del horario de atencion del asesor"
-              : "el asesor ya tiene otra cita a esa hora";
-          // NO se persiste la cita: se le pide al cliente otro horario.
-          return `No se pudo agendar: ${motivo}. Ofrecele al cliente proponer OTRO dia u hora; no inventes horarios libres, preguntale que otro momento le sirve y vuelve a intentar agendar.`;
-        }
-        // Estampa el asesor dueno de la agenda (para el calendario grupal y el
-        // anti-choque) y prepara el aviso inmediato de la cita.
-        if (advisor.auth_user_id) cita.advisor_id = advisor.auth_user_id;
-        ctx.appointmentAlert = ctx.colega
-          ? await armarAvisoCitaColega(ctx, advisor, cita, cita.ref)
-          : { advisorPhone: advisor.phone, advisorAlert: buildAppointmentAlert(advisor, ctx.lead, cita) };
+      if (!dispo.disponible) {
+        const motivo =
+          dispo.motivo === "fuera_de_horario"
+            ? "ese horario esta fuera del horario de atencion del asesor"
+            : "el asesor ya tiene otra cita a esa hora";
+        // NO se persiste la cita: se le pide al cliente otro horario.
+        return `No se pudo agendar: ${motivo}. Ofrecele al cliente proponer OTRO dia u hora; no inventes horarios libres, preguntale que otro momento le sirve y vuelve a intentar agendar.`;
       }
-    } else if (ctx.colega) {
-      // Un colega que no fijo dia/hora ("la otra semana lo llevo") tampoco
-      // puede quedar sin aviso: a diferencia de un cliente, a el NUNCA se lo
-      // transfiere (transferir_a_asesor esta bloqueado para colegas), asi que
-      // no hay un segundo momento en el que esta cita le llegue a alguien —
-      // se perderia entera. Sin fecha_hora no hay agenda que validar: solo se
-      // resuelve a quien avisarle. (Juan, 2026-09-04)
-      let advisor = null;
-      try {
-        advisor = await resolveLeadAdvisor(ctx, especialidad);
-      } catch (e) {
-        console.warn("[tools] No se pudo resolver a quien avisarle la cita del colega:", e.message);
-      }
-      if (advisor) ctx.appointmentAlert = await armarAvisoCitaColega(ctx, advisor, cita, cita.ref);
+      // Quien coordina queda como duena de la agenda: el calendario grupal,
+      // el anti-choque y el recordatorio de 1 h salen de aca.
+      if (advisor.auth_user_id) cita.advisor_id = advisor.auth_user_id;
+    }
+    if (advisor) {
+      ctx.appointmentAlert = ctx.colega
+        ? await armarAvisoCitaColega(ctx, advisor, cita, cita.ref)
+        : {
+            advisorPhone: advisor.phone,
+            advisorName: advisor.name || null,
+            advisorId: advisor.id || null,
+            advisorAlert: buildAppointmentAlert(advisor, ctx.lead, cita),
+          };
     }
 
     // En memoria: la cita viaja al asesor en la alerta aunque la persistencia falle.
@@ -771,19 +703,25 @@ async function executeTool(name, input, ctx) {
       console.warn("[tools] No se pudo persistir la cita (revisar migracion leads.cita):", e.message);
     }
 
-    // "me lo pones en el super admin tambien y lo marcas para yo hacerle
-    // seguimiento... avisanos" — cita.origen="auto" ya la marca (el
-    // Calendario del equipo puede distinguirla) y esto le avisa a Juan.
-    if (cita.origen === "auto") {
-      avisarCitaAutoAgendada(ctx, cita).catch((e) =>
-        console.warn("[tools] No se pudo avisar la cita auto-agendada:", e.message)
-      );
-    }
-
+    // CONFIRMACION DE VISITAS (2026-09-11): la cita nace `propuesta`, no
+    // confirmada -- nadie de la casa la vio todavia. El texto que Sofi le dice
+    // al cliente/colega NUNCA puede sonar a confirmada: la confirma la asesora
+    // respondiendo "OK CONFIRMADA" (confirmar_cita). Ver
+    // docs/superpowers/specs/2026-09-10-confirmacion-de-visitas-design.md.
+    // Al colega se le pasa el contacto de quien coordina: el MISMO asesor que
+    // quedo estampado en la cita y al que se le aviso arriba.
+    const coordinador = ctx.appointmentAlert && ctx.colega ? advisor : null;
     const notificado = ctx.appointmentAlert
-      ? " El asesor ya fue notificado de la cita."
+      ? " El asesor ya fue notificado, pero TODAVIA NO CONFIRMO la cita."
       : " Cuando transfieras al asesor la vera en la alerta.";
-    return `Cita registrada: ${cita.descripcion}${cita.fecha_hora ? ` (${cita.fecha_hora})` : ""} — tipo ${cita.tipo}.${notificado} Confirma al cliente con calidez, repitiendo EXACTAMENTE el dia y la hora agendados, y deja claro el siguiente paso.`;
+    const comoDecirlo = ctx.colega
+      ? `Decile al colega que la visita quedo SOLICITADA${cita.fecha_hora ? ` para ${cita.fecha_hora}` : ""}, que en breve ${
+          coordinador?.name || "la asesora"
+        } lo contacta para confirmarla${
+          coordinador?.phone ? `, y que si quiere confirmarla directo puede escribirle a +${coordinador.phone}` : ""
+        }. Nunca digas "confirmada".`
+      : `Decile al cliente que la visita quedo SOLICITADA${cita.fecha_hora ? ` para ${cita.fecha_hora}` : ""} y que en breve el asesor la revisa y se pone en contacto. Nunca digas que ya quedo en firme ni que "queda lista": todavia falta que el asesor la revise.`;
+    return `Cita registrada: ${cita.descripcion}${cita.fecha_hora ? ` (${cita.fecha_hora})` : ""} — tipo ${cita.tipo}.${notificado} ${comoDecirlo}`;
   }
 
   if (name === "consultar_guia_legal") {
@@ -903,6 +841,87 @@ async function executeTool(name, input, ctx) {
 
   if (name === "pedir_contacto_asesora") {
     return pedirContactoAsesora(input, ctx);
+  }
+
+  if (name === "confirmar_cita") {
+    // GATE (2026-09-11): esta herramienta SOLO existe para que un asesor
+    // confirme SU propia cita -- ctx.advisor se resuelve en engine.js igual
+    // que ctx.colega. Sin esto, cualquier cliente podria pedirle a Sofi que
+    // "confirme" algo que nadie de la casa reviso.
+    if (!ctx.advisor) {
+      return "Esta herramienta es solo para un asesor de la casa confirmando su propia cita.";
+    }
+    let pendientes;
+    try {
+      pendientes = await appointments.citasPendientesDeConfirmar(ctx.org.id, ctx.advisor.auth_user_id);
+    } catch (e) {
+      console.warn("[tools] No se pudieron leer las citas pendientes de confirmar:", e.message);
+      return "No pude leer tus citas pendientes ahorita. Intenta de nuevo en un momento.";
+    }
+    if (pendientes.length === 0) {
+      return "No tenes ninguna cita PROPUESTA pendiente de confirmar ahorita.";
+    }
+    if (pendientes.length > 1) {
+      const lista = pendientes
+        .map((l, i) => {
+          const fh = formatCitaFechaHora(l.cita.fecha_hora);
+          const cuando = fh ? `${fh.fecha} a las ${fh.hora}` : l.cita.descripcion || "sin fecha";
+          return `${i + 1}. ${l.nombre || `+${l.phone}`} — ${cuando}`;
+        })
+        .join("\n");
+      return `Tenes ${pendientes.length} citas propuestas pendientes. Preguntale cual es, y volve a contarme con mas detalle (nombre o fecha) para identificarla:\n${lista}`;
+    }
+
+    const lead = pendientes[0];
+    const cita = {
+      ...lead.cita,
+      estado: "confirmada",
+      confirmada_at: new Date().toISOString(),
+      confirmada_por: ctx.advisor.name,
+    };
+    try {
+      await leads.update(lead.id, { cita });
+    } catch (e) {
+      console.warn("[tools] No se pudo persistir la confirmacion de la cita:", e.message);
+      return "No pude confirmar la cita en el sistema ahorita, intentá de nuevo.";
+    }
+
+    // AVISO AL CLIENTE/COLEGA, SIEMPRE POR LA LINEA OFICIAL (2026-09-11):
+    // nunca por WAHA -- esta cita puede ser de un cliente final que nunca
+    // estuvo en un grupo. Un colega marcado "solo llamada" no recibe nada:
+    // se le pide al asesor que lo llame. Require tardio del canal (mismo
+    // motivo que src/channels/whatsapp.js#procesarBotonRadar con
+    // ../agent/tools): channels/whatsapp.js -> agent/engine.js -> este
+    // archivo forma un ciclo si se requiere arriba, al tope del modulo.
+    const canalWhatsapp = require("../channels/whatsapp");
+    const esColega = lead.source === "colega";
+    const soloLlamada = esColega
+      ? await colegas.esSoloLlamada(ctx.org.id, { telefono: lead.phone }).catch((e) => {
+          console.warn("[tools] No se pudo verificar si el colega es solo-llamada:", e.message);
+          return null;
+        })
+      : false;
+
+    const fechaHora = formatCitaFechaHora(cita.fecha_hora);
+    const cuando = fechaHora ? `del ${fechaHora.fecha} a las ${fechaHora.hora}` : cita.descripcion || "acordada";
+    const refLinea = cita.ref ? ` a la ref ${cita.ref}` : "";
+    const textoCliente = `Tu visita ${cuando}${refLinea} quedó CONFIRMADA. Te recibe ${ctx.advisor.name}${
+      ctx.advisor.phone ? `, +${ctx.advisor.phone}` : ""
+    }.`;
+
+    const quien = lead.nombre || `+${lead.phone}`;
+    if (soloLlamada !== false) {
+      return `Confirmada en el sistema la cita con ${quien}${refLinea} para ${cuando} — pidió que lo contacten solo por llamada, así que no le escribí: avisale vos por llamada.`;
+    }
+
+    const envio = await canalWhatsapp.sendWhatsApp(ctx.org, lead.phone, textoCliente).catch((e) => {
+      console.warn("[tools] No se pudo enviar el aviso de confirmacion de cita por WhatsApp:", e.message);
+      return { ok: false, error: e.message };
+    });
+    if (envio && envio.ok) {
+      return `Confirmada la cita con ${quien}${refLinea} para ${cuando}. Ya le avisé por WhatsApp.`;
+    }
+    return `Confirmada en el sistema la cita con ${quien}${refLinea} para ${cuando}, pero no le pude avisar por acá (probablemente la ventana de 24h está cerrada) — avisale vos.`;
   }
 
   return `Herramienta desconocida: ${name}`;
@@ -1490,7 +1509,7 @@ async function marcarColegaSoloLlamada(input, ctx) {
 
   const asesora = await advisors.findAsesorPrincipalRadar(ctx.org).catch(() => null);
   if (asesora && asesora.phone) {
-    // Require tardio (mismo motivo que avisarCitaAutoAgendada, arriba).
+    // Require tardio (ciclo: este archivo -> mensaje-asesor.js -> whatsapp.js -> engine.js -> este archivo).
     const mensajeAsesor = require("../lib/mensaje-asesor");
     await mensajeAsesor
       .enviarYRegistrar(ctx.org, String(asesora.phone).replace(/\D/g, ""), texto.filter((l) => l !== null).join("\n"))
@@ -1568,7 +1587,7 @@ async function pedirContactoAsesora(input, ctx) {
     `Lo pidió en el chat con Sofi. Es un negocio compartido con otra inmobiliaria, no un cliente propio.`,
   ].filter((l) => l !== null).join("\n");
 
-  // Require tardio (mismo motivo que avisarCitaAutoAgendada, arriba).
+  // Require tardio (ciclo: este archivo -> mensaje-asesor.js -> whatsapp.js -> engine.js -> este archivo).
   const mensajeAsesor = require("../lib/mensaje-asesor");
   const principal = await mensajeAsesor
     .enviarYRegistrar(ctx.org, String(asesora.phone).replace(/\D/g, ""), texto)
