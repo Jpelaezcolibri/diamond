@@ -1,6 +1,6 @@
 const { test } = require("node:test");
 const assert = require("node:assert");
-const { buildClientLink, buildAdvisorAlert, buildAllyClientMatchAlert, buildAppointmentAlert } = require("../src/notifications/advisor");
+const { buildClientLink, buildAdvisorAlert, buildAllyClientMatchAlert, buildAppointmentAlert, buildColegaAppointmentAlert } = require("../src/notifications/advisor");
 
 const org = { name: "Diamond" };
 const ventaAdvisor = { name: "Asesor Ventas", phone: "573028536489", especialidad: "venta" };
@@ -150,7 +150,7 @@ test("buildAppointmentAlert: incluye tipo, cliente, dia/hora legible y propiedad
   const lead = { nombre: "Marta Gomez", phone: "573001112233", property_ref_origen: "9702941" };
   const cita = { tipo: "visita", fecha_hora: "2026-07-24T15:00:00-05:00", descripcion: "manana a las 3" };
   const alert = buildAppointmentAlert(advisor, lead, cita);
-  assert.match(alert, /Nueva cita agendada/);
+  assert.match(alert, /Nueva cita PROPUESTA/);
   assert.match(alert, /visita/i);
   assert.match(alert, /Marta Gomez/);
   assert.match(alert, /573001112233/);
@@ -177,4 +177,21 @@ test("buildAdvisorAlert: incluye la linea 'Transferido:' con fecha y hora de la 
   const alert = buildAdvisorAlert(org, lead, "Calificado", null, "venta");
   // La alerta se construye en el instante de la transferencia: "ahora" en Colombia.
   assert.match(alert, /Transferido: .+, \d{1,2}:\d{2}/);
+});
+
+test("buildAppointmentAlert pide OK CONFIRMADA", () => {
+  const advisor = { name: "Camila", phone: "573009990000" };
+  const lead = { nombre: "Marta Gomez", phone: "573001112233", property_ref_origen: "9702941" };
+  const cita = { tipo: "visita", fecha_hora: "2026-07-24T15:00:00-05:00", descripcion: "manana a las 3" };
+  const texto = buildAppointmentAlert(advisor, lead, cita);
+  assert.match(texto, /OK CONFIRMADA/);
+});
+
+test("buildColegaAppointmentAlert tambien pide OK CONFIRMADA", async () => {
+  const org = { name: "Diamond" };
+  const colega = { nombre: "Esteban Higuita", telefono: "573112223344" };
+  const lead = { phone: "573112223344" };
+  const cita = { descripcion: "el fin de semana", tipo: "visita" };
+  const texto = await buildColegaAppointmentAlert({ org, colega, lead, cita, ref: null });
+  assert.match(texto, /OK CONFIRMADA/);
 });

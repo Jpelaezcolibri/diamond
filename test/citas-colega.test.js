@@ -270,7 +270,7 @@ test("cliente final: nada cambia — rotacion de siempre, aviso de siempre, sin 
 
   assert.strictEqual(radarLlamado, false, "el camino del cliente final no pasa por la linea de Natalia");
   assert.strictEqual(ctx.appointmentAlert.advisorPhone, OTRO_ASESOR.phone);
-  assert.match(ctx.appointmentAlert.advisorAlert, /Nueva cita agendada/);
+  assert.match(ctx.appointmentAlert.advisorAlert, /Nueva cita PROPUESTA/);
   assert.doesNotMatch(ctx.appointmentAlert.advisorAlert, /COLEGA/);
   assert.ok(!ctx.appointmentAlert.copias || ctx.appointmentAlert.copias.length === 0, "un cliente final no genera copias");
   assert.match(out, /Cita registrada/);
