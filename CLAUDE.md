@@ -28,8 +28,28 @@ Equipo: 1 dev (Juan) + Claude Code. Idioma de la app: español (Colombia).
 Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
 `docs:`, `config:`).
 
-## 2. Estado actual (2026-09-10)
+## 2. Estado actual (2026-09-11)
 
+- **Visitas: toda cita va a Daiana (2026-09-11).** Rama
+  `confirmacion-de-visitas`, **sin desplegar**.
+  - **La regla de Juan:** Sofi solo arma la previa. La cita va a quien
+    coordina las visitas: primero al 573011880668, que es el de la ventana
+    abierta, y si no se puede entregar, al 573001878024. La confirma la
+    asesora por WhatsApp respondiendo "OK CONFIRMADA".
+  - **Qué hace la rama:**
+    - `agendar_cita` ya no usa la rotación de asesores.
+    - El aviso de cita sale con `entregarConRespaldo`.
+    - Se quitó `proximo_disponible`.
+    - Se quitaron del prompt las instrucciones de "confirmá" y "agendado".
+  - **Ya aplicado en producción el 2026-09-11, sin deploy:**
+    - Daiana tiene `recibe_transferencias=true` y Catherine `false`.
+    - Hay una fila nueva, "Daiana Zea (línea 2)", con el 8024.
+    - `RADAR_ESCALADO_PHONE=573001878024`.
+  - **Al desplegar:** correr `scripts/backfill-citas-propuesta.js`.
+  - **El caso que lo disparó:** la visita de Sebastián Velásquez (11-sep,
+    3 p. m.) le llegó a Catherine, que tenía la ventana cerrada hacía 142 h,
+    y se perdió. Sofi ya le había dicho "queda confirmada". Detalle en
+    `docs/superpowers/specs/2026-09-10-confirmacion-de-visitas-design.md` §4.
 - **Rama `colega-solo-llamada` (2026-09-10), lista y SIN desplegar.** Caso
   Ángela Moscoso: pidió contacto solo por llamada, Sofi dijo "anotado" sin
   herramienta y el radar le mandó un DM dos horas después. Ahora

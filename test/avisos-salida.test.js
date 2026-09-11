@@ -153,11 +153,16 @@ function conEnvios(resultadoPorTelefono) {
   };
   const realList = advisors.listElegibles;
   advisors.listElegibles = async () => [CATHE, NATA];
+  // Sin respaldo configurado por defecto: cada test que lo quiera lo pone.
+  const previoEscalado = process.env.RADAR_ESCALADO_PHONE;
+  delete process.env.RADAR_ESCALADO_PHONE;
   return {
     enviados,
     restaurar: () => {
       mensajeAsesor.enviarYRegistrar = real;
       advisors.listElegibles = realList;
+      if (previoEscalado === undefined) delete process.env.RADAR_ESCALADO_PHONE;
+      else process.env.RADAR_ESCALADO_PHONE = previoEscalado;
     },
   };
 }
@@ -214,6 +219,30 @@ test("si NINGUNA puede recibir, lo dice — el pendiente se reintenta despues", 
     assert.match(r.error, /sin suplente con ventana abierta/);
   } finally {
     m.restaurar();
+  }
+});
+
+// REGLA DE JUAN (2026-09-11): "el principal es el que tenemos con la
+// automatizacion de la ventana abierta y luego al otro numero". El respaldo es
+// RADAR_ESCALADO_PHONE (la segunda linea de quien coordina) y va ANTES que el
+// resto del equipo.
+test("con RADAR_ESCALADO_PHONE, el respaldo es ese numero antes que el resto del equipo", async () => {
+  const DAIANA = { id: "adv-daiana", name: "Daiana Zea", phone: "573011880668" };
+  const LINEA2 = { id: "adv-daiana-2", name: "Daiana Zea (línea 2)", phone: "573009998024", activo: true };
+  const m = conEnvios({ "573011880668": { ok: false, error: CERRADA } });
+  const realFind = advisors.findByPhone;
+  advisors.findByPhone = async (orgId, tel) => (tel === LINEA2.phone ? LINEA2 : null);
+  process.env.RADAR_ESCALADO_PHONE = LINEA2.phone;
+  try {
+    const r = await entregarConRespaldo(ORG, DAIANA, "📅 Nueva cita");
+    assert.strictEqual(r.ok, true);
+    assert.strictEqual(r.suplente, true);
+    assert.strictEqual(m.enviados.length, 2, "un solo intento de respaldo cuando el primero entrega");
+    assert.strictEqual(m.enviados[1].tel, LINEA2.phone, "el respaldo configurado va antes que la rotacion");
+    assert.strictEqual(r.advisor.id, "adv-daiana-2", "quien lo recibio queda identificado");
+  } finally {
+    m.restaurar();
+    advisors.findByPhone = realFind;
   }
 });
 

@@ -12,8 +12,13 @@
 // herramienta" cuando agendar_cita si estaba en TOOL_DEFINITIONS.
 //
 // Juan, 2026-09-04: "que todo llegue a Natalia con una alerta enorme con la
-// hora y el dia de la visita y copia a catherine, me parece mejor por que
-// natalia sera la encargada de todo en esa linea".
+// hora y el dia de la visita y copia a catherine".
+//
+// Juan, 2026-09-11 (reemplaza la copia): "siempre las citas van al numero de
+// Daiana que tiene la ventana abierta... y luego al otro numero". Toda cita
+// —de colega o de cliente— va a quien coordina las visitas. El segundo numero
+// ya no recibe una copia de todo: recibe lo que el primero no pudo (ver
+// test/aviso-cita-respaldo.test.js).
 //
 // Mismo criterio de mock que test/agendar-cita.test.js: advisors/appointments/
 // properties/leads tocan Supabase real, se mockean sus metodos desde el
@@ -21,8 +26,6 @@
 
 const { test } = require("node:test");
 const assert = require("node:assert");
-const fs = require("node:fs");
-const path = require("node:path");
 
 const { executeTool, TOOL_DEFINITIONS } = require("../src/agent/tools");
 const { buildColegaAppointmentAlert } = require("../src/notifications/advisor");
@@ -33,8 +36,8 @@ const properties = require("../src/data/properties");
 const leads = require("../src/data/leads");
 
 const ORG = { id: "org-1", name: "Diamond Inmobiliaria" };
-// Natalia: la asesora principal del radar (RADAR_REVISOR_PHONE). Catherine:
-// la copia (RADAR_ESCALADO_PHONE).
+// NATALIA: quien coordina las visitas en estos fixtures (RADAR_REVISOR_PHONE).
+// OTRO_ASESOR: la rotacion de transferencias, que nunca recibe citas.
 const NATALIA = { id: "adv-natalia", name: "Natalia Velez", phone: "573001878024", auth_user_id: "uid-natalia", especialidad: "venta", activo: true };
 const CATHERINE_PHONE = "573028536489";
 const OTRO_ASESOR = { id: "adv-camila", name: "Camila Ruiz", phone: "573009990000", auth_user_id: "uid-camila", especialidad: "venta", activo: true };
@@ -84,7 +87,7 @@ function ctxCliente() {
   };
 }
 
-function mockearAgenda(t, { propiedad = PROPIEDAD, escalado = CATHERINE_PHONE } = {}) {
+function mockearAgenda(t, { propiedad = PROPIEDAD } = {}) {
   t.mock.method(advisors, "findAsesorPrincipalRadar", async () => NATALIA);
   t.mock.method(advisors, "findForTransfer", async () => OTRO_ASESOR);
   t.mock.method(appointments, "checkAvailability", async () => ({ disponible: true }));
@@ -94,18 +97,12 @@ function mockearAgenda(t, { propiedad = PROPIEDAD, escalado = CATHERINE_PHONE } 
     refsBuscadas.push(ref);
     return propiedad;
   });
-  const previo = process.env.RADAR_ESCALADO_PHONE;
-  process.env.RADAR_ESCALADO_PHONE = escalado;
-  t.after(() => {
-    if (previo === undefined) delete process.env.RADAR_ESCALADO_PHONE;
-    else process.env.RADAR_ESCALADO_PHONE = previo;
-  });
   return { refsBuscadas };
 }
 
 // ── (a) Colega que agenda CON ref ─────────────────────────────────────────
 
-test("colega agenda con ref: el aviso va a Natalia con la ficha completa y copia a Catherine", async (t) => {
+test("colega agenda con ref: el aviso va a quien coordina, con la ficha completa y sin copias", async (t) => {
   mockearAgenda(t);
 
   const ctx = ctxColega();
@@ -117,9 +114,10 @@ test("colega agenda con ref: el aviso va a Natalia con la ficha completa y copia
 
   assert.match(out, /Cita registrada/);
   assert.ok(ctx.appointmentAlert, "la cita de un colega tambien tiene que avisar");
-  assert.strictEqual(ctx.appointmentAlert.advisorPhone, NATALIA.phone, "Natalia es la encargada de esta linea");
+  assert.strictEqual(ctx.appointmentAlert.advisorPhone, NATALIA.phone, "va a quien coordina las visitas");
   assert.notStrictEqual(ctx.appointmentAlert.advisorPhone, OTRO_ASESOR.phone, "no puede caer en la rotacion normal");
-  assert.deepStrictEqual(ctx.appointmentAlert.copias, [CATHERINE_PHONE], "Catherine va en copia del MISMO mensaje");
+  assert.strictEqual(ctx.appointmentAlert.advisorName, NATALIA.name, "la entrega necesita saber de quien era el aviso");
+  assert.ok(!ctx.appointmentAlert.copias || ctx.appointmentAlert.copias.length === 0, "ya no hay copias: el respaldo lo decide la entrega");
 
   const aviso = ctx.appointmentAlert.advisorAlert;
   // Dia y hora bien visibles arriba ("una alerta enorme con la hora y el dia").
@@ -202,10 +200,16 @@ test("si la consulta de la propiedad revienta, el aviso sale igual (best-effort)
   assert.match(ctx.appointmentAlert.advisorAlert, /sin propiedad indicada/i);
 });
 
-// ── (c) Sin copia configurada ─────────────────────────────────────────────
+// ── (c) El escalado ya no es copia ────────────────────────────────────────
 
-test("RADAR_ESCALADO_PHONE vacio: el aviso a Natalia sale igual, sin copias", async (t) => {
-  mockearAgenda(t, { escalado: "" });
+test("RADAR_ESCALADO_PHONE ya no genera copias del aviso de cita", async (t) => {
+  mockearAgenda(t);
+  const previo = process.env.RADAR_ESCALADO_PHONE;
+  process.env.RADAR_ESCALADO_PHONE = CATHERINE_PHONE;
+  t.after(() => {
+    if (previo === undefined) delete process.env.RADAR_ESCALADO_PHONE;
+    else process.env.RADAR_ESCALADO_PHONE = previo;
+  });
 
   const ctx = ctxColega();
   await executeTool(
@@ -214,22 +218,8 @@ test("RADAR_ESCALADO_PHONE vacio: el aviso a Natalia sale igual, sin copias", as
     ctx
   );
 
-  assert.ok(ctx.appointmentAlert, "una copia que no se puede mandar no tumba el aviso principal");
   assert.strictEqual(ctx.appointmentAlert.advisorPhone, NATALIA.phone);
-  assert.deepStrictEqual(ctx.appointmentAlert.copias, []);
-});
-
-test("si la copia es el mismo telefono de Natalia, no se manda dos veces", async (t) => {
-  mockearAgenda(t, { escalado: NATALIA.phone });
-
-  const ctx = ctxColega();
-  await executeTool(
-    "agendar_cita",
-    { descripcion: "el jueves a las 4", fecha_hora_iso: "2026-09-10T16:00:00-05:00", tipo: "visita", ref: "9702941" },
-    ctx
-  );
-
-  assert.deepStrictEqual(ctx.appointmentAlert.copias, []);
+  assert.ok(!ctx.appointmentAlert.copias || ctx.appointmentAlert.copias.length === 0);
 });
 
 test("colega sin dia/hora concretos: el aviso igual sale (nunca se lo transfiere, si no se pierde)", async (t) => {
@@ -243,9 +233,9 @@ test("colega sin dia/hora concretos: el aviso igual sale (nunca se lo transfiere
   assert.match(ctx.appointmentAlert.advisorAlert, /la otra semana/);
 });
 
-// ── (d) El cliente final no cambia ────────────────────────────────────────
+// ── (d) El cliente final tambien va a quien coordina (Juan, 2026-09-11) ────
 
-test("cliente final: nada cambia — rotacion de siempre, aviso de siempre, sin copias", async (t) => {
+test("cliente final: la cita va a quien coordina las visitas, con el aviso de cliente y sin copias", async (t) => {
   let radarLlamado = false;
   t.mock.method(advisors, "findAsesorPrincipalRadar", async () => {
     radarLlamado = true;
@@ -254,12 +244,6 @@ test("cliente final: nada cambia — rotacion de siempre, aviso de siempre, sin 
   t.mock.method(advisors, "findForTransfer", async () => OTRO_ASESOR);
   t.mock.method(appointments, "checkAvailability", async () => ({ disponible: true }));
   t.mock.method(leads, "update", async (id, fields) => ({ id, ...fields }));
-  const previo = process.env.RADAR_ESCALADO_PHONE;
-  process.env.RADAR_ESCALADO_PHONE = CATHERINE_PHONE;
-  t.after(() => {
-    if (previo === undefined) delete process.env.RADAR_ESCALADO_PHONE;
-    else process.env.RADAR_ESCALADO_PHONE = previo;
-  });
 
   const ctx = ctxCliente();
   const out = await executeTool(
@@ -268,8 +252,9 @@ test("cliente final: nada cambia — rotacion de siempre, aviso de siempre, sin 
     ctx
   );
 
-  assert.strictEqual(radarLlamado, false, "el camino del cliente final no pasa por la linea de Natalia");
-  assert.strictEqual(ctx.appointmentAlert.advisorPhone, OTRO_ASESOR.phone);
+  assert.strictEqual(radarLlamado, true, "la cita de un cliente tambien la recibe quien coordina");
+  assert.strictEqual(ctx.appointmentAlert.advisorPhone, NATALIA.phone);
+  assert.notStrictEqual(ctx.appointmentAlert.advisorPhone, OTRO_ASESOR.phone, "la rotacion no recibe citas");
   assert.match(ctx.appointmentAlert.advisorAlert, /Nueva cita PROPUESTA/);
   assert.doesNotMatch(ctx.appointmentAlert.advisorAlert, /COLEGA/);
   assert.ok(!ctx.appointmentAlert.copias || ctx.appointmentAlert.copias.length === 0, "un cliente final no genera copias");
@@ -360,8 +345,13 @@ test("sin coordinador resuelto, el contexto no trae ningun contacto que Sofi pue
   assert.match(bloques[0].text, /si abajo no aparece ninguno/i, "el prompt tiene que decirle que hacer cuando no hay contacto");
 });
 
-// ── El cableado (engine + canales) ────────────────────────────────────────
+// ── El cableado (engine) ──────────────────────────────────────────────────
+// La entrega del aviso de cita (principal y respaldo) se prueba por
+// comportamiento, pasando un webhook real por el canal, en
+// test/aviso-cita-respaldo.test.js.
 
+const fs = require("node:fs");
+const path = require("node:path");
 const leer = (...p) => fs.readFileSync(path.join(__dirname, "..", ...p), "utf8");
 
 test("engine.js resuelve el coordinador con findAsesorPrincipalRadar y se lo pasa al prompt", () => {
@@ -370,16 +360,4 @@ test("engine.js resuelve el coordinador con findAsesorPrincipalRadar y se lo pas
   const i = fuente.indexOf("buildSystemPrompt({");
   assert.ok(i > -1);
   assert.match(fuente.slice(i, i + 300), /coordinador/, "el prompt tiene que recibirlo");
-});
-
-test("los canales mandan las copias del aviso de cita", () => {
-  for (const canal of ["whatsapp.js", "telegram.js"]) {
-    const fuente = leer("src", "channels", canal);
-    // `|| []` es la parte retrocompatible: un appointmentAlert viejo, sin
-    // copias, tiene que seguir funcionando exactamente igual.
-    assert.ok(
-      /appointmentAlert\.copias\s*\|\|\s*\[\]/.test(fuente),
-      `${canal} tiene que recorrer las copias y seguir funcionando sin ellas`
-    );
-  }
 });

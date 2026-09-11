@@ -439,20 +439,26 @@ router.post("/webhook", async (req, res) => {
         if (!r.ok) console.error(`[whatsapp] Aviso de match de aliado a ${allyAlert.advisorPhone} NO se pudo enviar:`, r.error);
       }
       if (appointmentAlert) {
-        const r = await sendWhatsApp(org, appointmentAlert.advisorPhone, appointmentAlert.advisorAlert, { fromPhoneId: phoneNumberId });
-        if (!r.ok) console.error(`[whatsapp] Aviso de cita a ${appointmentAlert.advisorPhone} NO se pudo enviar:`, r.error);
-        // COPIAS (Juan, 2026-09-04): "que todo llegue a Natalia con una alerta
-        // enorme con la hora y el dia de la visita y copia a catherine". Es el
-        // MISMO texto a otro telefono, y va DESPUES del principal a proposito:
-        // una copia que no se puede mandar no puede tumbar el aviso que si.
-        // Un appointmentAlert sin `copias` (el de un cliente final) no entra.
-        for (const copia of appointmentAlert.copias || []) {
-          const rc = await sendWhatsApp(org, copia, appointmentAlert.advisorAlert, { fromPhoneId: phoneNumberId }).catch((e) => ({
-            ok: false,
-            error: e.message,
-          }));
-          if (!rc.ok) console.error(`[whatsapp] Copia del aviso de cita a ${copia} NO se pudo enviar:`, rc.error);
-        }
+        // CON RESPALDO (Juan, 2026-09-11): "siempre las citas van al numero de
+        // Daiana que tiene la ventana abierta... y luego al otro numero". Antes
+        // salia con sendWhatsApp directo: la visita de Sebastian Velasquez se
+        // le aviso a una asesora con la ventana cerrada hacia 142 h y se perdio
+        // sin que nada lo dijera. entregarConRespaldo la pasa al numero de
+        // respaldo si la ventana esta cerrada, y la deja registrada en el
+        // Inbox. Reemplaza a las copias del 2026-09-04: el segundo numero ya no
+        // recibe todo dos veces, recibe lo que el primero no pudo.
+        // Require tardio: entrega-asesor -> mensaje-asesor -> este archivo.
+        const { entregarConRespaldo } = require("../lib/entrega-asesor");
+        const principal = {
+          id: appointmentAlert.advisorId || null,
+          name: appointmentAlert.advisorName || null,
+          phone: appointmentAlert.advisorPhone,
+        };
+        const r = await entregarConRespaldo(org, principal, appointmentAlert.advisorAlert).catch((e) => ({
+          ok: false,
+          error: e.message,
+        }));
+        if (!r.ok) console.error(`[whatsapp] Aviso de cita a ${appointmentAlert.advisorPhone} NO se pudo entregar:`, r.error);
       }
       if (captadorAlert) {
         const r = await sendWhatsApp(org, captadorAlert.advisorPhone, captadorAlert.advisorAlert, { fromPhoneId: phoneNumberId });

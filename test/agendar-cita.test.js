@@ -3,14 +3,31 @@
 // mockean sus metodos desde el consumidor (tools.js ve el mock por require).
 const { test } = require("node:test");
 const assert = require("node:assert");
-const { executeTool } = require("../src/agent/tools");
+const { executeTool, TOOL_DEFINITIONS } = require("../src/agent/tools");
+const { buildSystemPrompt } = require("../src/agent/prompts");
 const advisors = require("../src/data/advisors");
 const appointments = require("../src/data/appointments");
 const leads = require("../src/data/leads");
 
+const ORG = { id: "org-1", name: "Diamond" };
+
+// REGLA DE JUAN (2026-09-11): "siempre las citas van al numero de Daiana que
+// tiene la ventana abierta". La cita va a quien coordina las visitas
+// (advisors.findAsesorPrincipalRadar, RADAR_REVISOR_PHONE), nunca a la
+// rotacion de transferencias. Caso real: la visita de un cliente cayo en la
+// rotacion, le llego a una asesora con la ventana cerrada hacia 142 h y se
+// perdio sin que nadie se enterara.
+const COORDINA = { id: "adv-daiana", name: "Daiana Zea", phone: "573011880668", auth_user_id: "uid-daiana", horario: null };
+const ROTACION = { id: "adv-cathe", name: "Catherine Uribe", phone: "573028536489", auth_user_id: "uid-cathe", horario: null };
+
+function mockCoordina(t) {
+  t.mock.method(advisors, "findAsesorPrincipalRadar", async () => COORDINA);
+  t.mock.method(advisors, "findForTransfer", async () => ROTACION);
+}
+
 function baseCtx() {
   return {
-    org: { id: "org-1", name: "Diamond" },
+    org: ORG,
     lead: { id: "lead-1", phone: "573001112233", nombre: "Marta", categoria: "compra", intencion: "comprar", estado: "en_conversacion", score: 0, property_ref_origen: "9702941" },
     propertyInteres: { ref: "9702941", operacion: "Venta" },
     transfer: null,
@@ -26,7 +43,7 @@ function baseCtx() {
 // la casa la reviso todavia. Bug real: una visita se auto-confirmo y quedo
 // en manos de un asesor que nunca la vio. Ver docs/superpowers/specs/2026-09-10-confirmacion-de-visitas-design.md.
 test("agendar_cita: la cita nace propuesta, nunca confirmada de una", async (t) => {
-  t.mock.method(advisors, "findForTransfer", async () => ({ name: "Camila", phone: "573009990000", auth_user_id: "uid-camila", horario: null }));
+  mockCoordina(t);
   t.mock.method(appointments, "checkAvailability", async () => ({ disponible: true }));
   t.mock.method(leads, "update", async (id, fields) => ({ id, ...fields }));
 
@@ -55,24 +72,40 @@ test("agendar_cita: a un colega tambien le queda propuesta, y el texto de retorn
   assert.match(r, /573011880668/);
 });
 
+test("la cita de un CLIENTE va a quien coordina las visitas, nunca a la rotacion de transferencias", async (t) => {
+  mockCoordina(t);
+  t.mock.method(appointments, "checkAvailability", async () => ({ disponible: true }));
+  t.mock.method(leads, "update", async (id, fields) => ({ id, ...fields }));
+
+  const ctx = baseCtx();
+  await executeTool("agendar_cita", { descripcion: "manana a las 3", fecha_hora_iso: "2026-09-12T15:00:00-05:00", tipo: "visita" }, ctx);
+
+  assert.ok(ctx.appointmentAlert, "debe preparar el aviso inmediato");
+  assert.strictEqual(ctx.appointmentAlert.advisorPhone, COORDINA.phone);
+  assert.notStrictEqual(ctx.appointmentAlert.advisorPhone, ROTACION.phone, "la rotacion no recibe citas");
+  assert.strictEqual(ctx.appointmentAlert.advisorName, COORDINA.name, "la entrega necesita saber de quien era el aviso");
+  assert.strictEqual(ctx.appointmentAlert.advisorId, COORDINA.id);
+  assert.strictEqual(ctx.cita.advisor_id, COORDINA.auth_user_id, "queda en SU agenda: contra esa se valida el choque");
+});
+
 test("agendar_cita con hora libre: estampa advisor_id, agenda y prepara aviso inmediato", async (t) => {
-  t.mock.method(advisors, "findForTransfer", async () => ({ name: "Camila", phone: "573009990000", auth_user_id: "uid-camila", horario: null }));
+  mockCoordina(t);
   t.mock.method(appointments, "checkAvailability", async () => ({ disponible: true }));
   t.mock.method(leads, "update", async (id, fields) => ({ id, ...fields }));
 
   const ctx = baseCtx();
   const out = await executeTool("agendar_cita", { descripcion: "manana a las 3", fecha_hora_iso: "2026-07-24T15:00:00-05:00", tipo: "visita" }, ctx);
 
-  assert.strictEqual(ctx.cita.advisor_id, "uid-camila");
+  assert.strictEqual(ctx.cita.advisor_id, "uid-daiana");
   assert.ok(ctx.appointmentAlert, "debe preparar el aviso inmediato");
-  assert.strictEqual(ctx.appointmentAlert.advisorPhone, "573009990000");
+  assert.strictEqual(ctx.appointmentAlert.advisorPhone, "573011880668");
   assert.match(ctx.appointmentAlert.advisorAlert, /Marta/);
   assert.match(out, /Cita registrada/);
   assert.match(out, /notificado/);
 });
 
 test("agendar_cita con choque: NO persiste la cita y pide otro horario", async (t) => {
-  t.mock.method(advisors, "findForTransfer", async () => ({ name: "Camila", phone: "573009990000", auth_user_id: "uid-camila" }));
+  mockCoordina(t);
   t.mock.method(appointments, "checkAvailability", async () => ({ disponible: false, motivo: "choque" }));
   let updateCalls = 0;
   t.mock.method(leads, "update", async (id, fields) => { updateCalls++; return { id, ...fields }; });
@@ -87,7 +120,7 @@ test("agendar_cita con choque: NO persiste la cita y pide otro horario", async (
 });
 
 test("agendar_cita fuera de horario: mensaje especifico, sin agendar", async (t) => {
-  t.mock.method(advisors, "findForTransfer", async () => ({ name: "Camila", phone: "573009990000", auth_user_id: "uid-camila" }));
+  mockCoordina(t);
   t.mock.method(appointments, "checkAvailability", async () => ({ disponible: false, motivo: "fuera_de_horario" }));
   t.mock.method(leads, "update", async (id, fields) => ({ id, ...fields }));
 
@@ -112,120 +145,56 @@ test("agendar_cita sin fecha_hora: comportamiento viejo, no valida ni notifica",
   assert.match(out, /Cuando transfieras/);
 });
 
-// ── proximo_disponible (Juan, 2026-08-21) ──────────────────────────────────
-// "todo lo que digan que cuando se puede ver inmediatamente se agenda...
-// utilizalo y ocupa un espacio" — el cliente pregunta por ver la propiedad
-// SIN proponer dia/hora; el sistema busca el primer espacio libre solo.
+// ── Sofi no escoge la hora sola (Juan, 2026-09-11) ─────────────────────────
+// "sofi solo hace una previa pero la cita tiene que ir al asesor para validar
+// disponibilidad". proximo_disponible (2026-08-21) hacia lo contrario: el
+// sistema tomaba el primer espacio libre y Sofi se lo confirmaba al cliente.
 
-test("proximo_disponible: busca el espacio, lo agenda con origen=auto y prepara el aviso al asesor", async (t) => {
-  t.mock.method(advisors, "findForTransfer", async () => ({ name: "Camila", phone: "573009990000", auth_user_id: "uid-camila", horario: null }));
-  t.mock.method(appointments, "proximoDisponible", async (orgId, advisor) => {
-    assert.strictEqual(advisor.auth_user_id, "uid-camila");
+test("proximo_disponible ya no existe: no busca espacio, no agenda y le pide a Sofi preguntar dia y hora", async (t) => {
+  mockCoordina(t);
+  let buscado = false;
+  t.mock.method(appointments, "proximoDisponible", async () => {
+    buscado = true;
     return "2026-07-24T15:00:00-05:00";
   });
-  t.mock.method(appointments, "checkAvailability", async (orgId, advisor, fechaHora) => {
-    assert.strictEqual(fechaHora, "2026-07-24T15:00:00-05:00");
-    return { disponible: true };
-  });
-  t.mock.method(leads, "update", async (id, fields) => ({ id, ...fields }));
-
-  const ctx = baseCtx();
-  const out = await executeTool("agendar_cita", { descripcion: "quiere verla lo antes posible", proximo_disponible: true, tipo: "visita" }, ctx);
-
-  assert.strictEqual(ctx.cita.fecha_hora, "2026-07-24T15:00:00-05:00");
-  assert.strictEqual(ctx.cita.origen, "auto");
-  assert.strictEqual(ctx.cita.advisor_id, "uid-camila");
-  assert.ok(ctx.appointmentAlert, "debe preparar el aviso al asesor, igual que una cita normal");
-  assert.match(out, /Cita registrada/);
-  // CONFIRMACION DE VISITAS (2026-09-11): ya no se le dice a Sofi que
-  // confirme "EXACTAMENTE" -- la cita nace propuesta, no confirmada.
-  assert.match(out, /SOLICITADA/);
-});
-
-test("proximo_disponible y fecha_hora_iso juntos: son excluyentes, no agenda nada", async (t) => {
   const updateCalls = [];
   t.mock.method(leads, "update", async (id, fields) => { updateCalls.push(fields); return { id, ...fields }; });
 
   const ctx = baseCtx();
-  const out = await executeTool("agendar_cita", { descripcion: "x", proximo_disponible: true, fecha_hora_iso: "2026-07-24T15:00:00-05:00" }, ctx);
+  const out = await executeTool("agendar_cita", { descripcion: "quiere verla ya", proximo_disponible: true, tipo: "visita" }, ctx);
 
-  assert.match(out, /excluyentes/);
-  assert.strictEqual(updateCalls.length, 0);
+  assert.strictEqual(buscado, false, "el sistema no toma un espacio por su cuenta");
+  assert.strictEqual(updateCalls.length, 0, "no se persiste nada");
   assert.strictEqual(ctx.cita, null);
+  assert.strictEqual(ctx.appointmentAlert, null);
+  assert.match(out, /pregunt/i, "Sofi le pregunta al cliente que dia y hora le sirven");
 });
 
-test("proximo_disponible sin nada libre en el horizonte: pide que el cliente proponga dia/hora, no inventa nada", async (t) => {
-  t.mock.method(advisors, "findForTransfer", async () => ({ name: "Camila", phone: "573009990000", auth_user_id: "uid-camila" }));
-  t.mock.method(appointments, "proximoDisponible", async () => null);
-  const updateCalls = [];
-  t.mock.method(leads, "update", async (id, fields) => { updateCalls.push(fields); return { id, ...fields }; });
-
-  const ctx = baseCtx();
-  const out = await executeTool("agendar_cita", { descripcion: "quiere verla ya", proximo_disponible: true }, ctx);
-
-  assert.match(out, /No encontre ningun espacio libre/);
-  assert.match(out, /fecha_hora_iso/);
-  assert.strictEqual(updateCalls.length, 0, "no debe persistir nada si no se encontro espacio");
-  assert.strictEqual(ctx.cita, null);
+test("la tool agendar_cita ya no ofrece proximo_disponible ni le pide a Sofi confirmar", () => {
+  const tool = TOOL_DEFINITIONS.find((x) => x.name === "agendar_cita");
+  assert.strictEqual(tool.input_schema.properties.proximo_disponible, undefined);
+  const textos = [tool.description, ...Object.values(tool.input_schema.properties).map((p) => p.description || "")].join("\n");
+  assert.doesNotMatch(textos, /proximo_disponible/);
+  assert.doesNotMatch(textos, /se lo confirmas|confirmale/i);
 });
 
-test("proximo_disponible con carrera (el espacio se ocupo justo antes de confirmar): mensaje especifico, no le echa la culpa al cliente", async (t) => {
-  t.mock.method(advisors, "findForTransfer", async () => ({ name: "Camila", phone: "573009990000", auth_user_id: "uid-camila" }));
-  t.mock.method(appointments, "proximoDisponible", async () => "2026-07-24T15:00:00-05:00");
-  t.mock.method(appointments, "checkAvailability", async () => ({ disponible: false, motivo: "choque" }));
-  const updateCalls = [];
-  t.mock.method(leads, "update", async (id, fields) => { updateCalls.push(fields); return { id, ...fields }; });
+// Guarda contra la contradiccion que ya paso con revalidar.js (auditoria
+// 2026-09-05): el texto de retorno de la tool decia "SOLICITADA" y el prompt
+// seguia ordenando "listo, agendado para manana a las 8 am". Gana el prompt.
+test("el prompt ya no le ordena a Sofi dar la cita por hecha ni escoger la hora sola", () => {
+  const base = { org: ORG, lead: { id: "l1", estado: "nuevo" }, qualified: false, now: null };
+  const cliente = buildSystemPrompt(base).map((b) => b.text).join("\n");
+  const colega = buildSystemPrompt({
+    ...base,
+    colega: { nombre: "Esteban Higuita" },
+    coordinador: { nombre: "Daiana Zea", telefono: "573011880668" },
+  }).map((b) => b.text).join("\n");
 
-  const ctx = baseCtx();
-  const out = await executeTool("agendar_cita", { descripcion: "quiere verla ya", proximo_disponible: true }, ctx);
-
-  assert.match(out, /se ocupo justo antes de confirmar/);
-  assert.doesNotMatch(out, /Ofrecele al cliente proponer OTRO dia/);
-  assert.strictEqual(updateCalls.length, 0);
-});
-
-test("proximo_disponible sin poder resolver asesor: no rompe, pide fecha_hora_iso", async (t) => {
-  t.mock.method(advisors, "findForTransfer", async () => null);
-
-  const ctx = baseCtx();
-  const out = await executeTool("agendar_cita", { descripcion: "quiere verla ya", proximo_disponible: true }, ctx);
-
-  assert.match(out, /No pude resolver el asesor/);
-});
-
-// AUTO_AGENDA_ALERTA_TO se lee de RADAR_ALERTA_TO al cargar tools.js (mismo
-// patron que test/group-dm.test.js con RADAR_VISITAS_ALERTA_TO): hay que
-// setearlo ANTES del require y volver a requerir con cache limpio.
-test("proximo_disponible: avisa a RADAR_ALERTA_TO ademas de notificar al asesor", async (t) => {
-  const rutaTools = require.resolve("../src/agent/tools");
-  const rutaMensajeAsesor = require.resolve("../src/lib/mensaje-asesor");
-  const previo = process.env.RADAR_ALERTA_TO;
-  process.env.RADAR_ALERTA_TO = "573016981200";
-  delete require.cache[rutaTools];
-  const { executeTool: executeToolConAlerta } = require("../src/agent/tools");
-  process.env.RADAR_ALERTA_TO = previo;
-
-  t.mock.method(advisors, "findForTransfer", async () => ({ name: "Camila", phone: "573009990000", auth_user_id: "uid-camila" }));
-  t.mock.method(appointments, "proximoDisponible", async () => "2026-07-24T15:00:00-05:00");
-  t.mock.method(appointments, "checkAvailability", async () => ({ disponible: true }));
-  t.mock.method(leads, "update", async (id, fields) => ({ id, ...fields }));
-  const mensajeAsesor = require("../src/lib/mensaje-asesor");
-  let avisoJuan = null;
-  t.mock.method(mensajeAsesor, "enviarYRegistrar", async (org, telefono, texto) => {
-    avisoJuan = { telefono, texto };
-    return { ok: true, wamid: "w1" };
-  });
-
-  const ctx = baseCtx();
-  await executeToolConAlerta("agendar_cita", { descripcion: "quiere verla ya", proximo_disponible: true }, ctx);
-  // El aviso se dispara sin esperar (best-effort) — le doy una vuelta al
-  // microtask queue para que el .catch()/then() encolado alcance a correr.
-  await new Promise((r) => setImmediate(r));
-
-  assert.ok(avisoJuan, "debe avisarle a Juan de la cita auto-agendada");
-  assert.strictEqual(avisoJuan.telefono, "573016981200");
-  assert.match(avisoJuan.texto, /auto-agendada/);
-
-  delete require.cache[rutaTools];
-  delete require.cache[rutaMensajeAsesor];
+  for (const [quien, p] of [["cliente", cliente], ["colega", colega]]) {
+    assert.doesNotMatch(p, /agendado para/i, `${quien}: "listo, agendado" da la cita por hecha`);
+    assert.doesNotMatch(p, /Al confirmar la cita/i, quien);
+    assert.doesNotMatch(p, /confirmes una visita/i, quien);
+    assert.doesNotMatch(p, /Al confirmarle/i, quien);
+    assert.doesNotMatch(p, /proximo_disponible/, quien);
+  }
 });
