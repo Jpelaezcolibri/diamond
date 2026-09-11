@@ -171,6 +171,29 @@ async function dueReminders(orgId, { windowMin = 60, nowMs = null } = {}) {
   return (data || []).filter((l) => isReminderDue(l, now, windowMin));
 }
 
+// Citas PROPUESTA de un asesor especifico, para que confirmar_cita
+// (src/agent/tools.js) sepa cuales ofrecerle. Ordenadas por fecha_hora
+// ascendente: la mas proxima primero, que es la que casi siempre quiere decir
+// cuando responde "OK CONFIRMADA" sin mas contexto.
+async function citasPendientesDeConfirmar(orgId, advisorId) {
+  if (!advisorId) return [];
+  if (!supabase) {
+    return memory.leads
+      .filter((l) => l.org_id === orgId && l.cita && l.cita.advisor_id === advisorId && citasData.estadoDe(l.cita) === "propuesta")
+      .sort((a, b) => new Date(a.cita.fecha_hora || 0) - new Date(b.cita.fecha_hora || 0));
+  }
+  const { data, error } = await supabase
+    .from("leads")
+    .select("id, nombre, phone, source, cita")
+    .eq("org_id", orgId)
+    .not("cita", "is", null)
+    .limit(500);
+  if (error) throw error;
+  return (data || [])
+    .filter((l) => l.cita && l.cita.advisor_id === advisorId && citasData.estadoDe(l.cita) === "propuesta")
+    .sort((a, b) => new Date(a.cita.fecha_hora || 0) - new Date(b.cita.fecha_hora || 0));
+}
+
 module.exports = {
   DEFAULT_HORARIO,
   DURACION_MIN,
@@ -181,4 +204,5 @@ module.exports = {
   proximoDisponible,
   isReminderDue,
   dueReminders,
+  citasPendientesDeConfirmar,
 };
