@@ -665,7 +665,7 @@ async function executeTool(name, input, ctx) {
       descripcion: input.descripcion,
       fecha_hora: input.fecha_hora_iso || null,
       tipo: input.tipo || "llamada",
-      estado: "solicitada",
+      estado: "propuesta",
       creada_at: new Date().toISOString(),
     };
     // La ref del inmueble de la cita, cuando la hay (Juan, 2026-09-04). Es el
@@ -780,10 +780,33 @@ async function executeTool(name, input, ctx) {
       );
     }
 
+    // CONFIRMACION DE VISITAS (2026-09-11): la cita nace `propuesta`, no
+    // confirmada -- nadie de la casa la vio todavia. El texto que Sofi le dice
+    // al cliente/colega NUNCA puede sonar a confirmada: eso es lo que una
+    // futura tool `confirmar_cita` (task aparte, todavia sin implementar) va
+    // a resolver cuando el asesor responda "OK CONFIRMADA". Ver
+    // docs/superpowers/specs/2026-09-10-confirmacion-de-visitas-design.md.
+    // Solo se resuelve para un colega: el cliente final NUNCA pasa por la
+    // linea de Natalia (invariante de citas-colega.test.js, Juan 2026-09-04) y
+    // el texto que le llega a Sofi para el cliente ni siquiera nombra al
+    // coordinador, asi que resolverlo ahi seria una consulta desperdiciada.
+    const coordinador = ctx.appointmentAlert && ctx.colega
+      ? await advisors.findAsesorPrincipalRadar(ctx.org).catch((e) => {
+          console.warn("[tools] No se pudo resolver el coordinador de visitas:", e.message);
+          return null;
+        })
+      : null;
     const notificado = ctx.appointmentAlert
-      ? " El asesor ya fue notificado de la cita."
+      ? " El asesor ya fue notificado, pero TODAVIA NO CONFIRMO la cita."
       : " Cuando transfieras al asesor la vera en la alerta.";
-    return `Cita registrada: ${cita.descripcion}${cita.fecha_hora ? ` (${cita.fecha_hora})` : ""} — tipo ${cita.tipo}.${notificado} Confirma al cliente con calidez, repitiendo EXACTAMENTE el dia y la hora agendados, y deja claro el siguiente paso.`;
+    const comoDecirlo = ctx.colega
+      ? `Decile al colega que la visita quedo SOLICITADA${cita.fecha_hora ? ` para ${cita.fecha_hora}` : ""}, que en breve ${
+          coordinador?.name || "la asesora"
+        } lo contacta para confirmarla${
+          coordinador?.phone ? `, y que si quiere confirmarla directo puede escribirle a +${coordinador.phone}` : ""
+        }. Nunca digas "confirmada".`
+      : `Decile al cliente que la visita quedo SOLICITADA${cita.fecha_hora ? ` para ${cita.fecha_hora}` : ""} y que en breve el asesor la revisa y se pone en contacto. Nunca digas que ya quedo en firme ni que "queda lista": todavia falta que el asesor la revise.`;
+    return `Cita registrada: ${cita.descripcion}${cita.fecha_hora ? ` (${cita.fecha_hora})` : ""} — tipo ${cita.tipo}.${notificado} ${comoDecirlo}`;
   }
 
   if (name === "consultar_guia_legal") {

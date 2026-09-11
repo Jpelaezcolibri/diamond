@@ -22,6 +22,39 @@ function baseCtx() {
   };
 }
 
+// CONFIRMACION DE VISITAS (2026-09-11): la cita nace `propuesta`, nadie de
+// la casa la reviso todavia. Bug real: una visita se auto-confirmo y quedo
+// en manos de un asesor que nunca la vio. Ver docs/superpowers/specs/2026-09-10-confirmacion-de-visitas-design.md.
+test("agendar_cita: la cita nace propuesta, nunca confirmada de una", async (t) => {
+  t.mock.method(advisors, "findForTransfer", async () => ({ name: "Camila", phone: "573009990000", auth_user_id: "uid-camila", horario: null }));
+  t.mock.method(appointments, "checkAvailability", async () => ({ disponible: true }));
+  t.mock.method(leads, "update", async (id, fields) => ({ id, ...fields }));
+
+  const ctx = baseCtx();
+  const r = await executeTool("agendar_cita", { fecha_hora_iso: "2026-09-12T15:00:00-05:00", tipo: "visita", descripcion: "ver la casa" }, ctx);
+
+  assert.strictEqual(ctx.cita.estado, "propuesta");
+  assert.doesNotMatch(r, /confirmad/i);
+  assert.match(r, /solicitad/i);
+});
+
+test("agendar_cita: a un colega tambien le queda propuesta, y el texto de retorno menciona al coordinador para confirmar directo", async (t) => {
+  t.mock.method(advisors, "findAsesorPrincipalRadar", async () => ({ name: "Daiana Zea", phone: "573011880668" }));
+  t.mock.method(appointments, "checkAvailability", async () => ({ disponible: true }));
+  t.mock.method(leads, "update", async (id, fields) => ({ id, ...fields }));
+
+  const ctx = baseCtx();
+  ctx.colega = { lid: "123@lid", telefono: "573112223344", nombre: "Esteban Higuita" };
+  ctx.lead = { id: "lead-colega", phone: "573112223344", nombre: null, estado: "en_conversacion", score: 0, source: "colega" };
+  ctx.propertyInteres = null;
+
+  const r = await executeTool("agendar_cita", { fecha_hora_iso: "2026-09-12T15:00:00-05:00", tipo: "visita", descripcion: "ver la casa" }, ctx);
+
+  assert.strictEqual(ctx.cita.estado, "propuesta");
+  assert.match(r, /Daiana Zea/);
+  assert.match(r, /573011880668/);
+});
+
 test("agendar_cita con hora libre: estampa advisor_id, agenda y prepara aviso inmediato", async (t) => {
   t.mock.method(advisors, "findForTransfer", async () => ({ name: "Camila", phone: "573009990000", auth_user_id: "uid-camila", horario: null }));
   t.mock.method(appointments, "checkAvailability", async () => ({ disponible: true }));
@@ -104,7 +137,9 @@ test("proximo_disponible: busca el espacio, lo agenda con origen=auto y prepara 
   assert.strictEqual(ctx.cita.advisor_id, "uid-camila");
   assert.ok(ctx.appointmentAlert, "debe preparar el aviso al asesor, igual que una cita normal");
   assert.match(out, /Cita registrada/);
-  assert.match(out, /EXACTAMENTE/);
+  // CONFIRMACION DE VISITAS (2026-09-11): ya no se le dice a Sofi que
+  // confirme "EXACTAMENTE" -- la cita nace propuesta, no confirmada.
+  assert.match(out, /SOLICITADA/);
 });
 
 test("proximo_disponible y fecha_hora_iso juntos: son excluyentes, no agenda nada", async (t) => {
