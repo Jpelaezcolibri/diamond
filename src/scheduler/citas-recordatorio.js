@@ -38,59 +38,69 @@ function textoRecordatorio(lead, advisor) {
   ].join("\n\n");
 }
 
+let corriendo = false;
 async function runOnce() {
   if (!config.citasRecordatorio.enabled) return { sent: 0 };
-
-  let vencidas;
+  // Mismo motivo que radar-directorio.js: si un tick lento sigue corriendo
+  // cuando el setInterval dispara el siguiente, los dos pueden leer el mismo
+  // lead como vencido antes de que cualquiera lo marque recordado -- nunca
+  // dos pasadas a la vez.
+  if (corriendo) return { sent: 0 };
+  corriendo = true;
   try {
-    vencidas = await leads.listConCitasPropuestasVencidas(config.citasRecordatorio.silenceMin);
-  } catch (e) {
-    console.error("[citas-recordatorio] error leyendo citas vencidas:", e.message);
-    return { sent: 0 };
-  }
-
-  // Cache por org dentro de esta corrida: varios leads vencidos de la misma
-  // organizacion no deberian disparar una consulta de organizations por cada
-  // uno (mismo criterio que radar-recordatorio.js, que resuelve la org una
-  // vez por iteracion en vez de por señal).
-  const orgsCache = new Map();
-  async function resolverOrg(orgId) {
-    if (orgsCache.has(orgId)) return orgsCache.get(orgId);
-    const org = await organizations.findById(orgId).catch(() => null);
-    orgsCache.set(orgId, org);
-    return org;
-  }
-
-  let sent = 0;
-  for (const lead of vencidas) {
+    let vencidas;
     try {
-      const org = await resolverOrg(lead.org_id);
-      if (!org) {
-        console.warn(`[citas-recordatorio] No se pudo resolver la organizacion ${lead.org_id} — se salta el lead ${lead.id} en este tick.`);
-        continue;
-      }
-
-      const advisor = await advisors.findByAuthUserId(lead.org_id, lead.cita.advisor_id).catch(() => null);
-      if (!advisor || !advisor.phone) continue;
-
-      const { ok } = await mensajeAsesor.enviarYRegistrar(
-        org,
-        advisor.phone,
-        textoRecordatorio(lead, advisor)
-      );
-      // Se marca SIEMPRE, salga o no: si la ventana esta cerrada, reintentar
-      // en el proximo tick no la va a abrir (mismo criterio que
-      // radar-recordatorio.js) -- lo unico que la reabre es que el asesor le
-      // escriba primero a Sofi, y eso no depende de este scheduler.
-      await leads.update(lead.id, { cita: { ...lead.cita, recordatorio_confirmacion_enviado: true } });
-      if (ok) sent++;
-      else console.warn(`[citas-recordatorio] No se pudo avisar a ${advisor.name} de la cita con ${lead.nombre || lead.phone}`);
+      vencidas = await leads.listConCitasPropuestasVencidas(config.citasRecordatorio.silenceMin);
     } catch (e) {
-      console.error("[citas-recordatorio] error con lead", lead.id, e.message);
+      console.error("[citas-recordatorio] error leyendo citas vencidas:", e.message);
+      return { sent: 0 };
     }
+
+    // Cache por org dentro de esta corrida: varios leads vencidos de la misma
+    // organizacion no deberian disparar una consulta de organizations por cada
+    // uno (mismo criterio que radar-recordatorio.js, que resuelve la org una
+    // vez por iteracion en vez de por señal).
+    const orgsCache = new Map();
+    async function resolverOrg(orgId) {
+      if (orgsCache.has(orgId)) return orgsCache.get(orgId);
+      const org = await organizations.findById(orgId).catch(() => null);
+      orgsCache.set(orgId, org);
+      return org;
+    }
+
+    let sent = 0;
+    for (const lead of vencidas) {
+      try {
+        const org = await resolverOrg(lead.org_id);
+        if (!org) {
+          console.warn(`[citas-recordatorio] No se pudo resolver la organizacion ${lead.org_id} — se salta el lead ${lead.id} en este tick.`);
+          continue;
+        }
+
+        const advisor = await advisors.findByAuthUserId(lead.org_id, lead.cita.advisor_id).catch(() => null);
+        if (!advisor || !advisor.phone) continue;
+
+        const { ok } = await mensajeAsesor.enviarYRegistrar(
+          org,
+          advisor.phone,
+          textoRecordatorio(lead, advisor)
+        );
+        // Se marca SIEMPRE, salga o no: si la ventana esta cerrada, reintentar
+        // en el proximo tick no la va a abrir (mismo criterio que
+        // radar-recordatorio.js) -- lo unico que la reabre es que el asesor le
+        // escriba primero a Sofi, y eso no depende de este scheduler.
+        await leads.update(lead.id, { cita: { ...lead.cita, recordatorio_confirmacion_enviado: true } });
+        if (ok) sent++;
+        else console.warn(`[citas-recordatorio] No se pudo avisar a ${advisor.name} de la cita con ${lead.nombre || lead.phone}`);
+      } catch (e) {
+        console.error("[citas-recordatorio] error con lead", lead.id, e.message);
+      }
+    }
+    if (sent) console.log(`[citas-recordatorio] ${sent} recordatorio(s) enviado(s)`);
+    return { sent };
+  } finally {
+    corriendo = false;
   }
-  if (sent) console.log(`[citas-recordatorio] ${sent} recordatorio(s) enviado(s)`);
-  return { sent };
 }
 
 let timer = null;
