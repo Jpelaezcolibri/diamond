@@ -81,6 +81,16 @@ const config = {
     quietEndHour: parseInt(process.env.FOLLOWUP_QUIET_END || "8", 10), // ...a 8am (hora Colombia)
   },
 
+  // Recordatorio unico al asesor si no confirmo una cita PROPUESTA en el
+  // plazo (Juan, spec 2026-09-10-confirmacion-de-visitas): sin este empujon,
+  // una cita puede quedar "propuesta" para siempre y el cliente nunca se
+  // entera de que nadie la reviso.
+  citasRecordatorio: {
+    enabled: process.env.CITAS_RECORDATORIO_ENABLED !== "false",
+    silenceMin: parseInt(process.env.CITAS_RECORDATORIO_SILENCE_MIN || "120", 10), // 2h
+    intervalMin: parseInt(process.env.CITAS_RECORDATORIO_INTERVAL_MIN || "20", 10),
+  },
+
   // Radar de grupos: lo que se detecta en los grupos gremiales.
   //
   // Entra por tres vias. Dos NO tocan el protocolo de WhatsApp y por lo tanto

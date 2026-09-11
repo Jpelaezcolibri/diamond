@@ -138,6 +138,11 @@ app.listen(config.port, () => {
   // Bandeja de salida: junta lo pendiente y le manda a cada asesora un solo
   // mensaje agrupado en vez de uno por oportunidad (Juan, 2026-09-02).
   if (config.supabaseUrl) require("./scheduler/avisos-salida").start();
+  // Recordatorio unico al asesor si no confirmo una cita PROPUESTA en 2h (Juan,
+  // spec 2026-09-10-confirmacion-de-visitas): sin este empujon una cita puede
+  // quedar "propuesta" para siempre y el cliente nunca se entera de que nadie
+  // la reviso.
+  if (config.supabaseUrl) require("./scheduler/citas-recordatorio").start();
   // Cruce diario visitas -> ventas (Juan, 2026-08-21): de lo que el sistema
   // pudo capturar como visita agendada, ¿cual propiedad ya no esta
   // disponible? "quiero tener el control de las visitas y ventas".
