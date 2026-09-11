@@ -45,7 +45,14 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
     - Daiana tiene `recibe_transferencias=true` y Catherine `false`.
     - Hay una fila nueva, "Daiana Zea (línea 2)", con el 8024.
     - `RADAR_ESCALADO_PHONE=573001878024`.
-  - **Al desplegar:** correr `scripts/backfill-citas-propuesta.js`.
+  - **El backfill `scripts/backfill-citas-propuesta.js` NO se corrió, a
+    propósito.** Las 5 citas que existen ya pasaron. `citas-recordatorio` no
+    filtra por fecha, así que pasarlas a `propuesta` le mandaría a Daiana (y
+    a Catherine) recordatorios de "confirma" por visitas viejas.
+  - **Una sola línea (Juan, 2026-09-11):** no se implementa "dos líneas".
+    RADA-NATALIA queda `pendiente`, con posibilidad de conectarla. Si se
+    conecta, `ventana-asesora` deja de mandar sin avisar y la ventana de
+    Daiana se cierra. Ver la spec `2026-09-10-radar-dos-lineas-design.md`.
   - **El caso que lo disparó:** la visita de Sebastián Velásquez (11-sep,
     3 p. m.) le llegó a Catherine, que tenía la ventana cerrada hacía 142 h,
     y se perdió. Sofi ya le había dicho "queda confirmada". Detalle en

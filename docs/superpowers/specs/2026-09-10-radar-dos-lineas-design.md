@@ -1,8 +1,19 @@
 # El radar con dos líneas: la de la asesora principal primero, la otra de respaldo
 
 **Decisión de Juan, 2026-09-10.** Diseño aprobado en conversación.
-**Estado: pendiente de plan e implementación.** Va ANTES de volver a vincular
-la línea de Natalia y antes de la confirmación de visitas y los DM separados.
+
+> **2026-09-11: NO SE IMPLEMENTA (decisión de Juan).** *"no vamos a
+> implementar el programa para que aguante dos lineas, dejemos como esta con
+> una sola y la otra con posibilidad de conectar"*.
+>
+> - Queda una sola línea activa: DaianaDiamond.
+> - RADA-NATALIA (el 573001878024) no se borra: queda `pendiente`, con la
+>   posibilidad de conectarla.
+>
+> **Ojo:** si alguien escanea el QR y hay dos líneas activas, siguen vigentes
+> las fallas silenciosas del §1. La peor es la de `ventana-asesora`: deja de
+> mantener abierta la ventana de Daiana y los avisos dejan de llegarle al día
+> siguiente. Conectar la segunda línea exige retomar esta spec antes.
 
 Juan: *"no quiero que canceles del todo la línea de Natalia, se pueden dejar
 las dos sin problema; el mensaje de salida tratar de que se haga desde el
