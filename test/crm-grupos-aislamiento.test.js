@@ -94,3 +94,25 @@ test("el export se atribuye a quien lo sube, tomado de la sesión", () => {
     "El advisorId NUNCA puede venir del formulario: sería suplantable"
   );
 });
+
+// La pagina de amoblados (spec 2026-09-12) lee las mismas señales: mismo filtro.
+test("/amoblados: toda consulta a group_signals pasa por el filtro por asesor", () => {
+  const PAGINA_AMOBLADOS = path.join(__dirname, "../crm/app/(dashboard)/amoblados/page.tsx");
+  const src = readFileSync(PAGINA_AMOBLADOS, "utf8");
+  const re = /supabase\s*\.from\(\s*["']group_signals["']\s*\)/g;
+  const consultas = [...src.matchAll(re)];
+  assert.ok(consultas.length >= 2, "la pagina tiene que consultar group_signals");
+  const sinFiltro = consultas
+    .filter((m) => !src.slice(0, m.index).replace(/\s+$/, "").endsWith("mias("))
+    .map((m) => src.slice(Math.max(0, m.index - 60), m.index + 45).replace(/\s+/g, " "));
+  assert.deepStrictEqual(sinFiltro, []);
+});
+
+// Los pedidos de arriendo viven en /amoblados (spec 2026-09-12): /grupos los
+// excluye en la lista con match, en la lista general y en el conteo del KPI.
+// Se usa .or(... is.null ...) porque un .neq a secas en PostgREST tambien
+// descarta las filas con operacion null.
+test("/grupos excluye los pedidos de arriendo en sus tres lecturas de pedidos", () => {
+  const exclusiones = fuente.match(/operacion\.is\.null,operacion\.neq\.arriendo/g) || [];
+  assert.strictEqual(exclusiones.length, 3);
+});
