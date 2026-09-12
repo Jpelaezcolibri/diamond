@@ -46,8 +46,15 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
       sobre todo.
     - Corregir la zona de la 10390204: dice Robledo, pero la descripción
       dice Loma del Esmeraldal, que queda en Envigado.
-  - **Pendiente de diseño:** el panel de amoblados del CRM. Va con maqueta
-    antes de escribir código.
+  - **Panel `/amoblados` en el CRM (2026-09-12).** Muestra solo los pedidos
+    de arriendo con match y lo que salió para cada uno: aviso a la asesora,
+    DM al colega o descarte de Sofi. También el inventario en arriendo con
+    sus alertas de Wasi. `/grupos` ya no muestra los pedidos de arriendo.
+    Spec, maqueta y plan en `docs/superpowers/`.
+  - **Carril apagado otra vez:** `RADAR_AMOBLADO_ACTIVO=false`, decisión de
+    Juan el 2026-09-12. Por ahora todo lo de arriendo va a Daiana, mientras
+    se corrige Wasi. Los cambios pendientes están en el Excel que se le
+    envió a Juan.
 
 - **Visitas: toda cita va a Daiana (2026-09-11).** Rama
   `confirmacion-de-visitas`, **sin desplegar**.
