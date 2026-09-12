@@ -62,6 +62,12 @@ async function persistirSenal(org, c, { origen = "export", advisorId = null, aut
     garajes: c.garajes || null,
     estrato: c.estrato || null,
     flexible_habitaciones: c.flexible_habitaciones ?? null,
+    // Muebles y plazo (2026-09-12). classify.js los extrae desde el 2026-09-07
+    // y la tabla tiene las columnas, pero aca nunca se copiaban: 92 de 92
+    // pedidos de arriendo quedaron en null. `??` y no `||`: "" (no lo
+    // menciona) es distinto de null (no se sabe), igual que en group-signals.
+    amoblado: c.amoblado ?? null,
+    periodo: c.periodo ?? null,
     contacto: c.contacto || null,
     texto_original: m.texto || null,
     matches: c.matches || [],

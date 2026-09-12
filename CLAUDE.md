@@ -28,7 +28,26 @@ Equipo: 1 dev (Juan) + Claude Code. Idioma de la app: español (Colombia).
 Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
 `docs:`, `config:`).
 
-## 2. Estado actual (2026-09-11)
+## 2. Estado actual (2026-09-12)
+
+- **Amoblados, antes de publicarlos (2026-09-12).**
+  - **Carril encendido:** `RADAR_AMOBLADO_ACTIVO=true`, decisión de Juan.
+    Antes estaba en `false` y ningún pedido de arriendo salía solo.
+  - **Arreglo de guardado:** `persistir.js` ahora guarda `amoblado` y
+    `periodo`. Nunca lo hacía: 92 de 92 pedidos de arriendo quedaron en null.
+    El cruce en vivo no se afectaba porque usa el pedido en memoria.
+  - **Verificado contra producción:**
+    - Los 8 arriendos de la web pública de Wasi son los 8 que hay en
+      `properties`.
+    - `findForTransfer` para arriendo, venta y vehículos devuelve a Daiana.
+  - **Pendiente en Wasi (lo hace Juan):**
+    - Marcar la característica Amoblado donde falta.
+    - Aclarar si cada precio es por mes o por noche. La finca 10389800
+      sobre todo.
+    - Corregir la zona de la 10390204: dice Robledo, pero la descripción
+      dice Loma del Esmeraldal, que queda en Envigado.
+  - **Pendiente de diseño:** el panel de amoblados del CRM. Va con maqueta
+    antes de escribir código.
 
 - **Visitas: toda cita va a Daiana (2026-09-11).** Rama
   `confirmacion-de-visitas`, **sin desplegar**.
