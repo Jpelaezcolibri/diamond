@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mockup — panel de amoblados (/amoblados)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-100 text-slate-900">
+<p class="mx-auto max-w-6xl px-5 pt-4 text-xs text-slate-500">Mockup 2026-09-12 — página nueva <b>/amoblados</b> del CRM (aparte de /grupos, para que no se sature). Datos REALES de producción del 12-sep. Solo pedidos de arriendo con match, y lo que salió: aviso a Daiana o DM al colega, con el pedido al que responde.</p>
+
+<div class="mx-auto flex max-w-6xl flex-col gap-4 px-5 py-4">
+
+  <!-- Menú lateral: solo para ubicar el ítem nuevo -->
+  <nav class="flex flex-wrap gap-1 text-xs">
+    <span class="rounded-md px-2 py-1 text-slate-500">Inbox</span>
+    <span class="rounded-md px-2 py-1 text-slate-500">Leads</span>
+    <span class="rounded-md px-2 py-1 text-slate-500">Radar de grupos</span>
+    <span class="rounded-md bg-slate-900 px-2 py-1 font-bold text-[#f2d58a]">🛋️ Amoblados <i class="not-italic">· nuevo</i></span>
+    <span class="rounded-md px-2 py-1 text-slate-500">Calendario</span>
+  </nav>
+
+  <!-- Cabecera -->
+  <div class="flex flex-wrap items-end justify-between gap-3">
+    <div>
+      <h1 class="text-3xl font-extrabold">Amoblados</h1>
+      <p class="mt-1 max-w-[62ch] text-sm text-slate-600">Pedidos de arriendo de los colegas que calzan con nuestro inventario amoblado, y qué se respondió a cada uno.</p>
+    </div>
+    <div class="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs">
+      <span class="mr-1 inline-block h-2 w-2 rounded-full bg-slate-400 align-middle"></span>
+      <b>Carril apagado</b> · nada sale solo al colega: todo le llega a Daiana
+    </div>
+  </div>
+
+  <!-- Isla oscura: KPIs -->
+  <section class="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#0b1526] via-[#13223a] to-[#1b2b47] p-5 text-white">
+    <div class="pointer-events-none absolute inset-0" style="background:radial-gradient(600px 220px at 85% -10%, rgba(201,162,75,.18), transparent 70%)"></div>
+    <div class="relative">
+      <div class="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+        <h2 class="text-lg font-bold">Arriendo · últimos 7 días</h2>
+        <span class="text-xs text-slate-400">sale de la base, no se reinicia con los despliegues</span>
+      </div>
+      <div class="grid grid-cols-2 gap-2.5 sm:grid-cols-5">
+        <div class="flex min-h-24 flex-col justify-between rounded-xl bg-slate-600 p-3"><p class="text-3xl font-extrabold tabular-nums">92</p><div><p class="text-xs font-bold">Pedidos de arriendo</p><p class="text-[11px] opacity-80">detectados en los grupos</p></div></div>
+        <a href="#pedidos" class="flex min-h-24 flex-col justify-between rounded-xl bg-indigo-600 p-3"><p class="text-3xl font-extrabold tabular-nums">2</p><div><p class="text-xs font-bold">Con match</p><p class="text-[11px] opacity-80">calzan con un amoblado</p><p class="mt-1 text-[10px] font-bold opacity-70">Ver la lista →</p></div></a>
+        <div class="flex min-h-24 flex-col justify-between rounded-xl bg-amber-500 p-3"><p class="text-3xl font-extrabold tabular-nums">1</p><div><p class="text-xs font-bold">Aviso a Daiana</p><p class="text-[11px] opacity-80">para que ella le escriba</p></div></div>
+        <div class="flex min-h-24 flex-col justify-between rounded-xl bg-teal-600 p-3"><p class="text-3xl font-extrabold tabular-nums">0</p><div><p class="text-xs font-bold">DM al colega</p><p class="text-[11px] opacity-80">salió solo (carril apagado)</p></div></div>
+        <div class="flex min-h-24 flex-col justify-between rounded-xl bg-slate-500 p-3"><p class="text-3xl font-extrabold tabular-nums">1</p><div><p class="text-xs font-bold">Descartó Sofi</p><p class="text-[11px] opacity-80">revisó y no le servía</p></div></div>
+      </div>
+      <p class="mt-3 text-[11px] text-slate-400">Si algún día aparece un pedido con match que no tuvo aviso, ni DM, ni descarte de Sofi, se marca en rojo como <b class="text-rose-300">Sin dueño</b>: un match nunca debería quedar sin salida.</p>
+    </div>
+  </section>
+
+  <div class="grid items-start gap-4 lg:grid-cols-[1.6fr_1fr]">
+
+    <!-- Pedidos con match -->
+    <section id="pedidos" class="rounded-2xl border border-slate-200 bg-white">
+      <div class="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+        <h2 class="text-sm font-bold">Pedidos con match</h2>
+        <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-500">2</span>
+      </div>
+
+      <!-- Tarjeta 1: aviso a Daiana -->
+      <article class="border-b border-slate-200 p-4">
+        <div class="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <p class="text-[11px] font-bold uppercase tracking-wider text-indigo-600">Pedido sin número · SOLO LAURELES</p>
+            <h3 class="text-base font-bold">Ana Sanchez busca apartamento en Laureles</h3>
+            <p class="text-xs text-slate-500">10 de sep, 7:33 p. m.</p>
+          </div>
+          <span class="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-bold text-amber-800">📨 Aviso a Daiana</span>
+        </div>
+        <div class="mt-2 flex flex-wrap gap-1.5 text-[11px]">
+          <span class="rounded bg-slate-100 px-1.5 py-0.5">apartamento</span>
+          <span class="rounded bg-slate-100 px-1.5 py-0.5">Laureles</span>
+          <span class="rounded bg-slate-100 px-1.5 py-0.5">2 alcobas · 2 garajes</span>
+          <span class="rounded bg-slate-100 px-1.5 py-0.5">presupuesto: no dice</span>
+          <span class="rounded bg-slate-100 px-1.5 py-0.5 text-slate-500">amoblado: no lo dice</span>
+          <span class="rounded bg-slate-100 px-1.5 py-0.5 text-slate-500">plazo: no lo dice</span>
+        </div>
+        <p class="mt-2 rounded-r-lg border-l-4 border-indigo-400 bg-slate-50 px-3 py-2 text-sm italic text-slate-700">"Busco apto solo laureles .máximo 5 años de construido 2 habitaciones parqueadero doble en lo posible presupuesto de acuerdo a lo ofrecido!! Muy moderno"</p>
+        <div class="mt-3 grid gap-2 sm:grid-cols-2">
+          <div class="rounded-lg border border-slate-200 p-2 text-sm"><b>10383636</b> · Don Quijote, Laureles · $4.500.000<br><span class="text-xs text-slate-500">puntaje 85 · 1 garaje (pidió 2) · <span class="text-amber-700">⚠ amoblado sin confirmar en Wasi</span></span></div>
+          <div class="rounded-lg border border-slate-200 p-2 text-sm"><b>10319552</b> · Don Quijote · $4.500.000<br><span class="text-xs text-slate-500">puntaje 85 · 1 garaje (pidió 2) · ✓ amoblado</span></div>
+        </div>
+        <details class="mt-3 rounded-lg border border-amber-200 bg-amber-50/60" open>
+          <summary class="cursor-pointer px-3 py-2 text-xs font-bold text-amber-900">Lo que salió · aviso a Daiana Zea (0668) · 10 de sep, 7:33 p. m. · entregado ✓</summary>
+          <pre class="whitespace-pre-wrap px-3 pb-3 font-sans text-xs leading-relaxed text-slate-700">🛋️ AMOBLADOS — pedido que no salió solo
+🚨🚨 OPORTUNIDAD APROBADA — el bot NO pudo escribirle al colega
+Grupo: SOLO LAURELES · Colega: Ana Sanchez · Contacto: wa.me/573005967207
+Por qué no salió solo: el carril de amoblados está apagado. Vos decidís si escribirle al colega.
+Le pueden servir: Ref 10383636 · Ref 10319552
+Sofi dice: Ambas quedan en Laureles/Don Quijote, cumplen 2 alcobas y 2 baños. Las dos tienen 1 garaje en lugar de 2…</pre>
+        </details>
+        <div class="mt-3 flex flex-wrap gap-2 text-xs">
+          <span class="rounded-lg border border-slate-200 px-2.5 py-1.5 font-semibold text-slate-600">Le escribí</span>
+          <span class="rounded-lg border border-slate-200 px-2.5 py-1.5 font-semibold text-slate-600">Hubo visita</span>
+          <span class="rounded-lg border border-slate-200 px-2.5 py-1.5 font-semibold text-slate-600">No sirvió</span>
+          <span class="ml-auto text-slate-400">mismo seguimiento que en venta</span>
+        </div>
+      </article>
+
+      <!-- Tarjeta 2: descartado por Sofi -->
+      <article class="border-b border-slate-200 p-4">
+        <div class="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <p class="text-[11px] font-bold uppercase tracking-wider text-indigo-600">Pedido sin número · grupo del radar</p>
+            <h3 class="text-base font-bold">Niko busca apartamento en El Poblado</h3>
+            <p class="text-xs text-slate-500">9 de sep, 11:02 a. m.</p>
+          </div>
+          <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-600">🚫 Descartó Sofi</span>
+        </div>
+        <p class="mt-2 rounded-r-lg border-l-4 border-indigo-400 bg-slate-50 px-3 py-2 text-sm italic text-slate-700">"BUSCO APARTAMENTO EN EL POBLADO *Q Concept (San Lucas)*"</p>
+        <div class="mt-3 grid gap-2 sm:grid-cols-2">
+          <div class="rounded-lg border border-slate-200 p-2 text-sm text-slate-500"><b>10383517</b> · El Poblado · $6.800.000<br><span class="text-xs">puntaje 75 · ✓ amoblado</span></div>
+          <div class="rounded-lg border border-slate-200 p-2 text-sm text-slate-500"><b>10319436</b> · Los Gonzáles · $7.900.000<br><span class="text-xs">puntaje 75 · ✓ amoblado</span></div>
+        </div>
+        <p class="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700"><b>Por qué no salió nada:</b> "El colega busca un apartamento específico en el edificio Q Concept. Ninguna de las dos propiedades está en ese edificio: una queda en Patio Bonito y la otra en Los Gonzáles. No cumplen lo pedido." — Sofi</p>
+      </article>
+
+      <!-- Tarjeta 3: ejemplo con carril encendido -->
+      <article class="bg-slate-50 p-4">
+        <p class="mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-400">Ejemplo · así se verá cuando el carril esté encendido</p>
+        <div class="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <p class="text-[11px] font-bold uppercase tracking-wider text-indigo-600">Pedido N° 112 · PEDIDOS 7:00A.M.8:00P.M.</p>
+            <h3 class="text-base font-bold">Un colega busca apartamento amoblado en Envigado</h3>
+          </div>
+          <span class="rounded-full bg-teal-50 px-2 py-0.5 text-xs font-bold text-teal-800">💬 DM al colega</span>
+        </div>
+        <div class="mt-2 flex flex-wrap gap-1.5 text-[11px]">
+          <span class="rounded bg-indigo-50 px-1.5 py-0.5 font-bold text-indigo-700">amoblado: sí</span>
+          <span class="rounded bg-indigo-50 px-1.5 py-0.5 font-bold text-indigo-700">plazo: por meses</span>
+          <span class="rounded bg-slate-100 px-1.5 py-0.5">hasta $4.000.000</span>
+        </div>
+        <details class="mt-3 rounded-lg border border-teal-200 bg-white" open>
+          <summary class="cursor-pointer px-3 py-2 text-xs font-bold text-teal-900">Lo que salió · DM privado al colega · desde la línea de Daiana</summary>
+          <pre class="whitespace-pre-wrap px-3 pb-3 font-sans text-xs leading-relaxed text-slate-700">Hola, te respondo tu PEDIDO 112 (apartamento amoblado en Envigado). Tengo esta opción…</pre>
+        </details>
+      </article>
+    </section>
+
+    <!-- Inventario amoblado -->
+    <section class="rounded-2xl border border-slate-200 bg-white">
+      <div class="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+        <h2 class="text-sm font-bold">Inventario amoblado</h2>
+        <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-500">8 en Wasi</span>
+      </div>
+      <ul class="divide-y divide-slate-100 text-sm">
+        <li class="flex items-start justify-between gap-2 px-4 py-2.5"><div><b>10383636</b> · Laureles<br><span class="text-xs text-amber-700">⚠ falta marcar Amoblado en Wasi</span></div><div class="text-right"><span class="tabular-nums">$4.500.000</span><br><span class="text-xs text-slate-500">1 pedido</span></div></li>
+        <li class="flex items-start justify-between gap-2 px-4 py-2.5"><div><b>10319552</b> · Don Quijote<br><span class="text-xs text-slate-500">✓ amoblado · mensual</span></div><div class="text-right"><span class="tabular-nums">$4.500.000</span><br><span class="text-xs text-slate-500">1 pedido</span></div></li>
+        <li class="flex items-start justify-between gap-2 px-4 py-2.5"><div><b>10383517</b> · El Poblado<br><span class="text-xs text-slate-500">✓ amoblado · mensual</span></div><div class="text-right"><span class="tabular-nums">$6.800.000</span><br><span class="text-xs text-slate-500">1 pedido</span></div></li>
+        <li class="flex items-start justify-between gap-2 px-4 py-2.5"><div><b>10319436</b> · Los Gonzáles<br><span class="text-xs text-slate-500">✓ amoblado · mensual</span></div><div class="text-right"><span class="tabular-nums">$7.900.000</span><br><span class="text-xs text-slate-500">1 pedido</span></div></li>
+        <li class="flex items-start justify-between gap-2 px-4 py-2.5"><div><b>10389800</b> · Finca, Guatapé<br><span class="text-xs text-rose-700">⚠ ¿por noche o por mes?</span></div><div class="text-right"><span class="tabular-nums">$1.700.000</span><br><span class="text-xs text-slate-400">0 pedidos</span></div></li>
+        <li class="flex items-start justify-between gap-2 px-4 py-2.5"><div><b>10390204</b> · "Robledo"<br><span class="text-xs text-amber-700">⚠ zona real: Loma del Esmeraldal</span></div><div class="text-right"><span class="tabular-nums">$7.700.000</span><br><span class="text-xs text-slate-400">0 pedidos</span></div></li>
+        <li class="flex items-start justify-between gap-2 px-4 py-2.5"><div><b>10392197</b> · Laureles (loft)<br><span class="text-xs text-slate-500">✓ amoblado · mensual</span></div><div class="text-right"><span class="tabular-nums">$4.400.000</span><br><span class="text-xs text-slate-400">0 pedidos</span></div></li>
+        <li class="flex items-start justify-between gap-2 px-4 py-2.5"><div><b>10383577</b> · El Poblado<br><span class="text-xs text-slate-500">✓ amoblado · sin periodo escrito</span></div><div class="text-right"><span class="tabular-nums">$6.900.000</span><br><span class="text-xs text-slate-400">0 pedidos</span></div></li>
+      </ul>
+      <p class="border-t border-slate-100 px-4 py-2 text-[11px] text-slate-400">Las alertas ⚠ salen de lo que dice Wasi y se van solas cuando se corrige allá (sync de las 7 p. m.).</p>
+    </section>
+  </div>
+</div>
+</body>
+</html>
