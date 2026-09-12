@@ -47,9 +47,10 @@ const TONO = {
   sky: "bg-sky-600",
   green: "bg-emerald-600",
   rose: "bg-rose-600",
+  slate: "bg-slate-500",
 } as const;
 
-function Kpi({
+export function Kpi({
   n,
   titulo,
   detalle,
