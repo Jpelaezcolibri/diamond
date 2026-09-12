@@ -29,6 +29,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     // propias señales. Era solo de admin cuando una línea vinculada servía a
     // toda la organización y ver la pantalla era ver los grupos de otro.
     { href: "/grupos", label: "Grupos" },
+    { href: "/amoblados", label: "Amoblados" },
     { href: "/marketing", label: "Marketing" },
     ...(admin ? [{ href: "/equipo", label: "Equipo" }, { href: "/usuarios", label: "Usuarios" }] : []),
   ];

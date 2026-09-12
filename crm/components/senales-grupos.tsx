@@ -87,6 +87,12 @@ export type Signal = {
    *  select("*"); se usan solo para la franja de estado de la tarjeta. */
   politica_motivo?: string | null;
   aviso_advisor_id?: string | null;
+  /** Texto del aviso que recibió la asesora (messages.content por
+   *  aviso_wamid). Lo llena /amoblados; /grupos no lo trae. */
+  aviso_texto?: string | null;
+  /** Por qué Sofi descartó el pedido (revalidacion.por_que cuando
+   *  sirve_alguna === false). Lo llena /amoblados. */
+  descarte_motivo?: string | null;
 };
 
 /** El recorrido natural de una oportunidad. El orden es el del embudo, no
@@ -152,6 +158,9 @@ const MENSAJE_RESULTADO_DM: Record<string, string> = {
     "La línea agotó su cuota de mensajes de WhatsApp de este mes. No es un límite nuestro: hasta que arranque el próximo ciclo, WhatsApp los rechaza. Escribile a mano.",
   // Solo llamada (Juan, 2026-09-10): permanente, ningún mensaje por ningún camino.
   colega_solo_llamada: "Este colega pidió contacto solo por llamada: no se le mandó nada. Llamá vos.",
+  // Carril de amoblados apagado (Juan, 2026-09-12: "por ahora solo
+  // transferencia a Daiana"): el bot no le escribe al colega por ningun camino.
+  carril_apagado: "El carril de amoblados está apagado: por ahora los arriendos no se le escriben al colega desde el sistema. Escribile vos desde tu WhatsApp.",
   error_envio: "El envío falló. Se puede volver a intentar.",
   ya_respondida: "Este pedido ya tiene una respuesta registrada.",
   no_es_demanda: "Esto no es un pedido (demanda).",
@@ -536,6 +545,31 @@ function Ficha({
 
       <p className="mt-0.5 text-sm text-slate-800">{s.texto_original}</p>
       {extraido && <p className="mt-1 text-xs text-slate-500">{extraido}</p>}
+
+      {/* Lo que salió (Juan, 2026-09-12): "que se muestre con el mensaje
+          enviado al DM del colega... y lo mismo si la respuesta va a
+          Daiana". Plegado para no alargar la lista. */}
+      {s.respondida_at && s.respuesta_modo === "auto" && s.respuesta_texto && (
+        <details className="mt-2 rounded-lg border border-teal-200 bg-teal-50/50">
+          <summary className="cursor-pointer px-3 py-1.5 text-xs font-bold text-teal-900">
+            Lo que salió · DM al colega · {fechaHora(s.respondida_at)}
+          </summary>
+          <p className="whitespace-pre-wrap px-3 pb-2 text-xs leading-relaxed text-slate-700">{s.respuesta_texto}</p>
+        </details>
+      )}
+      {s.aviso_texto && (
+        <details className="mt-2 rounded-lg border border-amber-200 bg-amber-50/60">
+          <summary className="cursor-pointer px-3 py-1.5 text-xs font-bold text-amber-900">
+            Lo que salió · aviso a la asesora
+          </summary>
+          <p className="whitespace-pre-wrap px-3 pb-2 text-xs leading-relaxed text-slate-700">{s.aviso_texto}</p>
+        </details>
+      )}
+      {s.descarte_motivo && (
+        <p className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+          <b>Descartó Sofi:</b> {s.descarte_motivo}
+        </p>
+      )}
 
       {s.clase === "demanda" && (
         <div className="mt-1.5">

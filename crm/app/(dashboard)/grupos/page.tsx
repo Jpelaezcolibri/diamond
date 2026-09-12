@@ -106,6 +106,8 @@ export default async function GruposPage() {
       .select("*")
       .eq("clase", "demanda")
       .neq("matches", "[]")
+      // Los pedidos de arriendo viven en /amoblados (spec 2026-09-12).
+      .or("operacion.is.null,operacion.neq.arriendo")
       .order("created_at", { ascending: false })
       .limit(200)
   );
@@ -118,6 +120,7 @@ export default async function GruposPage() {
     fetchSafe<Signal>(conMatchQuery, "grupos:demandas_con_match"),
     fetchSafe<Signal>(
       mias(supabase.from("group_signals").select("*").eq("clase", "demanda")
+        .or("operacion.is.null,operacion.neq.arriendo")
         .order("created_at", { ascending: false }).limit(100)),
       "grupos:demandas"
     ),
@@ -218,7 +221,7 @@ export default async function GruposPage() {
           .from("group_signals")
           .select("*", { count: "exact", head: true })
           .eq("clase", "demanda")
-      ).neq("matches", "[]"),
+      ).neq("matches", "[]").or("operacion.is.null,operacion.neq.arriendo"),
       "grupos:con_match_total"
     ),
     countSafe(

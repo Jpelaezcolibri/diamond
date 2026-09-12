@@ -213,6 +213,14 @@ router.post("/api/grupos/responde", async (req, res) => {
 // Metricas del radar. Antes vivian en memoria del bot y se reiniciaban con
 // cada deploy —"desde el ultimo reinicio" era una ventana inutil para decidir
 // nada—. Ahora salen de la base, asi que sobreviven y se pueden comparar.
+// Estado del carril de amoblados, para el panel /amoblados del CRM (spec
+// 2026-09-12). Se lee en cada llamada, igual que carril-arriendo.js: el
+// interruptor se cambia en Railway sin redesplegar el CRM.
+router.post("/api/grupos/amoblados/estado", (req, res) => {
+  const carrilArriendo = require("../groups/carril-arriendo");
+  res.json({ activo: carrilArriendo.carrilActivo(), umbral: carrilArriendo.umbralDm() });
+});
+
 router.post("/api/grupos/metricas", async (req, res) => {
   try {
     const org = await organizations.getDefault();
