@@ -48,6 +48,7 @@ const linkAvisoLib = require("../lib/link-aviso");
 const directorio = require("../groups/directorio");
 const { entregarConRespaldo } = require("../lib/entrega-asesor");
 const ritmo = require("../lib/ritmo-avisos");
+const colaPostDm = require("../groups/cola-post-dm");
 
 const INTERVALO_MS = 60 * 1000;
 // Cuanto se espera antes de volver a escribirle a la MISMA asesora. No es un
@@ -57,6 +58,9 @@ const VENTANA_MIN = ritmo.VENTANA_MIN;
 // Una señal mas vieja que esto ya no se avisa: el colega consiguio lo que
 // buscaba y un aviso tardio solo gasta la ventana de WhatsApp.
 const VIGENCIA_HORAS = Number(process.env.AVISOS_VIGENCIA_HORAS || 12);
+// Cuanto tiene que tener una señal para que esta bandeja la tome (ver "EN
+// VUELO" en procesarOrg).
+const GRACIA_MIN = Number(process.env.AVISOS_GRACIA_MIN || 3);
 
 let timer = null;
 let corriendo = false;
@@ -185,8 +189,19 @@ async function procesarOrg(org, ahora) {
   if (!ritmo.puedeEnviar(asesor.id, ahora)) return null;
 
   const desdeIso = new Date(ahora - VIGENCIA_HORAS * 3600 * 1000).toISOString();
+  // EN VUELO (Juan, 2026-09-14: "me dicen que llegan muchos mensajes para el
+  // mismo colega"). Una señal recien creada la sigue procesando
+  // vivo.js#asistir: Sofi ya guardo su veredicto, pero el DM al colega o el
+  // aviso en linea todavia no terminaron de salir. Si esta bandeja la toma en
+  // ese hueco, la asesora recibe el aviso dos veces, o el aviso en el mismo
+  // minuto que el DM. Medido del 07 al 14-sep: Carmen Arbelaez recibio dos
+  // avisos identicos a las 21:00:37, y Jaime, Claudia Velez, Lu Vallejo y
+  // Margarita recibieron el aviso en el mismo minuto en que salia su DM. Solo
+  // se toman señales con mas de GRACIA_MIN: para entonces asistir ya las
+  // marco, o las dejo en cola a proposito.
+  const hastaIso = new Date(ahora - GRACIA_MIN * 60 * 1000).toISOString();
   const [senales, alertas] = await Promise.all([
-    groupSignals.aprobadasSinAvisar(org.id, { desdeIso }).catch((e) => {
+    groupSignals.aprobadasSinAvisar(org.id, { desdeIso, hastaIso }).catch((e) => {
       console.warn("[avisos] no se pudieron leer los pedidos pendientes:", e.message);
       return [];
     }),
@@ -198,14 +213,23 @@ async function procesarOrg(org, ahora) {
   // Solo las que el veredicto de Sofi aprueba. La consulta trae todas las que
   // tienen veredicto; el criterio de aprobacion vive en revalidar.js y no se
   // duplica aca.
-  const pedidos = senales.filter((s) => revalidar.apruebaAviso(s.revalidacion));
-  if (pedidos.length === 0 && alertas.length === 0) return null;
+  //
+  // YA SE LE MANDO (2026-09-14): el colega ya recibio esas mismas propiedades
+  // en los ultimos dias (pedido republicado). vivo.js#asistir no avisa por
+  // eso, y esta bandeja tampoco. Ver la nota en asistir.
+  const pedidos = senales.filter(
+    (s) => revalidar.apruebaAviso(s.revalidacion) && s.politica_motivo !== "ya_se_le_mando"
+  );
+  // Los avisos post-DM que el freno de ritmo retuvo (ver cola-post-dm.js). Se
+  // miran sin sacarlos: salen de la cola solo si el mensaje se entrego.
+  const postDm = colaPostDm.ver(org.id, asesor.id);
+  if (pedidos.length === 0 && alertas.length === 0 && postDm.length === 0) return null;
 
   const grupos = new Map((await whatsappGroups.listGroups(org.id).catch(() => [])).map((g) => [g.id, g]));
   const sesiones = await whatsappGroups.listSessions(org.id).catch(() => []);
   const sesion = (sesiones.find((s) => s.estado === "activa") || sesiones[0] || {}).nombre || null;
 
-  const total = pedidos.length + alertas.length;
+  const total = pedidos.length + alertas.length + postDm.length;
   let texto;
 
   if (total === 1) {
@@ -213,7 +237,9 @@ async function procesarOrg(org, ahora) {
     // completo. La agrupacion existe para la rafaga, no para el goteo.
     texto = pedidos.length
       ? await textoDePedido(org, pedidos[0], grupos, sesion)
-      : alertas[0].texto;
+      : alertas.length
+        ? alertas[0].texto
+        : postDm[0].texto;
   } else {
     // El link de cada pedido del digest (Juan, 2026-09-02, opcion D).
     const links = new Map();
@@ -256,7 +282,8 @@ async function procesarOrg(org, ahora) {
         habitaciones: Number((String(a.texto || "").match(/(\d+)\s*alcobas?/) || [])[1]) || null,
         reparos: reparosDe(a.texto),
         cumpleTodo: !/Ojo:/.test(String(a.texto || "")),
-      }))
+      })),
+      postDm.map((p) => ({ colega: p.colega, enviadas: p.enviadas, dudosas: p.dudosas, faltantes: p.faltantes, link: p.link }))
     );
   }
 
@@ -276,6 +303,7 @@ async function procesarOrg(org, ahora) {
   // El ritmo se le cuenta a QUIEN LO RECIBIO: si lo tomo una suplente, la
   // asesora original no gasto su turno y su proximo aviso puede salir ya.
   ritmo.registrarEnvio(envio.advisor.id, ahora);
+  colaPostDm.quitar(org.id, asesor.id, postDm);
   for (const s of pedidos) {
     await groupSignals
       // El destinatario REAL, no a quien le tocaba: si respondio una suplente,
@@ -290,7 +318,7 @@ async function procesarOrg(org, ahora) {
   }
   console.log(
     `[avisos] ${envio.advisor.name}${envio.suplente ? ` (suplente de ${asesor.name})` : ""}: ` +
-      `1 mensaje con ${total} pendiente(s) (${pedidos.length} pedidos, ${alertas.length} ofertas).`
+      `1 mensaje con ${total} pendiente(s) (${pedidos.length} pedidos, ${alertas.length} ofertas, ${postDm.length} post-DM).`
   );
   return { ok: true, total };
 }
@@ -329,4 +357,4 @@ function stop() {
   timer = null;
 }
 
-module.exports = { start, stop, runOnce, procesarOrg, textoDePedido, VENTANA_MIN, VIGENCIA_HORAS };
+module.exports = { start, stop, runOnce, procesarOrg, textoDePedido, VENTANA_MIN, VIGENCIA_HORAS, GRACIA_MIN };

@@ -119,7 +119,35 @@ async function yaSalioIgual(convId, texto) {
   );
 }
 
+// EN VUELO (2026-09-14). El candado de arriba mira la base, y el mensaje
+// recien se escribe ahi despues de un par de consultas: dos envios IDENTICOS
+// que arrancan en el mismo instante pasan los dos antes de que exista la
+// fila. Es el caso de Carmen Arbelaez, dos avisos iguales a las 21:00:37
+// (vivo.js#asistir y la bandeja de salida sobre la misma señal). Un envio
+// igual que llega mientras el primero sigue en curso espera ESE envio en vez
+// de repetirlo, y devuelve su resultado: si el primero fallo, el segundo
+// tambien dice que fallo, y nadie marca como avisado lo que no llego.
+const enVuelo = new Map();
+
 async function enviarYRegistrar(org, telefono, texto, opts = {}) {
+  if (opts.permitirRepetido) return enviarUnaVez(org, telefono, texto, opts);
+  const clave = `${(org && org.id) || ""}|${telefono}|${texto}`;
+  const enCurso = enVuelo.get(clave);
+  if (enCurso) {
+    console.warn(`[mensaje-asesor] mensaje identico a ${telefono} ya en camino — no se repite.`);
+    const r = await enCurso;
+    return { ok: Boolean(r && r.ok), wamid: null, error: r && r.error, duplicado: true };
+  }
+  const envio = enviarUnaVez(org, telefono, texto, opts);
+  enVuelo.set(clave, envio);
+  try {
+    return await envio;
+  } finally {
+    enVuelo.delete(clave);
+  }
+}
+
+async function enviarUnaVez(org, telefono, texto, opts = {}) {
   if (await estaDadoDeBaja(org, telefono)) {
     console.warn(`[mensaje-asesor] ${telefono} es un asesor dado de baja — no se le manda nada.`);
     return { ok: false, wamid: null, error: "asesor_inactivo", bloqueado: true };

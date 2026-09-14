@@ -95,10 +95,12 @@ function lineaOferta(o, i) {
  * @param nombre    primer nombre de la asesora, para el saludo
  * @param pedidos   [{ id, colega, operacion, tipo, zona, precioMax, utiles, dudosas }]
  * @param ofertas   [{ id, mandato, zona, precio, habitaciones, reparos: [], cumpleTodo }]
+ * @param resueltos [{ colega, enviadas: [refs], dudosas, faltantes, link }] — avisos
+ *   post-DM que el freno de ritmo retuvo (ver src/groups/cola-post-dm.js)
  * @returns el texto, o null si no hay nada
  */
-function construir(nombre, pedidos = [], ofertas = []) {
-  const total = pedidos.length + ofertas.length;
+function construir(nombre, pedidos = [], ofertas = [], resueltos = []) {
+  const total = pedidos.length + ofertas.length + resueltos.length;
   if (total === 0) return null;
 
   const partes = [`📋 ${nombre || "Hola"}, tenés ${total} cosas nuevas del radar.`];
@@ -154,6 +156,37 @@ function construir(nombre, pedidos = [], ofertas = []) {
         partes.push(cumplen.length ? `Para revisar:` : `Ninguna cumple del todo:`);
         for (const o of revisar.slice(0, MAX_ITEMS)) partes.push(lineaOferta(o, ++i));
       }
+    }
+  }
+
+  if (resueltos.length) {
+    // Lo que el bot YA respondio por privado y dejo algo para ella (Juan,
+    // 2026-09-14): dudosas para decidir, o fichas que WhatsApp no alcanzo a
+    // entregar. Antes cada uno era un mensaje suelto, fuera del freno de
+    // ritmo. Agrupado por colega, igual que los pedidos.
+    const porColega = new Map();
+    for (const r of resueltos) {
+      const k = r.colega || "un colega";
+      if (!porColega.has(k)) porColega.set(k, []);
+      porColega.get(k).push(r);
+    }
+    partes.push(``, `✅ YA LES RESPONDÍ POR PRIVADO (${resueltos.length})`);
+    let i = 0;
+    for (const [colega, suyos] of porColega) {
+      if (i >= MAX_ITEMS) break;
+      const enviadas = [...new Set(suyos.flatMap((r) => r.enviadas || []))];
+      const dudosas = suyos.reduce((n, r) => n + (r.dudosas || 0), 0);
+      const faltantes = suyos.reduce((n, r) => n + (r.faltantes || 0), 0);
+      const mandadas = enviadas.length
+        ? `le mandé ${enviadas.slice(0, 6).map((r) => `Ref ${r}`).join(", ")}${enviadas.length > 6 ? " y más" : ""}`
+        : `le escribí`;
+      const pendiente = [
+        faltantes ? `⚠️ ${faltantes} no le llegaron, mandáselas vos` : null,
+        dudosas ? `${dudosas} para revisar` : null,
+      ].filter(Boolean).join(" · ");
+      const cuantos = suyos.length > 1 ? ` (${suyos.length} pedidos)` : "";
+      partes.push(`${++i}. ${colega}${cuantos} — ${mandadas}${pendiente ? `\n   ${pendiente}` : ""}`);
+      for (const r of suyos.slice(0, 4)) if (r.link) partes.push(`   👉 ${r.link}`);
     }
   }
 

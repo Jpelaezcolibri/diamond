@@ -9,6 +9,7 @@ const { test, beforeEach } = require("node:test");
 const assert = require("node:assert");
 // Ver la nota en group-avisar-mandato.test.js: el freno de ritmo es de proceso.
 const ritmo = require("../src/lib/ritmo-avisos");
+const colaPostDm = require("../src/groups/cola-post-dm");
 const path = require("node:path");
 const memory = require("../src/data/memory");
 const colegasData = require("../src/data/colegas");
@@ -234,6 +235,7 @@ const APRUEBA = {
 let vivo;
 beforeEach(() => {
   ritmo._reset();
+  colaPostDm._reset();
   claseDevuelta = "demanda";
   matchesDevueltos = [match()];
   veredictoDeSofi = { ...APRUEBA };
@@ -565,6 +567,42 @@ test("con telefono resuelto Y refs_dudosas, el DM sale Y la asesora recibe el av
   // colega (el mismo telefono que ya recibio el DM).
   assert.match(enviadosPorSofi[0].texto, /Grupo: Inmobiliarias Medellin/);
   assert.match(enviadosPorSofi[0].texto, /Contacto: https:\/\/wa\.me\/573001234567/, "link directo al DM del colega");
+});
+
+// REPETIDOS (Juan, 2026-09-14): el post-DM salia sin mirar el freno de ritmo
+// y sin contarse en el. Jaime publico 8 pedidos en 2 minutos y a la asesora le
+// llegaron 2 post-DM y 1 aviso en 37 segundos.
+test("REPETIDOS: si a la asesora se le escribio hace poco, el post-DM NO sale: queda en la cola de la bandeja", async () => {
+  telefonoColegaResuelto = "573001234567";
+  matchesDevueltos = [match(), match({ ref: "9800000", titulo: "Apartamento en Sabaneta", zona: "Sabaneta" })];
+  veredictoDeSofi = { ...APRUEBA, refs_dudosas: ["9800000"] };
+  const asesora = { ...CATHERINE, id: "adv-cathe" };
+  ritmo.registrarEnvio(asesora.id);
+
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: asesora, sesion: "RADA-NATALIA" });
+
+  assert.strictEqual(r.resultado, "dm_enviado", "el DM al colega no se frena: el freno es para la asesora");
+  assert.strictEqual(enviosDm.length, 2);
+  assert.strictEqual(enviadosPorSofi.length, 0, "a la asesora no le sale nada ahora");
+  const cola = colaPostDm.ver(ORG.id, asesora.id);
+  assert.strictEqual(cola.length, 1);
+  assert.match(cola[0].texto, /Ya le mandé por privado/);
+  assert.strictEqual(cola[0].colega, "Patricia Gomez");
+  assert.deepStrictEqual(cola[0].enviadas.map(String), ["9780079"]);
+  assert.strictEqual(cola[0].dudosas, 1);
+});
+
+test("REPETIDOS: el post-DM que SI sale cuenta para el freno, asi lo siguiente para ella espera", async () => {
+  telefonoColegaResuelto = "573001234567";
+  matchesDevueltos = [match(), match({ ref: "9800000", titulo: "Apartamento en Sabaneta", zona: "Sabaneta" })];
+  veredictoDeSofi = { ...APRUEBA, refs_dudosas: ["9800000"] };
+  const asesora = { ...CATHERINE, id: "adv-cathe" };
+
+  await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: asesora, sesion: "RADA-NATALIA" });
+
+  assert.strictEqual(enviadosPorSofi.length, 1, "el primero sale en el momento");
+  assert.strictEqual(ritmo.puedeEnviar(asesora.id), false, "y el siguiente ya cae en la bandeja");
+  assert.strictEqual(colaPostDm.ver(ORG.id, asesora.id).length, 0);
 });
 
 test("el DM al colega usa el mismo texto que antes iba al grupo (redactar.mensajeGrupo)", async () => {
@@ -1117,18 +1155,23 @@ test("un colega sin marca sigue recibiendo su DM como siempre", async () => {
 // sirve" por la 9776631 el 9-sep y al dia siguiente se la volvimos a mandar
 // por el mismo pedido republicado. Lo que el colega ya recibio no se le
 // repite; si no queda nada, el pedido va a la asesora con el motivo.
-test("si el colega ya recibio esa ref en los ultimos dias, no se le repite: va a la asesora con el motivo", async () => {
+//
+// REPETIDOS (Juan, 2026-09-14: "me dicen que llegan muchos mensajes para el
+// mismo colega"): hasta ese dia el pedido republicado le llegaba a la asesora
+// como un aviso mas ("Ya le mandamos estas mismas propiedades"). Nada nuevo
+// que ofrecer: el motivo queda en la señal y a la asesora no le llega nada.
+test("si el colega ya recibio esa ref en los ultimos dias, no se le repite, y a la asesora NO le llega otro aviso", async () => {
   telefonoColegaResuelto = "573001234567";
   refsYaEnviadasMock = new Set(["9780079"]);
   const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
 
-  assert.strictEqual(r.resultado, "avisada");
+  assert.strictEqual(r.resultado, "ya_se_le_mando");
   assert.strictEqual(enviosDm.length, 0, "no se le repite nada");
   assert.strictEqual(politicasGuardadas[0].motivo, "ya_se_le_mando");
   assert.ok(politicasGuardadas[0].traza.some((t) => t.includes("9780079")), politicasGuardadas[0].traza.join(","));
-  assert.match(enviadosPorSofi[0].texto, /Ya le mandamos estas mismas propiedades a este colega/);
-  // Repetir no es una oportunidad perdida: el aviso no puede gritar urgencia.
-  assert.doesNotMatch(enviadosPorSofi[0].texto, /OPORTUNIDAD APROBADA/);
+  assert.strictEqual(enviadosPorSofi.length, 0, "la asesora no recibe un aviso por un pedido republicado");
+  assert.strictEqual(avisosMarcados.length, 0);
+  assert.strictEqual(feedRegistrado.length, 1, "el feed del admin igual se entera");
 });
 
 test("si solo UNA de las aprobadas ya se le mando, sale el DM con las otras", async () => {

@@ -56,6 +56,7 @@ const command = require("../data/command");
 const cruceLeads = require("./cruce-leads");
 const ritmo = require("../lib/ritmo-avisos");
 const carrilArriendo = require("./carril-arriendo");
+const colaPostDm = require("./cola-post-dm");
 
 const VENTANA_LIMITE_HORAS = 24;
 
@@ -700,6 +701,7 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
         // de doble escalado del commit 5db7e74. No "arreglar" esto conectando
         // el tracking.
         let avisoPostDm = null;
+        let postDmEnCola = false;
         if (asesor && asesor.phone) {
           avisoPostDm = alertaAsesor.construirAvisoPostDm(
             senalParaAviso(c, mensaje, grupo),
@@ -709,14 +711,39 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
             telefonoColega,
             { refsFaltantes: envio.faltantes }
           );
-          if (avisoPostDm) {
+          if (avisoPostDm && asesor.id && !ritmo.puedeEnviar(asesor.id)) {
+            // EL POST-DM TAMBIEN RESPETA EL FRENO DE RITMO (Juan, 2026-09-14:
+            // "me dicen que llegan muchos mensajes para el mismo colega").
+            // Salia en linea sin mirar el freno y sin contarse en el: Jaime
+            // publico 8 pedidos en 2 minutos y a la asesora le llegaron 2
+            // post-DM y 1 aviso en 37 segundos. Si a la asesora se le escribio
+            // hace menos de VENTANA_MIN, queda en la cola en memoria y la
+            // bandeja de salida lo entrega junto con lo demas (ver
+            // src/groups/cola-post-dm.js: por que no va a la base).
+            const dudosasConFicha = ((veredicto && veredicto.refs_dudosas) || []).filter((ref) =>
+              (matches || []).some((m) => String(m.ref) === String(ref))
+            );
+            colaPostDm.encolar(org.id, asesor.id, {
+              texto: avisoPostDm,
+              colega: mensaje.autor || null,
+              enviadas: envio.refsEnviadas || [],
+              dudosas: dudosasConFicha.length,
+              faltantes: (envio.faltantes || []).length,
+              link: linkAvisoLib.urlDeAviso(await groupSignals.asegurarToken(org.id, signal.id).catch(() => null)),
+            });
+            postDmEnCola = true;
+          } else if (avisoPostDm) {
             // La tabla advisors guarda el numero en formatos distintos segun
             // quien lo cargo (ver src/data/advisors.js) y enviarYRegistrar
             // espera solo digitos.
             const telefonoAsesor = String(asesor.phone).replace(/\D/g, "");
-            await mensajeAsesor.enviarYRegistrar(org, telefonoAsesor, avisoPostDm).catch((e) =>
-              console.warn("[radar] No se pudo mandar el aviso post-DM:", e.message)
-            );
+            const r = await mensajeAsesor.enviarYRegistrar(org, telefonoAsesor, avisoPostDm).catch((e) => {
+              console.warn("[radar] No se pudo mandar el aviso post-DM:", e.message);
+              return null;
+            });
+            // Y cuenta para el freno, igual que cualquier aviso: lo que llegue
+            // en los proximos minutos para ella sale agrupado por la bandeja.
+            if (r && r.ok && asesor.id) ritmo.registrarEnvio(asesor.id);
           }
         }
 
@@ -724,7 +751,7 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
         await feedComando
           .registrar(org, señalParaFeed, veredicto, matches, {
             avisada: true,
-            destinatarioNombre: `DM directo a ${mensaje.autor || "el colega"}${avisoPostDm ? ` + aviso de pendientes a ${asesor.name || "la asesora"}` : ""}`,
+            destinatarioNombre: `DM directo a ${mensaje.autor || "el colega"}${avisoPostDm ? ` + aviso de pendientes a ${asesor.name || "la asesora"}${postDmEnCola ? " (en cola)" : ""}` : ""}`,
           })
           .catch((e) => console.warn("[radar] No se pudo escribir en el feed del admin:", e.message));
         return {
@@ -745,6 +772,22 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
         .guardarPolitica(org.id, signal.id, { motivo: "dm_fallido", traza: [...decisionDm.traza, `NO:dm_fallido:${envio.error}`] })
         .catch(() => {});
     }
+  }
+
+  // YA SE LE MANDO: NO SE AVISA (Juan, 2026-09-14: "me dicen que llegan
+  // muchos mensajes para el mismo colega"). El colega republico un pedido y
+  // todo lo que calza ya se lo mandamos en los ultimos dias (ver
+  // quitarYaEnviadas). Hasta hoy eso igual producia un aviso a la asesora
+  // ("Ya le mandamos estas mismas propiedades a este colega"): nada nuevo que
+  // ofrecer y un mensaje mas sobre el mismo colega. Jaime publico el mismo
+  // pedido el 07 y el 09-sep, y la asesora recibio los dos. El motivo queda en
+  // la señal (guardarPolitica, arriba) y el pedido se ve en /grupos; la
+  // bandeja de salida tampoco lo toma (avisos-salida.js).
+  if (decisionDm.motivo === "ya_se_le_mando") {
+    await feedComando
+      .registrar(org, señalParaFeed, veredicto, matches, { avisada: false, motivoDm: decisionDm.motivo })
+      .catch((e) => console.warn("[radar] No se pudo escribir en el feed del admin:", e.message));
+    return { resultado: "ya_se_le_mando", veredicto, signalId: signal.id, refs: refsRepetidas };
   }
 
   // Se le pasan tambien los campos del clasificado (Juan, 2026-09-02: "que

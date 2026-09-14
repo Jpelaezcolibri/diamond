@@ -423,10 +423,33 @@ async function armarAvisoCitaColega(ctx, advisor, cita, ref) {
 // anotado, ni afecta el registro en group_signals que ya se hizo antes.
 const RADAR_REVISOR_PHONE = process.env.RADAR_REVISOR_PHONE || "";
 
+// UN AVISO POR COLEGA Y POR RATO (Juan, 2026-09-14: "me dicen que llegan
+// muchos mensajes para el mismo colega"). Esto se disparaba en CADA pedido
+// que un colega le hacia a Sofi: Adriana recibio dos "Pedido directo" del
+// mismo colega con 32 segundos de diferencia, porque el colega fue sumando
+// detalle en un segundo mensaje. El aviso le pide a la asesora que lo
+// contacte, y con uno alcanza: el pedido completo queda en group_signals.
+// Mismo patron que pedirContactoAsesora mas abajo: marca en memoria (un
+// reinicio la borra, y eso solo cuesta un aviso de mas), puesta ANTES del
+// envio para que dos pedidos simultaneos no pasen los dos, y quitada si el
+// aviso no salio.
+const VENTANA_REPETIDO_DEMANDA_MS = Number(process.env.AVISO_DEMANDA_COLEGA_MIN || 15) * 60 * 1000;
+const avisosDemandaRecientes = new Map();
+
 async function avisarDemandaColegaInmediata(ctx, { contacto, contactoTelefono, matches, clasificado }) {
   if (!RADAR_REVISOR_PHONE) return;
+  const clave = `${ctx.org.id}:${(ctx.lead && ctx.lead.id) || contactoTelefono || contacto}`;
+  const antes = avisosDemandaRecientes.get(clave);
+  if (antes && Date.now() - antes < VENTANA_REPETIDO_DEMANDA_MS) {
+    console.log(`[tools] pedido directo de ${contacto}: la asesora ya tiene un aviso de este colega de hace un rato, no se repite.`);
+    return;
+  }
+  avisosDemandaRecientes.set(clave, Date.now());
   const revisor = await advisors.findByPhone(ctx.org.id, RADAR_REVISOR_PHONE).catch(() => null);
-  if (!revisor) return;
+  if (!revisor) {
+    avisosDemandaRecientes.delete(clave);
+    return;
+  }
 
   const que = [clasificado.tipo, clasificado.zona || clasificado.ciudad].filter(Boolean).join(" en ") || "algo sin detalle";
   const telefonoLinea = contactoTelefono ? `+${contactoTelefono}` : "sin telefono";
@@ -450,7 +473,15 @@ async function avisarDemandaColegaInmediata(ctx, { contacto, contactoTelefono, m
 
   // Require tardio (ciclo: este archivo -> mensaje-asesor.js -> whatsapp.js -> engine.js -> este archivo).
   const mensajeAsesor = require("../lib/mensaje-asesor");
-  await mensajeAsesor.enviarYRegistrar(ctx.org, revisor.phone, texto);
+  const r = await mensajeAsesor.enviarYRegistrar(ctx.org, revisor.phone, texto).catch((e) => {
+    avisosDemandaRecientes.delete(clave);
+    throw e;
+  });
+  if (!r || !r.ok) avisosDemandaRecientes.delete(clave);
+}
+
+function _resetAvisosDemandaColega() {
+  avisosDemandaRecientes.clear();
 }
 
 // Ejecuta una tool. ctx: { org, lead, propertyInteres, transfer } — el engine lee
@@ -1626,5 +1657,6 @@ function _resetPedidosContacto() {
 module.exports = {
   TOOL_DEFINITIONS, executeTool, maybeCaptadorAlert, registrarDemandaColega, consultarRadarGrupos,
   registrarResultadoRadar, registrarResultadosCierre, aprobarPedidoRadar, rechazarPedidoRadar, registrarMandatoCompra,
-  marcarColegaSoloLlamada, pedirContactoAsesora, _resetPedidosContacto,
+  marcarColegaSoloLlamada, pedirContactoAsesora, _resetPedidosContacto, avisarDemandaColegaInmediata,
+  _resetAvisosDemandaColega,
 };

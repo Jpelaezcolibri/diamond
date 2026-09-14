@@ -524,13 +524,19 @@ async function pendientesDeAviso(orgId, advisorId = null, { limite = 20, incluir
 //
 // `respondida_at` null: un pedido que ya se resolvio por DM automatico no
 // tiene nada que avisarle a la asesora.
-async function aprobadasSinAvisar(orgId, { desdeIso, limite = 30 } = {}) {
+//
+// `hastaIso` (2026-09-14): deja afuera las señales creadas despues de ese
+// instante, que son las que vivo.js#asistir todavia esta procesando. Ver la
+// nota "EN VUELO" en avisos-salida.js.
+async function aprobadasSinAvisar(orgId, { desdeIso, hastaIso = null, limite = 30 } = {}) {
   if (!supabase) {
     return (memory.groupSignals || []).filter(
-      (s) => s.org_id === orgId && s.clase === "demanda" && s.revalidacion && !s.enviado_at && !s.respondida_at
+      (s) =>
+        s.org_id === orgId && s.clase === "demanda" && s.revalidacion && !s.enviado_at && !s.respondida_at &&
+        (!hastaIso || !s.created_at || Date.parse(s.created_at) <= Date.parse(hastaIso))
     );
   }
-  const { data, error } = await supabase
+  let consulta = supabase
     .from("group_signals")
     .select("*")
     .eq("org_id", orgId)
@@ -538,9 +544,9 @@ async function aprobadasSinAvisar(orgId, { desdeIso, limite = 30 } = {}) {
     .not("revalidacion", "is", null)
     .is("enviado_at", null)
     .is("respondida_at", null)
-    .gte("created_at", desdeIso)
-    .order("created_at", { ascending: true })
-    .limit(limite);
+    .gte("created_at", desdeIso);
+  if (hastaIso) consulta = consulta.lte("created_at", hastaIso);
+  const { data, error } = await consulta.order("created_at", { ascending: true }).limit(limite);
   if (error) {
     if (esColumnaFaltante(error)) return [];
     console.error("[grupos] No se pudieron leer los pedidos aprobados sin avisar:", error.message);
