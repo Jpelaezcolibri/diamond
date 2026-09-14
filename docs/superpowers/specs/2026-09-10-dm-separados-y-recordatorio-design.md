@@ -1,8 +1,23 @@
 # DM al colega: una propiedad por mensaje, un solo recordatorio a las 2 horas
 
 **Decisiones de Juan, 2026-09-10.** Diseño aprobado en conversación.
-**Estado: pendiente de plan e implementación** (rama nueva, después del
-despliegue de `colega-solo-llamada`).
+**Estado (2026-09-13): §3.1 a §3.3 implementados** (rama `dm-separados`,
+commits `36e1442` y `a45fac5`). **§3.4, el recordatorio, NO**: necesita la
+migración y va apagado hasta que Juan diga.
+
+Un ajuste sobre §3.1, por el caso del 2026-09-13 en el inbox de la línea: un
+colega respondió "Enviame de a una propiedad Link Que se pueda pasar al posible
+cliente" y después "Enviame link solo Opción 2". El saludo, la salvedad, la
+comisión y la firma van en un **primer mensaje aparte**, no pegados a la ficha
+1 ni a la última: pegados, esa ficha deja de poder reenviarse tal cual. Cuesta
+un mensaje más por DM (1 + hasta 3). La ficha ahora lleva la administración
+cuando Wasi la tiene (el mismo colega la preguntó).
+
+Dónde vive: `src/groups/redactar.js#mensajesAlColega` (los mensajes),
+`src/groups/envio-colega.js` (el envío, uno para los tres caminos),
+`src/groups/vivo.js#quitarYaEnviadas` y `src/data/group-signals.js#refsYaEnviadas`
+(no reenviar). Perillas: `RADAR_DM_MAX_PROPIEDADES` (3), `RADAR_DM_PAUSA_MS`
+(4000), `RADAR_DM_NO_REENVIAR_DIAS` (7).
 
 ## 1. Por qué
 

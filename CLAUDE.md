@@ -28,7 +28,32 @@ Equipo: 1 dev (Juan) + Claude Code. Idioma de la app: español (Colombia).
 Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
 `docs:`, `config:`).
 
-## 2. Estado actual (2026-09-12)
+## 2. Estado actual (2026-09-13)
+
+- **DM al colega partido (2026-09-13, merge de la rama `dm-separados`).**
+  - **Qué cambió:** el DM sale como un mensaje para el colega (saludo,
+    salvedad, comisión, firma) y después una ficha por propiedad, hasta 3,
+    cada una con su link de Wasi, para que la reenvíe tal cual. Hay 4 s entre
+    mensajes. Spec: `docs/superpowers/specs/2026-09-10-dm-separados-y-recordatorio-design.md`.
+  - **El caso:** un colega respondió "Enviame de a una propiedad Link Que se
+    pueda pasar al posible cliente" y preguntó la administración.
+  - **No reenviar:** ninguna ref se le repite a un colega que la recibió en
+    los últimos 7 días. Si no queda nada, el pedido va a la asesora con el
+    motivo `ya_se_le_mando`.
+  - **Envío único:** `src/groups/envio-colega.js` sirve a los tres caminos.
+    Si WhatsApp corta a la mitad, se registra solo lo que salió
+    (`dm_parcial`) y la asesora recibe lo que faltó.
+  - **Administración:** DMAP guarda `maintenance_fee` de Wasi en
+    `properties.administracion` (41 de 124 propiedades la tienen) y la ficha
+    la muestra.
+  - **Riesgo a vigilar:** un DM pasa de 1 mensaje a entre 2 y 4. La cuota de
+    WhatsApp no cuenta los DM por lid (el 98 %), así que el cortacircuitos no
+    ve casi nada de este volumen. Hay que mirar la línea la primera semana.
+  - **Pendiente:** el recordatorio único a las 2 h (§3.4 de la spec) no está
+    hecho. Necesita migración.
+  - **Auditoría del motor de match:** sus pendientes quedaron cerrados en el
+    mismo merge (lista única de exigencias, freno de edificio en el DM). Ver
+    el cierre en `auditoria-motor-match-2026-09-05.md`.
 
 - **Amoblados, antes de publicarlos (2026-09-12).**
   - **Carril encendido:** `RADAR_AMOBLADO_ACTIVO=true`, decisión de Juan.
