@@ -216,9 +216,14 @@ function ficha(match, indice, { detalleFalta = null } = {}) {
 // zona" para el puntaje, para Sofi y para el mensaje.
 const GRADOS = new Set(["exacta", "vecina", "otra_zona", "ciudad"]);
 
+// Las zonas pedidas se leen con ubicacion.zonasPedidas, la MISMA funcion que
+// usa el motor (auditoria 2026-09-05, hallazgo bajo: esta era la tercera forma
+// de leerlas). Una diferencia que se corrige de paso: con \`zonas: []\` y
+// \`zona\` cargada, antes no se veia ninguna zona; ahora se usa \`zona\`, como
+// en el motor.
 function gradoDeZona(match, pedido) {
   if (GRADOS.has(match.ubicacion)) return match.ubicacion;
-  const zonas = (Array.isArray(pedido.zonas) ? pedido.zonas : [pedido.zona]).map((z) => String(z || "").trim()).filter(Boolean);
+  const zonas = ubicacion.zonasPedidas(pedido);
   if (!zonas.length) return null;
   const grado = ubicacion.ubicacionCoincide({ zona: match.zona || "", ciudad: match.ciudad || "" }, { zonas, zona: zonas[0] });
   return grado ? grado.grado : "otra_zona";
@@ -228,9 +233,7 @@ function desvios(match, pedido) {
   if (!pedido) return [];
   const salida = [];
 
-  const zonasPedidas = (Array.isArray(pedido.zonas) ? pedido.zonas : [pedido.zona])
-    .map((z) => String(z || "").trim())
-    .filter(Boolean);
+  const zonasPedidas = ubicacion.zonasPedidas(pedido);
   const zonaProp = String(match.zona || "").trim();
   if (zonasPedidas.length > 0 && zonaProp) {
     const grado = gradoDeZona(match, pedido);

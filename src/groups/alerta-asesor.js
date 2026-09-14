@@ -231,6 +231,9 @@ const PORQUE = {
   // que dijo "Ninguno me sirve" y al dia siguiente le volvimos a mandar la
   // misma propiedad por un pedido republicado.
   ya_se_le_mando: "Ya le mandamos estas mismas propiedades a este colega en los últimos 7 días. Que el bot se las repita se lee como spam; si creés que vale la pena, escribile vos.",
+  // Edificio puntual (auditoria 2026-09-05; regla de Juan del 2026-08-21):
+  // en Wasi las propiedades no estan marcadas por edificio.
+  edificio_especifico: "El colega pidió un edificio puntual y en Wasi las propiedades no están marcadas por edificio: el bot no puede saber si alguna queda ahí. Vos sí.",
   // carril_umbral (Important 3 del review de 400c0c8): el carril de arriendo
   // exige, ademas de todo lo anterior, que el match califique por encima de
   // su propio umbral (RADAR_AMOBLADO_UMBRAL_DM) y que la propiedad este

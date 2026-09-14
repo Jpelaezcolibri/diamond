@@ -43,6 +43,7 @@ let dmsHoyLineaMock = 0;
 let enviosDm = [];
 let envioDmResultado = { ok: true, wamid: "wm-dm-1" };
 let refsYaEnviadasMock = new Set();
+let extraClasificado = {};
 // ── Escalado inmediato marca la señal, para que radar-silencio no la reintente ──
 let claimsEscaladoSilencio = [];
 // Carril de arriendo (Important 3 del review de 400c0c8): por defecto "venta",
@@ -59,6 +60,7 @@ function instalar() {
           tipo: "apartamento", zona: "laureles", ciudad: "medellin",
           precio_min: 0, precio_max: 900000000, habitaciones: 3, area_min: 0,
           banos: 0, garajes: 0, estrato: 0, contacto: "", notas: "", mensaje: m,
+          ...extraClasificado,
         })),
         uso: { costoUsd: 0 }, lotesFallidos: 0, reintentos: 0, lotes: 1,
       }),
@@ -249,6 +251,7 @@ beforeEach(() => {
   enviosDm = [];
   envioDmResultado = { ok: true, wamid: "wm-dm-1" };
   refsYaEnviadasMock = new Set();
+  extraClasificado = {};
   claimsEscaladoSilencio = [];
   operacionDevuelta = "venta";
   delete process.env.RADAR_ALERTA_TO;
@@ -1179,4 +1182,17 @@ test("si WhatsApp corta a la mitad, se registra solo lo que salio y la asesora r
   assert.strictEqual(enviadosPorSofi.length, 1, "la asesora recibe lo que falto");
   assert.match(enviadosPorSofi[0].texto, /WhatsApp cortó el envío y estas no le llegaron/);
   assert.match(enviadosPorSofi[0].texto, /Ref 9800000/);
+});
+
+// EDIFICIO PUNTUAL (auditoria 2026-09-05, hallazgo bajo): el mismo freno que el
+// camino del grupo. En Wasi las propiedades no estan marcadas por edificio.
+test("un pedido de un edificio puntual no sale por DM: va a la asesora, igual que en el grupo", async () => {
+  telefonoColegaResuelto = "573001234567";
+  extraClasificado = { edificio: "Murano Plaza" };
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+
+  assert.strictEqual(r.resultado, "avisada");
+  assert.strictEqual(enviosDm.length, 0);
+  assert.strictEqual(politicasGuardadas[0].motivo, "edificio_especifico");
+  assert.match(enviadosPorSofi[0].texto, /edificio puntual/);
 });

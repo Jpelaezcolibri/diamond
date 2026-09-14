@@ -12,6 +12,8 @@
 // que el numero solo no alcanza; al resto hay que describirle el pedido.
 
 const formato = require("../lib/formato");
+// Que se exige y con que nombre llega de cada lado: ./exigencias.js (auditoria 2026-09-05, H6).
+const exigencias = require("./exigencias");
 
 // Los formatos reales medidos en produccion (2026-09-10): "PEDIDO 👉 645",
 // "_*PEDIDO 👉 645*_", "Pedido #201", "Pedido 12026", "Pedido 02👈" y el codigo
@@ -49,13 +51,8 @@ function resumenPedido(senal) {
     s.tipo,
     zonas,
     formato.datoCargado(s.precio_max) ? `hasta ${formato.formatearPrecio(s.precio_max)}` : null,
-    formato.datoCargado(s.habitaciones)
-      ? `${formato.pluralizar(s.habitaciones, "alcoba")}${s.flexible_habitaciones ? " (o una menos con estudio)" : ""}`
-      : null,
-    formato.datoCargado(s.area_min) ? `desde ${s.area_min} m²` : null,
-    formato.pluralizar(s.banos, "baño", "baños"),
-    formato.pluralizar(s.garajes, "garaje"),
-    formato.datoCargado(s.estrato) ? `estrato ${s.estrato}` : null,
+    // Las exigencias salen de ./exigencias.js (auditoria 2026-09-05, H6).
+    ...exigencias.resumen(s),
   ].filter(Boolean);
   return partes.length ? partes.join(" · ") : null;
 }

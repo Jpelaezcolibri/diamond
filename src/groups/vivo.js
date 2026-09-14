@@ -555,6 +555,8 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
     dmsHoyLinea: dmsLineaHoy,
     cuotaLinea,
     soloLlamada,
+    // Edificio puntual: el mismo freno que el camino del grupo (ver politica.js).
+    edificio: c.edificio || null,
   });
 
   // LA COMPUERTA DE CALIDAD TAMBIEN CORRIGE EL MOTIVO (fix critico, revision

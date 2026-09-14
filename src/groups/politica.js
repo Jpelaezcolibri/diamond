@@ -232,6 +232,7 @@ function decidirDm({
   dmsHoyLinea = null,
   cuotaLinea = null,
   soloLlamada = false,
+  edificio = null,
   limites = LIMITES_DM_DEFAULT,
 } = {}) {
   const traza = [];
@@ -244,6 +245,17 @@ function decidirDm({
   // de esta funcion.
   if (soloLlamada === true) return no("colega_solo_llamada");
   if (soloLlamada === null) return no("solo_llamada_no_verificable");
+
+  // EDIFICIO PUNTUAL (auditoria del motor de match 2026-09-05, hallazgo bajo;
+  // regla de Juan del 2026-08-21, caso Esteban Higuita / edificio Murano
+  // Plaza): "el asesor sabe donde quedan las propiedades pero en wasi no las
+  // tenemos marcadas por edificio por seguridad". `decidir` (el camino del
+  // grupo) ya frenaba SIEMPRE un pedido que nombra un edificio con nombre
+  // propio; el DM no recibia el dato y dependia de que Sofi lo leyera en el
+  // texto. Mismo freno aca: el pedido va a la asesora, que si sabe si alguna
+  // propiedad queda en ese edificio. "Unidad cerrada" sin nombre no llega
+  // aca: el clasificador solo llena `edificio` con un nombre propio.
+  if (edificio) return no("edificio_especifico");
 
   // EL DESTINO: TELEFONO, Y SI NO, EL LID (Juan, 2026-09-04). Literal: "todo
   // lo que se pueda resolver con el lids lo hacemos por ahi (...) y si

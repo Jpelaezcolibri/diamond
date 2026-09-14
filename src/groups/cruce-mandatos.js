@@ -19,6 +19,8 @@
 // blando: se manda, con la salvedad escrita.
 const match = require("./match");
 const formato = require("../lib/formato");
+// Que se exige y con que nombre llega de cada lado: ./exigencias.js (auditoria 2026-09-05, H6).
+const catalogoExigencias = require("./exigencias");
 
 const MARGEN_PRECIO_DEFAULT = Number(process.env.RADAR_MANDATO_MARGEN_PRECIO || 0.15);
 
@@ -170,32 +172,32 @@ function evaluarOferta(oferta, mandato, { margenPrecio = MARGEN_PRECIO_DEFAULT }
   // colega, y "No dice (246 m² de 150 pedidos)" no es una frase.
   const blandos = [
     {
-      pedido: c.habitaciones, tiene: num(oferta.habitaciones),
+      pedido: catalogoExigencias.pedido(c, "habitaciones"), tiene: num(catalogoExigencias.dePropiedad(oferta, "habitaciones")),
       esHabitaciones: true,
       cumple: (v) => `${v} habitaciones`,
       corto: (v, p) => `Tiene ${v} de las ${p} habitaciones pedidas`,
       sinDato: (p) => `No dice cuántas habitaciones tiene (se pidieron ${p})`,
     },
     {
-      pedido: c.area_min, tiene: num(oferta.area),
+      pedido: catalogoExigencias.pedido(c, "area_min"), tiene: num(catalogoExigencias.dePropiedad(oferta, "area_min")),
       cumple: (v) => `área (${v} m² de ${c.area_min} pedidos)`,
       corto: (v, p) => `Tiene ${v} m² de los ${p} pedidos`,
       sinDato: (p) => `No dice el área (se pidieron ${p} m²)`,
     },
     {
-      pedido: c.banos, tiene: num(oferta.banos),
+      pedido: catalogoExigencias.pedido(c, "banos"), tiene: num(catalogoExigencias.dePropiedad(oferta, "banos")),
       cumple: (v) => `${v} baños`,
       corto: (v, p) => `Tiene ${v} de los ${p} baños pedidos`,
       sinDato: (p) => `No dice cuántos baños tiene (se pidieron ${p})`,
     },
     {
-      pedido: c.garajes, tiene: num(oferta.garajes),
+      pedido: catalogoExigencias.pedido(c, "garajes"), tiene: num(catalogoExigencias.dePropiedad(oferta, "garajes")),
       cumple: (v) => `${v} garajes`,
       corto: (v, p) => `Tiene ${v} de los ${p} garajes pedidos`,
       sinDato: (p) => `No dice cuántos garajes tiene (se pidieron ${p})`,
     },
     {
-      pedido: c.estrato, tiene: num(oferta.estrato),
+      pedido: catalogoExigencias.pedido(c, "estrato"), tiene: num(catalogoExigencias.dePropiedad(oferta, "estrato")),
       cumple: (v) => `estrato ${v}`,
       corto: (v, p) => `Tiene estrato ${v}, se pidió estrato ${p}`,
       sinDato: (p) => `No dice el estrato (se pidió estrato ${p})`,
