@@ -28,7 +28,31 @@ Equipo: 1 dev (Juan) + Claude Code. Idioma de la app: español (Colombia).
 Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
 `docs:`, `config:`).
 
-## 2. Estado actual (2026-09-13)
+## 2. Estado actual (2026-09-14)
+
+- **Mensajes repetidos a la asesora, cerrados (2026-09-14).**
+  - **La queja:** "llegan muchos mensajes para el mismo colega". Se midieron
+    13 casos del 07 al 14-sep y salieron cinco causas.
+  - **Bandeja:** `avisos-salida.js` solo toma señales con más de
+    `AVISOS_GRACIA_MIN` (3). Antes pisaba a `asistir` mientras avisaba o
+    mientras el DM iba en camino.
+  - **Envíos simultáneos:** `enviarYRegistrar` junta dos envíos idénticos
+    simultáneos en uno.
+  - **Post-DM:** cuenta para el freno de ritmo. Si el freno está cerrado,
+    espera en `src/groups/cola-post-dm.js`, una cola en memoria, y sale en el
+    digest.
+  - **`ya_se_le_mando`:** ya no avisa. Esto revierte la regla de la spec de DM
+    separados §3.3.
+  - **"Pedido directo de un colega":** uno por colega cada 15 min.
+  - **Regla:** todo camino nuevo que le escriba a la asesora pasa por
+    `ritmo.puedeEnviar` y `ritmo.registrarEnvio`.
+- **Barrios de Envigado (2026-09-14).**
+  - **Qué entró:** 27 barrios en `SUBZONA_DE` (`src/lib/zonas.js`) y un grado
+    nuevo, `zona_general`. Con él, un pedido de "Barrio Mesa" encuentra una
+    propiedad registrada solo como "Envigado". La ficha dice "el barrio exacto
+    no lo tengo registrado".
+  - **Golden set:** corrido con la frase nueva del prompt, 6/6.
+  - **Caso:** Juanita Monsalve contra la 10077063.
 
 - **DM al colega partido (2026-09-13, merge de la rama `dm-separados`).**
   - **Qué cambió:** el DM sale como un mensaje para el colega (saludo,
