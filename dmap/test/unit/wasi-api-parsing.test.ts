@@ -424,3 +424,34 @@ describe("umbral de descartes: un inventario mutilado NO se da por bueno", () =>
     expect(() => verificarDescartes(2, 3)).toThrow(/aborta la corrida/i);
   });
 });
+
+/**
+ * Administracion (2026-09-13). Forma real verificada contra produccion con
+ * dmap/scripts/wasi-admin-crudo.ts: `maintenance_fee` "280000" y
+ * `maintenance_fee_label` "$280.000 COP"; sin cargar llegan "0" y "$0 COP".
+ * 41 de 124 propiedades la tienen. El sync la guardaba siempre como null.
+ */
+describe("normalizeAdministracion", () => {
+  it("con el dato cargado devuelve la etiqueta de Wasi sin el COP", async () => {
+    const { normalizeAdministracion } = await import("../../src/sync/wasi-api.source.js");
+    const p = wasiApiPropertySchema.parse({ id_property: 1, maintenance_fee: "280000", maintenance_fee_label: "$280.000 COP" });
+    expect(normalizeAdministracion(p)).toBe("$280.000");
+  });
+
+  it("un 0 es 'sin dato', no 'no paga administracion'", async () => {
+    const { normalizeAdministracion } = await import("../../src/sync/wasi-api.source.js");
+    expect(normalizeAdministracion(wasiApiPropertySchema.parse({ id_property: 2, maintenance_fee: "0", maintenance_fee_label: "$0 COP" }))).toBeNull();
+    expect(normalizeAdministracion(wasiApiPropertySchema.parse({ id_property: 3 }))).toBeNull();
+  });
+
+  it("sin etiqueta la arma desde el numero", async () => {
+    const { normalizeAdministracion } = await import("../../src/sync/wasi-api.source.js");
+    const p = wasiApiPropertySchema.parse({ id_property: 4, maintenance_fee: 1350000 });
+    expect(normalizeAdministracion(p)).toBe(`$${(1350000).toLocaleString("es-CO")}`);
+  });
+
+  it("toCanonicalProperty lleva la administracion", () => {
+    const canonical = toCanonicalProperty(wasiApiPropertySchema.parse({ id_property: 5, maintenance_fee: "190000", maintenance_fee_label: "$190.000 COP" }));
+    expect(canonical.administracion).toBe("$190.000");
+  });
+});

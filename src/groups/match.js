@@ -200,6 +200,8 @@ const BONUS_PRIORIDAD_VENTA = Number(process.env.GRUPOS_BONUS_PRIORIDAD_VENTA ||
 // regalaba sus 8 puntos. No se veia en los tests porque los fixtures usaban
 // "95 m²" con superindice, que no es un digito.
 const formato = require("../lib/formato");
+// Que se exige y con que nombre llega de cada lado: ./exigencias.js (auditoria 2026-09-05, H6).
+const catalogoExigencias = require("./exigencias");
 
 const millones = (n) => formato.formatearPrecioCorto(n);
 
@@ -319,7 +321,7 @@ function evaluarCandidata(p, c, fuente) {
     // deberia tener el puntaje mayor [la que calza exacto]". Sigue sirviendo
     // -por eso la compuerta la deja pasar- pero no tan bien como la exacta.
     {
-      pide: c.habitaciones, tiene: p.habitaciones,
+      pide: catalogoExigencias.pedido(c, "habitaciones"), tiene: catalogoExigencias.dePropiedad(p, "habitaciones"),
       // SIN TOPE SUPERIOR, PERO SOLO SI EL PEDIDO TRAE PRESUPUESTO (Juan,
       // 2026-09-04). Antes era `t <= q + 1` siempre, y eso descartaba en
       // silencio una propiedad de 4 alcobas ante un pedido de 2 aunque calzara
@@ -355,7 +357,7 @@ function evaluarCandidata(p, c, fuente) {
     // Area SI lleva margen de captura SIEMPRE (Juan, 2026-08-20): unos metros
     // menos de lo pedido casi nunca descarta un negocio real.
     {
-      pide: c.area_min, tiene: formato.parsearArea(p.area),
+      pide: catalogoExigencias.pedido(c, "area_min"), tiene: formato.parsearArea(catalogoExigencias.dePropiedad(p, "area_min")),
       ok: (t, q) => t >= q * (1 - MARGEN_AREA),
       texto: (t) => `${t} m²`, puntos: 8, castigo: CASTIGO_CORTO.area,
     },
@@ -371,13 +373,13 @@ function evaluarCandidata(p, c, fuente) {
     // Esto es lo que desbloquea `le_falta` de revalidar.js: hasta hoy la
     // propiedad se descartaba aca y Sofi nunca llegaba a verla.
     {
-      pide: c.banos, tiene: p.banos,
+      pide: catalogoExigencias.pedido(c, "banos"), tiene: catalogoExigencias.dePropiedad(p, "banos"),
       ok: () => true,
       texto: (t) => `${t} baños`, puntos: (t, q) => (t >= q ? 6 : 4),
       castigo: CASTIGO_CORTO.banos,
     },
     {
-      pide: c.garajes, tiene: p.garaje,
+      pide: catalogoExigencias.pedido(c, "garajes"), tiene: catalogoExigencias.dePropiedad(p, "garajes"),
       ok: () => true,
       texto: (t) => `${t} garaje${t > 1 ? "s" : ""}`, puntos: (t, q) => (t >= q ? 6 : 4),
       castigo: CASTIGO_CORTO.garajes,
@@ -386,7 +388,7 @@ function evaluarCandidata(p, c, fuente) {
     // negociable como una alcoba de menos, es la clasificacion socioeconomica
     // del sector y no cambia porque el cliente compre "para inversion".
     // Sin gabela no hay forma de quedarse corto, asi que tampoco lleva castigo.
-    { pide: c.estrato, tiene: p.estrato, ok: (t, q) => t >= q, texto: (t) => `estrato ${t}`, puntos: 5 },
+    { pide: catalogoExigencias.pedido(c, "estrato"), tiene: catalogoExigencias.dePropiedad(p, "estrato"), ok: (t, q) => t >= q, texto: (t) => `estrato ${t}`, puntos: 5 },
   ];
 
   for (const e of exigencias) {
@@ -432,6 +434,10 @@ function evaluarCandidata(p, c, fuente) {
     // ficha de Sofi pueda confirmar en positivo lo que antes era siempre
     // "sin_confirmar". La ausencia sigue sin significar "no tiene".
     caracteristicas: fuente === "diamond" ? p.caracteristicas || null : null,
+    // Administracion (2026-09-13): va en la ficha del colega. Un colega la
+    // pidio por DM ("Valor administracion de la opcion 2") y otro la puso
+    // como exigencia del pedido ("no mayor a 700.000").
+    administracion: fuente === "diamond" ? p.administracion || null : null,
     // Las tres marcas que lee publicable.js (2026-09-07). Se estampan ACA
     // porque esta es la unica funcion que ve el pedido Y la propiedad:
     // `esPublicable(match)` recibe solo el match y no tiene forma de saber

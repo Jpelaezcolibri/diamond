@@ -194,4 +194,10 @@ Los 8 pasos se ejecutaron en orden, cada uno verificado con la suite (1571 tests
 
 Extra que salió del paso 7 y no estaba en el plan, **hecho la misma noche** (`44c72b8`, `27ad39e`): la API de Wasi manda `features` (Urbanización cerrada ×16, Terraza ×6, Balcón ×32, Vista panorámica ×18, Garaje ×10, Jardín ×4) para 43 de 112 propiedades y el sync no las guardaba. Ahora DMAP las aplana a `properties.caracteristicas`, el match las lleva y la ficha de Sofi las muestra como "caracteristicas registradas"; la ficha que recibe el colega lleva hasta 6. Sync corrido en producción tras el despliegue: 114 vistas, 2 marcadas no disponibles (ya no están en Wasi), 71 de 112 disponibles con características (16 con unidad cerrada, 6 con terraza). Verificado cruzando un pedido sintético contra el inventario real: 5 de 6 candidatas llegan a Sofi con la línea.
 
-Pendiente del plan original que se decidió no hacer hoy: la lista única de exigencias compartida por los cinco módulos (segunda mitad de H6). El helper cerró la duplicación de la regla; la lista de campos sigue en cada archivo porque cada uno la formatea distinto y el refactor no cambiaba comportamiento.
+## Pendientes cerrados (2026-09-13, commit `173b2d4`)
+
+- **H6, segunda mitad.** Una sola lista de exigencias en `src/groups/exigencias.js`: qué se exige, con qué nombre llega del pedido y de la propiedad (`garajes` en el pedido, `garaje` en la fila, `garajes` en el match y las ofertas) y cómo se dice. La leen `match.js`, `cruce-mandatos.js`, `revalidar.js` y `pedido.js`. Las reglas de cada lector siguen en su archivo, a propósito. `test/auditoria-pendientes.test.js` fija que el texto que ve Sofi y el resumen para la asesora quedaron idénticos. Golden set 6 de 6 después del cambio.
+- **Edificio puntual en el DM.** `decidirDm` recibe el edificio y lo frena con el motivo `edificio_especifico`, igual que el camino del grupo. En vivo es el único lugar donde existe el dato: `group_signals` no tiene columna de edificio.
+- **Zonas pedidas en `redactar.js`.** Se leen con `ubicacion.zonasPedidas`, la del motor.
+
+Lo único del motor de match que sigue abierto no salió de esta auditoría. El 2026-09-11 se encontró que un pedido con varios tipos ("apartamento, casa") nunca matchea: son 27 de 27 en 14 días sin candidatas. Está pendiente de la decisión de Juan, porque arreglarlo sube el volumen de DM.

@@ -10,6 +10,14 @@ const assert = require("node:assert");
 const path = require("node:path");
 
 const RUTA = (m) => require.resolve(path.join("..", "src", m));
+
+// EL DM SALE PARTIDO (Juan, 2026-09-10; caso del 2026-09-13): un mensaje para
+// el colega y una ficha por propiedad. Con una sola candidata aprobada son
+// DOS envios. El texto registrado es la union de los dos (envio-colega.SEPARADOR).
+// La pausa entre mensajes se apaga en los tests: con ella cada DM espera 4 s.
+const envioColega = require("../src/groups/envio-colega");
+envioColega._setDormirParaTests(async () => {});
+const textoDmManual = () => enviosDmManual.map((e) => e.texto).join(envioColega.SEPARADOR);
 const mandatosData = require("../src/data/mandatos");
 const memory = require("../src/data/memory");
 
@@ -47,6 +55,7 @@ let operacionDevuelta = "venta";
 // Dobles para vivo.js#responderPorDmManual (Juan, 2026-08-24).
 let telefonoColegaManual = null;
 let enviosDmManual = [];
+let refsYaEnviadasManualMock = new Set();
 let envioDmManualResultado = { ok: true, wamid: "wm-dm-manual" };
 let dmsHoyColegaManualMock = 0;
 let dmsHoyLineaManualMock = 0;
@@ -134,6 +143,7 @@ function instalarDobles() {
       marcarAvisoEnviado: async (orgId, id, datos) => { avisosCercanosMarcados.push({ id, ...datos }); return true; },
       dmsHoyPorColega: async () => dmsHoyColegaManualMock,
       dmsHoyLinea: async () => dmsHoyLineaManualMock,
+      refsYaEnviadas: async () => refsYaEnviadasManualMock,
     },
   };
   require.cache[RUTA("data/whatsapp-groups.js")] = {
@@ -271,6 +281,7 @@ beforeEach(() => {
   operacionDevuelta = "venta";
   telefonoColegaManual = null;
   enviosDmManual = [];
+  refsYaEnviadasManualMock = new Set();
   envioDmManualResultado = { ok: true, wamid: "wm-dm-manual" };
   dmsHoyColegaManualMock = 0;
   dmsHoyLineaManualMock = 0;
@@ -600,7 +611,7 @@ test("aprobarManual: responde al PRIVADO del colega y lo marca respondido", asyn
 
   assert.strictEqual(r.resultado, "publicado");
   assert.strictEqual(r.destino, "dm_colega");
-  assert.strictEqual(enviosDmManual.length, 1, "salio por DM");
+  assert.strictEqual(enviosDmManual.length, 2, "salio por DM");
   assert.strictEqual(enviosDmManual[0].sesion, "RADA-NATALIA");
   assert.strictEqual(enviosDmManual[0].telefono, "573001234567");
   assert.strictEqual(marcadas.length, 1);
@@ -639,7 +650,7 @@ test("aprobarManual: con telefono Y lid disponibles, sigue prefiriendo el telefo
   const r = await vivo.aprobarManual({ id: "org-1" }, "sig-callada");
 
   assert.strictEqual(r.resultado, "publicado");
-  assert.strictEqual(enviosDmManual.length, 1);
+  assert.strictEqual(enviosDmManual.length, 2);
   assert.strictEqual(enviosDmManual[0].telefono, "573001234567");
   assert.deepStrictEqual(enviosDmManual[0].opciones, { orgId: "org-1" });
 });
@@ -658,7 +669,7 @@ test("aprobarManual: sin telefono pero con lid, manda por lid — igual que el c
   const r = await vivo.aprobarManual({ id: "org-1" }, "sig-callada");
 
   assert.strictEqual(r.resultado, "publicado");
-  assert.strictEqual(enviosDmManual.length, 1, "salio por DM, por la via del lid");
+  assert.strictEqual(enviosDmManual.length, 2, "salio por DM, por la via del lid");
   assert.deepStrictEqual(enviosDmManual[0].opciones, { lid: "141746805670125", orgId: "org-1" });
   assert.strictEqual(marcadas.length, 1);
   assert.strictEqual(marcadas[0].destinoTelefono, null);
@@ -725,7 +736,7 @@ test("aprobarManual: un grupo en modo escucha (responde=false) SI se puede aprob
   telefonoColegaManual = "573001234567";
   const r = await vivo.aprobarManual({ id: "org-1" }, "sig-callada");
   assert.strictEqual(r.resultado, "publicado");
-  assert.strictEqual(enviosDmManual.length, 1);
+  assert.strictEqual(enviosDmManual.length, 2);
 });
 
 test("aprobarManual: un grupo apagado del todo (modo ignorar) SI sigue sin publicarse", async () => {
@@ -749,7 +760,7 @@ test("aprobarManual: un match que SOLO fallo por puntaje bajo SI sale aprobado a
 
   const r = await vivo.aprobarManual({ id: "org-1" }, "sig-callada");
   assert.strictEqual(r.resultado, "publicado");
-  assert.strictEqual(enviosDmManual.length, 1);
+  assert.strictEqual(enviosDmManual.length, 2);
 });
 
 test("aprobarManual: la zona equivocada SIGUE sin publicarse aunque se apruebe a mano — es seguridad, no confianza", async () => {
@@ -845,7 +856,7 @@ test("aprobarManual: por debajo del tope diario manda normalmente", async () => 
   const r = await vivo.aprobarManual({ id: "org-1" }, "sig-callada");
 
   assert.strictEqual(r.resultado, "publicado");
-  assert.strictEqual(enviosDmManual.length, 1);
+  assert.strictEqual(enviosDmManual.length, 2);
 });
 
 test("aprobarManual: con la cuota de WhatsApp agotada (300/300) no manda", async () => {
@@ -871,7 +882,7 @@ test("aprobarManual: al 80% de la cuota SI manda — el colchon del automatico e
   const r = await vivo.aprobarManual({ id: "org-1" }, "sig-callada");
 
   assert.strictEqual(r.resultado, "publicado");
-  assert.strictEqual(enviosDmManual.length, 1);
+  assert.strictEqual(enviosDmManual.length, 2);
 });
 
 test("aprobarManual: si la cuota no se puede leer, no frena", async () => {
@@ -883,7 +894,7 @@ test("aprobarManual: si la cuota no se puede leer, no frena", async () => {
   const r = await vivo.aprobarManual({ id: "org-1" }, "sig-callada");
 
   assert.strictEqual(r.resultado, "publicado");
-  assert.strictEqual(enviosDmManual.length, 1);
+  assert.strictEqual(enviosDmManual.length, 2);
 });
 
 // ── responderPorDmManual: mandar el DM DESPUES, desde el CRM (Juan,
@@ -899,10 +910,10 @@ test("responderPorDmManual: manda el DM cuando hay telefono y la señal pasa la 
   const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
 
   assert.strictEqual(r.resultado, "dm_enviado");
-  assert.strictEqual(enviosDmManual.length, 1);
+  assert.strictEqual(enviosDmManual.length, 2);
   assert.strictEqual(enviosDmManual[0].sesion, "RADA-NATALIA");
   assert.strictEqual(enviosDmManual[0].telefono, "573001234567");
-  assert.match(enviosDmManual[0].texto, /Ref AP004/);
+  assert.match(textoDmManual(), /Ref AP004/);
   // destinoTelefono/destinoLid: registro de a quien salio el DM, para poder
   // contactarlo a futuro (Juan, 2026-09-04). Cuando el DM sale por TELEFONO,
   // destinoLid queda en null (Juan, 2026-09-08) -- no se inventa un lid que
@@ -910,7 +921,7 @@ test("responderPorDmManual: manda el DM cuando hay telefono y la señal pasa la 
   // donde destinoLid SI lleva el @lid crudo con su sufijo).
   assert.deepStrictEqual(marcadas, [
     {
-      id: "sig-callada", texto: enviosDmManual[0].texto, wamid: "wm-dm-manual", modo: "auto", refs: ["AP004"],
+      id: "sig-callada", texto: textoDmManual(), wamid: "wm-dm-manual", modo: "auto", refs: ["AP004"],
       destinoTelefono: "573001234567", destinoLid: null,
     },
   ]);
@@ -936,7 +947,7 @@ test("responderPorDmManual: sin telefono resuelto pero con lid, manda por lid �
   const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
 
   assert.strictEqual(r.resultado, "dm_enviado");
-  assert.strictEqual(enviosDmManual.length, 1, "salio por DM, por la via del lid");
+  assert.strictEqual(enviosDmManual.length, 2, "salio por DM, por la via del lid");
   assert.deepStrictEqual(enviosDmManual[0].opciones, { lid: "141746805670125", orgId: "org-1" });
   assert.strictEqual(marcadas.length, 1);
   assert.strictEqual(marcadas[0].destinoTelefono, null);
@@ -987,7 +998,7 @@ test("responderPorDmManual: un colega ya contactado varias veces hoy SI recibe e
   const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
 
   assert.strictEqual(r.resultado, "dm_enviado");
-  assert.strictEqual(enviosDmManual.length, 1);
+  assert.strictEqual(enviosDmManual.length, 2);
 });
 
 // El conteo por colega ya no decide nada, asi que tampoco puede frenar por no
@@ -1002,7 +1013,7 @@ test("responderPorDmManual: no poder contar los DMs del colega ya no frena nada"
   const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
 
   assert.strictEqual(r.resultado, "dm_enviado");
-  assert.strictEqual(enviosDmManual.length, 1);
+  assert.strictEqual(enviosDmManual.length, 2);
 });
 
 // ── La cuota de WhatsApp en los caminos manuales: al 100%, no al 80% (Juan,
@@ -1035,7 +1046,7 @@ test("responderPorDmManual: al 80% de la cuota SI manda — ese colchon es justa
   const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
 
   assert.strictEqual(r.resultado, "dm_enviado");
-  assert.strictEqual(enviosDmManual.length, 1);
+  assert.strictEqual(enviosDmManual.length, 2);
 });
 
 test("responderPorDmManual: si la cuota no se puede leer, no frena — queda el tope de linea en el mismo eje", async () => {
@@ -1047,7 +1058,7 @@ test("responderPorDmManual: si la cuota no se puede leer, no frena — queda el 
   const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
 
   assert.strictEqual(r.resultado, "dm_enviado");
-  assert.strictEqual(enviosDmManual.length, 1);
+  assert.strictEqual(enviosDmManual.length, 2);
 });
 
 test("responderPorDmManual: al tope diario de la linea, tampoco manda -- cortacircuito de volumen", async () => {
@@ -1076,7 +1087,7 @@ test("responderPorDmManual: manda igual sin importar la antiguedad del pedido --
   const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
 
   assert.strictEqual(r.resultado, "dm_enviado");
-  assert.strictEqual(enviosDmManual.length, 1);
+  assert.strictEqual(enviosDmManual.length, 2);
 });
 
 test("responderPorDmManual: la zona equivocada SIGUE sin mandarse aunque haya telefono -- es seguridad, no confianza", async () => {
@@ -1186,8 +1197,8 @@ test("responderPorDmManual: con refs elegidas, solo se manda lo seleccionado", a
   assert.strictEqual(r.resultado, "dm_enviado");
   assert.strictEqual(r.publicables.length, 1);
   assert.strictEqual(r.publicables[0].ref, "AP004");
-  assert.match(enviosDmManual[0].texto, /Ref AP004/);
-  assert.doesNotMatch(enviosDmManual[0].texto, /Ref AP005/);
+  assert.match(textoDmManual(), /Ref AP004/);
+  assert.doesNotMatch(textoDmManual(), /Ref AP005/);
   assert.deepStrictEqual(marcadas[0].refs, ["AP004"]);
 });
 
@@ -1203,8 +1214,8 @@ test("responderPorDmManual: sin refs (undefined), se mandan todas las publicable
 
   assert.strictEqual(r.resultado, "dm_enviado");
   assert.strictEqual(r.publicables.length, 2);
-  assert.match(enviosDmManual[0].texto, /Ref AP004/);
-  assert.match(enviosDmManual[0].texto, /Ref AP005/);
+  assert.match(textoDmManual(), /Ref AP004/);
+  assert.match(textoDmManual(), /Ref AP005/);
 });
 
 test("responderPorDmManual: una ref que no pertenece a la señal se ignora, no se manda por confiar en el request", async () => {
@@ -1253,7 +1264,7 @@ test("responderPorDmManual: una ref elegida que no pasa la compuerta se reporta 
     r.descartados.some((d) => d.ref === "AP005" && d.motivos.includes("zona_no_publicable")),
     "AP005 se reporta como descartada, no desaparece sin explicacion"
   );
-  assert.doesNotMatch(enviosDmManual[0].texto, /Ref AP005/);
+  assert.doesNotMatch(textoDmManual(), /Ref AP005/);
 });
 
 // ── responderPorDmManual: SALVEDAD REUSADA (Juan, 2026-08-24) ────────────
@@ -1274,7 +1285,7 @@ test("responderPorDmManual: reusa la salvedad guardada en signal.revalidacion", 
   const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
 
   assert.strictEqual(r.resultado, "dm_enviado");
-  assert.match(enviosDmManual[0].texto, /No tengo confirmado si tiene terraza ni antigüedad/);
+  assert.match(textoDmManual(), /No tengo confirmado si tiene terraza ni antigüedad/);
 });
 
 test("responderPorDmManual: sin revalidacion guardada (nunca paso por asistido), el DM sale sin salvedad", async () => {
@@ -1285,7 +1296,7 @@ test("responderPorDmManual: sin revalidacion guardada (nunca paso por asistido),
   const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
 
   assert.strictEqual(r.resultado, "dm_enviado");
-  assert.doesNotMatch(enviosDmManual[0].texto, /No tengo confirmado/);
+  assert.doesNotMatch(textoDmManual(), /No tengo confirmado/);
 });
 
 // ── avisarCercano: "necesito que catherine uribe reciba que se envió y que
@@ -1568,7 +1579,7 @@ test("responderPorDmManual: reusa la aclaracion de 'le_falta' guardada en signal
   const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
 
   assert.strictEqual(r.resultado, "dm_enviado");
-  assert.match(enviosDmManual[0].texto, /Aclaración: tiene 1 garaje y pediste 2/);
+  assert.match(textoDmManual(), /Aclaración: tiene 1 garaje y pediste 2/);
 });
 
 test("responderPorDmManual: sin 'le_falta' en la revalidacion, el DM sale sin aclaracion", async () => {
@@ -1582,7 +1593,7 @@ test("responderPorDmManual: sin 'le_falta' en la revalidacion, el DM sale sin ac
   const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
 
   assert.strictEqual(r.resultado, "dm_enviado");
-  assert.doesNotMatch(enviosDmManual[0].texto, /Aclaración:/);
+  assert.doesNotMatch(textoDmManual(), /Aclaración:/);
 });
 
 // LA DECISION DE UNA APROBACION MANUAL TAMBIEN SE REGISTRA (revision del

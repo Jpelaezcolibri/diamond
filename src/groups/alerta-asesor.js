@@ -151,7 +151,7 @@ function telefonoResuelto(telefonoColega, autorTelefono, textoOriginal = null) {
 // persona tiene que hacerlo a mano, tocando su nombre en el grupo. Sin este
 // bloque, el aviso solo describia las propiedades y la asesora tenia que
 // redactar el mensaje ella misma. Reusa el MISMO texto "blanqueado" que ya usa
-// el DM automatico (src/groups/vivo.js#textoParaColega) -- el que el colega
+// el DM automatico (src/groups/redactar.js#mensajesAlColega) -- el que el colega
 // reenvia tal cual a su cliente -- para que copiar y pegar sea lo unico que
 // haga falta.
 //
@@ -227,6 +227,13 @@ const PORQUE = {
   cuota_whatsapp_alta: "La línea está cerca de la cuota mensual de mensajes de WhatsApp, y el bot se frena para dejar colchón.",
   sin_fecha_mensaje: "El pedido llegó sin fecha, así que no podemos saber si todavía está vigente.",
   dm_fallido: "El bot intentó escribirle y WhatsApp rechazó el envío.",
+  // No reenviar (Juan, 2026-09-10, spec dm-separados §3.3): caso Sergio Neira,
+  // que dijo "Ninguno me sirve" y al dia siguiente le volvimos a mandar la
+  // misma propiedad por un pedido republicado.
+  ya_se_le_mando: "Ya le mandamos estas mismas propiedades a este colega en los últimos 7 días. Que el bot se las repita se lee como spam; si creés que vale la pena, escribile vos.",
+  // Edificio puntual (auditoria 2026-09-05; regla de Juan del 2026-08-21):
+  // en Wasi las propiedades no estan marcadas por edificio.
+  edificio_especifico: "El colega pidió un edificio puntual y en Wasi las propiedades no están marcadas por edificio: el bot no puede saber si alguna queda ahí. Vos sí.",
   // carril_umbral (Important 3 del review de 400c0c8): el carril de arriendo
   // exige, ademas de todo lo anterior, que el match califique por encima de
   // su propio umbral (RADAR_AMOBLADO_UMBRAL_DM) y que la propiedad este
@@ -264,6 +271,12 @@ function telefonoParaLlamar(telefonoColega, autorTelefono, textoOriginal) {
   return `+57 ${n.slice(2, 5)} ${n.slice(5, 8)} ${n.slice(8)}`;
 }
 
+// Motivos por los que el bot no escribio y que NO son una oportunidad perdida
+// (Juan, 2026-09-10, spec dm-separados §3.3): si el colega ya tiene esas refs,
+// gritarle "OPORTUNIDAD APROBADA, escribile con urgencia" a la asesora es
+// falso — la oportunidad ya se atendio. Se explica, sin urgencia.
+const MOTIVOS_SIN_URGENCIA = new Set(["ya_se_le_mando"]);
+
 function porqueNoSalioSolo(motivo, hayUtiles) {
   if (MOTIVOS_LLAMADA.has(motivo)) {
     return hayUtiles
@@ -273,6 +286,7 @@ function porqueNoSalioSolo(motivo, hayUtiles) {
   if (!hayUtiles) {
     return "Sofi no aprobó ninguna del todo, así que no le escribió nada al colega. Estas quedan para que decidas vos.";
   }
+  if (MOTIVOS_SIN_URGENCIA.has(motivo)) return PORQUE[motivo];
   if (PORQUE[motivo]) return `🚨 ${PORQUE[motivo]} ${URGENCIA}`;
   // LA COMPUERTA DE CALIDAD TIENE SUS PROPIOS MOTIVOS (fix critico, revision
   // post-merge 2026-09-07). `motivo` viene de politica.js#decidirDm casi
@@ -457,7 +471,7 @@ function construir(
   // bloque ⛔ explica que paso — el "Por qué no salió solo" sigue midiendose
   // contra `utilesSofi` unas lineas mas arriba, porque ahi la pregunta es
   // otra: si Sofi aprobo o no.
-  const aprobadaSinSalir = utiles.length > 0 && Boolean(porque);
+  const aprobadaSinSalir = utiles.length > 0 && Boolean(porque) && !MOTIVOS_SIN_URGENCIA.has(motivoDm);
   const titulo = soloLlamada
     ? `📞 LLAMAR — ${numero ? `Pedido N° ${numero}` : "pedido de un colega"}`
     : aprobadaSinSalir
@@ -643,11 +657,18 @@ function clamp(texto) {
 // @param refsEnviadas   array de refs que SI se mandaron por DM (utiles.map(m => m.ref))
 // @param telefonoColega telefono ya resuelto por el directorio (mismo que recibio el DM), o null
 // @returns el texto del aviso, o null si no hay refs_dudosas
-function construirAvisoPostDm(senal, veredicto, matches, refsEnviadas, telefonoColega = null) {
+function construirAvisoPostDm(senal, veredicto, matches, refsEnviadas, telefonoColega = null, { refsFaltantes = [] } = {}) {
+  const porRef = (ref) => (matches || []).find((m) => String(m.ref) === String(ref));
   const dudosas = (veredicto && Array.isArray(veredicto.refs_dudosas) ? veredicto.refs_dudosas : [])
-    .map((ref) => (matches || []).find((m) => String(m.ref) === String(ref)))
+    .map(porRef)
     .filter(Boolean);
-  if (dudosas.length === 0) return null;
+  // LO QUE NO ALCANZO A SALIR (Juan, 2026-09-10, spec dm-separados §3.2). Con
+  // una propiedad por mensaje, WhatsApp puede cortar el envio a la mitad: al
+  // colega le llegaron dos opciones de tres. Las que faltaron le llegan a la
+  // asesora aca, para que las mande ella. Con faltantes el aviso sale aunque
+  // no haya dudosas.
+  const faltantes = (refsFaltantes || []).map(porRef).filter(Boolean);
+  if (dudosas.length === 0 && faltantes.length === 0) return null;
 
   const s = senal || {};
   const quien = s.autor_nombre || "un colega";
@@ -666,20 +687,34 @@ function construirAvisoPostDm(senal, veredicto, matches, refsEnviadas, telefonoC
   ];
 
   // Por que estas no salieron solas: es el veredicto de Sofi sobre el lote
-  // entero, la misma linea "Sofi dice" del aviso normal. Si algun dia el
-  // veredicto trae un motivo por ref, va aca; hoy por_que es lo que hay.
+  // entero, la misma linea "Sofi dice" del aviso normal. Habla de las
+  // dudosas: sin dudosas no hay nada que explicar.
   const porQue = String((veredicto && veredicto.por_que) || "").trim();
-  const bloquePorQue = porQue ? [``, `Por qué no se las mandé: ${porQue}`] : [];
+  const bloquePorQue = porQue && dudosas.length ? [``, `Por qué no se las mandé: ${porQue}`] : [];
+
+  const bloqueFaltantes = faltantes.length
+    ? [``, `⚠️ WhatsApp cortó el envío y estas no le llegaron — mandáselas vos:`, faltantes.map((m) => linea(m)).join("\n")]
+    : [];
+  const bloqueDudosas = dudosas.length
+    ? [``, `🔎 Esto otro quedó sin mandar (no confirmado) — decidí vos si vale la pena:`, dudosas.map((m) => linea(m)).join("\n")]
+    : [];
+
+  // "Cortó antes de las propiedades" SOLO si de verdad falto algo y no salio
+  // ninguna ficha. Sin faltantes, un refsEnviadas vacio es un llamador que no
+  // paso la lista (el aviso de dudosas de siempre), no un corte.
+  const primeraLinea =
+    !enviadas.length && faltantes.length
+      ? `⚠️ Le escribí por privado a ${quien}, pero WhatsApp cortó el envío antes de las propiedades.`
+      : `✅ Ya le mandé por privado a ${quien}${detalleEnviadas}`;
 
   const lineas = [
-    `✅ Ya le mandé por privado a ${quien}${detalleEnviadas}`,
+    primeraLinea,
     ``,
     `Grupo: ${grupo}`,
     `Contacto: ${contactoTexto}`,
     ...bloquePedido,
-    ``,
-    `🔎 Esto otro quedó sin mandar (no confirmado) — decidí vos si vale la pena:`,
-    dudosas.map((m) => linea(m)).join("\n"),
+    ...bloqueFaltantes,
+    ...bloqueDudosas,
     ...bloquePorQue,
   ];
   return clamp(lineas.join("\n"));

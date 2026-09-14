@@ -47,6 +47,8 @@
 // imprime dentro de la ficha de esa propiedad, no en el encabezado.
 const config = require("../config");
 const formato = require("../lib/formato");
+// Que se exige y con que nombre llega de cada lado: ./exigencias.js (auditoria 2026-09-05, H6).
+const exigencias = require("./exigencias");
 const { getClient, CACHE_ESTABLE, registrarUso } = require("../lib/anthropic");
 // Los margenes del motor se interpolan en el prompt desde su unica fuente
 // (auditoria 2026-09-05, H2): el motor aceptaba +10 % de precio y -10 % de
@@ -535,13 +537,9 @@ async function revalidar(clasificado, matches) {
     // extrae baños, garajes, estrato y la flexibilidad de alcobas, y el motor
     // de cruce ya puntua con ellas -- pero no se le mostraban a Sofi, que
     // tenia que juzgar "le falta un garaje" sin saber cuantos se pidieron.
-    `- alcobas: ${clasificado.habitaciones || "no dice"}${
-      clasificado.habitaciones && clasificado.flexible_habitaciones ? " (acepta una menos si tiene estudio)" : ""
-    }`,
-    `- area minima: ${clasificado.area_min ? `${clasificado.area_min} m²` : "no dice"}`,
-    `- baños: ${clasificado.banos || "no dice"}`,
-    `- garajes: ${clasificado.garajes || "no dice"}`,
-    `- estrato: ${clasificado.estrato || "no dice"}`,
+    // Las cinco lineas salen de ./exigencias.js: mismo texto de siempre
+    // (lo fija test/auditoria-pendientes.test.js), un solo lugar donde viven.
+    ...exigencias.lineasParaSofi(clasificado),
     clasificado.amoblado === "si" ? `- amoblado: SI, el colega lo pidio explicitamente` : null,
     clasificado.amoblado === "no" ? `- amoblado: NO, el colega lo RECHAZO explicitamente` : null,
     clasificado.edificio ? `- edificio puntual: ${clasificado.edificio}` : null,

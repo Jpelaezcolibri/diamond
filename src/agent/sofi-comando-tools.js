@@ -933,6 +933,18 @@ async function aprobarPedidoRadarComando(input, ctx) {
   switch (r.resultado) {
     case "publicado":
       return `Listo, aprobado y publicado en "${r.grupo}":\n\n${r.texto}`;
+    // DM PARTIDO (Juan, 2026-09-10): una propiedad por mensaje, y WhatsApp
+    // puede cortar a la mitad. Lo que salio quedo registrado; lo que falto
+    // hay que mandarlo a mano, y quien aprobo tiene que saber cuales son.
+    case "dm_parcial":
+      return `Aprobado, pero WhatsApp cortó el envío a la mitad: al colega le llegó solo una parte.${
+        r.faltantes && r.faltantes.length ? ` No le llegaron: ${r.faltantes.map((x) => `Ref ${x}`).join(", ")} — hay que mandárselas a mano.` : ""
+      }\n\nLo que sí le llegó:\n\n${r.texto}`;
+    // NO REENVIAR (spec dm-separados §3.3): el colega ya tiene esas refs.
+    case "ya_se_le_mando":
+      return `No se le mandó nada: a este colega ya se le enviaron esas mismas propiedades en los últimos 7 días (${(r.refs || [])
+        .map((x) => `Ref ${x}`)
+        .join(", ")}). Repetírselas por el bot se lee como spam; si querés insistir, que le escriba una persona.`;
     // Desde el 2026-09-04 el lid es el canal principal y el telefono el
     // respaldo, asi que este caso ya NO significa "no tenemos el numero":
     // significa que no habia NI telefono NI lid. Se explica asi para que nadie

@@ -88,7 +88,7 @@ async function processCandidate(orgId: string, syncRunId: string, candidate: Syn
       banos: data.banos,
       garaje: data.garaje,
       estrato: data.estrato,
-      administracion: null,
+      administracion: data.administracion,
       zona: data.zona,
       ciudad: data.ciudad,
       descripcion: data.descripcion,
@@ -171,6 +171,9 @@ async function processCandidate(orgId: string, syncRunId: string, candidate: Syn
   // si las manda, la API gana, porque es la fuente activa y la que el asesor
   // edita en Wasi.
   if (data.caracteristicas !== null) patch.caracteristicas = data.caracteristicas;
+  // Administracion (2026-09-13), mismo criterio: cada corrida y solo si la
+  // fuente la trae, para no borrar la que alguien haya cargado a mano.
+  if (data.administracion !== null) patch.administracion = data.administracion;
 
   for (const event of diff.events) {
     if (event.changeType === "price_changed") patch.precio = data.precio;

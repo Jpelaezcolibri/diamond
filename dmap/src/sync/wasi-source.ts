@@ -27,6 +27,12 @@ export const canonicalPropertySchema = z.object({
   // tuviera. Texto plano separado por ", ", que es lo que properties.
   // caracteristicas ya guardaba del import viejo. null si la fuente no trae.
   caracteristicas: z.string().nullable().default(null),
+  // Administracion (2026-09-13). Wasi la manda en `maintenance_fee` (41 de
+  // 124 propiedades la tienen cargada) y el sync la escribia como null al
+  // crear y nunca la volvia a mirar. Un colega pregunto por DM "Valor
+  // administracion de la opcion 2, cual es?": es dato de decision, no un
+  // adorno. Texto ya formateado ("$280.000"), el mismo formato de precio.
+  administracion: z.string().nullable().default(null),
   zona: z.string().nullable().default(null),
   ciudad: z.string().nullable().default(null),
   link: z.string().nullable().default(null),

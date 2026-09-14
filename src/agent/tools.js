@@ -1392,6 +1392,14 @@ async function aprobarPedidoRadar(input, ctx) {
   switch (r.resultado) {
     case "publicado":
       return `Listo, publicado en el grupo:\n\n${r.texto}`;
+    // DM PARTIDO (Juan, 2026-09-10): WhatsApp puede cortar a la mitad.
+    case "dm_parcial":
+      return `Se mandó, pero WhatsApp cortó el envío a la mitad.${
+        r.faltantes && r.faltantes.length ? ` No le llegaron: ${r.faltantes.map((x) => `Ref ${x}`).join(", ")} — mandáselas vos.` : ""
+      }`;
+    // NO REENVIAR (spec dm-separados §3.3).
+    case "ya_se_le_mando":
+      return "No se mandó: a este colega ya se le enviaron esas mismas propiedades en los últimos 7 días. Si querés insistir, escribile vos.";
     case "ya_respondida":
       return "Ese pedido ya se habia publicado — no hay nada que hacer.";
     case "sin_propiedades_publicables":

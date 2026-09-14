@@ -28,6 +28,7 @@ const feedComando = require("./feed-comando");
 const verificarLink = require("./verificar-link");
 const politica = require("./politica");
 const redactar = require("./redactar");
+const envioColega = require("./envio-colega");
 const groupSignals = require("../data/group-signals");
 const organizations = require("../data/organizations");
 const syncEstado = require("../data/sync-estado");
@@ -339,27 +340,6 @@ function refsDelAviso(veredicto) {
   return todas.length ? todas : null;
 }
 
-// El texto que recibe el colega en el DM directo (Juan, 2026-08-24).
-//
-// Reusa redactar.mensajeGrupo TAL CUAL — "el mismo texto que antes iba al
-// grupo" (mismo mensaje "blanqueado": ficha completa, sin mencionar Diamond,
-// firmado "Sofi, asistente virtual"). Ver la nota de diseño en redactar.js.
-//
-// CORRECCION (Juan, 2026-08-24): esta funcion armaba su PROPIO renglon
-// adicional con linkContactoOficial(org) encima del que redactar.js ya ponia
-// con su propio numero fijo (SOFI_WHATSAPP_NUMBER) -- el colega recibia dos
-// invitaciones a escribirle a Sofi, una debajo de la otra. redactar.js#mensajeGrupo
-// ya resuelve el numero multi-tenant (recibe `org` en las opciones), asi que
-// no hace falta nada mas aca. Se deja la funcion, en vez de llamar a
-// mensajeGrupo directo desde el llamador, porque documenta con nombre la
-// intencion (el texto que le llega al colega por DM).
-// `sinConfirmar` y `leFalta` (Juan, 2026-08-24, opcionales): los dos huecos
-// que el veredicto de Sofi declara sobre estas mismas `utiles` -- lo que no
-// sabemos y lo que sabemos que no cumple (ver revalidar.js). Se pasan tal
-// cual a redactar.mensajeGrupo, que decide donde va cada uno.
-function textoParaColega(autorNombre, utiles, org, sinConfirmar = [], leFalta = [], pedido = null) {
-  return redactar.mensajeGrupo({ autor_nombre: autorNombre }, utiles, { org, sinConfirmar, leFalta, pedido });
-}
 
 // Lo que el colega pidio, en la forma que esperan redactar.desvios y el saludo
 // del DM: sirve tanto para la clasificacion recien hecha (`c`) como para una
@@ -410,6 +390,30 @@ function senalParaAviso(c, mensaje, grupo) {
     garajes: c.garajes,
     estrato: c.estrato,
   };
+}
+
+// NO REENVIAR (Juan, 2026-09-10, spec dm-separados §3.3). Caso Sergio Neira:
+// dijo "Ninguno me sirve" por la 9776631 el 9-sep y el 10-sep se la volvimos a
+// mandar al republicar el mismo pedido. Antes de armar el DM se quitan las
+// refs que ese colega (por lid o por telefono) ya recibio por DM en los
+// ultimos RADAR_DM_NO_REENVIAR_DIAS dias (7). Lo usan los tres caminos.
+//
+// Si la consulta falla se sigue sin filtrar: repetir una ref es una molestia,
+// no un riesgo para la linea, y no verificar no puede frenar el negocio.
+const DIAS_NO_REENVIAR = Number(process.env.RADAR_DM_NO_REENVIAR_DIAS || 7);
+
+async function quitarYaEnviadas(org, { lid = null, telefono = null } = {}, propiedades = [], ahora = new Date()) {
+  if (!propiedades.length) return { quedan: [], repetidas: [] };
+  const desdeIso = new Date(ahora.getTime() - DIAS_NO_REENVIAR * 24 * 3600 * 1000).toISOString();
+  const ya = await Promise.resolve()
+    .then(() => groupSignals.refsYaEnviadas(org.id, { lid, telefono }, desdeIso))
+    .catch(() => null);
+  if (!ya) {
+    console.warn("[radar] No se pudo verificar que refs ya recibio el colega; el DM sale sin ese filtro.");
+    return { quedan: propiedades, repetidas: [] };
+  }
+  const repetidas = propiedades.filter((m) => m && m.ref !== null && m.ref !== undefined && ya.has(String(m.ref)));
+  return { quedan: propiedades.filter((m) => !repetidas.includes(m)), repetidas: repetidas.map((m) => String(m.ref)) };
 }
 
 // Sofi da su veredicto y, si aprueba, le avisa a la asesora.
@@ -551,6 +555,8 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
     dmsHoyLinea: dmsLineaHoy,
     cuotaLinea,
     soloLlamada,
+    // Edificio puntual: el mismo freno que el camino del grupo (ver politica.js).
+    edificio: c.edificio || null,
   });
 
   // LA COMPUERTA DE CALIDAD TAMBIEN CORRIGE EL MOTIVO (fix critico, revision
@@ -575,6 +581,24 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
     }
   }
 
+  // NO REENVIAR (ver quitarYaEnviadas). Lo que el colega ya recibio en los
+  // ultimos dias no se le repite. Si no queda nada, el pedido NO se pierde:
+  // cae al aviso a la asesora con el motivo, igual que cualquier otro freno.
+  // Solo se corrige el motivo si decidirDm dijo "ok": si el freno real era
+  // otro, esa es la razon autentica.
+  const { quedan: utilesDm, repetidas: refsRepetidas } = await quitarYaEnviadas(
+    org,
+    { lid: lidColega, telefono: telefonoColega },
+    utiles,
+    ahora || new Date()
+  );
+  if (utiles.length > 0 && utilesDm.length === 0 && decisionDm.motivo === "ok") {
+    decisionDm.motivo = "ya_se_le_mando";
+    decisionDm.traza = [...decisionDm.traza, `NO:ya_se_le_mando:${refsRepetidas.join(",")}`];
+  } else if (refsRepetidas.length) {
+    decisionDm.traza = [...decisionDm.traza, `sin_repetir:${refsRepetidas.join(",")}`];
+  }
+
   // El carril de arriendo exige ademas que alguna candidata calce fino
   // (RADAR_AMOBLADO_UMBRAL_DM) y que el interruptor este prendido. Si no, el
   // pedido NO se pierde: cae al aviso diferenciado a la asesora, mas abajo en
@@ -587,7 +611,7 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
   // dejaba en la base.
   const carrilEsDelPedido = carrilArriendo.esDelCarril(c);
   const carrilApagado = carrilEsDelPedido && !carrilArriendo.carrilActivo();
-  const salidaSolaOk = !carrilEsDelPedido || carrilArriendo.puedeSalirSolo(utiles);
+  const salidaSolaOk = !carrilEsDelPedido || carrilArriendo.puedeSalirSolo(utilesDm);
 
   // CUAL ES LA RAZON REAL (Important del review de 6104561): decidirDm ya
   // aprobo el envio (motivo "ok"), pero el carril de arriendo lo puede frenar
@@ -607,7 +631,7 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
   // Igual que antes: se corrige SOLO cuando decidirDm de verdad dijo "ok". Si
   // el motivo real era otro (sin_telefono, limite_linea_alcanzado, etc.) esa
   // es la razon autentica y no hay nada que pisar.
-  if (!salidaSolaOk && decisionDm.motivo === "ok" && utiles.length > 0) {
+  if (!salidaSolaOk && decisionDm.motivo === "ok" && utilesDm.length > 0) {
     decisionDm.motivo = carrilApagado ? "carril_apagado" : "carril_umbral";
     decisionDm.traza = [...decisionDm.traza, `NO:${decisionDm.motivo}`];
   }
@@ -617,110 +641,78 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
   // columna): la razon por la que un pedido salio por DM o por la asesora
   // queda en la señal misma, no solo en un log que se pierde.
   await groupSignals.guardarPolitica(org.id, signal.id, { motivo: decisionDm.motivo, traza: decisionDm.traza }).catch(() => {});
-  if (decisionDm.enviarDm && sesion && utiles.length > 0 && salidaSolaOk) {
-    const textoDm = textoParaColega(
-      mensaje.autor,
-      utiles,
+  if (decisionDm.enviarDm && sesion && utilesDm.length > 0 && salidaSolaOk) {
+    // UNA PROPIEDAD POR MENSAJE (Juan, 2026-09-10; caso del 2026-09-13: "Enviame
+    // de a una propiedad Link Que se pueda pasar al posible cliente"). Primero
+    // un mensaje para el colega y despues una ficha por propiedad, cada una con
+    // su link de Wasi. Ver redactar.mensajesAlColega y envio-colega.js.
+    const armado = redactar.mensajesAlColega({ autor_nombre: mensaje.autor }, utilesDm, {
       org,
-      veredicto.sin_confirmar || [],
-      veredicto.le_falta || [],
-      pedidoDe(c, { texto: mensaje.texto, fechaIso: mensaje.instanteIso })
-    );
-    if (textoDm) {
-      // POR CUAL VIA SALE. `decidirDm` ya eligio (prefiere el telefono, que es
-      // el destino verificado); aca solo se traduce a lo que espera
-      // waha.enviarDm: con { lid } el chatId es `<lid>@lid`, sin el es
-      // `<telefono>@c.us`. No se pasan los dos: la guarda de waha.js exige que
-      // un lid entre SOLO por la opcion explicita, nunca por `telefono`.
-      const opcionesDm = decisionDm.via === "lid" ? { lid: lidColega, orgId: org.id } : { orgId: org.id };
-      let envioDm = await waha.enviarDm(sesion, telefonoColega, textoDm, opcionesDm).catch((e) => ({ ok: false, error: e.message }));
-      // UN solo reintento, y solo si el fallo fue ANTES de que el mensaje
-      // saliera (WAHA lo rechazo, o la conexion ni se establecio -- ver
-      // `previoAlEnvio` en waha.js#enviarDm). Un timeout NO se reintenta: el
-      // estado es desconocido y duplicarle el DM a un colega es justo la
-      // conducta que hace que a uno lo reporten. La linea reconecta ~10 veces
-      // al dia (medido 2026-09-02), asi que este caso es real y hoy tiraba el
-      // pedido al camino manual sin necesidad.
-      if (envioDm && !envioDm.ok && envioDm.previoAlEnvio) {
-        console.warn(`[radar] El DM no llego a salir (${envioDm.error}); un reintento en 3 s.`);
-        await new Promise((r) => setTimeout(r, 3000));
-        envioDm = await waha.enviarDm(sesion, telefonoColega, textoDm, opcionesDm).catch((e) => ({ ok: false, error: e.message }));
-      }
+      sinConfirmar: veredicto.sin_confirmar || [],
+      leFalta: veredicto.le_falta || [],
+      pedido: pedidoDe(c, { texto: mensaje.texto, fechaIso: mensaje.instanteIso }),
+    });
+    if (armado) {
+      // POR CUAL VIA SALE. `decidirDm` ya eligio (el lid primero, ver
+      // politica.js); envio-colega traduce a lo que espera waha.enviarDm y, si
+      // el lid no entrega el primer mensaje y hay telefono verificado, cae al
+      // telefono (la regresion que se cerro el 2026-09-05).
+      const porLid = decisionDm.via === "lid";
+      const envio = await envioColega.enviarAlColega({
+        sesion,
+        orgId: org.id,
+        telefono: telefonoColega,
+        lid: porLid ? lidColega : null,
+        respaldoTelefono: porLid ? telefonoColega : null,
+        mensajes: armado.mensajes,
+      });
 
-      // RESPALDO POR TELEFONO (Juan, 2026-09-05, al hacer del lid el camino
-      // principal). Antes de este cambio, un colega con telefono resuelto se
-      // contactaba POR el telefono; ahora sale por el lid, asi que un lid que
-      // no entregue significaria perder a un colega que antes si alcanzabamos.
-      // Esa regresion se cierra aca: si el envio por lid no salio y hay un
-      // telefono verificado, se reintenta por ese destino.
-      //
-      // Solo cuando el fallo fue ANTES de que el mensaje saliera, por la misma
-      // razon que el reintento de arriba: con estado desconocido, insistir por
-      // otra via arriesga mandarle el DM dos veces al mismo colega, que es la
-      // conducta por la que a uno lo reportan.
-      if (envioDm && !envioDm.ok && envioDm.previoAlEnvio && decisionDm.via === "lid" && telefonoColega) {
-        console.warn(`[radar] El DM por lid no salio (${envioDm.error}); se reintenta por el telefono resuelto.`);
-        envioDm = await waha.enviarDm(sesion, telefonoColega, textoDm, { orgId: org.id }).catch((e) => ({ ok: false, error: e.message }));
-      }
-
-      if (envioDm && envioDm.ok) {
-        // Se registra con modo 'auto' — igual que el camino que publica DENTRO
-        // del grupo (ver la nota en group-signals.js#dmsHoyPorColega sobre por
-        // que no hace falta un valor nuevo en la columna): en modo asistido,
-        // que es el UNICO que llega hasta aca, 'auto' solo puede significar
-        // "el sistema lo mando solo por DM", nunca "lo publico en el grupo".
-        const refsDm = utiles.map((m) => m.ref).filter(Boolean);
-        // A QUIEN salio el DM (Juan, 2026-09-04). Dos identificadores, no uno:
-        // `telefonoColega` es el numero real que el directorio resolvio y por
-        // el que salio el mensaje; `mensaje.autorId` es como WhatsApp presento
-        // al autor en el grupo.
+      if (envio.ok) {
+        // Se registra con modo 'auto' — igual que el camino que publicaba
+        // DENTRO del grupo (ver group-signals.js#dmsHoyPorColega). Solo las
+        // refs que de verdad salieron: si WhatsApp corto a la mitad, las que
+        // faltaron no se pueden contar como enviadas.
         //
-        // Va el autorId CRUDO y no `mensaje.autorTelefono` (revision final,
-        // 2026-09-04): autorTelefono es soloDigitos(autorId), y esos digitos
-        // sueltos son indistinguibles entre un @lid y un telefono real -- para
-        // un autor que entra por un JID @c.us son literalmente un telefono. El
-        // sufijo del JID es lo unico que lo dice, asi que se guarda entero.
+        // A QUIEN salio (Juan, 2026-09-04): el telefono resuelto y el autorId
+        // CRUDO, con su sufijo (@lid o @c.us) — sin el sufijo, unos digitos
+        // sueltos no dicen si son un lid o un telefono.
         await groupSignals.marcarRespondida(org.id, signal.id, {
-          texto: textoDm, wamid: envioDm.wamid, modo: "auto", refs: refsDm,
+          texto: envio.texto, wamid: envio.wamid, modo: "auto", refs: envio.refsEnviadas,
           destinoTelefono: telefonoColega || null,
           destinoLid: mensaje.autorId || mensaje.autorTelefono || null,
         });
+        if (!envio.completo) {
+          await groupSignals
+            .guardarPolitica(org.id, signal.id, {
+              motivo: "dm_parcial",
+              traza: [...decisionDm.traza, `dm_parcial:salieron:${envio.refsEnviadas.join(",")}`, `faltaron:${envio.faltantes.join(",")}`, `error:${envio.error}`],
+            })
+            .catch(() => {});
+        }
 
         // Aviso post-DM (Juan, 2026-09-01): "no tiene nada que hacer" solo es
-        // cierto si no queda nada pendiente -- si el pedido tenia dudosas,
-        // esas se le avisan igual, aparte del DM que ya salio. Best-effort:
-        // un fallo aca no puede tumbar el resultado "dm_enviado", que ya es
-        // verdad sin importar si este aviso extra sale o no.
+        // cierto si no queda nada pendiente. Sale si el pedido tenia dudosas o
+        // si WhatsApp corto el envio y quedaron refs sin llegar.
         //
-        // Deliberadamente NO pasa por marcarAvisoEnviado/tracking de avisos al
-        // asesor (revision post-review, 2026-09-01): esta señal YA quedo
-        // resuelta por el DM (marcarRespondida, arriba). Si este aviso extra
-        // quedara registrado con ese mismo mecanismo, candidatosRecordatorio y
-        // candidatosEscaladoSilencio (src/data/group-signals.js) la tomarian
-        // como candidata a recordatorio/escalado a Catherine -- filtran solo
-        // por `aviso_advisor_id` + `enviado_at`, no por si el pedido ya se
-        // resolvio. Es exactamente el bug de doble escalado que ya se corrigio
-        // en el commit 5db7e74. No "arreglar" esto conectando el tracking.
+        // Deliberadamente NO pasa por marcarAvisoEnviado (revision post-review,
+        // 2026-09-01): esta señal YA quedo resuelta por el DM. Registrarlo con
+        // ese mecanismo la volveria candidata a recordatorio y escalado — el bug
+        // de doble escalado del commit 5db7e74. No "arreglar" esto conectando
+        // el tracking.
         let avisoPostDm = null;
         if (asesor && asesor.phone) {
-          // Grupo + telefono ya resuelto (Juan, 2026-09-01): si la asesora
-          // decide que SI vale la pena mandar una dudosa, no puede tener que
-          // volver al grupo a buscar quien la pidio -- telefonoColega ya esta
-          // resuelto aca mismo (es el que acaba de recibir el DM).
-          // La MISMA señal que recibe el aviso normal (Juan, 2026-09-05): el
-          // post-DM salia solo con el nombre y el grupo, y Natalia tenia que
-          // decidir sobre una dudosa sin saber que pedia el colega.
           avisoPostDm = alertaAsesor.construirAvisoPostDm(
             senalParaAviso(c, mensaje, grupo),
             veredicto,
             matches,
-            refsDm,
-            telefonoColega
+            envio.refsEnviadas,
+            telefonoColega,
+            { refsFaltantes: envio.faltantes }
           );
           if (avisoPostDm) {
-            // Mismo criterio que telefonoPrincipal mas abajo en esta funcion: la
-            // tabla advisors guarda el numero en formatos distintos segun quien lo
-            // cargo (ver src/data/advisors.js) y enviarYRegistrar espera solo digitos.
+            // La tabla advisors guarda el numero en formatos distintos segun
+            // quien lo cargo (ver src/data/advisors.js) y enviarYRegistrar
+            // espera solo digitos.
             const telefonoAsesor = String(asesor.phone).replace(/\D/g, "");
             await mensajeAsesor.enviarYRegistrar(org, telefonoAsesor, avisoPostDm).catch((e) =>
               console.warn("[radar] No se pudo mandar el aviso post-DM:", e.message)
@@ -728,26 +720,29 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
           }
         }
 
-        // El feed del admin SI se entera siempre — es la trazabilidad que ya
-        // usa el resto de este archivo, con quien realmente se avisó. Si
-        // ademas salio el aviso post-DM de pendientes, se suma a la misma
-        // linea -- de lo contrario el feed reportaria solo la mitad de a
-        // quien realmente se le avisó (este radar ya tuvo un caso de un
-        // reporte de avisos inventado, ver 2026-08-18 en el historial).
+        // El feed del admin se entera siempre, con quien realmente se avisó.
         await feedComando
           .registrar(org, señalParaFeed, veredicto, matches, {
             avisada: true,
             destinatarioNombre: `DM directo a ${mensaje.autor || "el colega"}${avisoPostDm ? ` + aviso de pendientes a ${asesor.name || "la asesora"}` : ""}`,
           })
           .catch((e) => console.warn("[radar] No se pudo escribir en el feed del admin:", e.message));
-        return { resultado: "dm_enviado", veredicto, texto: textoDm, telefono: telefonoColega, signalId: signal.id };
+        return {
+          resultado: "dm_enviado",
+          veredicto,
+          texto: envio.texto,
+          telefono: telefonoColega,
+          signalId: signal.id,
+          parcial: !envio.completo,
+          faltantes: envio.faltantes,
+        };
       }
-      // Si el envio falla, se cae al aviso a la asesora de siempre: ningun
-      // pedido puede quedar sin que alguien lo atienda. Y la señal deja de
-      // decir "ok": el motivo real es que el transporte fallo.
-      console.warn(`[radar] Fallo el DM al colega, se avisa a la asesora en su lugar: ${envioDm && envioDm.error}`);
+      // Si el primer mensaje no sale, se cae al aviso a la asesora de siempre:
+      // ningun pedido puede quedar sin que alguien lo atienda. Y la señal deja
+      // de decir "ok": el motivo real es que el transporte fallo.
+      console.warn(`[radar] Fallo el DM al colega, se avisa a la asesora en su lugar: ${envio.error}`);
       await groupSignals
-        .guardarPolitica(org.id, signal.id, { motivo: "dm_fallido", traza: [...decisionDm.traza, `NO:dm_fallido:${envioDm && envioDm.error}`] })
+        .guardarPolitica(org.id, signal.id, { motivo: "dm_fallido", traza: [...decisionDm.traza, `NO:dm_fallido:${envio.error}`] })
         .catch(() => {});
     }
   }
@@ -1096,7 +1091,17 @@ async function aprobarManual(org, signalId) {
 
   if (!publicables.length) return { resultado: "sin_propiedades_publicables", descartados };
 
+  // Las mismas salvedades y el mismo cierre que los otros dos caminos: hasta
+  // el 2026-09-13 este camino no pasaba `org` (sin link a Sofi) ni las
+  // salvedades del veredicto — la divergencia que la revision del 2026-09-06
+  // (H2) encontro entre los caminos. `texto` es el borrador de un solo
+  // mensaje, para quien lo muestre cuando el DM no puede salir.
+  const sinConfirmarManual = (signal.revalidacion && signal.revalidacion.sin_confirmar) || [];
+  const leFaltaManual = (signal.revalidacion && signal.revalidacion.le_falta) || [];
   const texto = redactar.mensajeGrupo({ autor_nombre: signal.autor_nombre }, publicables, {
+    org,
+    sinConfirmar: sinConfirmarManual,
+    leFalta: leFaltaManual,
     pedido: pedidoDe(signal),
   });
   if (!texto) return { resultado: "sin_texto" };
@@ -1169,11 +1174,32 @@ async function aprobarManual(org, signalId) {
   const lidColega = !telefonoColega ? signal.autor_telefono || null : null;
   if (!telefonoColega && !lidColega) return { resultado: "sin_telefono", texto, publicables };
 
-  const opcionesDm = lidColega ? { lid: lidColega, orgId: org.id } : { orgId: org.id };
-  const envio = await waha.enviarDm(activas[0].nombre, telefonoColega, texto, opcionesDm);
-  if (!envio || !envio.ok) return { resultado: "error_envio", error: envio && envio.error };
+  // NO REENVIAR, tambien a mano (spec dm-separados §3.3): una persona que
+  // aprueba no sabe que el colega ya tiene esas refs de otro pedido.
+  const { quedan: aEnviar, repetidas } = await quitarYaEnviadas(
+    org,
+    { lid: signal.autor_telefono, telefono: telefonoColega },
+    publicables
+  );
+  if (!aEnviar.length) return { resultado: "ya_se_le_mando", refs: repetidas, texto, publicables };
 
-  const refs = publicables.map((m) => m.ref).filter(Boolean);
+  // UNA PROPIEDAD POR MENSAJE, igual que el camino automatico.
+  const armado = redactar.mensajesAlColega({ autor_nombre: signal.autor_nombre }, aEnviar, {
+    org,
+    sinConfirmar: sinConfirmarManual,
+    leFalta: leFaltaManual,
+    pedido: pedidoDe(signal),
+  });
+  const envio = await envioColega.enviarAlColega({
+    sesion: activas[0].nombre,
+    orgId: org.id,
+    telefono: telefonoColega,
+    lid: lidColega,
+    mensajes: armado.mensajes,
+  });
+  if (!envio.ok) return { resultado: "error_envio", error: envio.error };
+
+  const refs = envio.refsEnviadas;
   // A QUIEN salio (Juan, 2026-09-04; corregido 2026-09-08). destinoLid se
   // arma con lidColega, NO con signal.autor_telefono a secas: lidColega solo
   // existe cuando el DM de verdad salio por lid (ver mas arriba), asi que
@@ -1183,7 +1209,7 @@ async function aprobarManual(org, signalId) {
   // identificador crudo que trae el mensaje entrante, que siempre llega con
   // su sufijo) nunca encuentra esta señal.
   await groupSignals.marcarRespondida(org.id, signal.id, {
-    texto, wamid: envio.wamid, modo: "auto", refs,
+    texto: envio.texto, wamid: envio.wamid, modo: "auto", refs,
     destinoTelefono: telefonoColega || null,
     destinoLid: lidColega ? `${lidColega}@lid` : null,
   });
@@ -1210,14 +1236,26 @@ async function aprobarManual(org, signalId) {
   await groupSignals
     .guardarPolitica(org.id, signal.id, {
       motivo: "aprobacion_manual",
-      traza: ["aprobacion_manual", `refs:${refs.join(",")}`],
+      traza: ["aprobacion_manual", `refs:${refs.join(",")}`, ...(envio.completo ? [] : [`faltaron:${envio.faltantes.join(",")}`])],
     })
     .catch(() => {});
 
   // `destino` para que quien lo muestre no tenga que adivinar: el CRM y Sofi
   // decian "publicado" y de ahi salio que Sofi le contara a Juan que la
   // respuesta iba al grupo.
-  return { resultado: "publicado", destino: "dm_colega", telefono: telefonoColega, texto, wamid: envio.wamid, publicables, grupo: grupo.nombre || grupo.jid };
+  // "dm_parcial" si WhatsApp corto a la mitad: lo que falto no le llego al
+  // colega y quien aprobo tiene que saberlo.
+  return {
+    resultado: envio.completo ? "publicado" : "dm_parcial",
+    destino: "dm_colega",
+    telefono: telefonoColega,
+    texto: envio.texto,
+    wamid: envio.wamid,
+    publicables,
+    faltantes: envio.faltantes,
+    repetidas,
+    grupo: grupo.nombre || grupo.jid,
+  };
 }
 
 // DM manual al colega, desde el CRM (Juan, 2026-08-24): "que pueda mandar el
@@ -1371,9 +1409,32 @@ async function responderPorDmManual(org, signalId, { sesion = null, refs = null 
   // esperando a la asesora igual que antes.
   if (await cuotaAgotada(sesion)) return { resultado: "cuota_whatsapp_agotada" };
 
-  const opcionesDm = lidColega ? { lid: lidColega, orgId: org.id } : { orgId: org.id };
-  const envioDm = await waha.enviarDm(sesion, telefonoColega, texto, opcionesDm).catch((e) => ({ ok: false, error: e.message }));
-  if (!envioDm || !envioDm.ok) return { resultado: "error_envio", error: envioDm && envioDm.error };
+  // NO REENVIAR (spec dm-separados §3.3): lo que el colega ya recibio no se
+  // le repite, aunque la persona lo haya marcado en el panel. Se reporta en
+  // `descartados`, con su motivo, igual que cualquier otro descarte.
+  const { quedan: aEnviar, repetidas } = await quitarYaEnviadas(
+    org,
+    { lid: signal.autor_telefono, telefono: telefonoColega },
+    publicables
+  );
+  for (const ref of repetidas) descartados.push({ ref, motivos: ["ya_se_le_mando"] });
+  if (!aEnviar.length) return { resultado: "ya_se_le_mando", refs: repetidas, descartados };
+
+  // UNA PROPIEDAD POR MENSAJE, igual que el camino automatico.
+  const armado = redactar.mensajesAlColega({ autor_nombre: signal.autor_nombre }, aEnviar, {
+    org,
+    sinConfirmar,
+    leFalta,
+    pedido: pedidoDe(signal),
+  });
+  const envioDm = await envioColega.enviarAlColega({
+    sesion,
+    orgId: org.id,
+    telefono: telefonoColega,
+    lid: lidColega,
+    mensajes: armado.mensajes,
+  });
+  if (!envioDm.ok) return { resultado: "error_envio", error: envioDm.error };
 
   // Mismo modo 'auto' que usa el DM automatico (ver la nota en asistir, mas
   // arriba, y en group-signals.js#dmsHoyPorColega): en la columna
@@ -1385,7 +1446,7 @@ async function responderPorDmManual(org, signalId, { sesion = null, refs = null 
   // usuario) a proposito: esto es lo que de verdad quedo dentro del mensaje
   // enviado, que puede ser un subconjunto de lo elegido si algo no paso la
   // compuerta (ver `descartados` mas abajo).
-  const refsEnviadas = publicables.map((m) => m.ref).filter(Boolean);
+  const refsEnviadas = envioDm.refsEnviadas;
   // A QUIEN salio (Juan, 2026-09-04; corregido 2026-09-08). Mismo arreglo
   // que aprobarManual: destinoLid sale de lidColega (solo existe cuando el
   // DM de verdad salio por lid), no de signal.autor_telefono a secas, y se
@@ -1393,7 +1454,7 @@ async function responderPorDmManual(org, signalId, { sesion = null, refs = null 
   // compara por IGUALDAD EXACTA contra el identificador crudo del mensaje
   // entrante, que siempre llega con su sufijo) nunca encuentra esta señal.
   await groupSignals.marcarRespondida(org.id, signal.id, {
-    texto, wamid: envioDm.wamid, modo: "auto", refs: refsEnviadas,
+    texto: envioDm.texto, wamid: envioDm.wamid, modo: "auto", refs: refsEnviadas,
     destinoTelefono: telefonoColega || null,
     destinoLid: lidColega ? `${lidColega}@lid` : null,
   });
@@ -1403,12 +1464,17 @@ async function responderPorDmManual(org, signalId, { sesion = null, refs = null 
   // dashboard los sumaba como "bot resolvio solo". El DM automatico deja
   // motivo 'ok'; este deja 'dm_manual'.
   await groupSignals
-    .guardarPolitica(org.id, signal.id, { motivo: "dm_manual", traza: ["dm_manual", `refs:${refsEnviadas.join(",")}`] })
+    .guardarPolitica(org.id, signal.id, {
+      motivo: "dm_manual",
+      traza: ["dm_manual", `refs:${refsEnviadas.join(",")}`, ...(envioDm.completo ? [] : [`faltaron:${envioDm.faltantes.join(",")}`])],
+    })
     .catch(() => {});
 
   return {
-    resultado: "dm_enviado",
-    texto,
+    resultado: envioDm.completo ? "dm_enviado" : "dm_parcial",
+    texto: envioDm.texto,
+    faltantes: envioDm.faltantes,
+    repetidas,
     wamid: envioDm.wamid,
     telefono: telefonoColega,
     publicables,
