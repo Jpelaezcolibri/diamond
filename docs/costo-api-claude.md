@@ -61,6 +61,48 @@ Ahorraria ~$8/mes a cambio de exactamente la calidad que no se quiere tocar.
 toca el camino mas critico del sistema. Reconsiderar solo si `[uso]` muestra
 que las vueltas del tool loop dominan la factura.
 
+## Actualizacion 2026-09-14: el clasificador era la factura
+
+La tabla de arriba subestimaba `groups/classify.js` unas 12 veces. Medido con
+los contadores de `/webhook/grupos/estado` (09:08 a 15:03 hora Colombia):
+1.232 mensajes de grupos en escucha, **8 descartados por el prefiltro
+(0,6 %)**, 384 difundidos, **840 clasificados**, 82 demandas. En grupos
+gremiales casi todo mensaje nombra una zona, un precio o un termino del
+oficio, asi que el "~85 % de descarte" no se da. Son 820 a 1.300
+clasificaciones por dia: ~$100 a $160 al mes, ~85 % del gasto total.
+
+El descarte de "cachear el prompt de `classify.js`" (abajo, en la seccion de
+lo descartado) dejo de valer con ese volumen. El prefijo (system + esquema)
+media 3.092 tokens, bajo el minimo de Haiku 4.5 (4.096). Se cruzo con 12
+ejemplos reales y dos reglas nuevas (precio sin unidad segun operacion;
+barrio y municipio van los dos) y se marco con `CACHE_ESTABLE`.
+
+Validado con la clave de produccion sobre 60 mensajes congelados (40 demandas
+y 12 ofertas guardadas, 8 de ruido escritas a mano), gasto de la validacion
+~$0,59:
+
+| | Prompt viejo | Prompt nuevo |
+|---|---:|---:|
+| Clase igual a la etiqueta de produccion | 59/60 | 60/60 |
+| USD por mensaje (medido en `usage`) | 0,00413 | 0,00147 |
+| Llamadas que leyeron cache | — | 59/59 |
+
+Las dos reglas nuevas salieron de la primera pasada: con solo los ejemplos,
+el prompt nuevo leia "alrededor de 1.300" en venta como $1.300.000 (2 de 4
+vueltas) y dejaba solo el barrio en "Camino Verde de Envigado" — que no esta
+en `SUBZONA_DE`, o sea que el pedido no habria cruzado con nada.
+
+Quedan propuestas, sin aplicar: una compuerta de intencion de demanda antes
+de clasificar (recall 98,7 % sobre 1.500 demandas reales; el recorte no esta
+medido, va primero en sombra) y `buscar_propiedades` en JSON compacto y sin
+columnas internas (-14 % o mas por busqueda).
+
+Verificacion del cache del clasificador:
+
+```
+railway run --service diamond node scripts/smoke-cache.js classify
+```
+
 ## Como verificar que funciono
 
 En los logs de Railway:

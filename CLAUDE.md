@@ -30,6 +30,21 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
 
 ## 2. Estado actual (2026-09-14)
 
+- **Costo de la API: el clasificador cacheado (2026-09-14).**
+  - **Hallazgo:** el clasificador de grupos (`src/groups/classify.js`, Haiku)
+    era ~85 % del gasto. Clasifica 820 a 1.300 mensajes por día porque el
+    prefiltro léxico descarta el 0,6 % en grupos gremiales, no el 85 %.
+  - **Cambio:** su prompt pasó el mínimo cacheable de Haiku (4.096 tokens)
+    con 12 ejemplos reales y dos reglas nuevas (precio sin unidad según la
+    operación; barrio y municipio van los dos). Costo por mensaje de
+    $0,0041 a $0,0015.
+  - **Validado** con la clave de producción sobre 60 mensajes congelados:
+    60/60 en clase contra las etiquetas guardadas (el prompt viejo, 59/60).
+  - **Verificar:** en Railway, `[uso] classify ... cache_read=4xxx`; y
+    `railway run --service diamond node scripts/smoke-cache.js classify`.
+  - **Propuesto, sin aplicar:** compuerta de intención de demanda (primero en
+    sombra) y `buscar_propiedades` compacto. Detalle en `docs/costo-api-claude.md`.
+
 - **Mensajes repetidos a la asesora, cerrados (2026-09-14).**
   - **La queja:** "llegan muchos mensajes para el mismo colega". Se midieron
     13 casos del 07 al 14-sep y salieron cinco causas.
