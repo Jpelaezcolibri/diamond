@@ -382,3 +382,16 @@ test("el saludo nuevo no mete Diamond ni el nombre del grupo (mensaje blanqueado
   assert.ok(!texto.toLowerCase().includes("diamond"));
   assert.ok(!texto.includes("grupo"));
 });
+
+// ADMINISTRACION EN LA FICHA (2026-09-13). Un colega pregunto por DM "Valor
+// administracion de la opcion 2, cual es?" despues de recibir la ficha. Wasi
+// la tiene en 41 de 124 propiedades; si la sabemos, va. Si no, no aparece:
+// "administracion $0" seria afirmar que no paga.
+test("la ficha lleva la administracion cuando Wasi la tiene, y nada cuando no", () => {
+  const redactar = require("../src/groups/redactar");
+  const base = { ref: "9776631", titulo: "Apartamento en Sabaneta", operacion: "Venta", zona: "Sabaneta", area: "77m2", habitaciones: 3, banos: 2, garajes: 2, estrato: 4, precio: "$470.000.000", linkWasi: "https://info.wasi.co/x/9776631" };
+  const con = redactar.ficha({ ...base, administracion: "$280.000" }, 2);
+  assert.match(con, /2 baños · 2 garajes · estrato 4 · administración \$280\.000/);
+  const sin = redactar.ficha({ ...base, administracion: null }, 2);
+  assert.ok(!/administración/.test(sin));
+});

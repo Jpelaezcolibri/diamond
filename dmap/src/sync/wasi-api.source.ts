@@ -72,7 +72,12 @@ export const wasiApiPropertySchema = z
     // `internal` y `external`, cada uno un array de {id, nombre, name, own}.
     // z.unknown() por la misma razon que galleries: la forma real se
     // desarma en extractFeatures(), con tolerancia a que cambie.
-    features: z.unknown().optional()
+    features: z.unknown().optional(),
+    // Administracion (verificado contra produccion el 2026-09-13):
+    // `maintenance_fee` es el numero ("280000", "0" si no esta cargada) y
+    // `maintenance_fee_label` el texto ("$280.000 COP", "$0 COP").
+    maintenance_fee: z.union([z.string(), z.number()]).nullable().optional(),
+    maintenance_fee_label: z.string().nullable().optional()
   })
   .passthrough();
 
@@ -297,6 +302,23 @@ export function extractFeatures(p: WasiApiProperty): string | null {
   return nombres.length > 0 ? nombres.join(", ") : null;
 }
 
+/**
+ * La administracion como texto listo para mostrar ("$280.000"), o null si no
+ * esta cargada. Wasi manda 0 cuando el asesor no la lleno — la misma regla
+ * que garajes: un 0 es "sin dato", nunca "no paga administracion". Se prefiere
+ * la etiqueta de Wasi sin el " COP" (es el formato que ya ve el asesor); si no
+ * viene, se arma desde el numero.
+ */
+export function normalizeAdministracion(p: WasiApiProperty): string | null {
+  const valor = toNumberOrNull(p.maintenance_fee ?? null);
+  if (valor === null || valor <= 0) return null;
+  const etiqueta = String(p.maintenance_fee_label ?? "")
+    .replace(/\s*COP\s*$/i, "")
+    .trim();
+  if (/[1-9]/.test(etiqueta)) return etiqueta;
+  return `$${Math.round(valor).toLocaleString("es-CO")}`;
+}
+
 export function toCanonicalProperty(raw: WasiApiProperty, propertyTypes: PropertyTypeMap = new Map()): CanonicalProperty {
   const { operacion, precio } = normalizeOperacionYPrecio(raw);
   const { imageKeys, imageUrls } = extractImages(raw);
@@ -315,6 +337,7 @@ export function toCanonicalProperty(raw: WasiApiProperty, propertyTypes: Propert
     garaje: toNumberOrNull(raw.garages),
     estrato: toNumberOrNull(raw.stratum),
     caracteristicas: extractFeatures(raw),
+    administracion: normalizeAdministracion(raw),
     zona: raw.zone_label ?? null,
     ciudad: raw.city_label ?? null,
     link: raw.link ?? null,

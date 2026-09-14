@@ -432,6 +432,10 @@ function evaluarCandidata(p, c, fuente) {
     // ficha de Sofi pueda confirmar en positivo lo que antes era siempre
     // "sin_confirmar". La ausencia sigue sin significar "no tiene".
     caracteristicas: fuente === "diamond" ? p.caracteristicas || null : null,
+    // Administracion (2026-09-13): va en la ficha del colega. Un colega la
+    // pidio por DM ("Valor administracion de la opcion 2") y otro la puso
+    // como exigencia del pedido ("no mayor a 700.000").
+    administracion: fuente === "diamond" ? p.administracion || null : null,
     // Las tres marcas que lee publicable.js (2026-09-07). Se estampan ACA
     // porque esta es la unica funcion que ve el pedido Y la propiedad:
     // `esPublicable(match)` recibe solo el match y no tiene forma de saber

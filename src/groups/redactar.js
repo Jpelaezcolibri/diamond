@@ -154,6 +154,9 @@ function ficha(match, indice, { detalleFalta = null } = {}) {
     formato.pluralizar(match.banos, "baño", "baños"),
     formato.pluralizar(match.garajes, "garaje"),
     formato.datoCargado(match.estrato) ? `estrato ${match.estrato}` : null,
+    // Administracion (2026-09-13): solo si Wasi la tiene cargada. Un colega la
+    // pregunto por DM despues de recibir la ficha; si la sabemos, va aca.
+    String(match.administracion || "").trim() ? `administración ${String(match.administracion).trim()}` : null,
   ]
     .filter(Boolean)
     .join(" · ");

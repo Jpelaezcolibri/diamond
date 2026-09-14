@@ -123,6 +123,7 @@ function toCanonicalProperty(property: PropertyRow, fetched: WasiPublicFetchResu
     // Idem caracteristicas: la pagina publica no las parsea, se conserva lo
     // que la API oficial (o el import viejo) ya habia dejado en la fila.
     caracteristicas: property.caracteristicas,
+    administracion: property.administracion,
     zona: property.zona,
     ciudad: property.ciudad,
     link: property.link,
