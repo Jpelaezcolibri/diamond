@@ -85,6 +85,9 @@ const metricas = {
   publicados: 0, sombra: 0, callados: 0, errores: 0,
   // Modo asistido: Sofi revalida y le avisa a la asesora, sin publicar nada.
   avisadas: 0, descartadas_por_sofi: 0, avisos_pendientes: 0,
+  // Que termino siendo cada mensaje clasificado (auditoria de costo,
+  // 2026-09-14): es lo que dice cuanto del gasto del clasificador es ruido.
+  clasificados_demanda: 0, clasificados_oferta: 0, clasificados_ruido: 0, sin_clasificar: 0,
   desde: new Date().toISOString(),
 };
 function contar(k) {
@@ -262,6 +265,18 @@ function identidadDM(chatId) {
   return { id, telefono: id.endsWith("@c.us") ? soloDigitos(id) : null, lid: null };
 }
 
+// En que termino un mensaje que llego al clasificador, a partir del resultado
+// de vivo.procesarMensaje. null = no llego a clasificarse (radar apagado o
+// descartado por el prefiltro). Todo lo que no es ruido, oferta ni fallo salio
+// del camino de demandas.
+function claseDelResultado(resultado) {
+  if (resultado === "ruido") return "ruido";
+  if (resultado === "sin_clasificar") return "sin_clasificar";
+  if (resultado === "radar_apagado" || resultado === "descartado_prefiltro") return null;
+  if (typeof resultado === "string" && resultado.startsWith("oferta_")) return "oferta";
+  return "demanda";
+}
+
 // Procesa el mensaje despues de haber respondido 200. WAHA reintenta si el
 // webhook tarda, y clasificar + cruzar + publicar no cabe en ese plazo.
 async function procesar(org, ev, grupo, sesion) {
@@ -334,6 +349,10 @@ async function procesar(org, ev, grupo, sesion) {
   else if (r.resultado === "avisada") contar("avisadas");
   else if (r.resultado === "descartada_por_sofi") contar("descartadas_por_sofi");
   else if (r.resultado === "aviso_pendiente") contar("avisos_pendientes");
+
+  const clase = claseDelResultado(r.resultado);
+  if (clase === "sin_clasificar") contar("sin_clasificar");
+  else if (clase) contar(`clasificados_${clase}`);
 
   // Solo despues de haber publicado de verdad. Como esto corre dentro de la cola
   // del grupo, el pedido que venga atras espera y se responde igual: se demora,
@@ -487,3 +506,5 @@ module.exports._yaVisto = yaVisto;
 module.exports._esAnteriorAlCorte = esAnteriorAlCorte;
 module.exports._metricas = metricas;
 module.exports._telefonoVisible = telefonoVisible;
+module.exports._procesar = procesar;
+module.exports._claseDelResultado = claseDelResultado;
