@@ -484,6 +484,15 @@ function _resetAvisosDemandaColega() {
   avisosDemandaRecientes.clear();
 }
 
+// Columnas de `properties` que NO viajan al modelo en buscar_propiedades. El
+// resultado entra como tool_result y se reenvia entero en cada vuelta del tool
+// loop de engine.js, asi que cada campo de mas se paga por iteracion.
+// - images (2026-09-05): el 61% de la fila; la ficha usa `link`, no las URLs.
+// - id, org_id, created_at, captador_id, prioridad_venta (2026-09-14): internas;
+//   ningun prompt ni tool las nombra (las tools identifican por `ref`).
+// `disponible` se queda: la regla 18 del prompt la usa.
+const NO_AL_MODELO = new Set(["images", "id", "org_id", "created_at", "captador_id", "prioridad_venta"]);
+
 // Ejecuta una tool. ctx: { org, lead, propertyInteres, transfer } — el engine lee
 // ctx.lead (actualizado) y ctx.transfer despues del loop.
 async function executeTool(name, input, ctx) {
@@ -599,9 +608,15 @@ async function executeTool(name, input, ctx) {
     // a ~7.600 tokens.
     //
     // ctx.propertyInteres y las alertas siguen recibiendo la fila COMPLETA:
-    // esto solo recorta lo que viaja al modelo.
-    const paraElModelo = results.map(({ images, ...resto }) => resto);
-    return JSON.stringify(paraElModelo, null, 2);
+    // esto solo recorta lo que viaja al modelo (ver NO_AL_MODELO arriba).
+    //
+    // Sin sangria (2026-09-14): el modelo no la necesita para leer el JSON y
+    // son tokens puros. Medido con count_tokens sobre 5 propiedades reales:
+    // 3.002 con sangria contra 2.572 compacto.
+    const paraElModelo = results.map((p) =>
+      Object.fromEntries(Object.entries(p).filter(([campo]) => !NO_AL_MODELO.has(campo)))
+    );
+    return JSON.stringify(paraElModelo);
   }
 
   if (name === "registrar_dato_lead") {

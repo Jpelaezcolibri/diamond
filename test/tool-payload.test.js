@@ -43,6 +43,25 @@ test("pero SI lleva todo lo que Sofi necesita para armar la ficha", async (t) =>
   assert.ok(salida.includes("9702941"), "la ref tiene que llegar entera");
 });
 
+test("el resultado no lleva columnas internas que Sofi nunca lee", async (t) => {
+  t.mock.method(properties, "search", async () => [
+    propiedad({ captador_id: "adv-9", prioridad_venta: 2, created_at: "2026-07-01T00:00:00Z" }),
+  ]);
+  const salida = await executeTool("buscar_propiedades", { zona: "Envigado" }, ctxDe());
+  const [p] = JSON.parse(salida);
+  for (const campo of ["id", "org_id", "created_at", "captador_id", "prioridad_venta"]) {
+    assert.ok(!(campo in p), `${campo} no le sirve al modelo y se paga en cada vuelta del tool loop`);
+  }
+  assert.strictEqual(p.disponible, true, "disponible se queda: la regla 18 del prompt lo usa");
+});
+
+test("el resultado viaja en JSON compacto, sin sangria", async (t) => {
+  t.mock.method(properties, "search", async () => [propiedad({ descripcion: "Linea uno.\nLinea dos." })]);
+  const salida = await executeTool("buscar_propiedades", { zona: "Envigado" }, ctxDe());
+  assert.ok(!salida.includes("\n"), "la sangria son tokens que el modelo no necesita");
+  assert.strictEqual(JSON.parse(salida)[0].descripcion, "Linea uno.\nLinea dos.", "el contenido no cambia");
+});
+
 test("el recorte no toca la propiedad que se guarda como interes del lead", async (t) => {
   t.mock.method(properties, "search", async () => [propiedad()]);
   const ctx = ctxDe();
