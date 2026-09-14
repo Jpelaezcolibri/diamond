@@ -42,8 +42,14 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
     60/60 en clase contra las etiquetas guardadas (el prompt viejo, 59/60).
   - **Verificar:** en Railway, `[uso] classify ... cache_read=4xxx`; y
     `railway run --service diamond node scripts/smoke-cache.js classify`.
-  - **Propuesto, sin aplicar:** compuerta de intención de demanda (primero en
-    sombra) y `buscar_propiedades` compacto. Detalle en `docs/costo-api-claude.md`.
+  - **`buscar_propiedades` liviano, aplicado:** JSON compacto y sin columnas
+    internas, −19 % de tokens por búsqueda (4.799 → 3.887 en 5 propiedades).
+  - **Compuerta de intención de demanda, descartada:** deja pasar el 93 % de
+    las ofertas reales, así que no recortaría casi nada.
+  - **Pendiente de leer (24–48 h):** la mezcla del clasificador en
+    `/webhook/grupos/estado` (`clasificados_ruido/oferta/demanda`). Si el
+    ruido es ≥ 40 %, planear una salida corta para el ruido. Detalle en
+    `docs/costo-api-claude.md`.
 
 - **Mensajes repetidos a la asesora, cerrados (2026-09-14).**
   - **La queja:** "llegan muchos mensajes para el mismo colega". Se midieron

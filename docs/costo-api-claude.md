@@ -92,10 +92,26 @@ el prompt nuevo leia "alrededor de 1.300" en venta como $1.300.000 (2 de 4
 vueltas) y dejaba solo el barrio en "Camino Verde de Envigado" — que no esta
 en `SUBZONA_DE`, o sea que el pedido no habria cruzado con nada.
 
-Quedan propuestas, sin aplicar: una compuerta de intencion de demanda antes
-de clasificar (recall 98,7 % sobre 1.500 demandas reales; el recorte no esta
-medido, va primero en sombra) y `buscar_propiedades` en JSON compacto y sin
-columnas internas (-14 % o mas por busqueda).
+Despues, el mismo dia (plan en
+`docs/superpowers/plans/2026-09-14-costo-api-palanca-3-y-mezcla.md`):
+
+- **`buscar_propiedades` liviano (aplicado, commit `2f1edeb`).** JSON
+  compacto y sin `id`, `org_id`, `created_at`, `captador_id` ni
+  `prioridad_venta`. Medido con count_tokens sobre 5 propiedades reales de
+  Envigado: 4.799 → 3.887 tokens (-19 %) por busqueda, en cada vuelta del
+  tool loop.
+- **Compuerta de intencion de demanda (descartada).** Medida sobre
+  produccion, deja pasar el 98,6-99,1 % de 1.509 demandas reales, pero
+  tambien el 93 % de 329 ofertas: las ofertas dicen "para sus clientes",
+  "interesados al interno" o traen "?". No recortaria las ofertas, y lo que
+  ahorraria depende solo del ruido.
+- **Mezcla del clasificador (aplicado, commit `ee915a4`).**
+  `/webhook/grupos/estado` trae ahora `clasificados_ruido`,
+  `clasificados_oferta`, `clasificados_demanda` y `sin_clasificar`. Con el
+  cache puesto, lo que queda del costo del clasificador es sobre todo la
+  salida (137 a 185 tokens por mensaje, 22 campos aunque sea ruido). Si a
+  las 24-48 h el ruido es 40 % o mas de lo clasificado, vale planear una
+  salida corta para el ruido; si no, el clasificador queda como esta.
 
 Verificacion del cache del clasificador:
 

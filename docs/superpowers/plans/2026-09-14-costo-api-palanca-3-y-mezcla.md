@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Estado (2026-09-14):** Task 1 y Task 2 ejecutadas (commits `2f1edeb`, `ee915a4`; suite 1.906/1.906). Task 1 medida: −19 % de tokens por búsqueda. Task 3 Step 5 (leer la mezcla a las 24–48 h) queda pendiente.
+
 **Goal:** Bajar los tokens que `buscar_propiedades` le manda a Sofi en cada vuelta del tool loop, y medir en qué termina cada mensaje que paga el clasificador, para decidir con datos la próxima palanca.
 
 **Architecture:** Dos cambios independientes, cada uno en su commit. (1) `src/agent/tools.js` deja de serializar columnas internas y deja de indentar el JSON. (2) El canal de grupos (`src/channels/whatsapp-group.js`) cuenta, después de `vivo.procesarMensaje`, si el mensaje terminó en ruido, oferta o demanda, y lo expone en `/webhook/grupos/estado`. Ninguno cambia lo que Sofi responde ni lo que el radar decide.
