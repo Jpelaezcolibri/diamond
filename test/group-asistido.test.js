@@ -15,6 +15,14 @@ const colegasData = require("../src/data/colegas");
 
 const RUTA = (m) => require.resolve(path.join("..", "src", m));
 
+// EL DM SALE PARTIDO (Juan, 2026-09-10; caso del 2026-09-13): un mensaje para
+// el colega y una ficha por propiedad. Con una sola candidata aprobada son
+// DOS envios. El texto registrado es la union de los dos (envio-colega.SEPARADOR).
+// La pausa entre mensajes se apaga en los tests: con ella cada DM espera 4 s.
+const envioColega = require("../src/groups/envio-colega");
+envioColega._setDormirParaTests(async () => {});
+const textoDm = () => enviosDm.map((e) => e.texto).join(envioColega.SEPARADOR);
+
 let claseDevuelta = "demanda";
 let matchesDevueltos = [];
 let veredictoDeSofi = null;
@@ -34,6 +42,7 @@ let dmsHoyColegaMock = 0; // cupo libre por defecto
 let dmsHoyLineaMock = 0;
 let enviosDm = [];
 let envioDmResultado = { ok: true, wamid: "wm-dm-1" };
+let refsYaEnviadasMock = new Set();
 // ── Escalado inmediato marca la señal, para que radar-silencio no la reintente ──
 let claimsEscaladoSilencio = [];
 // Carril de arriendo (Important 3 del review de 400c0c8): por defecto "venta",
@@ -96,6 +105,7 @@ function instalar() {
       guardarPolitica: async (orgId, id, datos) => { politicasGuardadas.push({ id, ...datos }); return true; },
       dmsHoyPorColega: async () => dmsHoyColegaMock,
       dmsHoyLinea: async () => dmsHoyLineaMock,
+      refsYaEnviadas: async () => refsYaEnviadasMock,
       claimEscaladoSilencio: async (orgId, signalId) => {
         claimsEscaladoSilencio.push({ orgId, signalId });
         return true;
@@ -238,6 +248,7 @@ beforeEach(() => {
   dmsHoyLineaMock = 0;
   enviosDm = [];
   envioDmResultado = { ok: true, wamid: "wm-dm-1" };
+  refsYaEnviadasMock = new Set();
   claimsEscaladoSilencio = [];
   operacionDevuelta = "venta";
   delete process.env.RADAR_ALERTA_TO;
@@ -507,10 +518,10 @@ test("con telefono, pedido reciente, cupo libre y sesion, se manda el DM y NO se
   });
 
   assert.strictEqual(r.resultado, "dm_enviado");
-  assert.strictEqual(enviosDm.length, 1);
+  assert.strictEqual(enviosDm.length, 2, "el mensaje para el colega y la ficha, cada uno aparte");
   assert.strictEqual(enviosDm[0].sesion, "RADA-NATALIA");
   assert.strictEqual(enviosDm[0].telefono, "573001234567");
-  assert.match(enviosDm[0].texto, /Ref 9780079/);
+  assert.match(textoDm(), /Ref 9780079/);
   assert.strictEqual(enviadosPorSofi.length, 0, "la asesora no recibe nada: no tiene nada que hacer");
   assert.strictEqual(avisosMarcados.length, 0, "marcarAvisoEnviado es del camino de la asesora, no de este");
   // destinoTelefono/destinoLid: registro de a quien salio el DM, para poder
@@ -521,7 +532,7 @@ test("con telefono, pedido reciente, cupo libre y sesion, se manda el DM y NO se
   // final, 2026-09-04).
   assert.deepStrictEqual(marcadasRespondidas, [
     {
-      id: "sig-1", texto: enviosDm[0].texto, wamid: "wm-dm-1", modo: "auto", refs: ["9780079"],
+      id: "sig-1", texto: textoDm(), wamid: "wm-dm-1", modo: "auto", refs: ["9780079"],
       destinoTelefono: "573001234567", destinoLid: "141746805670125@lid",
     },
   ]);
@@ -540,7 +551,7 @@ test("con telefono resuelto Y refs_dudosas, el DM sale Y la asesora recibe el av
   });
 
   assert.strictEqual(r.resultado, "dm_enviado", "el DM sigue saliendo igual");
-  assert.strictEqual(enviosDm.length, 1, "el colega sigue recibiendo su DM normal");
+  assert.strictEqual(enviosDm.length, 2, "el colega sigue recibiendo su DM: el mensaje para el y la ficha");
   assert.strictEqual(enviadosPorSofi.length, 1, "la asesora SI recibe algo ahora -- quedo una dudosa pendiente");
   assert.match(enviadosPorSofi[0].texto, /Ya le mandé por privado/i);
   assert.match(enviadosPorSofi[0].texto, /9780079/, "menciona la ref que ya se envio por DM");
@@ -557,7 +568,7 @@ test("el DM al colega usa el mismo texto que antes iba al grupo (redactar.mensaj
   telefonoColegaResuelto = "573001234567";
   await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
 
-  const t = enviosDm[0].texto;
+  const t = textoDm();
   // El saludo dice a que pedido responde (Juan, 2026-09-10): el clasificador
   // de este archivo devuelve apartamento / laureles / 900M / 3 alcobas.
   assert.match(t, /Hola Patricia, te respondo tu pedido de apartamento en Laureles, hasta \$900\.000\.000, 3 alcobas\./);
@@ -576,7 +587,7 @@ test("el DM lleva la salvedad de Sofi cuando el veredicto reporta datos sin conf
   veredictoDeSofi = { ...APRUEBA, sin_confirmar: ["terraza", "antigüedad"] };
   await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
 
-  assert.match(enviosDm[0].texto, /No tengo confirmado si tiene terraza ni antigüedad/);
+  assert.match(textoDm(), /No tengo confirmado si tiene terraza ni antigüedad/);
 });
 
 test("sin datos sin confirmar en el veredicto, el DM sale igual que antes -- sin salvedad", async () => {
@@ -584,7 +595,7 @@ test("sin datos sin confirmar en el veredicto, el DM sale igual que antes -- sin
   veredictoDeSofi = { ...APRUEBA, sin_confirmar: [] };
   await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
 
-  assert.doesNotMatch(enviosDm[0].texto, /No tengo confirmado/);
+  assert.doesNotMatch(textoDm(), /No tengo confirmado/);
 });
 
 test("un veredicto VIEJO sin el campo 'sin_confirmar' no rompe el DM -- se degrada a sin salvedad", async () => {
@@ -594,7 +605,7 @@ test("un veredicto VIEJO sin el campo 'sin_confirmar' no rompe el DM -- se degra
   const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
 
   assert.strictEqual(r.resultado, "dm_enviado");
-  assert.doesNotMatch(enviosDm[0].texto, /No tengo confirmado/);
+  assert.doesNotMatch(textoDm(), /No tengo confirmado/);
 });
 
 test("el DM incluye el link a la linea oficial de Sofi cuando hay numero configurado", async () => {
@@ -602,14 +613,14 @@ test("el DM incluye el link a la linea oficial de Sofi cuando hay numero configu
   telefonoColegaResuelto = "573001234567";
   await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
 
-  assert.match(enviosDm[0].texto, /https:\/\/wa\.me\/573000000009/);
+  assert.match(textoDm(), /https:\/\/wa\.me\/573000000009/);
 });
 
 test("sin CONTACT_WHATSAPP_NUMBER, el DM sale sin ese renglon -- nunca un link a medias", async () => {
   telefonoColegaResuelto = "573001234567";
   await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
 
-  assert.doesNotMatch(enviosDm[0].texto, /línea oficial/);
+  assert.doesNotMatch(textoDm(), /línea oficial/);
 });
 
 test("el feed del admin se entera del DM directo, con trazabilidad de a quien se le escribio", async () => {
@@ -830,16 +841,16 @@ test("sin telefono pero con el lid del autor, el DM sale igual por <lid>@lid", a
   });
 
   assert.strictEqual(r.resultado, "dm_enviado");
-  assert.strictEqual(enviosDm.length, 1);
+  assert.strictEqual(enviosDm.length, 2);
   assert.strictEqual(enviosDm[0].telefono, null, "no hay numero: el destino es el lid");
   assert.strictEqual(enviosDm[0].opciones.lid, "141746805670125");
-  assert.match(enviosDm[0].texto, /Ref 9780079/);
+  assert.match(textoDm(), /Ref 9780079/);
   assert.strictEqual(enviadosPorSofi.length, 0, "el DM salio: la asesora no tiene nada que hacer");
   assert.strictEqual(politicasGuardadas[0].motivo, "ok");
   assert.ok(politicasGuardadas[0].traza.includes("destino:lid"), politicasGuardadas[0].traza.join(","));
   assert.deepStrictEqual(marcadasRespondidas, [
     {
-      id: "sig-1", texto: enviosDm[0].texto, wamid: "wm-dm-1", modo: "auto", refs: ["9780079"],
+      id: "sig-1", texto: textoDm(), wamid: "wm-dm-1", modo: "auto", refs: ["9780079"],
       destinoTelefono: null, destinoLid: "141746805670125@lid",
     },
   ]);
@@ -877,7 +888,7 @@ test("si el lid no entrega, el DM sale por el telefono resuelto", async () => {
   const porLid = enviosDm.filter((e) => e.opciones && e.opciones.lid);
   const porTelefono = enviosDm.filter((e) => !e.opciones || !e.opciones.lid);
   assert.ok(porLid.length >= 1, "no intento primero por el lid");
-  assert.strictEqual(porTelefono.length, 1, "no reintento por el telefono");
+  assert.strictEqual(porTelefono.length, 2, "el primer mensaje cae al telefono y la ficha sale por el mismo destino");
   assert.strictEqual(porTelefono[0].telefono, "573001234567");
   assert.strictEqual(marcadasRespondidas.length, 1, "el pedido no quedo registrado como respondido");
 });
@@ -945,7 +956,7 @@ test("un colega ya contactado varias veces hoy sigue recibiendo el DM -- ya no h
   const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
 
   assert.strictEqual(r.resultado, "dm_enviado");
-  assert.strictEqual(enviosDm.length, 1);
+  assert.strictEqual(enviosDm.length, 2);
   assert.strictEqual(enviadosPorSofi.length, 0, "la asesora no recibe nada: el DM automatico salio");
   assert.strictEqual(politicasGuardadas[0].motivo, "ok");
 });
@@ -983,7 +994,7 @@ test("el DM lleva la aclaracion cuando Sofi reporta que una propiedad no cumple 
   };
   await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
 
-  assert.match(enviosDm[0].texto, /Aclaración: tiene 1 garaje y pediste 2/);
+  assert.match(textoDm(), /Aclaración: tiene 1 garaje y pediste 2/);
 });
 
 // ── Escalado INMEDIATO a Catherine si a Natalia no le llega (Juan, 2026-08-26) ──
@@ -1055,7 +1066,7 @@ test("un veredicto VIEJO sin el campo 'le_falta' no rompe el DM -- se degrada a 
   const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
 
   assert.strictEqual(r.resultado, "dm_enviado");
-  assert.doesNotMatch(enviosDm[0].texto, /Aclaración:/);
+  assert.doesNotMatch(textoDm(), /Aclaración:/);
 });
 
 // ── SOLO LLAMADA (Juan, 2026-09-10) ──────────────────────────────────────
@@ -1094,5 +1105,78 @@ test("un colega sin marca sigue recibiendo su DM como siempre", async () => {
   telefonoColegaResuelto = "573001234567";
   const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
   assert.strictEqual(r.resultado, "dm_enviado");
-  assert.strictEqual(enviosDm.length, 1);
+  assert.strictEqual(enviosDm.length, 2, "el mensaje para el colega y la ficha");
+});
+
+// ── DM PARTIDO, de punta a punta (Juan, 2026-09-10; caso del 2026-09-13) ──
+
+// NO REENVIAR (spec dm-separados §3.3). Caso Sergio Neira: dijo "Ninguno me
+// sirve" por la 9776631 el 9-sep y al dia siguiente se la volvimos a mandar
+// por el mismo pedido republicado. Lo que el colega ya recibio no se le
+// repite; si no queda nada, el pedido va a la asesora con el motivo.
+test("si el colega ya recibio esa ref en los ultimos dias, no se le repite: va a la asesora con el motivo", async () => {
+  telefonoColegaResuelto = "573001234567";
+  refsYaEnviadasMock = new Set(["9780079"]);
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+
+  assert.strictEqual(r.resultado, "avisada");
+  assert.strictEqual(enviosDm.length, 0, "no se le repite nada");
+  assert.strictEqual(politicasGuardadas[0].motivo, "ya_se_le_mando");
+  assert.ok(politicasGuardadas[0].traza.some((t) => t.includes("9780079")), politicasGuardadas[0].traza.join(","));
+  assert.match(enviadosPorSofi[0].texto, /Ya le mandamos estas mismas propiedades a este colega/);
+  // Repetir no es una oportunidad perdida: el aviso no puede gritar urgencia.
+  assert.doesNotMatch(enviadosPorSofi[0].texto, /OPORTUNIDAD APROBADA/);
+});
+
+test("si solo UNA de las aprobadas ya se le mando, sale el DM con las otras", async () => {
+  telefonoColegaResuelto = "573001234567";
+  matchesDevueltos = [match(), match({ ref: "9800000", titulo: "Apartamento en Sabaneta", zona: "Sabaneta" })];
+  veredictoDeSofi = { ...APRUEBA, refs_utiles: ["9780079", "9800000"] };
+  refsYaEnviadasMock = new Set(["9780079"]);
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+
+  assert.strictEqual(r.resultado, "dm_enviado");
+  assert.strictEqual(enviosDm.length, 2, "el mensaje para el colega y la unica ficha nueva");
+  assert.doesNotMatch(textoDm(), /Ref 9780079/);
+  assert.match(textoDm(), /Ref 9800000/);
+  assert.deepStrictEqual(marcadasRespondidas[0].refs, ["9800000"]);
+});
+
+test("una ficha por mensaje: dos aprobadas son tres envios, cada ficha con su link", async () => {
+  telefonoColegaResuelto = "573001234567";
+  matchesDevueltos = [match(), match({ ref: "9800000", titulo: "Apartamento en Sabaneta", zona: "Sabaneta" })];
+  veredictoDeSofi = { ...APRUEBA, refs_utiles: ["9780079", "9800000"] };
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+
+  assert.strictEqual(r.resultado, "dm_enviado");
+  assert.strictEqual(enviosDm.length, 3);
+  assert.match(enviosDm[0].texto, /^Hola Patricia/);
+  assert.match(enviosDm[1].texto, /^1\) .*\n[\s\S]*Ref 9780079/);
+  assert.match(enviosDm[2].texto, /^2\) .*\n[\s\S]*Ref 9800000/);
+  for (const e of enviosDm.slice(1)) assert.doesNotMatch(e.texto, /Hola|Comision|Sofi/, "la ficha se reenvia tal cual");
+  assert.deepStrictEqual(marcadasRespondidas[0].refs, ["9780079", "9800000"]);
+  assert.strictEqual(marcadasRespondidas[0].texto, textoDm(), "se registra todo lo que salio");
+});
+
+// CORTE A LA MITAD (spec dm-separados §3.2): lo que salio queda registrado,
+// lo que falto le llega a la asesora para que lo mande ella.
+test("si WhatsApp corta a la mitad, se registra solo lo que salio y la asesora recibe lo que falto", async () => {
+  telefonoColegaResuelto = "573001234567";
+  matchesDevueltos = [match(), match({ ref: "9800000", titulo: "Apartamento en Sabaneta", zona: "Sabaneta" })];
+  veredictoDeSofi = { ...APRUEBA, refs_utiles: ["9780079", "9800000"] };
+  envioDmResultado = ({ intento }) =>
+    intento === 3 ? { ok: false, error: "rate-overlimit", previoAlEnvio: true } : { ok: true, wamid: `wm-dm-${intento}` };
+
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+
+  assert.strictEqual(r.resultado, "dm_enviado", "el colega recibio el primer mensaje y una ficha");
+  assert.strictEqual(r.parcial, true);
+  assert.deepStrictEqual(r.faltantes, ["9800000"]);
+  assert.strictEqual(enviosDm.length, 3, "se corta en el que fallo: sin reintento ni salto");
+  assert.deepStrictEqual(marcadasRespondidas[0].refs, ["9780079"], "solo lo que salio");
+  assert.strictEqual(marcadasRespondidas[0].wamid, "wm-dm-1");
+  assert.ok(politicasGuardadas.some((p) => p.motivo === "dm_parcial"), JSON.stringify(politicasGuardadas));
+  assert.strictEqual(enviadosPorSofi.length, 1, "la asesora recibe lo que falto");
+  assert.match(enviadosPorSofi[0].texto, /WhatsApp cortó el envío y estas no le llegaron/);
+  assert.match(enviadosPorSofi[0].texto, /Ref 9800000/);
 });

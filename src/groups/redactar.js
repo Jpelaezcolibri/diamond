@@ -42,7 +42,7 @@
 // un canal directo con el asistente para quien quiera seguir la conversacion.
 //
 // CORRECCION (Juan, 2026-08-24): este mismo texto se reusa TAL CUAL para el DM
-// directo al colega (ver src/groups/vivo.js#textoParaColega) porque es "el
+// directo al colega (ver src/groups/redactar.js#mensajesAlColega) porque es "el
 // mismo mensaje que antes iba al grupo". Antes de esta fecha, vivo.js le
 // agregaba UN SEGUNDO renglon con otro link a Sofi encima del que ya ponia
 // esta funcion -- el colega recibia dos invitaciones seguidas a escribirle a
@@ -288,6 +288,65 @@ function lineaSalvedad(sinConfirmar, cantidadPropiedades) {
   return `No tengo confirmado si ${verbo} ${lista} — decime si querés que lo averigüe.`;
 }
 
+// LAS ACLARACIONES DE CADA FICHA, compartidas por el mensaje unico
+// (mensajeGrupo) y el DM de una propiedad por mensaje (mensajesAlColega): si
+// cada uno las calculara por su cuenta, el colega leeria cosas distintas
+// segun por donde le llego la misma propiedad.
+//
+// Se indexa por ref (como string: la ref viaja como numero desde Wasi y como
+// string desde el veredicto de Sofi). Un veredicto guardado antes de
+// `le_falta` no lo trae y la aclaracion queda solo con lo calculado.
+//
+// El desvio calculado va PRIMERO en la aclaracion y la del modelo despues:
+// "queda en Sabaneta, vecina de Envigado · no tiene garaje registrado". Una
+// sola linea de Aclaración por ficha, no dos.
+//
+// SIN REPETIR (2026-09-05). El modelo tambien puede haber escrito el mismo
+// desvio en 'le_falta', y la ficha salia con "113 m² y pediste desde 120 ·
+// tiene 113 m² y pediste mínimo 120". Si su texto ya menciona los mismos
+// numeros, el calculado sobra: el del modelo esta redactado para esa
+// propiedad puntual y se lee mejor.
+function detallesPorFicha(props, leFalta, pedido) {
+  const faltaPorRef = new Map(
+    (Array.isArray(leFalta) ? leFalta : [])
+      .filter((f) => f && f.ref && f.detalle)
+      .map((f) => [String(f.ref), String(f.detalle)])
+  );
+  return props.map((m) => {
+    const delModelo = faltaPorRef.get(String(m.ref)) || null;
+    const numerosDelModelo = new Set(String(delModelo || "").match(/\d+/g) || []);
+    const calculados = desvios(m, pedido).filter((d) => {
+      const nums = d.match(/\d+/g) || [];
+      return !(nums.length && nums.every((n) => numerosDelModelo.has(n)));
+    });
+    const detalle = [...calculados, delModelo].filter(Boolean).join(" · ");
+    return detalle || null;
+  });
+}
+
+// El cierre: comision, firma y la invitacion a la linea oficial de Sofi.
+//
+// "Sofi, asistente virtual" y nada mas: sin "de Diamond Inmobiliaria". El
+// colega identifica a quien responder por el numero de WhatsApp que le
+// escribio, no por un nombre o link en el texto.
+//
+// Un solo renglon de invitacion (2026-08-24): la razon real de invitar a
+// escribirle a la linea oficial no es "mas informacion", es que ahi la
+// conversacion no corre el riesgo de baneo de una linea personal y queda
+// registrada en el CRM.
+function lineasCierre(org) {
+  const cierre = ["Comision compartida.", "— Sofi, asistente virtual"];
+  const linkSofi = linkContactoOficial(org);
+  if (linkSofi) {
+    cierre.push(
+      "",
+      "Para que la conversación quede en nuestro sistema, también podés escribirle directo a Sofi (nuestra línea oficial):",
+      linkSofi
+    );
+  }
+  return cierre;
+}
+
 // Devuelve el texto listo para publicar, o null si no hay nada que decir.
 //
 // No recibe (ni deriva a) ningun asesor a proposito: es el mensaje
@@ -351,56 +410,10 @@ function mensajeGrupo(
       : `${saludo} Tengo ${props.length} opciones que pueden servirte:`;
   const salvedad = lineaSalvedad(sinConfirmar, props.length);
 
-  // Se indexa por ref (como string: la ref viaja como numero desde Wasi y
-  // como string desde el veredicto de Sofi). Un veredicto guardado antes de
-  // este cambio no trae `le_falta` y esto queda vacio, igual que si todas
-  // cumplieran.
-  const faltaPorRef = new Map(
-    (Array.isArray(leFalta) ? leFalta : [])
-      .filter((f) => f && f.ref && f.detalle)
-      .map((f) => [String(f.ref), String(f.detalle)])
-  );
+  const detalles = detallesPorFicha(props, leFalta, pedido);
+  const bloques = props.map((m, i) => ficha(m, i + 1, { detalleFalta: detalles[i] }));
 
-  // El desvio calculado va PRIMERO en la aclaracion y la del modelo despues:
-  // "queda en Sabaneta, no en Envigado · no tiene garaje registrado". Una sola
-  // linea de Aclaración por ficha, no dos.
-  const bloques = props.map((m, i) => {
-    const delModelo = faltaPorRef.get(String(m.ref)) || null;
-    // SIN REPETIR (2026-09-05). El modelo tambien puede haber escrito el mismo
-    // desvio en 'le_falta', y la ficha salia con "113 m² y pediste desde 120 ·
-    // tiene 113 m² y pediste mínimo 120". Si su texto ya menciona los mismos
-    // numeros, el calculado sobra: el del modelo esta redactado para esa
-    // propiedad puntual y se lee mejor.
-    const numerosDelModelo = new Set(String(delModelo || "").match(/\d+/g) || []);
-    const calculados = desvios(m, pedido).filter((d) => {
-      const nums = d.match(/\d+/g) || [];
-      return !(nums.length && nums.every((n) => numerosDelModelo.has(n)));
-    });
-    const detalle = [...calculados, delModelo].filter(Boolean).join(" · ");
-    return ficha(m, i + 1, { detalleFalta: detalle || null });
-  });
-
-  const cierre = [
-    "Comision compartida.",
-    // "Sofi, asistente virtual" y nada mas: sin "de Diamond Inmobiliaria". El
-    // colega identifica a quien responder por el numero de WhatsApp que
-    // publico esto en el grupo, no por un nombre o link en el texto.
-    "— Sofi, asistente virtual",
-  ];
-
-  const linkSofi = linkContactoOficial(org);
-  if (linkSofi) {
-    // Un solo renglon de invitacion (2026-08-24): la razon real de invitar a
-    // escribirle a la linea oficial no es "mas informacion", es que ahi la
-    // conversacion no corre el riesgo de baneo de una linea personal y queda
-    // registrada en el CRM -- decirlo asi tambien es mejor copy para el DM
-    // directo al colega, que reusa este mismo texto (ver vivo.js).
-    cierre.push(
-      "",
-      "Para que la conversación quede en nuestro sistema, también podés escribirle directo a Sofi (nuestra línea oficial):",
-      linkSofi
-    );
-  }
+  const cierre = lineasCierre(org);
 
   // La salvedad va pegada al encabezado, antes del espacio en blanco que
   // separa las fichas: se lee como parte de la presentacion del pedido, no
@@ -411,4 +424,79 @@ function mensajeGrupo(
   return [...cabecera, "", bloques.join("\n\n"), "", cierre.join("\n")].join("\n");
 }
 
-module.exports = { mensajeGrupo, ficha, desvios, primerNombre, tituloUtil, lineaSalvedad, unirConNi, MAX_PROPIEDADES };
+// UNA PROPIEDAD POR MENSAJE (Juan, 2026-09-10 — spec
+// docs/superpowers/specs/2026-09-10-dm-separados-y-recordatorio-design.md —
+// y el caso del 2026-09-13 en el inbox de la linea). Un colega respondio el
+// DM de tres opciones con "Enviame de a una propiedad Link Que se pueda pasar
+// al posible cliente" y despues "Enviame link solo Opción 2". Lo que el colega
+// hace con nuestro DM es REENVIARLE cada propiedad a su cliente; con las tres
+// en un solo mensaje no puede, y ademas WhatsApp arma la vista previa (la foto)
+// solo con el primer link del mensaje.
+//
+// Por eso el DM sale partido:
+//   · Mensaje 1, para el colega: a que pedido le contestamos, cuantas
+//     opciones van, la salvedad de lo no confirmado, comision y firma.
+//   · Un mensaje por propiedad: la ficha completa y limpia, con su link de
+//     Wasi (la vista previa trae la foto). Sin saludo ni firma: se reenvia
+//     tal cual. Van numeradas ("2) ...") para que el colega pueda decir
+//     "la opcion 2".
+// El saludo y la firma van en el primer mensaje y no pegados a la ultima
+// ficha (como decia la spec): pegados, esa ficha deja de poder reenviarse,
+// que es justo lo que el colega pidio. Cuesta un mensaje mas por DM.
+//
+// Hasta MAX_POR_DM propiedades (decision de Juan: 3). Si Sofi aprobo mas, el
+// primer mensaje lo dice y lo manda a Sofi para ver el resto.
+//
+// Devuelve { mensajes: [{ texto, ref }], refs, restantes }, o null si no hay
+// nada que mandar. `ref` es null en el primer mensaje: no lleva propiedad.
+const MAX_POR_DM = Number(process.env.RADAR_DM_MAX_PROPIEDADES || 3);
+
+function mensajesAlColega(
+  senal,
+  publicables,
+  { org = null, sinConfirmar = [], leFalta = [], pedido = null, ahora = new Date(), max = MAX_POR_DM } = {}
+) {
+  const todas = publicables || [];
+  const props = todas.slice(0, Math.max(1, Number(max) || 1));
+  if (props.length === 0) return null;
+  const restantes = todas.length - props.length;
+
+  const nombre = primerNombre(senal && senal.autor_nombre);
+  const saludo = saludoDelPedido(nombre, pedido, ahora);
+  const presentacion =
+    props.length === 1
+      ? `${saludo} Te paso una opción que puede servirte en el mensaje de abajo, lista para que se la reenvíes a tu cliente.`
+      : `${saludo} Te paso ${props.length} opciones que pueden servirte, cada una en un mensaje aparte para que se las reenvíes a tu cliente.`;
+  const salvedad = lineaSalvedad(sinConfirmar, props.length);
+
+  // Con opciones de mas, la invitacion a Sofi pasa a ser el camino para
+  // verlas: un solo renglon con el link, no dos invitaciones seguidas.
+  const linkSofi = linkContactoOficial(org);
+  const cuantasMas = restantes === 1 ? "1 opción más" : `${restantes} opciones más`;
+  const cierre =
+    restantes > 0
+      ? [
+          "Comision compartida.",
+          "— Sofi, asistente virtual",
+          "",
+          ...(linkSofi
+            ? [`Tengo ${cuantasMas} para este pedido; si querés verlas, escribile a Sofi (nuestra línea oficial):`, linkSofi]
+            : [`Tengo ${cuantasMas} para este pedido; si querés verlas, decime.`]),
+        ]
+      : lineasCierre(org);
+
+  const primero = [presentacion, ...(salvedad ? [salvedad] : []), "", ...cierre].join("\n");
+  const detalles = detallesPorFicha(props, leFalta, pedido);
+  const fichas = props.map((m, i) => ({
+    texto: ficha(m, i + 1, { detalleFalta: detalles[i] }),
+    ref: m.ref !== null && m.ref !== undefined ? String(m.ref) : null,
+  }));
+
+  return {
+    mensajes: [{ texto: primero, ref: null }, ...fichas],
+    refs: fichas.map((x) => x.ref).filter(Boolean),
+    restantes,
+  };
+}
+
+module.exports = { mensajeGrupo, mensajesAlColega, MAX_POR_DM, detallesPorFicha, lineasCierre, ficha, desvios, primerNombre, tituloUtil, lineaSalvedad, unirConNi, MAX_PROPIEDADES };

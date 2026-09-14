@@ -139,6 +139,11 @@ const WHATSAPP_WEB = "https://web.whatsapp.com";
 // lista cae al genérico de abajo — nunca se deja de mostrar algo.
 const MENSAJE_RESULTADO_DM: Record<string, string> = {
   dm_enviado: "Listo: se le mandó el DM directo al colega.",
+  // DM partido en varios mensajes (Juan, 2026-09-10): WhatsApp puede cortar a
+  // la mitad. Lo que salió queda registrado; lo que faltó hay que mandarlo a mano.
+  dm_parcial: "Se le mandó el DM, pero WhatsApp cortó el envío a la mitad: algunas propiedades no le llegaron. Mandáselas vos.",
+  // No reenviar (spec dm-separados §3.3): el colega ya recibió esas refs en los últimos 7 días.
+  ya_se_le_mando: "A este colega ya se le mandaron esas mismas propiedades en los últimos 7 días. No se repitieron.",
   sin_telefono: "No se pudo resolver el número del colega (WhatsApp lo esconde). Escribile a mano en el grupo.",
   sin_sesion: "No hay una línea de WhatsApp lista para mandar el DM.",
   sin_propiedades_publicables: "Ninguna propiedad pasa el control de calidad ahora mismo (el inventario pudo cambiar).",

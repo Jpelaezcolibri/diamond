@@ -890,6 +890,59 @@ async function dmsHoyPorColega(orgId, autorTelefono, desdeIso) {
 // modulo: en este piloto una linea vinculada sirve a una sola organizacion
 // (ver la nota de "Una sola sesion vinculada por org" en vivo.js#aprobarManual),
 // asi que el conteo por org ES el conteo de la linea.
+// Las refs que un colega YA recibio por DM desde `desdeIso` (Juan,
+// 2026-09-10, spec dm-separados §3.3). Caso Sergio Neira: dijo "Ninguno me
+// sirve" el 9-sep por la 9776631 y el 10-sep se la volvimos a mandar al
+// republicar el mismo pedido. Con una propiedad por mensaje, repetir cuesta
+// el triple.
+//
+// El colega se reconoce por los tres rastros que deja un DM: el lid con y
+// sin sufijo en respuesta_destino_lid (el automatico guarda el crudo
+// "<digitos>@lid"; ver marcarRespondida), el autor del pedido
+// (autor_telefono son los digitos del autor, lid o telefono) y el telefono
+// resuelto en respuesta_destino_telefono.
+//
+// Devuelve un Set de refs (string), o null si la consulta fallo: quien llama
+// decide. No verificar no puede frenar el negocio — repetir una ref es una
+// molestia, no un riesgo para la linea.
+async function refsYaEnviadas(orgId, { lid = null, telefono = null } = {}, desdeIso) {
+  const digitosLid = String(lid || "").replace(/\D/g, "");
+  const digitosTel = String(telefono || "").replace(/\D/g, "");
+  const lids = digitosLid.length >= 10 ? [`${digitosLid}@lid`, digitosLid] : [];
+  const autores = [digitosLid, digitosTel].filter((d) => d.length >= 10);
+  const telefonos = digitosTel.length >= 10 ? [digitosTel] : [];
+  if (!lids.length && !autores.length && !telefonos.length) return new Set();
+
+  if (!supabase) {
+    const refs = new Set();
+    for (const s of memory.groupSignals || []) {
+      if (s.org_id !== orgId || s.respuesta_modo !== "auto" || !s.respondida_at || s.respondida_at < desdeIso) continue;
+      const esDelColega =
+        lids.includes(s.respuesta_destino_lid) || autores.includes(s.autor_telefono) || telefonos.includes(s.respuesta_destino_telefono);
+      if (esDelColega) for (const r of s.respuesta_refs || []) refs.add(String(r));
+    }
+    return refs;
+  }
+
+  const condiciones = [
+    ...lids.map((l) => `respuesta_destino_lid.eq.${l}`),
+    ...autores.map((a) => `autor_telefono.eq.${a}`),
+    ...telefonos.map((t) => `respuesta_destino_telefono.eq.${t}`),
+  ];
+  const { data, error } = await supabase
+    .from("group_signals")
+    .select("respuesta_refs")
+    .eq("org_id", orgId)
+    .eq("respuesta_modo", "auto")
+    .gte("respondida_at", desdeIso)
+    .or(condiciones.join(","));
+  if (error) {
+    console.error("[grupos] No se pudo consultar que refs ya recibio el colega:", error.message);
+    return null;
+  }
+  return new Set((data || []).flatMap((r) => (r.respuesta_refs || []).map(String)));
+}
+
 async function dmsHoyLinea(orgId, desdeIso) {
   if (!supabase) return 0;
   const { data, error } = await supabase
@@ -1061,7 +1114,7 @@ module.exports = {
   guardarPolitica, obtenerPorId, calladosPendientes, buscarPorTelefono, buscarPorLid, aprobadasSinAvisar,
   findByWamid, pendientesDeAviso, candidatosRecordatorio, claimRecordatorio,
   candidatosEscaladoSilencio, claimEscaladoSilencio,
-  dmsHoyPorColega, dmsHoyLinea,
+  dmsHoyPorColega, dmsHoyLinea, refsYaEnviadas,
   CLASES, ORIGENES, MODOS_RESPUESTA, COLUMNAS_NUEVAS, _resetBlindaje,
 };
 
