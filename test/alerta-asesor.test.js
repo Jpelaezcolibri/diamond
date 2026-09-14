@@ -901,3 +901,26 @@ test("porqueNoSalioSolo: solo llamada sin nada aprobado pide decidir si vale la 
   assert.match(porqueNoSalioSolo("colega_solo_llamada", false), /^📞 .*decidí vos si vale la pena llamar/);
   assert.doesNotMatch(porqueNoSalioSolo("colega_solo_llamada", true), /escribile/);
 });
+
+// UNA PROPIEDAD POR MENSAJE (Juan, 2026-09-14). El bloque "mandale ESTO YA"
+// es un solo mensaje de WhatsApp: pegado entero, el colega recibe todo junto.
+// Con link al aviso, se le sugiere a la asesora mandarlas desde ahi, de a una.
+test("con link al aviso, el borrador sugiere mandar las propiedades de a una desde el link", () => {
+  const { construir } = require("../src/groups/alerta-asesor");
+  const senal = {
+    grupo_nombre: "Pedidos Poblado", autor_nombre: "Mateo Narvaez", autor_telefono: "141746805670125",
+    texto_original: "Busco apto en El Poblado, 3 alcobas, hasta 900 millones",
+  };
+  const veredicto = { es_pedido_real: true, refs_utiles: ["9780079"], refs_dudosas: [], sin_confirmar: [], le_falta: [], por_que: "Calza." };
+  const matches = [{
+    ref: "9780079", fuente: "diamond", titulo: "Apartamento en El Poblado", zona: "El Poblado", ubicacion: "exacta",
+    precio: "$850.000.000", area: "110m2", habitaciones: 3, puntaje: 90,
+    linkWasi: "https://info.wasi.co/apartamento-venta-el-poblado/9780079",
+  }];
+  const conLink = construir(senal, veredicto, matches, null, null, "pedido_vencido", { link: "https://crm.diamondinmobiliaria.com/aviso/tok" });
+  assert.match(conLink, /mandale ESTO YA/i);
+  assert.match(conLink, /Mejor desde el link de arriba: ahí va cada propiedad en su propio mensaje/);
+  const sinLink = construir(senal, veredicto, matches, null, null, "pedido_vencido");
+  assert.match(sinLink, /mandale ESTO YA/i);
+  assert.doesNotMatch(sinLink, /Mejor desde el link de arriba/, "sin link no se promete una pagina que no existe");
+});

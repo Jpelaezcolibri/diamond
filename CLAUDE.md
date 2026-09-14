@@ -49,11 +49,30 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
   - **Riesgo a vigilar:** un DM pasa de 1 mensaje a entre 2 y 4. La cuota de
     WhatsApp no cuenta los DM por lid (el 98 %), así que el cortacircuitos no
     ve casi nada de este volumen. Hay que mirar la línea la primera semana.
+  - **Borrador para humanos también partido (2026-09-14):** la página del
+    aviso (`/aviso/<token>`, `crm/components/aviso-celular.tsx`) muestra la
+    presentación y cada ficha en su propio recuadro con botón Copiar; el botón
+    verde manda o copia la presentación. `vivo.prepararAviso` devuelve
+    `mensajes` además de `mensaje`. El aviso por WhatsApp le sugiere a la
+    asesora mandarlas desde el link.
   - **Pendiente:** el recordatorio único a las 2 h (§3.4 de la spec) no está
     hecho. Necesita migración.
   - **Auditoría del motor de match:** sus pendientes quedaron cerrados en el
     mismo merge (lista única de exigencias, freno de edificio en el DM). Ver
     el cierre en `auditoria-motor-match-2026-09-05.md`.
+
+- **El radar escucha muchos menos pedidos desde el 11-sep (medido
+  2026-09-14).** Del 7 al 10-sep entraban 120 a 139 pedidos por día; el 11
+  entraron 55, el 12 27 y el 13 solo 13. Coincide con el cambio de línea a
+  Daiana (10-sep). La base tiene 141 grupos: 53 en escucha y 88 en
+  "ignorar". No es el motor: los 7 pedidos que entraron después del
+  despliegue del 13-sep dan el mismo resultado con el motor anterior. Falta
+  revisar en cuántos de los 53 grupos está de verdad la línea nueva.
+- **Hueco del motor (visto 2026-09-14):** un pedido que nombra barrios de
+  Envigado ("Barrio Mesa", "El Trianón") no trae las propiedades cuya zona
+  dice solo "Envigado": el motor no sabe que esos barrios están dentro del
+  municipio. Caso Juanita Monsalve; la 10077063 dice "Barrio Mesa" en el
+  título. Mismo patrón que `zona-huerfana-mata-el-match` en la memoria.
 
 - **Amoblados, antes de publicarlos (2026-09-12).**
   - **Carril encendido:** `RADAR_AMOBLADO_ACTIVO=true`, decisión de Juan.

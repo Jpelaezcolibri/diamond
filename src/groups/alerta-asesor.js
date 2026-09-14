@@ -573,6 +573,10 @@ function construir(
     ? [
         ``,
         `⚡ No se pudo resolver su número — mandale ESTO YA por su privado (tocá su nombre arriba para abrirle el chat):`,
+        // UNA PROPIEDAD POR MENSAJE (Juan, 2026-09-14): pegado de un solo
+        // bloque, el colega no puede reenviarle una sola propiedad a su
+        // cliente. En la pagina del link van aparte, cada una con su boton.
+        ...(link ? [`👉 Mejor desde el link de arriba: ahí va cada propiedad en su propio mensaje, para que el colega la reenvíe tal cual.`] : []),
         ``,
         mensajeListo,
       ]

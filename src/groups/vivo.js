@@ -1639,6 +1639,23 @@ async function prepararAviso(org, signalId, { sesion = null } = {}) {
         pedido: pedidoDe(signal),
       })
     : null;
+  // UNA PROPIEDAD POR MENSAJE TAMBIEN CUANDO ESCRIBE UNA PERSONA (Juan,
+  // 2026-09-14: "que las respuestas si se hagan de a una por propiedad para
+  // que el colega le quede facil reenviarla"). La pagina del aviso muestra la
+  // presentacion y cada ficha aparte, cada una con su boton de copiar: si la
+  // asesora pega el borrador de un solo bloque, el colega recibe todo junto y
+  // no puede reenviar una sola. `mensaje` se sigue mandando para quien todavia
+  // lo lea (y como respaldo si la pagina vieja esta en cache).
+  const mensajes = aprobada && !soloLlamada
+    ? (
+        redactar.mensajesAlColega({ autor_nombre: signal.autor_nombre }, utiles, {
+          org,
+          sinConfirmar: rev.sin_confirmar || [],
+          leFalta: rev.le_falta || [],
+          pedido: pedidoDe(signal),
+        }) || { mensajes: [] }
+      ).mensajes.map((m) => m.texto)
+    : null;
 
   return {
     resultado: "ok",
@@ -1666,6 +1683,7 @@ async function prepararAviso(org, signalId, { sesion = null } = {}) {
     dudosas: porRef(rev.refs_dudosas),
     descartados,
     mensaje,
+    mensajes,
     telefonoColega,
     soloLlamada,
     telefonoLlamada: soloLlamada ? telefonoColega || telefonoEnTexto(signal.texto_original) || null : null,

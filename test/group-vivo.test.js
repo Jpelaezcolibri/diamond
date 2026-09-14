@@ -1690,3 +1690,21 @@ test("prepararAviso: un colega sin marca sigue recibiendo el mensaje armado", as
   assert.ok(r.mensaje);
   assert.strictEqual(r.telefonoLlamada, null);
 });
+
+// UNA PROPIEDAD POR MENSAJE TAMBIEN EN EL BORRADOR PARA HUMANOS (Juan,
+// 2026-09-14: "que las respuestas si se hagan de a una por propiedad para que
+// el colega le quede facil reenviarla"). La pagina del aviso recibe el
+// borrador partido: la presentacion y cada ficha aparte.
+test("prepararAviso: devuelve el borrador partido, la presentacion y cada ficha aparte", async () => {
+  señalParaAprobar = señalCallada({ revalidacion: { refs_utiles: ["AP004"], sin_confirmar: [] } });
+  grupoParaAprobar = grupoHabilitado();
+  const r = await vivo.prepararAviso({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
+
+  assert.ok(Array.isArray(r.mensajes), "viene la lista de mensajes");
+  assert.strictEqual(r.mensajes.length, 2, "la presentacion y la unica ficha");
+  assert.match(r.mensajes[0], /^Hola/);
+  assert.doesNotMatch(r.mensajes[0], /Ref AP004/, "la presentacion no lleva propiedades");
+  assert.match(r.mensajes[1], /Ref AP004/);
+  assert.doesNotMatch(r.mensajes[1], /Hola|Comision|Sofi/, "la ficha se reenvia tal cual");
+  assert.ok(r.mensaje, "el borrador de un solo bloque sigue viajando");
+});

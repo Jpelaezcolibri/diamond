@@ -14,6 +14,15 @@ import { numeroPedido } from "@/lib/pedido";
 //     ENCUENTRA (toca su nombre), no a dónde escribe.
 // En los dos casos, tocar el botón es lo que medimos como "gestionado". El
 // envío real dentro de WhatsApp no lo vemos.
+//
+// UNA PROPIEDAD POR MENSAJE (Juan, 2026-09-14: "que las respuestas si se hagan
+// de a una por propiedad para que el colega le quede facil reenviarla"). El
+// colega reenvía cada propiedad a su cliente; si le llegan todas en un solo
+// mensaje, no puede mandar una sola. Por eso el borrador viene partido, igual
+// que el DM automático: la presentación y después cada ficha, cada una en su
+// recuadro con su botón de copiar. El botón verde manda (o copia) la
+// presentación. Mismo estilo visual de la pantalla aprobada, sin elementos
+// nuevos.
 
 type Match = {
   ref: string;
@@ -52,6 +61,9 @@ export type DatosAviso = {
   utiles: Match[];
   dudosas: Match[];
   mensaje: string | null;
+  // El mismo borrador, partido: la presentación y una ficha por propiedad
+  // (vivo.js#prepararAviso, 2026-09-14). Si no viene, se usa `mensaje` entero.
+  mensajes?: string[] | null;
   telefonoColega: string | null;
   // Solo llamada (Juan, 2026-09-10): el colega pidió que lo contacten solo por
   // llamada. Sin mensaje que mandar; el botón llama.
@@ -76,11 +88,13 @@ const haceCuanto = (iso: string) => {
 };
 
 export default function AvisoCelular({ datos, token }: { datos: DatosAviso; token: string }) {
-  const { senal, utiles, dudosas, mensaje, telefonoColega, porque, aprobada, soloLlamada = false, telefonoLlamada = null } = datos;
-  const [texto, setTexto] = useState(mensaje || "");
+  const { senal, utiles, dudosas, mensaje, mensajes, telefonoColega, porque, aprobada, soloLlamada = false, telefonoLlamada = null } = datos;
+  const [textos, setTextos] = useState<string[]>(mensajes && mensajes.length ? mensajes : mensaje ? [mensaje] : []);
+  const [copiados, setCopiados] = useState<number[]>([]);
   const [gestion, setGestion] = useState<string | null>(senal.gestion);
   const [ocupado, setOcupado] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
+  const varios = textos.length > 1;
 
   async function registrar(g: "envio" | "no_sirve") {
     setOcupado(true);
@@ -93,21 +107,45 @@ export default function AvisoCelular({ datos, token }: { datos: DatosAviso; toke
     setOcupado(false);
   }
 
+  // El botón verde: manda (o copia) el PRIMER mensaje. Con un solo mensaje es
+  // el borrador entero, como siempre; con varios es la presentación, y cada
+  // ficha se copia aparte con su botón.
   async function enviar() {
+    const primero = textos[0] || "";
     await registrar("envio");
     if (telefonoColega) {
-      window.location.href = `https://wa.me/${telefonoColega}?text=${encodeURIComponent(texto)}`;
+      window.location.href = `https://wa.me/${telefonoColega}?text=${encodeURIComponent(primero)}`;
       return;
     }
     let copiado = false;
     try {
-      await navigator.clipboard.writeText(texto);
+      await navigator.clipboard.writeText(primero);
       copiado = true;
     } catch {
       copiado = false;
     }
-    setAviso(copiado ? "Mensaje copiado. Ahora tocá el nombre del colega en el grupo y pegalo." : "No se pudo copiar solo: seleccioná el mensaje de arriba y copialo a mano.");
-    window.location.href = `whatsapp://send?text=${encodeURIComponent(texto)}`;
+    if (copiado) setCopiados((c) => (c.includes(0) ? c : [...c, 0]));
+    setAviso(
+      copiado
+        ? varios
+          ? "Presentación copiada. Tocá el nombre del colega en el grupo, pegala y enviá. Después volvé acá y mandale cada propiedad aparte."
+          : "Mensaje copiado. Ahora tocá el nombre del colega en el grupo y pegalo."
+        : "No se pudo copiar solo: seleccioná el mensaje de arriba y copialo a mano."
+    );
+    window.location.href = `whatsapp://send?text=${encodeURIComponent(primero)}`;
+  }
+
+  // Copiar un mensaje puntual (una ficha). Copiar ya es gestionar: si todavía
+  // no quedó registrado, se registra.
+  async function copiar(i: number) {
+    if (!gestion) await registrar("envio");
+    try {
+      await navigator.clipboard.writeText(textos[i]);
+      setCopiados((c) => (c.includes(i) ? c : [...c, i]));
+      setAviso(null);
+    } catch {
+      setAviso("No se pudo copiar solo: seleccioná el texto de ese mensaje y copialo a mano.");
+    }
   }
 
   async function llamar() {
@@ -239,16 +277,42 @@ export default function AvisoCelular({ datos, token }: { datos: DatosAviso; toke
         </section>
       )}
 
-      {mensaje && !soloLlamada && (
+      {textos.length > 0 && !soloLlamada && (
         <section className="border-b border-slate-200 px-5 py-3">
-          <p className="mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-400">El mensaje para {nombre}</p>
-          <textarea
-            value={texto}
-            onChange={(e) => setTexto(e.target.value)}
-            rows={10}
-            className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm leading-relaxed"
-            aria-label="Mensaje para el colega, editable"
-          />
+          <p className="mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+            {varios ? `Los mensajes para ${nombre} · ${textos.length}` : `El mensaje para ${nombre}`}
+          </p>
+          {varios && (
+            <p className="mb-2 text-xs text-slate-500">
+              Mandalos de a uno: primero la presentación y después cada propiedad por separado, así {nombre} le reenvía cada una a su cliente tal cual.
+            </p>
+          )}
+          <div className="grid gap-3">
+            {textos.map((t, i) => (
+              <div key={i}>
+                {varios && (
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-semibold text-slate-500">
+                      {i === 0 ? "1 · Presentación" : `${i + 1} · Propiedad ${i}`}
+                    </span>
+                    <button
+                      onClick={() => copiar(i)}
+                      className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d4a53a]"
+                    >
+                      {copiados.includes(i) ? "✅ Copiado" : "📋 Copiar"}
+                    </button>
+                  </div>
+                )}
+                <textarea
+                  value={t}
+                  onChange={(e) => setTextos((xs) => xs.map((x, j) => (j === i ? e.target.value : x)))}
+                  rows={varios ? Math.min(10, t.split("\n").length + 1) : 10}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm leading-relaxed"
+                  aria-label={varios ? `Mensaje ${i + 1} para el colega, editable` : "Mensaje para el colega, editable"}
+                />
+              </div>
+            ))}
+          </div>
         </section>
       )}
 
@@ -266,15 +330,17 @@ export default function AvisoCelular({ datos, token }: { datos: DatosAviso; toke
           )
         ) : telefonoColega ? (
           <p className="text-sm text-slate-600">
-            <b className="text-slate-900">{senal.autor_nombre}</b> · {telefonoColega.replace(/^57/, "")}. Se abre el chat con el mensaje ya escrito; solo tocás enviar.
+            <b className="text-slate-900">{senal.autor_nombre}</b> · {telefonoColega.replace(/^57/, "")}. Se abre el chat con {varios ? "la presentación" : "el mensaje"} ya escrito; solo tocás enviar.
+            {varios ? " Después volvé acá, copiá cada propiedad y mandala aparte." : ""}
           </p>
         ) : (
           <ol className="grid gap-1 text-sm text-slate-600">
-            <li>1. El botón copia el mensaje y abre WhatsApp</li>
+            <li>1. El botón copia {varios ? "la presentación" : "el mensaje"} y abre WhatsApp</li>
             <li>
               2. Entrá a <b className="text-slate-900">{senal.grupo_nombre || "el grupo"}</b> y tocá “{senal.autor_nombre || "el colega"}”
             </li>
             <li>3. Pegá en su chat privado y enviá</li>
+            {varios && <li>4. Volvé acá, copiá cada propiedad con su botón y mandala aparte</li>}
           </ol>
         )}
         {aviso && <p className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800">{aviso}</p>}
@@ -290,13 +356,19 @@ export default function AvisoCelular({ datos, token }: { datos: DatosAviso; toke
             📞 Llamar a {nombre}
           </button>
         ) : (
-          mensaje && (
+          textos.length > 0 && (
             <button
               onClick={enviar}
               disabled={ocupado}
               className="rounded-2xl bg-[#25d366] px-4 py-3 text-[15px] font-bold text-[#0b3d22] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d4a53a] disabled:opacity-60"
             >
-              {telefonoColega ? "💬 Enviar por WhatsApp" : "📋 Copiar y abrir WhatsApp"}
+              {telefonoColega
+                ? varios
+                  ? "💬 Enviar la presentación"
+                  : "💬 Enviar por WhatsApp"
+                : varios
+                  ? "📋 Copiar la presentación y abrir WhatsApp"
+                  : "📋 Copiar y abrir WhatsApp"}
             </button>
           )
         )}
