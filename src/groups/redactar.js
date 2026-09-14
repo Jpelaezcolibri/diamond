@@ -129,6 +129,19 @@ function tituloUtil(match) {
 // un hecho de una propiedad puntual: en un mensaje con tres opciones, dos
 // pueden tener los dos garajes y una no. Ponerlo arriba lo volveria una
 // advertencia sobre el lote entero, que seria falso.
+// La administracion como va en la ficha (2026-09-13). Un monto de Wasi
+// ("$280.000") va tal cual: "administración $280.000". Pero la columna tambien
+// guarda textos del import viejo — "No aplica" en 20 propiedades, "A definir
+// (proyecto en preventa, sin reglamento de PH aun)" en una — y pegados sin mas
+// se leerian como un monto raro. Van con dos puntos y en minuscula:
+// "administración: no aplica". Vacio o sin cargar, no aparece.
+function textoAdministracion(valor) {
+  const v = String(valor || "").trim();
+  if (!v) return null;
+  if (/[1-9]/.test(v)) return `administración ${v}`;
+  return `administración: ${v.charAt(0).toLocaleLowerCase("es-CO")}${v.slice(1)}`;
+}
+
 function ficha(match, indice, { detalleFalta = null } = {}) {
   const titulo = tituloUtil(match);
   const operacion = String(match.operacion || "").trim();
@@ -154,9 +167,9 @@ function ficha(match, indice, { detalleFalta = null } = {}) {
     formato.pluralizar(match.banos, "baño", "baños"),
     formato.pluralizar(match.garajes, "garaje"),
     formato.datoCargado(match.estrato) ? `estrato ${match.estrato}` : null,
-    // Administracion (2026-09-13): solo si Wasi la tiene cargada. Un colega la
+    // Administracion (2026-09-13): solo si esta cargada. Un colega la
     // pregunto por DM despues de recibir la ficha; si la sabemos, va aca.
-    String(match.administracion || "").trim() ? `administración ${String(match.administracion).trim()}` : null,
+    textoAdministracion(match.administracion),
   ]
     .filter(Boolean)
     .join(" · ");

@@ -213,3 +213,12 @@ test("si WhatsApp corto antes de las propiedades, el aviso lo dice de entrada", 
 test("sin faltantes ni dudosas no hay aviso post-DM", () => {
   assert.strictEqual(alertaAsesor.construirAvisoPostDm({ autor_nombre: "Mateo" }, { refs_dudosas: [] }, [PROP("A")], ["A"], null), null);
 });
+
+// La columna tambien guarda textos del import viejo: "No aplica" (20
+// propiedades) y "A definir (proyecto en preventa…)" (1). Pegados sin mas se
+// leerian como un monto raro.
+test("una administracion en texto va con dos puntos y en minuscula; un monto va tal cual", () => {
+  assert.match(redactar.ficha(PROP("A", { administracion: "No aplica" }), 1), /administración: no aplica/);
+  assert.match(redactar.ficha(PROP("B", { administracion: "$470.000" }), 1), /administración \$470\.000/);
+  assert.doesNotMatch(redactar.ficha(PROP("C", { administracion: "" }), 1), /administración/);
+});
