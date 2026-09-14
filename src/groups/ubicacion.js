@@ -94,6 +94,21 @@ function zonaExcluida(p, c) {
   });
 }
 
+// La propiedad esta registrada solo con la zona general (municipio o zona
+// grande) que contiene un barrio pedido (Juan, 2026-09-14, barrios de
+// Envigado). Mismo criterio que zonaCoincide para saber "donde" esta la
+// propiedad: su zona, y si esta vacia, su ciudad.
+function zonaGeneral(p, c) {
+  const ubic = String(p.zona || "").trim() || String(p.ciudad || "").trim();
+  const tokensPropiedad = zonas.zonaTokens(ubic);
+  if (!tokensPropiedad.length) return false;
+  for (const z of zonasPedidas(c)) {
+    const tokensPedido = zonas.distinctiveTokens(zonas.zonaTokens(z));
+    if (zonas.zonaGeneralCoincide(tokensPedido, tokensPropiedad)) return true;
+  }
+  return false;
+}
+
 function zonaVecina(p, c) {
   const tokensPropiedad = zonas.zonaTokens(p.zona || "");
   if (!tokensPropiedad.length) return false;
@@ -163,8 +178,18 @@ function ubicacionCoincide(p, c) {
   const donde = String(p.zona || "").trim() || String(p.ciudad || "").trim();
 
   if (pide && zonaCoincide(p, c)) return { razon: `Zona: ${donde}`, puntos: 20, grado: "exacta" };
+  // ZONA GENERAL (Juan, 2026-09-14, barrios de Envigado): el colega pidio
+  // "Barrio Mesa" y la propiedad dice solo "Envigado". Esta en el municipio
+  // del barrio pedido, pero el barrio exacto no lo registramos. Es un dato que
+  // no tenemos, no un incumplimiento (regla D7): entra, y el mensaje lo dice.
+  // Va DESPUES de "vecina": una vecindad ya declarada en zonas.js (San
+  // Joaquin <-> Laureles, Envigado <-> El Escobero) conserva su grado y su
+  // texto de siempre; esto solo suma lo que antes no entraba. Mismo puntaje.
   if (pide && zonaVecina(p, c)) {
     return { razon: `${donde} (vecina de lo pedido)`, puntos: -5, grado: "vecina" };
+  }
+  if (pide && zonaGeneral(p, c)) {
+    return { razon: `${donde} (el barrio exacto no está registrado)`, puntos: -5, grado: "zona_general" };
   }
   if (pide) {
     // Zona distinta y no contigua. Entra, pero muy castigada y marcada: solo
@@ -178,4 +203,4 @@ function ubicacionCoincide(p, c) {
   return null;
 }
 
-module.exports = { zonasPedidas, zonaCoincide, zonasExcluidas, zonaExcluida, zonaVecina, ciudadCoincide, ubicacionCoincide };
+module.exports = { zonasPedidas, zonaCoincide, zonasExcluidas, zonaExcluida, zonaGeneral, zonaVecina, ciudadCoincide, ubicacionCoincide };

@@ -296,7 +296,10 @@ ventaja ("cumple, y ademas tiene 4 alcobas y 212 m²"), nunca como objecion
 decimos como "acepta una menos si tiene estudio"), 2 alcobas con estudio
 cumple un pedido de 3.
 
-UBICACION. Exacta y vecina sirven: quien pide El Poblado muchas veces compra
+UBICACION. "Zona general" es una propiedad registrada solo con el municipio o
+la zona grande que contiene el barrio pedido ("Envigado" para un pedido de
+"Barrio Mesa"): sirve igual que exacta, y el barrio exacto es un dato que no
+registramos — va a 'sin_confirmar', nunca la baja a dudosas. Exacta y vecina sirven: quien pide El Poblado muchas veces compra
 en Envigado, son contiguos. Decilo en 'por_que' para que la asesora lo sepa
 de entrada ("queda en Envigado, pegado al Poblado"). "Fuera" casi nunca
 sirve, pero si todo lo demas calza muy bien y el colega no fue tajante,
@@ -358,6 +361,7 @@ const UBICACION = {
   exacta: "ubicacion: EXACTA (la zona que pidio)",
   vecina: "ubicacion: VECINA (barrio contiguo al pedido)",
   ciudad: "ubicacion: misma CIUDAD, otro barrio",
+  zona_general: "ubicacion: ZONA GENERAL del barrio pedido (el barrio exacto no esta registrado)",
   otra_zona: "ubicacion: FUERA de la zona pedida",
 };
 

@@ -86,7 +86,10 @@ function esPublicable(match, { umbral = UMBRAL_DEFAULT, syncFresco = true, refsB
   // Se aceptan `exacta` y `vecina` —contigüidad real, declarada en
   // src/lib/zonas.js— y nada mas. `ciudad` tampoco: un pedido sin barrio no
   // habilita a publicar media Medellin.
-  if (match.ubicacion && !["exacta", "vecina"].includes(match.ubicacion)) {
+  // "zona_general" (2026-09-14): la propiedad esta en la zona general del
+  // barrio pedido (Envigado para "Barrio Mesa") y el barrio exacto no esta
+  // registrado. Se ofrece, y el mensaje al colega lo dice.
+  if (match.ubicacion && !["exacta", "vecina", "zona_general"].includes(match.ubicacion)) {
     motivos.push("zona_no_publicable");
   }
 

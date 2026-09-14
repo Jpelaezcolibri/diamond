@@ -268,9 +268,13 @@ test("BUG: el precio es una banda, no sólo un techo", () => {
 });
 
 test("BUG: la zona se compara contra la zona, no contra la ciudad", () => {
-  // "Loma del Chocho" no puede matchear con todo Envigado.
+  // "Loma del Chocho" no puede matchear con todo Envigado: una propiedad de
+  // Las Antillas tiene ciudad "Envigado", pero su zona es otro barrio.
+  // (Hasta el 2026-09-14 este test pedia "Envigado" contra Las Antillas y
+  // esperaba null; desde los barrios de Envigado en SUBZONA_DE, Las Antillas
+  // ES Envigado y eso es exacta — ver test/zona-envigado-barrios.test.js.)
   const enEnvigado = apto({ zona: "Las Antillas", ciudad: "Envigado" });
-  assert.strictEqual(evaluarCandidata(enEnvigado, pide({ zona: "Envigado" }), "diamond"), null);
+  assert.strictEqual(evaluarCandidata(enEnvigado, pide({ zona: "Loma del Chocho" }), "diamond"), null);
 });
 
 // SUPERADO por FLEXIBILIDAD HACIA ARRIBA (Juan, 2026-09-04): el tope de

@@ -227,7 +227,7 @@ function ficha(match, indice, { detalleFalta = null } = {}) {
 // —matches guardados antes de que existiera, fixtures viejos—, se recalcula
 // con la misma funcion sobre los mismos datos. Una sola definicion de "misma
 // zona" para el puntaje, para Sofi y para el mensaje.
-const GRADOS = new Set(["exacta", "vecina", "otra_zona", "ciudad"]);
+const GRADOS = new Set(["exacta", "vecina", "zona_general", "otra_zona", "ciudad"]);
 
 // Las zonas pedidas se leen con ubicacion.zonasPedidas, la MISMA funcion que
 // usa el motor (auditoria 2026-09-05, hallazgo bajo: esta era la tercera forma
@@ -253,7 +253,11 @@ function desvios(match, pedido) {
     const pedidas = zonasPedidas.join(" ni ");
     // "vecina" se dice como vecina: es verdad y es la razon por la que el
     // motor la dejo pasar. Solo "no en X" cuando de verdad esta en otro lado.
-    if (grado === "vecina") salida.push(`queda en ${zonaProp}, vecina de ${zonasPedidas.join(" y ")}`);
+    // Zona general (2026-09-14): "queda en Envigado" es cierto y no es un
+    // desvio; lo que falta es el barrio, y eso se dice como un dato que no
+    // tenemos, no como una objecion.
+    if (grado === "zona_general") salida.push(`queda en ${zonaProp}; el barrio exacto no lo tengo registrado`);
+    else if (grado === "vecina") salida.push(`queda en ${zonaProp}, vecina de ${zonasPedidas.join(" y ")}`);
     else if (grado !== "exacta") salida.push(`queda en ${zonaProp}, no en ${pedidas}`);
   }
 

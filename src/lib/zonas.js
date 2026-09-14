@@ -239,11 +239,65 @@ const SUBZONA_DE = new Map([
   // comparta esa sola palabra, el mismo defecto que "san"/"loma" ya documentado
   // en GENERIC_GEO. Esta es la constraint mas importante de esta entrada.
   ["quijote", "laureles"],
+  // BARRIOS DE ENVIGADO (Juan, 2026-09-14). Medido ese dia: de 286 pedidos
+  // que mencionan Envigado desde el 15-ago, los colegas nombran el barrio
+  // —Cumbres x9, Las Antillas x4, El Dorado x4, El Esmeraldal x4, Brujas x4,
+  // Barrio Mesa x3, La Paz x3, Alcala x3...— y el inventario casi nunca lo
+  // registra: 5 propiedades de Envigado dicen solo zona="Envigado" (y
+  // ciudad="Medellín"), 2 tienen la zona vacia y ciudad="Envigado". El caso
+  // que lo destapo: Juanita Monsalve pidio "ENVIGADO · SECTORES: El Trianon,
+  // La Paz, Las Antillas, El Dorado, Alcala, Barrio Mesa, El Oasis, San
+  // Marcos, La Magnolia" y no le salio nada, con la 10077063 ("VENDO
+  // APARTAMENTO ENVIGADO BARRIO MESA") en el inventario.
+  //
+  // Solo tokens que no chocan con otra zona: se dejaron afuera "centro"
+  // (Zona Centro de Envigado vs el Centro de Medellin), "jardines",
+  // "inmaculada", "orquideas" y "villa"/"grande" (demasiado comunes), y "otra"
+  // /"parte" de Otraparte. Escobero, Chocho y Zuniga ya estaban en VECINDAD;
+  // ahora ademas son subzona: quien pide "Envigado" y la propiedad esta en
+  // Zuniga esta mirando lo que pidio.
+  ...[
+    "trianon", "paz", "antillas", "dorado", "alcala", "mesa", "oasis", "marcos", "magnolia",
+    "esmeraldal", "brujas", "cumbres", "benedictinos", "atravesado", "milan", "vallejuelos",
+    "zuniga", "chocho", "escobero", "abadia", "cuenca", "portal", "chingui", "salado",
+    "sebastiana", "ayura", "villagrande",
+  ].map((barrio) => [barrio, "envigado"]),
 ]);
 
 // ¿Algun token de la propiedad es una sub-zona conocida de algun token
 // pedido? Mismo criterio de token exacto que el resto del archivo — nunca
 // substring.
+// La zona general que contiene cada barrio pedido ("mesa" -> "envigado").
+// Sirve para dos cosas: que la consulta SQL traiga las propiedades
+// registradas solo con la zona general, y para graduarlas ("zona_general").
+function madresDe(tokensPedido) {
+  const out = new Set();
+  for (const t of tokensPedido || []) {
+    const madre = SUBZONA_DE.get(sinTildes(t));
+    if (madre) out.add(madre);
+  }
+  return [...out];
+}
+
+// Los barrios conocidos de cada zona general pedida ("envigado" -> "mesa",
+// "antillas"...). Para que un pedido de "Envigado" traiga en la consulta las
+// propiedades registradas con su barrio.
+function hijasDe(tokensPedido) {
+  const pedidos = new Set((tokensPedido || []).map(sinTildes));
+  const out = [];
+  for (const [hija, madre] of SUBZONA_DE) if (pedidos.has(madre)) out.push(hija);
+  return out;
+}
+
+// ¿La propiedad esta registrada SOLO con la zona general que contiene un
+// barrio pedido? "Barrio Mesa" pedido contra una propiedad con zona
+// "Envigado": la propiedad esta en Envigado, pero no sabemos en que barrio.
+// Es lo contrario de subzonaCoincide (ahi el barrio es de la propiedad).
+function zonaGeneralCoincide(tokensPedido, tokensPropiedad) {
+  const dela = new Set((tokensPropiedad || []).map(sinTildes));
+  return madresDe(tokensPedido).some((m) => dela.has(m));
+}
+
 function subzonaCoincide(tokensPedido, tokensPropiedad) {
   const pedidos = new Set((tokensPedido || []).map(sinTildes));
   for (const t of tokensPropiedad || []) {
@@ -255,5 +309,5 @@ function subzonaCoincide(tokensPedido, tokensPropiedad) {
 
 module.exports = {
   STOPWORDS, GENERIC_GEO, zonaTokens, distinctiveTokens, sonVecinas, vecinosDe, subzonaCoincide, VECINDAD, SUBZONA_DE,
-  sinAcentos, patronSinTildes,
+  sinAcentos, patronSinTildes, madresDe, hijasDe, zonaGeneralCoincide,
 };

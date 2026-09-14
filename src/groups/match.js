@@ -11,6 +11,9 @@
 const organizations = require("../data/organizations");
 const properties = require("../data/properties");
 const allyProperties = require("../data/ally-properties");
+// Las consultas de zona general y barrios (madresDe/hijasDe) viven en el
+// modulo puro de zonas; properties.js re-exporta solo una parte.
+const zonasLib = require("../lib/zonas");
 const { esAmoblada } = require("./amoblado");
 
 // Los dos modulos usan claves distintas para lo mismo: properties espera
@@ -31,7 +34,14 @@ function filtrosInventario(c) {
   const zonas = zonasPedidas(c);
   if (zonas.length) {
     const tokens = zonas.flatMap((z) => properties.distinctiveTokens(properties.zonaTokens(z)));
-    f.zona = [...new Set([...tokens, ...properties.vecinosDe(tokens)])].join(" ");
+    // Y ademas la zona general de cada barrio pedido ("Barrio Mesa" ->
+    // "envigado") y los barrios de cada zona general pedida ("Envigado" ->
+    // "antillas", "mesa"...): sin esto, las propiedades registradas solo con
+    // "Envigado" nunca llegaban al motor para un pedido de "Barrio Mesa"
+    // (Juan, 2026-09-14). Ver SUBZONA_DE en src/lib/zonas.js.
+    f.zona = [
+      ...new Set([...tokens, ...properties.vecinosDe(tokens), ...zonasLib.madresDe(tokens), ...zonasLib.hijasDe(tokens)]),
+    ].join(" ");
   } else if (c.ciudad) {
     f.zona = c.ciudad;
   }
