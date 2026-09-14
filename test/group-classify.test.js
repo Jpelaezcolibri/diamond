@@ -181,6 +181,60 @@ test("un 400 no se reintenta — fallaría igual las tres veces y solo retrasa",
   _setClientForTests(null);
 });
 
+// ── Prompt caching ───────────────────────────────────────────────────────
+//
+// Medido el 2026-09-14: el clasificador corre de 820 a 1.300 veces por dia en
+// vivo y es ~85% de la factura de la API. Sin cache, cada mensaje paga el
+// prompt entero. Estos tests son lo unico que afirma ese ahorro: si el
+// marcador se cae, nada falla, solo se paga de mas.
+const { CACHE_ESTABLE } = require("../src/lib/anthropic");
+const classifyMod = require("../src/groups/classify");
+
+test("classify cachea su prompt de sistema con el TTL compartido", async () => {
+  const llamadas = mockClient();
+  await classify([msg(0)]);
+  const system = llamadas[0].system;
+  assert.ok(Array.isArray(system), "el system tiene que ir en bloques para poder cachearse");
+  assert.strictEqual(system.length, 1);
+  assert.deepStrictEqual(system[0].cache_control, CACHE_ESTABLE);
+  assert.ok(!system[0].text.includes("mensaje 0"), "el mensaje del colega no puede entrar al prefijo cacheado");
+  _setClientForTests(null);
+});
+
+test("el prefijo del clasificador supera el minimo cacheable de Haiku 4.5 (4.096 tokens)", () => {
+  // Por debajo de 4.096 la API ignora el marcador SIN avisar. El prefijo es el
+  // system mas el esquema (la API lo inyecta antes del marcador: revalidar lee
+  // 5.107 de cache y count_tokens da 5.115 para su system+esquema). La razon
+  // de chars por token se midio con count_tokens sobre este mismo prompt; se
+  // exige un 5% de margen para que un recorte chico no lo tire abajo.
+  const chars = classifyMod.SISTEMA.length + JSON.stringify(classifyMod.ESQUEMA).length;
+  const tokens = chars / classifyMod.CHARS_POR_TOKEN;
+  assert.ok(tokens >= 4096 * 1.05, `el prefijo quedo en ~${Math.round(tokens)} tokens: el cache no se aplicaria`);
+});
+
+test("classify deja en el log cuanto leyo del cache", async () => {
+  mockClient({ usage: { input_tokens: 150, cache_read_input_tokens: 4300, cache_creation_input_tokens: 0, output_tokens: 160 } });
+  const lineas = [];
+  const original = console.log;
+  console.log = (...a) => lineas.push(a.join(" "));
+  try {
+    await classify([msg(0)]);
+  } finally {
+    console.log = original;
+  }
+  assert.ok(lineas.some((l) => /\[uso\] classify .*cache_read=4300/.test(l)), "sin esta linea la ruta mas cara vuelve a ser invisible");
+  _setClientForTests(null);
+});
+
+test("el costo de un import cuenta lo leido y lo escrito en el cache", async () => {
+  mockClient({ usage: { input_tokens: 100, cache_read_input_tokens: 4000, cache_creation_input_tokens: 0, output_tokens: 50 } });
+  const { uso } = await classify([msg(0)]);
+  assert.strictEqual(uso.cache_read_input_tokens, 4000);
+  // 100 frescos a 1 USD + 4000 leidos a 0,1 USD + 50 de salida a 5 USD, por millon
+  assert.ok(Math.abs(uso.costoUsd - (100 * 1 + 4000 * 0.1 + 50 * 5) / 1e6) < 1e-12);
+  _setClientForTests(null);
+});
+
 test("esReintentable distingue saturación de error de programación", () => {
   assert.ok(esReintentable(errorCon(429)));
   assert.ok(esReintentable(errorCon(500)));

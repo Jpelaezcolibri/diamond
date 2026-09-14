@@ -11,8 +11,9 @@
 // repartirla por el pipeline. Este modulo decide QUE decir; no sabe como sale.
 //
 // Orden de las etapas y por que:
-//   1. prefiltro lexico   gratis, descarta ~85% antes de gastar un token
-//   2. clasificacion      Haiku, ~0.001 USD por mensaje suelto
+//   1. prefiltro lexico   gratis; en grupos gremiales descarta poco (0,6 %
+//                         medido el 2026-09-14), casi todo nombra una zona
+//   2. clasificacion      Haiku con el prompt cacheado, ~0,0015 USD por mensaje
 //   3. cruce              codigo puro contra el inventario
 //   4. persistencia       la senal vale aunque despues se decida callar
 //   5. compuerta+politica lo ultimo: son las unicas que pueden publicar

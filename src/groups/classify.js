@@ -17,11 +17,20 @@
 //    no el prompt — asi que no hay que parsear texto libre ni tolerar JSON mal
 //    formado mensaje por mensaje.
 //
-// Sin prompt caching a proposito: el minimo cacheable de Haiku 4.5 es de 4096
-// tokens y el prompt de sistema esta muy por debajo, asi que un cache_control
-// aca no haria nada (silenciosamente) y solo cobraria el premium de escritura.
+// 4. PROMPT CACHING (2026-09-14). Hasta hoy decia "sin cache a proposito": el
+//    prefijo (system + esquema, 3.092 tokens) no llegaba al minimo cacheable
+//    de Haiku 4.5 (4.096) y el volumen estimado era de ~2.100 mensajes al
+//    mes. Medido en produccion son 820 a 1.300 POR DIA —el prefiltro lexico
+//    descarta el 0,6 % en grupos gremiales, no el 85 %— y el clasificador era
+//    ~85 % de la factura de la API. Con ese volumen conviene cruzar el minimo
+//    con contenido que el modelo usa (los EJEMPLOS del final del prompt) y
+//    marcarlo: cada mensaje lee el prefijo a 0,1x en vez de pagarlo entero.
+//    Si el prompt se recorta por debajo del minimo, el cache se cae SIN
+//    error: lo custodian test/group-classify.test.js (estimacion) y
+//    `railway run --service diamond node scripts/smoke-cache.js classify`
+//    (API real). Detalle en docs/costo-api-claude.md.
 
-const { getClient } = require("../lib/anthropic");
+const { getClient, CACHE_ESTABLE, registrarUso } = require("../lib/anthropic");
 
 const MODELO = process.env.CLAUDE_MODEL_GRUPOS || "claude-haiku-4-5";
 const TAMANO_LOTE = 20;
@@ -155,8 +164,9 @@ Todo lo demás es **ruido**: saludos, agradecimientos, felicitaciones, conversac
 Reglas de extracción:
 
 - Los precios van SIEMPRE en pesos colombianos, como entero, sin puntos. Convertí las formas coloquiales: "400 millones" y "400 palos" → 400000000; "1.200.000" → 1200000; "2.3 millones" → 2300000. Si el mensaje da un tope ("hasta 400 millones") es precio_max. Si da un piso ("desde 300") es precio_min. Si da un precio único de venta o arriendo, es precio_max.
+- Un precio sin unidad ("máximo 1.200", "hasta 850", "ppto 1300") se lee por lo que es plausible en el Valle de Aburrá: en VENTA una vivienda vale cientos o miles de millones, así que "máximo 1.200" → 1200000000 y "hasta 850" → 850000000; en ARRIENDO el canon mensual va de ~1 a ~20 millones, así que "hasta 4.500" → 4500000. Una venta nunca queda en 1.200.000 pesos.
 - No inventes datos. Si el mensaje no lo dice, dejá el string vacío o el 0. Esto es especialmente importante en \`zona\`: una demanda sin zona NO se puede cruzar contra el inventario, y es mejor dejarla vacía que poner una zona aproximada — una zona inventada manda al asesor a ofrecer algo del barrio equivocado.
-- \`zonas\` es la LISTA de barrios o sectores que nombra el pedido. Un colega pide en varias a la vez y hay que capturarlas TODAS: "POBLADO/ENVIGADO" → ["El Poblado","Envigado"]; "Laureles o Estadio" → ["Laureles","Estadio"]; "Sabaneta" → ["Sabaneta"]. Lista vacía si no nombra ninguna.
+- \`zonas\` es la LISTA de barrios o sectores que nombra el pedido. Un colega pide en varias a la vez y hay que capturarlas TODAS: "POBLADO/ENVIGADO" → ["El Poblado","Envigado"]; "Laureles o Estadio" → ["Laureles","Estadio"]; "Sabaneta" → ["Sabaneta"]. Lista vacía si no nombra ninguna. Si nombra el barrio Y el municipio ("Camino Verde de Envigado", "ENVIGADO - Loma de los Mesa"), van los dos: ["Camino Verde","Envigado"].
 - \`zona\` es la primera de esa lista, o vacío. Se conserva por compatibilidad; lo que importa es \`zonas\`.
 - \`zonas_excluidas\`: BUG real (2026-08-20) — un pedido que decía "❌No Loma del Indio" se guardaba sin ese dato, y el motor podía ofrecer justo lo que el cliente rechazó. Capturá TODA zona que el mensaje excluya explícitamente ("No X", "❌ X", "menos X", "excepto X", "X no"). Una zona nunca va en \`zonas\` y en \`zonas_excluidas\` a la vez.
 - Si el mensaje sólo nombra el municipio ("Medellín"), eso va en \`ciudad\`, no en \`zonas\`. Pero ojo: Envigado, Sabaneta, Itagüí y La Estrella son municipios que en estos grupos se usan como zona — van en \`zonas\`.
@@ -167,7 +177,53 @@ Reglas de extracción:
 - \`amoblado\`: 'si' cuando el pedido pide amoblado o amueblado ("busco amoblado en Sabaneta", "apartamento amoblado en el poblado"). 'no' cuando lo RECHAZA explícitamente — "SIN muebles", "sin amoblar", "vacío", "no amoblado". '' si no lo menciona. Los tres valores son distintos y no se pueden mezclar: '' significa que al colega le da igual, 'no' significa que no lo quiere.
 - \`periodo\`: 'corta' si el arriendo es por noches, días, semanas o una estadía de pocos días ("por 15 días", "3 noches", "renta corta", "airbnb"). 'mes' si es mensual o de largo plazo. '' si no se puede saber. Ojo: un precio alto no implica mensual — "$4.500.000 por 15 días" es 'corta' con precio_max 4500000.
 - Un mensaje de una sola propiedad con foto y ficha es oferta aunque no diga "vendo".
-- Devolvé exactamente un objeto por mensaje de entrada, con su id textual.`;
+- Devolvé exactamente un objeto por mensaje de entrada, con su id textual.
+
+Ejemplos resueltos. Son mensajes inventados con la forma real de los grupos (nombres, teléfonos y precios son de mentira). Cada uno muestra solo los campos que definen el caso; el resto se llena con las reglas de arriba.
+
+1. "Buenas colegas 🙏 tengo cliente para apto en Laureles o Estadio, 3 alcobas o 2 con estudio, hasta 480 millones, mínimo 85 m2, con parqueadero"
+   → demanda · venta · apartamento · zonas ["Laureles","Estadio"] · precio_max 480000000 · habitaciones 3 · area_min 85 · garajes 1 · flexible_habitaciones true (dice "estudio").
+
+2. "Se busca casa para arriendo en El Poblado ❌No Loma del Indio❌ presupuesto $9.000.000 SIN muebles"
+   → demanda · arriendo · casa · zonas ["El Poblado"] · zonas_excluidas ["Loma del Indio"] · precio_max 9000000 · amoblado "no".
+
+3. "Requiero apartamento amoblado en Sabaneta por 15 días para una familia que viene de afuera, pagan hasta 4.500.000"
+   → demanda · arriendo · apartamento · zonas ["Sabaneta"] · precio_max 4500000 · amoblado "si" · periodo "corta". El precio alto no lo vuelve mensual.
+
+4. "Alguien maneja algo en el edificio Torre Aqua de Envigado? cliente de contado"
+   → demanda · venta · zonas ["Envigado"] · edificio "Torre Aqua". Si en cambio dijera "que sea unidad cerrada", edificio va vacío: no hay nombre propio.
+
+5. "Para inversión: apartaestudio en Envigado o Sabaneta, hasta 280 palos, que ya esté rentando"
+   → demanda · venta · apartaestudio · zonas ["Envigado","Sabaneta"] · precio_max 280000000 · flexible_habitaciones true (dice "para inversión").
+
+6. "Necesito apto en Medellín para arriendo, 2 alcobas, hasta 2.5 millones, estrato 4 o 5"
+   → demanda · arriendo · apartamento · zonas [] · ciudad "Medellín" · precio_max 2500000 · habitaciones 2 · estrato 4. Medellín sola es la ciudad, no una zona.
+
+7. "Busco local comercial en Itagüí o La Estrella, arriendo hasta 6 millones, mínimo 120 metros"
+   → demanda · arriendo · local · zonas ["Itagüí","La Estrella"] · precio_max 6000000 · area_min 120.
+
+8. "📍 Belén | Apartamento 3 hab | 2 baños | 78 m² | Piso 6 con ascensor | $395.000.000 | Comisión compartida | Info Inmobiliaria Andes 300 000 0000"
+   → oferta · venta · apartamento · zonas ["Belén"] · precio_max 395000000 · habitaciones 3 · contacto "Inmobiliaria Andes 300 000 0000". Una ficha con precio y datos es oferta aunque no diga "vendo".
+
+9. "Sigue disponible el de Rionegro que les compartí ayer, comisión compartida"
+   → oferta · zonas ["Rionegro"]. Es un colega recordando lo que ofrece, no pidiendo.
+
+10. "Colegas, les comparto casa campestre en Llanogrande, 5 alcobas, lote de 2.000 m², venta 2.300 millones, recibe apartamento en Medellín como parte de pago"
+   → oferta · venta · casa · zonas ["Llanogrande"] · precio_max 2300000000 · habitaciones 5. Aceptar un inmueble como parte de pago no la vuelve demanda.
+
+11. "Busco colega que tenga cliente para mi apartamento en Calasanz, 3 alcobas, 520 millones, negociable"
+   → oferta · venta · apartamento · zonas ["Calasanz"] · precio_max 520000000 · habitaciones 3. Dice "busco", pero busca comprador para algo que ya tiene: es oferta.
+
+12. "Se cambia apartamento en Robledo por casa lote en Girardota o Barbosa, cliente con papeles al día"
+   → demanda · permuta · zonas ["Girardota","Barbosa"]. Lo que se cruza contra el inventario es lo que busca a cambio; el apartamento que entrega va en notas.
+
+13. Ruido aunque nombre algo del oficio: "Mil gracias, ya lo contacto" · "Listo, le paso tu número a mi cliente" · "Alguien me recomienda un abogado para una sucesión?" · "Ok" · "Ahí te mandé" · un nombre suelto como respuesta. No hay propiedad ofrecida ni requerimiento concreto: clase ruido, con los campos vacíos o en 0.`;
+
+// Caracteres por token del prefijo (system + esquema), medido con
+// count_tokens el 2026-09-14: 2,45 sin los ejemplos; la prosa de los ejemplos
+// rinde ~2,87. Solo lo usa el test del minimo cacheable: 2,6 subestima un poco
+// los tokens, que es el lado seguro.
+const CHARS_POR_TOKEN = 2.6;
 
 function armarLotes(mensajes, tamano = TAMANO_LOTE) {
   const lotes = [];
@@ -213,10 +269,13 @@ async function pedirLote(lote) {
   const res = await getClient().messages.create({
     model: MODELO,
     max_tokens: 4000,
-    system: SISTEMA,
+    // Cacheado (nota 4 arriba). Lo que cambia es el lote, que va en messages
+    // y no toca el prefijo.
+    system: [{ type: "text", text: SISTEMA, cache_control: CACHE_ESTABLE }],
     output_config: { format: { type: "json_schema", schema: ESQUEMA } },
     messages: [{ role: "user", content: `Clasificá estos ${lote.length} mensajes:\n\n${formatearLote(lote)}` }],
   });
+  registrarUso("classify", res.usage);
 
   const texto = res.content.find((b) => b.type === "text")?.text || "";
   const datos = JSON.parse(texto);
@@ -247,7 +306,7 @@ async function conPool(items, limite, fn) {
 // no pase por una tasa de ruido alta.
 async function classify(mensajes, { onProgreso = () => {}, reintentos = REINTENTOS } = {}) {
   const lotes = armarLotes(mensajes);
-  const uso = { input_tokens: 0, output_tokens: 0 };
+  const uso = { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 };
   let lotesFallidos = 0;
   let reintentosTotales = 0;
 
@@ -262,6 +321,8 @@ async function classify(mensajes, { onProgreso = () => {}, reintentos = REINTENT
       });
       uso.input_tokens += usage.input_tokens || 0;
       uso.output_tokens += usage.output_tokens || 0;
+      uso.cache_read_input_tokens += usage.cache_read_input_tokens || 0;
+      uso.cache_creation_input_tokens += usage.cache_creation_input_tokens || 0;
       onProgreso(i + 1, lotes.length);
       return items;
     } catch (e) {
@@ -290,11 +351,17 @@ async function classify(mensajes, { onProgreso = () => {}, reintentos = REINTENT
   };
 }
 
-function costoDe({ input_tokens = 0, output_tokens = 0 }) {
-  return (input_tokens / 1e6) * USD_POR_MTOK_ENTRADA + (output_tokens / 1e6) * USD_POR_MTOK_SALIDA;
+// Con cache, `input_tokens` es solo lo fresco: lo leido se cobra a 0,1x y lo
+// escrito a 2x con TTL de 1 hora (1,25x con 5 minutos). Sin sumarlos, el
+// reporte de un import mostraria un costo menor al real.
+const FACTOR_ESCRITURA = CACHE_ESTABLE.ttl === "1h" ? 2 : 1.25;
+
+function costoDe({ input_tokens = 0, output_tokens = 0, cache_read_input_tokens = 0, cache_creation_input_tokens = 0 }) {
+  const entrada = input_tokens + cache_read_input_tokens * 0.1 + cache_creation_input_tokens * FACTOR_ESCRITURA;
+  return (entrada / 1e6) * USD_POR_MTOK_ENTRADA + (output_tokens / 1e6) * USD_POR_MTOK_SALIDA;
 }
 
 module.exports = {
-  classify, armarLotes, formatearLote, costoDe, esReintentable, ESQUEMA,
+  classify, armarLotes, formatearLote, costoDe, esReintentable, ESQUEMA, SISTEMA, CHARS_POR_TOKEN,
   MODELO, TAMANO_LOTE, CONCURRENCIA, REINTENTOS,
 };

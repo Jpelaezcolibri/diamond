@@ -29,6 +29,26 @@ const getClient = () => new Anthropic({ apiKey: clave, timeout: 60 * 1000 });
 // tokens). El contenido da igual: solo tiene que ser identico en las dos.
 const RELLENO = "Regla de prueba sin efecto, solo para ocupar tokens. ".repeat(220);
 
+// `node scripts/smoke-cache.js classify` (2026-09-14): prueba el prompt REAL
+// del clasificador de grupos, que corre en Haiku 4.5 (minimo cacheable 4.096).
+// Si alguien recorta el prompt por debajo del minimo, la segunda llamada no
+// lee nada y esto sale con error — el test unitario solo estima.
+const MODO = process.argv[2] === "classify" ? "classify" : "sonnet";
+
+async function probarClasificador(cliente) {
+  require("../src/lib/anthropic")._setClientForTests(cliente);
+  const { classify } = require("../src/groups/classify");
+  const mensaje = { id: "smoke", autor: "Prueba", texto: "Busco apto 3 alcobas en Laureles hasta 450 millones" };
+  let leido = 0;
+  for (const etiqueta of ["1a (deberia ESCRIBIR el cache)", "2a (deberia LEERLO)"]) {
+    const { uso, lotesFallidos } = await classify([mensaje], { reintentos: [] });
+    if (lotesFallidos) throw new Error("la llamada al clasificador fallo (ver el log de arriba)");
+    leido = uso.cache_read_input_tokens || 0;
+    console.log(`${etiqueta}\n  escrito=${uso.cache_creation_input_tokens || 0} leido=${leido} fresco=${uso.input_tokens || 0}`);
+  }
+  return leido;
+}
+
 (async () => {
   if (!clave) {
     console.error("No hay ANTHROPIC_API_KEY. Corré con: railway run --service diamond node scripts/smoke-cache.js");
@@ -38,6 +58,15 @@ const RELLENO = "Regla de prueba sin efecto, solo para ocupar tokens. ".repeat(2
   console.log(`TTL configurado: ${CACHE_ESTABLE.ttl}`);
   console.log(`Clave: ...${clave.slice(-6)} — origen: ${origen}\n`);
   const cliente = getClient();
+  if (MODO === "classify") {
+    const leido = await probarClasificador(cliente);
+    if (leido > 0) {
+      console.log(`\n✅ El prompt del clasificador supera el minimo de Haiku y el cache pega (${leido} tokens leidos).`);
+      process.exit(0);
+    }
+    console.log("\n⚠️  La segunda llamada no leyo nada: el prefijo del clasificador quedo bajo el minimo de 4.096 tokens.");
+    process.exit(1);
+  }
   const peticion = {
     model: process.env.CLAUDE_MODEL || "claude-sonnet-4-5",
     max_tokens: 16,
