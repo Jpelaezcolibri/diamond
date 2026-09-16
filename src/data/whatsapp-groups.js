@@ -281,6 +281,29 @@ function jidVirtual(prefijo, nombre) {
   return `${prefijo}:${slug(nombre)}`;
 }
 
+// EL PEDIDO QUE ESCRIBE EL COLEGA MISMO, en su propio grupo virtual
+// (2026-09-15). Antes caia en el mismo "reenvio" que usa un asesor de la casa
+// cuando reenvia algo que vio en un grupo, y los dos casos son distintos: el
+// reenviado ya lo esta atendiendo el asesor que lo mando, el directo no lo
+// atiende nadie hasta que se avisa.
+//
+// Esa diferencia es lo que permite que la bandeja de salida levante los
+// directos que quedaron pendientes sin arrastrar tambien los reenviados. Se
+// separa por grupo y no por una columna nueva a proposito: `origen` tiene un
+// check constraint en la base (2026-08-01_radar_grupos.sql) y sumarle un valor
+// pediria una migracion; un grupo virtual mas no pide ninguna.
+const PREFIJO_PEDIDO_DIRECTO = "colega";
+const NOMBRE_PEDIDO_DIRECTO = "Pedidos directos a Sofi";
+
+// Los ids de los grupos virtuales de pedido directo de esta org. Lista vacia
+// si no hay ninguno todavia, que es lo normal hasta el primer pedido.
+async function idsPedidoDirecto(orgId) {
+  const grupos = !supabase
+    ? memory.whatsappGroups.filter((g) => g.org_id === orgId)
+    : (await supabase.from("whatsapp_groups").select("id, jid").eq("org_id", orgId)).data || [];
+  return grupos.filter((g) => String(g.jid || "").startsWith(`${PREFIJO_PEDIDO_DIRECTO}:`)).map((g) => g.id);
+}
+
 async function asegurarGrupoVirtual(orgId, { prefijo, nombre }) {
   return registrarGrupo(orgId, { jid: jidVirtual(prefijo, nombre), nombre });
 }
@@ -337,5 +360,6 @@ module.exports = {
   upsertSession, listSessions, touchSession, sesionPorNombre,
   registrarGrupo, listGroups, obtenerGrupo, setModo, setResponde, importarGrupos,
   asegurarGrupoVirtual, jidVirtual, slug,
+  PREFIJO_PEDIDO_DIRECTO, NOMBRE_PEDIDO_DIRECTO, idsPedidoDirecto,
   whitelist, invalidar,
 };

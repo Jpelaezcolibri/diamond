@@ -13,6 +13,7 @@ const groupSignals = require("../data/group-signals");
 const signalEvents = require("../data/signal-events");
 const radarCierres = require("../data/radar-cierres");
 const whatsappGroups = require("../data/whatsapp-groups");
+const pedidoDirecto = require("../groups/pedido-directo");
 const { cruzar: cruzarGrupos } = require("../groups/match");
 const { plano } = require("../groups/texto");
 const mandatos = require("../data/mandatos");
@@ -298,7 +299,7 @@ const TOOL_DEFINITIONS = [
   {
     name: "rechazar_pedido_radar",
     description:
-      "Registra que un pedido del radar NO sirve — el asesor respondio 'no' a un aviso 'Tenés un match del radar que no salió solo'. Usala SIEMPRE que diga que no o que no sirve, aunque no dé motivo: el aviso pide explicitamente una respuesta, y sin este registro un pedido descartado y uno que nunca se leyo se ven igual. Si citó (swipe-to-reply) el aviso exacto, no hace falta que aclare cual.",
+      "Registra que un pedido del radar NO sirve — el asesor respondio 'no' a un aviso 'Un pedido del radar no salió solo'. Usala SIEMPRE que diga que no o que no sirve, aunque no dé motivo: el aviso pide explicitamente una respuesta, y sin este registro un pedido descartado y uno que nunca se leyo se ven igual. Si citó (swipe-to-reply) el aviso exacto, no hace falta que aclare cual.",
     input_schema: {
       type: "object",
       properties: {
@@ -436,12 +437,22 @@ const RADAR_REVISOR_PHONE = process.env.RADAR_REVISOR_PHONE || "";
 const VENTANA_REPETIDO_DEMANDA_MS = Number(process.env.AVISO_DEMANDA_COLEGA_MIN || 15) * 60 * 1000;
 const avisosDemandaRecientes = new Map();
 
-async function avisarDemandaColegaInmediata(ctx, { contacto, contactoTelefono, matches, clasificado }) {
+async function avisarDemandaColegaInmediata(ctx, { contacto, contactoTelefono, matches, clasificado, signalId = null }) {
   if (!RADAR_REVISOR_PHONE) return;
   const clave = `${ctx.org.id}:${(ctx.lead && ctx.lead.id) || contactoTelefono || contacto}`;
   const antes = avisosDemandaRecientes.get(clave);
   if (antes && Date.now() - antes < VENTANA_REPETIDO_DEMANDA_MS) {
-    console.log(`[tools] pedido directo de ${contacto}: la asesora ya tiene un aviso de este colega de hace un rato, no se repite.`);
+    // NO SE DESCARTA, SE POSTERGA (Juan, 2026-09-15: "solucionalo como creas
+    // que es la mejor opcion para que no se pierdan los contactos").
+    //
+    // Hasta hoy esto era un `return` seco: el segundo pedido de un colega
+    // dentro de la ventana se tiraba, y Sofi ya le habia dicho que lo iban a
+    // contactar. El anti-rafaga sigue valiendo —a la asesora no le entran dos
+    // mensajes con 32 segundos de diferencia— pero la señal queda con
+    // `enviado_at` en null y la bandeja de salida la levanta en la proxima
+    // pasada (src/scheduler/avisos-salida.js). La cola es la base, no este
+    // Map: un reinicio de Railway ya no borra un contacto.
+    console.log(`[tools] pedido directo de ${contacto}: la asesora recibio un aviso de este colega hace poco; queda pendiente para la bandeja.`);
     return;
   }
   avisosDemandaRecientes.set(clave, Date.now());
@@ -451,25 +462,18 @@ async function avisarDemandaColegaInmediata(ctx, { contacto, contactoTelefono, m
     return;
   }
 
-  const que = [clasificado.tipo, clasificado.zona || clasificado.ciudad].filter(Boolean).join(" en ") || "algo sin detalle";
-  const telefonoLinea = contactoTelefono ? `+${contactoTelefono}` : "sin telefono";
-  const lista = matches.length > 0
-    ? matches
-        .map((m) => `- ${m.ref ? `ref ${m.ref}` : "sin ref"} · ${m.zona || "sin zona"} · ${m.precio || "sin precio"}`)
-        .join("\n")
-    : "No calza nada del inventario todavia.";
-
-  const texto = [
-    `🔔 Pedido directo de un colega — contactalo`,
-    ``,
-    `Colega: ${contacto} (${telefonoLinea})`,
-    `Pide: ${que}`,
-    clasificado.notas ? `Detalle: ${clasificado.notas}` : null,
-    ``,
-    lista,
-    ``,
-    `Escribile o llamalo vos, no Sofi: es un negocio compartido con otra inmobiliaria, no un cliente propio.`,
-  ].filter(Boolean).join("\n");
+  // El texto vive en src/groups/pedido-directo.js: la bandeja de salida arma
+  // el mismo aviso para los pedidos que quedaron pendientes, y dos copias del
+  // mismo mensaje divergen (fue lo que paso con el DM al colega antes de
+  // envio-colega.js).
+  const texto = pedidoDirecto.construir({
+    contacto,
+    telefono: contactoTelefono,
+    tipo: clasificado.tipo,
+    zona: clasificado.zona || clasificado.ciudad,
+    notas: clasificado.notas,
+    matches,
+  });
 
   // Require tardio (ciclo: este archivo -> mensaje-asesor.js -> whatsapp.js -> engine.js -> este archivo).
   const mensajeAsesor = require("../lib/mensaje-asesor");
@@ -477,7 +481,18 @@ async function avisarDemandaColegaInmediata(ctx, { contacto, contactoTelefono, m
     avisosDemandaRecientes.delete(clave);
     throw e;
   });
-  if (!r || !r.ok) avisosDemandaRecientes.delete(clave);
+  if (!r || !r.ok) {
+    avisosDemandaRecientes.delete(clave);
+    return;
+  }
+  // SALIO: se marca, y con eso la bandeja de salida deja de verlo pendiente.
+  // Sin esta marca el arreglo de arriba se da vuelta y la asesora recibe cada
+  // pedido dos veces — una en linea y otra por la bandeja.
+  if (signalId) {
+    await groupSignals
+      .marcarAvisoEnviado(ctx.org.id, signalId, { wamid: r.wamid || null, advisorId: revisor.id || null })
+      .catch((e) => console.warn("[tools] No se pudo marcar el pedido directo como avisado:", e.message));
+  }
 }
 
 function _resetAvisosDemandaColega() {
@@ -1032,12 +1047,26 @@ async function registrarDemandaColega(input, ctx) {
 
   // Persistir es best-effort: si la tabla o la migracion no estan, el asesor
   // igual se lleva la respuesta con los matches, que es el valor inmediato.
+  //
+  // EL GRUPO VIRTUAL DEPENDE DE QUIEN PIDE (2026-09-15). Si escribe el colega
+  // mismo, el pedido va al grupo de PEDIDOS DIRECTOS; si lo reenvia un asesor
+  // de la casa, sigue yendo al de reenvios de siempre. Los dos casos no son lo
+  // mismo: el reenviado ya lo esta atendiendo el asesor que lo mando, el
+  // directo no lo atiende nadie hasta que se avisa — y es esa diferencia la
+  // que deja que la bandeja de salida levante los directos pendientes sin
+  // arrastrar los reenviados (ver whatsapp-groups.js#PREFIJO_PEDIDO_DIRECTO).
+  let signalId = null;
   try {
-    const grupo = await whatsappGroups.asegurarGrupoVirtual(ctx.org.id, {
-      prefijo: "reenvio",
-      nombre: input.grupo || "Reenvíos a Sofi",
-    });
-    await groupSignals.create(ctx.org.id, {
+    const grupo = ctx.colega
+      ? await whatsappGroups.asegurarGrupoVirtual(ctx.org.id, {
+          prefijo: whatsappGroups.PREFIJO_PEDIDO_DIRECTO,
+          nombre: whatsappGroups.NOMBRE_PEDIDO_DIRECTO,
+        })
+      : await whatsappGroups.asegurarGrupoVirtual(ctx.org.id, {
+          prefijo: "reenvio",
+          nombre: input.grupo || "Reenvíos a Sofi",
+        });
+    const { signal } = await groupSignals.create(ctx.org.id, {
       group_id: grupo.id,
       // Dos asesores que reenvian el mismo pedido caen en el mismo id y el
       // indice unico lo deduplica: el segundo no crea una senal nueva.
@@ -1062,6 +1091,7 @@ async function registrarDemandaColega(input, ctx) {
       origen: "reenvio",
       fecha_mensaje: clasificado.mensaje.fechaIso,
     });
+    signalId = signal ? signal.id : null;
   } catch (e) {
     console.warn("[tools] No se pudo persistir la demanda del colega:", e.message);
   }
@@ -1072,7 +1102,7 @@ async function registrarDemandaColega(input, ctx) {
   // completa). Best-effort y disparado sin esperar (no bloquea la respuesta
   // al colega): un fallo aca no debe demorarle la confirmacion.
   if (ctx.colega) {
-    avisarDemandaColegaInmediata(ctx, { contacto, contactoTelefono, matches, clasificado }).catch((e) =>
+    avisarDemandaColegaInmediata(ctx, { contacto, contactoTelefono, matches, clasificado, signalId }).catch((e) =>
       console.warn("[tools] No se pudo avisar la demanda del colega:", e.message)
     );
   }

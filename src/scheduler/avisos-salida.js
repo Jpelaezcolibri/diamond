@@ -46,7 +46,12 @@ const carrilArriendo = require("../groups/carril-arriendo");
 const digest = require("../groups/digest-avisos");
 const linkAvisoLib = require("../lib/link-aviso");
 const directorio = require("../groups/directorio");
-const { entregarConRespaldo } = require("../lib/entrega-asesor");
+// Se importa el MODULO y no la funcion suelta: destructurar congela la
+// referencia y deja los tests sin forma de mockear la entrega — lo que ademas
+// significa que un test correria contra la Graph API de verdad. Mismo criterio
+// que src/scheduler/radar-watchdog.js con el canal de WhatsApp.
+const entregaAsesor = require("../lib/entrega-asesor");
+const pedidoDirecto = require("../groups/pedido-directo");
 const ritmo = require("../lib/ritmo-avisos");
 const colaPostDm = require("../groups/cola-post-dm");
 
@@ -223,14 +228,44 @@ async function procesarOrg(org, ahora) {
   // Los avisos post-DM que el freno de ritmo retuvo (ver cola-post-dm.js). Se
   // miran sin sacarlos: salen de la cola solo si el mensaje se entrego.
   const postDm = colaPostDm.ver(org.id, asesor.id);
-  if (pedidos.length === 0 && alertas.length === 0 && postDm.length === 0) return null;
+
+  // LOS PEDIDOS QUE EL COLEGA LE ESCRIBIO DIRECTO A SOFI (2026-09-15). Van por
+  // una consulta aparte y no por `senales`: aprobadasSinAvisar exige
+  // `revalidacion is not null` y un pedido directo no tiene revalidacion —
+  // nunca paso por el radar. Sin esta rama, el anti-rafaga de tools.js los
+  // deja "pendientes" y no los levanta nadie: se pierden igual que antes, solo
+  // que mas callados. Ver la spec del 2026-09-15, §6.3.
+  const directos = await groupSignals
+    .pedidosDirectosSinAvisar(org.id, {
+      groupIds: await whatsappGroups.idsPedidoDirecto(org.id).catch(() => []),
+      desdeIso,
+      hastaIso,
+    })
+    .catch((e) => {
+      console.warn("[avisos] no se pudieron leer los pedidos directos pendientes:", e.message);
+      return [];
+    });
+
+  if (pedidos.length === 0 && alertas.length === 0 && postDm.length === 0 && directos.length === 0) return null;
 
   const grupos = new Map((await whatsappGroups.listGroups(org.id).catch(() => [])).map((g) => [g.id, g]));
   const sesiones = await whatsappGroups.listSessions(org.id).catch(() => []);
   const sesion = (sesiones.find((s) => s.estado === "activa") || sesiones[0] || {}).nombre || null;
 
-  const total = pedidos.length + alertas.length + postDm.length;
+  const total = pedidos.length + alertas.length + postDm.length + directos.length;
   let texto;
+
+  // Un pedido directo, como aviso completo: los mismos datos que manda
+  // tools.js cuando alcanza a salir en linea.
+  const avisoDirecto = (s) =>
+    pedidoDirecto.construir({
+      contacto: s.autor_nombre,
+      telefono: s.contacto || s.autor_telefono,
+      tipo: s.tipo,
+      zona: s.zona || s.ciudad,
+      textoOriginal: s.texto_original,
+      matches: s.matches || [],
+    });
 
   if (total === 1) {
     // Sin cambios respecto de antes: un solo pendiente sale con su mensaje
@@ -239,7 +274,9 @@ async function procesarOrg(org, ahora) {
       ? await textoDePedido(org, pedidos[0], grupos, sesion)
       : alertas.length
         ? alertas[0].texto
-        : postDm[0].texto;
+        : postDm.length
+          ? postDm[0].texto
+          : avisoDirecto(directos[0]);
   } else {
     // El link de cada pedido del digest (Juan, 2026-09-02, opcion D).
     const links = new Map();
@@ -285,6 +322,16 @@ async function procesarOrg(org, ahora) {
       })),
       postDm.map((p) => ({ colega: p.colega, enviadas: p.enviadas, dudosas: p.dudosas, faltantes: p.faltantes, link: p.link }))
     );
+
+    // Los pedidos directos se suman como su propio bloque y no se meten en
+    // digest.construir: no son un pedido del radar (no tienen puntaje ni
+    // candidatas aprobadas) y mezclarlos ahi los haria ver como si el bot ya
+    // los hubiera evaluado. Con UN solo directo el bloque igual va en linea:
+    // el que sale con ficha completa es el caso `total === 1`.
+    if (directos.length) {
+      const bloque = [`🔔 Te escribieron directo:`, directos.map((s) => pedidoDirecto.lineaDigest({ contacto: s.autor_nombre, tipo: s.tipo, zona: s.zona || s.ciudad })).join("\n")];
+      texto = texto ? [texto, ``, ...bloque].join("\n") : bloque.join("\n");
+    }
   }
 
   if (!texto) return null;
@@ -293,7 +340,7 @@ async function procesarOrg(org, ahora) {
   // a la ventana de la otra... que nunca se pierda ninguna posibilidad de
   // hacer negocios"). Si la ventana de la asesora esta cerrada, el aviso se
   // entrega a otra del equipo en vez de perderse.
-  const envio = await entregarConRespaldo(org, asesor, texto);
+  const envio = await entregaAsesor.entregarConRespaldo(org, asesor, texto);
   if (!envio.ok) {
     // No se marca nada: queda pendiente y se reintenta en la proxima pasada.
     console.warn(`[avisos] no se pudo entregar el aviso a ${asesor.name}: ${envio.error}`);
@@ -315,6 +362,13 @@ async function procesarOrg(org, ahora) {
     await mandatosData
       .marcarEntrega(org.id, a.id, { entregado: true, via: "digest", error: null, texto: a.texto })
       .catch((e) => console.warn("[avisos] no se pudo marcar la alerta como entregada:", e.message));
+  }
+  // Y los directos. Sin esta marca vuelven a salir en la pasada siguiente y en
+  // la siguiente: seria el diluvio del 15-sep otra vez, con otro texto.
+  for (const s of directos) {
+    await groupSignals
+      .marcarAvisoEnviado(org.id, s.id, { wamid: envio.wamid || null, advisorId: envio.advisor.id })
+      .catch((e) => console.warn("[avisos] no se pudo marcar el pedido directo como avisado:", e.message));
   }
   console.log(
     `[avisos] ${envio.advisor.name}${envio.suplente ? ` (suplente de ${asesor.name})` : ""}: ` +

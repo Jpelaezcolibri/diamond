@@ -396,7 +396,21 @@ async function guardarRevalidacion(orgId, signalId, veredicto) {
 // en manos de la asesora. Best-effort igual que wamid/advisorId: si falta la
 // migracion, el aviso igual se marca enviado.
 async function marcarAvisoEnviado(orgId, signalId, { wamid = null, advisorId = null, refs = null } = {}) {
-  if (!supabase) return true;
+  if (!supabase) {
+    // MARCA DE VERDAD, no `return true` (2026-09-15). Devolver true sin tocar
+    // nada dejaba la señal "pendiente" para siempre en modo memoria: todo lo
+    // que lea pendientes la sigue viendo y la vuelve a mandar. En produccion
+    // no se notaba porque ahi si hay update, pero cualquier test sobre el
+    // circuito completo quedaba verde midiendo una marca que no existia.
+    const s = (memory.groupSignals || []).find((x) => x.org_id === orgId && x.id === signalId);
+    if (!s) return false;
+    s.enviado_at = new Date().toISOString();
+    s.updated_at = s.enviado_at;
+    s.aviso_wamid = wamid;
+    s.aviso_advisor_id = advisorId;
+    if (refs) s.aviso_refs = refs;
+    return true;
+  }
   const patch = { enviado_at: new Date().toISOString(), updated_at: new Date().toISOString() };
   const conRefs = { ...patch, aviso_wamid: wamid, aviso_advisor_id: advisorId, aviso_refs: refs };
   const conDestinatario = { ...patch, aviso_wamid: wamid, aviso_advisor_id: advisorId };
@@ -550,6 +564,51 @@ async function aprobadasSinAvisar(orgId, { desdeIso, hastaIso = null, limite = 3
   if (error) {
     if (esColumnaFaltante(error)) return [];
     console.error("[grupos] No se pudieron leer los pedidos aprobados sin avisar:", error.message);
+    return [];
+  }
+  return data || [];
+}
+
+// Los pedidos que un colega le escribio DIRECTO a Sofi y que todavia no se le
+// avisaron a nadie.
+//
+// POR QUE NO ALCANZA CON aprobadasSinAvisar (auditoria 2026-09-15): esa exige
+// `revalidacion is not null`, y un pedido directo no tiene revalidacion —
+// nunca paso por el radar, lo escribio el colega en el chat. La bandeja de
+// salida filtrando por ahi no lo veia nunca, asi que dejar la señal
+// "pendiente" no servia de nada: se perdia igual, en silencio.
+//
+// `groupIds` los resuelve quien llama (whatsappGroups.idsPedidoDirecto). Una
+// lista vacia significa NINGUNO y devuelve []: sin ese corte, un `in ()` vacio
+// o un filtro omitido devolveria todas las señales de la org y la asesora
+// recibiria el radar entero.
+async function pedidosDirectosSinAvisar(orgId, { groupIds = [], desdeIso, hastaIso = null, limite = 30 } = {}) {
+  const ids = (groupIds || []).filter(Boolean);
+  if (ids.length === 0) return [];
+  const dentroDeVentana = (s) =>
+    (!desdeIso || !s.created_at || Date.parse(s.created_at) >= Date.parse(desdeIso)) &&
+    (!hastaIso || !s.created_at || Date.parse(s.created_at) <= Date.parse(hastaIso));
+  if (!supabase) {
+    return (memory.groupSignals || []).filter(
+      (s) =>
+        s.org_id === orgId && s.clase === "demanda" && ids.includes(s.group_id) &&
+        !s.enviado_at && !s.respondida_at && dentroDeVentana(s)
+    );
+  }
+  let consulta = supabase
+    .from("group_signals")
+    .select("*")
+    .eq("org_id", orgId)
+    .eq("clase", "demanda")
+    .in("group_id", ids)
+    .is("enviado_at", null)
+    .is("respondida_at", null)
+    .gte("created_at", desdeIso);
+  if (hastaIso) consulta = consulta.lte("created_at", hastaIso);
+  const { data, error } = await consulta.order("created_at", { ascending: true }).limit(limite);
+  if (error) {
+    if (esColumnaFaltante(error)) return [];
+    console.error("[grupos] No se pudieron leer los pedidos directos sin avisar:", error.message);
     return [];
   }
   return data || [];
@@ -1118,6 +1177,7 @@ module.exports = {
   pendientesDigest, marcarDigest, revertirDigest,
   marcarRespondida, respuestasDesde, guardarRevalidacion, marcarAvisoEnviado,
   guardarPolitica, obtenerPorId, calladosPendientes, buscarPorTelefono, buscarPorLid, aprobadasSinAvisar,
+  pedidosDirectosSinAvisar,
   findByWamid, pendientesDeAviso, candidatosRecordatorio, claimRecordatorio,
   candidatosEscaladoSilencio, claimEscaladoSilencio,
   dmsHoyPorColega, dmsHoyLinea, refsYaEnviadas,

@@ -23,7 +23,11 @@ test("con un colega, Sofi no arranca el discurso de calificacion", () => {
   const p = texto(buildSystemPrompt({ org, lead, qualified: false, now: null, colega }));
   assert.match(p, /NO es un cliente/);
   assert.match(p, /NUNCA le preguntes presupuesto/);
-  assert.match(p, /NUNCA le ofrezcas "conectarlo con un asesor"/);
+  // La prohibicion quedo acotada (2026-09-15): lo que no se hace es ofrecerle
+  // un asesor COMO A UN CLIENTE. Escalar cuando da señal de que quiere una
+  // persona es lo contrario, y es obligatorio — ver
+  // test/colega-escalado-senales.test.js.
+  assert.match(p, /como se le ofrece a un cliente/);
   assert.doesNotMatch(p, /ESTADO DE CALIFICACION/);
 });
 
@@ -70,8 +74,11 @@ test("si el colega pide solo llamada, el prompt le da la herramienta y le prohib
   assert.match(p, /nunca digas "quedó anotado"/i);
 });
 
-test("si el colega pide hablar con una persona, el prompt le da pedir_contacto_asesora sin ofrecerlo por su cuenta", () => {
+test("si el colega quiere hablar con una persona, el prompt le da pedir_contacto_asesora y le manda escalar", () => {
   const p = texto(buildSystemPrompt({ org, lead, qualified: false, now: null, colega }));
   assert.match(p, /pedir_contacto_asesora/);
-  assert.match(p, /NUNCA le ofrezcas "conectarlo con un asesor"/);
+  // Lo que sigue prohibido: tratarlo como lead ofreciendole un asesor.
+  assert.match(p, /como se le ofrece a un cliente/);
+  // Lo que ahora es obligatorio: escalar ante la señal, no solo ante el pedido.
+  assert.match(p, /escalar apenas de señal/);
 });
