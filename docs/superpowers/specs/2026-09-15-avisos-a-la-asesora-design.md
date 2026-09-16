@@ -2,7 +2,7 @@
 
 **Fecha:** 2026-09-15
 **Decisión de:** Juan
-**Estado:** aprobado, sin implementar
+**Estado:** aprobado. §3.2 (dedupe por huella) y el interruptor `RADAR_ALERTA_ATASCADA` implementados el 2026-09-16; §5–§7 el 2026-09-15 (c0de219). Pendiente: §2.2 resto, §2.3, §3.1 y §4.
 
 ## 1. El problema
 

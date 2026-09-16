@@ -144,7 +144,49 @@ test("cuando se normaliza, avisa que se normalizo", async () => {
   inventario = { fresco: true, iso: new Date().toISOString(), horas: 1 };
   await wd.avisar(await wd.revisar());
   assert.strictEqual(enviados.length, 2);
-  assert.match(enviados[1].texto, /se normalizo/);
+  assert.match(enviados[1].texto, /inventario volvio a estar al dia/);
+});
+
+// EL DILUVIO (15 y 16-sep-2026): "lleva 1222 min", "lleva 1252 min"... El
+// texto trae un contador, cambiaba en cada pasada y el dedupe por texto lo
+// dejaba salir cada 30 min, por cada pedido, durante 24 h.
+test("un problema con un contador en el texto sale UNA vez", async () => {
+  problemasSalud = [{ clave: "atascada:s1", huella: "atascada:s1", texto: "El pedido de Joan lleva 1222 min sin salir." }];
+  await wd.avisar(await wd.revisar());
+  problemasSalud = [{ clave: "atascada:s1", huella: "atascada:s1", texto: "El pedido de Joan lleva 1252 min sin salir." }];
+  await wd.avisar(await wd.revisar());
+  problemasSalud = [{ clave: "atascada:s1", huella: "atascada:s1", texto: "El pedido de Joan lleva 1282 min sin salir." }];
+  await wd.avisar(await wd.revisar());
+  assert.strictEqual(enviados.length, 1);
+});
+
+test("el inventario viejo no se repite porque cambien las horas", async () => {
+  inventario = { fresco: false, iso: "2026-08-15T00:00:00Z", horas: 30 };
+  await wd.avisar(await wd.revisar());
+  inventario = { fresco: false, iso: "2026-08-15T00:00:00Z", horas: 30.5 };
+  await wd.avisar(await wd.revisar());
+  assert.strictEqual(enviados.length, 1);
+});
+
+test("si cambia la huella, vuelve a avisar", async () => {
+  // La ventana pasa de "por cerrar" a "cerrada": eso SI es noticia.
+  problemasSalud = [{ clave: "ventana:57300", huella: "ventana:57300:por_cerrar", texto: "cierra en 3 h" }];
+  await wd.avisar(await wd.revisar());
+  problemasSalud = [{ clave: "ventana:57300", huella: "ventana:57300:por_cerrar", texto: "cierra en 2 h" }];
+  await wd.avisar(await wd.revisar());
+  problemasSalud = [{ clave: "ventana:57300", huella: "ventana:57300:cerrada", texto: "esta CERRADA" }];
+  await wd.avisar(await wd.revisar());
+  assert.deepStrictEqual(enviados.map((e) => e.texto), ["⚠️ cierra en 3 h", "⚠️ esta CERRADA"]);
+});
+
+test("al resolverse, sin texto de cierre no manda un UUID: calla", async () => {
+  // Antes salia 'Radar: se normalizo lo de "atascada:fdaa59b7-..."'.
+  problemasSalud = [{ clave: "atascada:fdaa59b7", huella: "atascada:fdaa59b7", texto: "lleva 20 min" }];
+  await wd.avisar(await wd.revisar());
+  problemasSalud = [];
+  await wd.avisar(await wd.revisar());
+  assert.strictEqual(enviados.length, 1);
+  assert.ok(!enviados.some((e) => e.texto.includes("fdaa59b7") && e.texto.includes("normalizo")));
 });
 
 test("sin destinatario configurado no arranca", async () => {
@@ -173,7 +215,7 @@ test("el watchdog no intenta arreglar nada", () => {
 // sesion y el sync: misma deduplicacion, mismo "se normalizo".
 test("los problemas de salud se avisan una vez y se anuncia cuando se normalizan", async () => {
   wd = instalar();
-  problemasSalud = [{ clave: "ventana:573028536489", texto: "La ventana de Catherine cierra en 3 h." }];
+  problemasSalud = [{ clave: "ventana:573028536489", huella: "ventana:573028536489:por_cerrar", texto: "La ventana de Catherine cierra en 3 h.", resuelto: "La ventana de Catherine se reabrio." }];
 
   await wd.avisar(await wd.revisar());
   await wd.avisar(await wd.revisar());
@@ -181,5 +223,5 @@ test("los problemas de salud se avisan una vez y se anuncia cuando se normalizan
 
   problemasSalud = [];
   await wd.avisar(await wd.revisar());
-  assert.ok(enviados.some((e) => e.texto.includes("se normalizo") && e.texto.includes("ventana:573028536489")));
+  assert.ok(enviados.some((e) => e.texto.includes("La ventana de Catherine se reabrio")));
 });

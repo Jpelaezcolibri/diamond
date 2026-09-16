@@ -154,6 +154,41 @@ test("problemas: junta todo con claves estables por tipo", async () => {
   assert.ok(p.find((x) => x.clave === "ventana:573028536489").texto.includes("cierra en 2 h"));
 });
 
+// Spec 2026-09-15-avisos-a-la-asesora §2.2: nadie revisa el pedido atascado.
+// Interruptor RADAR_ALERTA_ATASCADA, default APAGADO.
+function atascada() {
+  memory.groupSignals.push({ id: "s1", org_id: ORG, clase: "demanda", autor_nombre: "Joan", created_at: hace(20), matches: [{ ref: "1" }],
+    revalidacion: { refs_utiles: ["1"], refs_dudosas: [] }, respondida_at: null, aviso_wamid: null, enviado_at: null });
+}
+
+test("problemas: el pedido atascado no se avisa sin RADAR_ALERTA_ATASCADA", async () => {
+  delete process.env.RADAR_ALERTA_ATASCADA;
+  atascada();
+  const p = await salud.problemas(ORG, { ahora: AHORA });
+  assert.ok(!p.some((x) => x.clave.startsWith("atascada:")));
+});
+
+test("problemas: con el interruptor prendido, la huella del atascado no lleva los minutos", async () => {
+  process.env.RADAR_ALERTA_ATASCADA = "true";
+  try {
+    atascada();
+    const p = (await salud.problemas(ORG, { ahora: AHORA })).find((x) => x.clave === "atascada:s1");
+    assert.ok(p, "con el interruptor prendido sigue saliendo");
+    assert.strictEqual(p.huella, "atascada:s1");
+    assert.ok(!p.resuelto, "al resolverse calla, no manda un UUID");
+  } finally {
+    delete process.env.RADAR_ALERTA_ATASCADA;
+  }
+});
+
+test("problemas: la huella de la ventana cambia con el estado, no con las horas", async () => {
+  equipo = [{ id: "a1", name: "Catherine", phone: "573028536489" }];
+  mensaje(conversacion("cc", "573028536489"), "user", "hola", 22);
+  const v = (await salud.problemas(ORG, { ahora: AHORA })).find((x) => x.clave === "ventana:573028536489");
+  assert.strictEqual(v.huella, "ventana:573028536489:por_cerrar");
+  assert.match(v.resuelto, /Catherine/);
+});
+
 test("problemas: un chequeo que revienta no calla a los demas", async () => {
   memory.groupSignals.push({ id: "roto", org_id: ORG, clase: "demanda", created_at: "no-es-fecha", matches: null, revalidacion: null });
   const c = conversacion("c1", "573245934862", "humano");

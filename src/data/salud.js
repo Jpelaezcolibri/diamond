@@ -305,6 +305,9 @@ async function problemas(orgId, { ahora = new Date(), org = null } = {}) {
   for (const v of await ventanasAsesoras(orgId, { ahora })) {
     p.push({
       clave: `ventana:${v.phone}`,
+      // Las horas corren en el texto; la huella solo cambia con el estado.
+      huella: `ventana:${v.phone}:${v.cerrada ? "cerrada" : "por_cerrar"}`,
+      resuelto: `La ventana de ${v.name} se reabrio: los avisos le vuelven a llegar.`,
       texto: v.cerrada
         ? `La ventana de ${v.name} esta CERRADA${v.horas ? ` (no le escribe a Sofi hace ${v.horas} h)` : " (nunca le ha escrito a Sofi)"}: ` +
           `todo lo que se le mande se acepta y no llega. Que le escriba cualquier cosa a Sofi y se reabre.`
@@ -329,9 +332,14 @@ async function problemas(orgId, { ahora = new Date(), org = null } = {}) {
     });
   }
 
-  for (const s of await senalesAtascadas(orgId, { ahora })) {
+  // Apagado por defecto (Juan, 2026-09-15, spec avisos-a-la-asesora §2.2):
+  // nadie lo revisaba y fue el diluvio del 15 y 16-sep. El pedido atascado se
+  // sigue viendo en CRM > Grupos. Sin texto de cierre: al resolverse, calla.
+  const alertaAtascada = process.env.RADAR_ALERTA_ATASCADA === "true";
+  for (const s of alertaAtascada ? await senalesAtascadas(orgId, { ahora }) : []) {
     p.push({
       clave: `atascada:${s.id}`,
+      huella: `atascada:${s.id}`,
       texto: `El pedido de ${s.autor_nombre || "un colega"} tiene propiedades que Sofi marco utiles y lleva ${s.minutos} min sin salir ni al colega ni a la asesora.`,
     });
   }

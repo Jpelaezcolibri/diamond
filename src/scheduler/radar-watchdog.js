@@ -41,9 +41,15 @@ const DESTINO = (process.env.RADAR_WATCHDOG_TO || "").split(",").map((t) => t.tr
 // Estados de WAHA que significan "el radar no esta escuchando".
 const ESTADOS_CAIDOS = new Set(["FAILED", "STOPPED", "ERROR"]);
 
-// Para no repetir el mismo aviso cada media hora. Se recuerda el ultimo problema
-// notificado por clave; cuando cambia (o se resuelve) vuelve a avisar.
-const avisado = new Map(); // clave -> texto del ultimo aviso
+// Para no repetir el mismo aviso cada media hora. Se recuerda la HUELLA del
+// ultimo aviso por clave, nunca el texto (Juan, 2026-09-16; spec
+// 2026-09-15-avisos-a-la-asesora §3.2): el texto del pedido atascado traia
+// "lleva 1222 min", cambiaba en cada pasada y el aviso salia cada 30 min por
+// cada pedido durante 24 h. La huella es estable: solo cambia cuando cambia
+// lo que hay que decir (ej. la ventana pasa de "por cerrar" a "cerrada").
+// Un problema sin huella usa su clave.
+const avisado = new Map(); // clave -> { huella, resuelto }
+const huellaDe = (p) => p.huella || p.clave;
 
 let timer = null;
 
@@ -69,6 +75,7 @@ async function revisar(ahora = new Date()) {
         if (ESTADOS_CAIDOS.has(estado?.status)) {
           problemas.push({
             clave: `sesion:${s.nombre}`,
+            resuelto: `Radar: la sesion "${s.nombre}" volvio a escuchar.`,
             texto:
               `El radar dejo de escuchar: la sesion "${s.nombre}" esta en ${estado.status}. ` +
               `No se levanta sola. Entra al CRM > Grupos y toca "Reintentar una vez".`,
@@ -87,6 +94,7 @@ async function revisar(ahora = new Date()) {
   if (!inventario.fresco) {
     problemas.push({
       clave: "sync",
+      resuelto: "Radar: el inventario volvio a estar al dia.",
       texto: inventario.iso
         ? `El inventario esta viejo: el ultimo sync de Wasi fue hace ${inventario.horas} h. ` +
           `El radar no va a publicar nada hasta que corra. Sincroniza desde el CRM > Marketing.`
@@ -113,18 +121,20 @@ async function avisar(problemas) {
 
   const vigentes = new Set(problemas.map((p) => p.clave));
 
-  // Lo que se resolvio solo tambien se avisa: si no, quien recibio la alarma no
-  // sabe nunca que puede dejar de preocuparse.
-  for (const [clave] of avisado) {
+  // Lo que se resolvio solo tambien se avisa, pero SOLO si el problema trajo
+  // su propio texto de cierre (`resuelto`). El que no lo trae calla: antes
+  // salia 'se normalizo lo de "atascada:<uuid>"', que no le dice nada a nadie.
+  for (const [clave, previo] of avisado) {
     if (!vigentes.has(clave)) {
       avisado.delete(clave);
-      await enviar(org, `Radar: se normalizo lo de "${clave}".`);
+      if (previo.resuelto) await enviar(org, `✅ ${previo.resuelto}`);
     }
   }
 
   for (const p of problemas) {
-    if (avisado.get(p.clave) === p.texto) continue; // ya avisado, sin novedad
-    avisado.set(p.clave, p.texto);
+    const previo = avisado.get(p.clave);
+    avisado.set(p.clave, { huella: huellaDe(p), resuelto: p.resuelto || null });
+    if (previo && previo.huella === huellaDe(p)) continue; // ya avisado, sin novedad
     await enviar(org, `⚠️ ${p.texto}`);
   }
 }
