@@ -14,7 +14,6 @@ const avisosSalida = require("../src/scheduler/avisos-salida");
 const cierreDia = require("../src/scheduler/cierre-dia");
 const digest = require("../src/scheduler/group-digest");
 const recordatorio = require("../src/scheduler/radar-recordatorio");
-const visitasVenta = require("../src/scheduler/visitas-venta");
 const avisarMandato = require("../src/groups/avisar-mandato");
 
 afterEach(() => {
@@ -58,12 +57,4 @@ test("prendido: el escalado de un mandato no sale", async (t) => {
   const ok = await avisarMandato.escalar({ id: "org-1" }, { texto: "x", mandato: { id: "m" }, motivo: "y", alertaId: "a" });
   assert.strictEqual(ok, false);
   assert.strictEqual(envio.mock.callCount(), 0);
-});
-
-test("visitas-venta respeta el interruptor", async (t) => {
-  process.env.ASESORA_SOLO_VISITAS = "true";
-  const listActive = t.mock.method(organizations, "listActive", async () => [{ id: "org-1" }]);
-  const r = await visitasVenta.runOnce({ forzar: true });
-  assert.strictEqual(r.alertadas, 0);
-  assert.strictEqual(listActive.mock.callCount(), 0);
 });

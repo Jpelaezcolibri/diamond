@@ -12,7 +12,7 @@
 //   - el aviso de un pedido (asistir, avisarCercano, pedido directo de un
 //     colega por chat, post-DM, bandeja de salida, mandatos)
 //   - los seguimientos (escalado por silencio, recordatorio por pedido,
-//     cierre del dia, digest de la mañana, cruce visitas -> ventas)
+//     cierre del dia, digest de la mañana)
 //   - las alertas tecnicas que salen a RADAR_WATCHDOG_TO (vigilante, informe
 //     de arranque, envio fallido, Sofi-Comando), porque hoy ese numero es el
 //     de Daiana
@@ -25,6 +25,7 @@
 //   - el colega que pide hablar con una persona o solo por llamada (decision
 //     de Juan el mismo dia)
 //   - lo que un humano pide a mano (Sofi-Comando, botones, CRM)
+//   - el cruce diario visitas -> ventas (Juan lo quiso dejar el mismo dia)
 //
 // Nada se pierde: la señal queda guardada con su motivo y se ve en /grupos.
 // Un solo interruptor, sin excepciones por camino (ver la memoria

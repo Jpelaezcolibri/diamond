@@ -37,12 +37,13 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
   - **Interruptor:** `ASESORA_SOLO_VISITAS=true` (`src/lib/solo-visitas.js`).
     Apaga el aviso de pedido, el post-DM, el candidato cercano, el pedido
     directo de un colega, la bandeja, el escalado por silencio, el
-    recordatorio, el cierre del día, el digest, visitas→ventas, los mandatos y
+    recordatorio, el cierre del día, el digest, los mandatos y
     las alertas técnicas a `RADAR_WATCHDOG_TO` (hoy son los dos números de
     Daiana).
   - **Sigue saliendo:** citas (aviso, recordatorio, cancelación), clientes
     directos (transferencia, captador, aliado), el colega que pide hablar con
-    una persona o solo llamada (decisión de Juan), y lo manual.
+    una persona o solo llamada (decisión de Juan), el cruce visitas→ventas
+    (Juan lo quiso dejar) y lo manual.
   - **Lo que no sale queda en `/grupos`** con su motivo. Un pedido que no
     califica para DM ya no lo atiende nadie por WhatsApp.
   - **Pendiente:** con esto el vigilante calla. Si se quiere de vuelta,

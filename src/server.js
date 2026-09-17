@@ -99,11 +99,11 @@ app.listen(config.port, () => {
   // SOLO VISITAS A LA ASESORA (Juan, 2026-09-17): con ASESORA_SOLO_VISITAS=true
   // los temporizadores que solo existen para escribirle a la asesora (digest,
   // vigilante, informe de arranque, cierre del dia, recordatorio, escalado por
-  // silencio, bandeja y visitas->ventas) ni arrancan: no consultan la base ni
+  // silencio y bandeja) ni arrancan: no consultan la base ni
   // ensucian el log. Ver src/lib/solo-visitas.js.
   const soloVisitas = require("./lib/solo-visitas").activo();
   if (soloVisitas) {
-    console.log("[solo-visitas] activo — a la asesora solo le llegan citas y sus recordatorios; digest, vigilante, cierre, recordatorio, silencio, bandeja y visitas-venta no arrancan.");
+    console.log("[solo-visitas] activo — a la asesora solo le llegan citas y sus recordatorios; digest, vigilante, cierre, recordatorio, silencio y bandeja no arrancan.");
   }
   if (config.supabaseUrl) require("./scheduler/reminders").start();
   if (config.supabaseUrl) require("./scheduler/followups").start();
@@ -155,7 +155,8 @@ app.listen(config.port, () => {
   // Cruce diario visitas -> ventas (Juan, 2026-08-21): de lo que el sistema
   // pudo capturar como visita agendada, ¿cual propiedad ya no esta
   // disponible? "quiero tener el control de las visitas y ventas".
-  if (config.supabaseUrl && !soloVisitas) require("./scheduler/visitas-venta").start();
+  // Sigue con solo visitas: Juan quiere el cruce visitas -> ventas (2026-09-17).
+  if (config.supabaseUrl) require("./scheduler/visitas-venta").start();
   // Inbox de la linea: dice al arrancar si el clasificador esta prendido, como
   // hacen los otros carriles — un interruptor que no se ve es uno que se olvida.
   if (config.supabaseUrl) {

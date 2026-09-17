@@ -20,7 +20,6 @@ const organizations = require("../data/organizations");
 const properties = require("../data/properties");
 const visitas = require("../data/visitas");
 const mensajeAsesor = require("../lib/mensaje-asesor");
-const soloVisitas = require("../lib/solo-visitas");
 const { hourInBogota } = require("./followups");
 
 const HORA = Number(process.env.VISITAS_VENTA_HORA || 8);
@@ -46,8 +45,6 @@ function construirAlerta(ref, prop, visita) {
 async function runOnce({ ahora = new Date(), forzar = false } = {}) {
   if (!forzar && hourInBogota(ahora) !== HORA) return { revisadas: 0, alertadas: 0 };
   if (!ALERTA_TO) return { revisadas: 0, alertadas: 0 };
-  // Solo visitas a la asesora (src/lib/solo-visitas.js).
-  if (soloVisitas.activo()) return { revisadas: 0, alertadas: 0 };
 
   let revisadas = 0;
   let alertadas = 0;
