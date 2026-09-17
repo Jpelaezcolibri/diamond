@@ -22,6 +22,7 @@ const advisors = require("../data/advisors");
 const directorio = require("./directorio");
 const mensajeAsesor = require("../lib/mensaje-asesor");
 const ritmo = require("../lib/ritmo-avisos");
+const soloVisitas = require("../lib/solo-visitas");
 const canalWhatsapp = require("../channels/whatsapp");
 const { evaluarOferta } = require("./cruce-mandatos");
 const { buildMandatoMatchAlert, paramsPlantilla } = require("../notifications/mandato-aviso");
@@ -42,6 +43,8 @@ const ESCALADO_TO = () => process.env.RADAR_ESCALADO_PHONE || process.env.RADAR_
 async function cruzarOfertaConMandatos(org, oferta, opts = {}) {
   const { allyPropertyId = null, colega = {}, grupo = null, vistoEnIso = null, sesion = null, jid = null } = opts;
   if (!allyPropertyId) return { resultado: "sin_oferta", avisados: [], matches: 0 };
+  // Solo visitas a la asesora (src/lib/solo-visitas.js).
+  if (soloVisitas.frena("oferta para un mandato")) return { resultado: "solo_visitas", avisados: [], matches: 0 };
 
   const activos = await mandatosData.listarActivos(org.id);
   if (activos.length === 0) return { resultado: "sin_mandatos", avisados: [], matches: 0 };
@@ -168,6 +171,7 @@ async function entregar(org, telefono, texto, { mandato, oferta }) {
 }
 
 async function escalar(org, { texto, mandato, motivo, alertaId }) {
+  if (soloVisitas.frena("escalado de mandato")) return false;
   const to = ESCALADO_TO();
   if (!to) {
     console.error("[radar] match sin entregar y sin RADAR_ESCALADO_PHONE configurado:", mandato.id);

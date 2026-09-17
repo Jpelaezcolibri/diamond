@@ -25,6 +25,7 @@ const groupSignals = require("../data/group-signals");
 // significa que un test correria contra la Graph API de verdad. Mismo criterio
 // que src/groups/recomendar.js.
 const canalWhatsapp = require("../channels/whatsapp");
+const soloVisitas = require("../lib/solo-visitas");
 const { hourInBogota } = require("./followups");
 
 // Un digest por org por dia. En memoria alcanza: si el proceso se reinicia, el
@@ -107,6 +108,8 @@ async function destinatarios(orgId) {
 
 async function runOnce({ ahora = new Date(), forzar = false } = {}) {
   if (columnaFaltante) return { enviados: 0 };
+  // Solo visitas a la asesora (src/lib/solo-visitas.js).
+  if (soloVisitas.activo()) return { enviados: 0 };
   if (!forzar && hourInBogota(ahora) !== config.groups.digest.hour) return { enviados: 0 };
 
   const dia = hoyEnBogota(ahora);

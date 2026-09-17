@@ -49,6 +49,7 @@ const { telefonoEnTexto } = require("../lib/contacto");
 // referencia y deja los tests sin forma de mockear el envio.
 const canalWhatsapp = require("../channels/whatsapp");
 const mensajeAsesor = require("../lib/mensaje-asesor");
+const soloVisitas = require("../lib/solo-visitas");
 const ofertas = require("./ofertas");
 const avisarMandato = require("./avisar-mandato");
 const mandatosData = require("../data/mandatos");
@@ -703,7 +704,9 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
         // el tracking.
         let avisoPostDm = null;
         let postDmEnCola = false;
-        if (asesor && asesor.phone) {
+        // Solo visitas a la asesora (src/lib/solo-visitas.js): el DM ya salio y
+        // lo pendiente se ve en /grupos.
+        if (asesor && asesor.phone && !soloVisitas.frena("aviso post-DM")) {
           avisoPostDm = alertaAsesor.construirAvisoPostDm(
             senalParaAviso(c, mensaje, grupo),
             veredicto,
@@ -789,6 +792,17 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
       .registrar(org, señalParaFeed, veredicto, matches, { avisada: false, motivoDm: decisionDm.motivo })
       .catch((e) => console.warn("[radar] No se pudo escribir en el feed del admin:", e.message));
     return { resultado: "ya_se_le_mando", veredicto, signalId: signal.id, refs: refsRepetidas };
+  }
+
+  // SOLO VISITAS A LA ASESORA (Juan, 2026-09-17: "solo que envie respuestas al
+  // dm"). El pedido que no salio por DM no se le avisa a nadie: queda en la
+  // señal con su motivo (guardarPolitica, arriba) y se ve en /grupos. Ver
+  // src/lib/solo-visitas.js.
+  if (soloVisitas.frena("aviso de pedido")) {
+    await feedComando
+      .registrar(org, señalParaFeed, veredicto, matches, { avisada: false, motivoDm: decisionDm.motivo })
+      .catch((e) => console.warn("[radar] No se pudo escribir en el feed del admin:", e.message));
+    return { resultado: "solo_visitas", veredicto, signalId: signal.id, motivo: decisionDm.motivo };
   }
 
   // Se le pasan tambien los campos del clasificado (Juan, 2026-09-02: "que
@@ -980,6 +994,7 @@ function destinatarios(asesor) {
 // se le avisa, nunca que se puede publicar sin revisar.
 async function avisarCercano(org, signal, mensaje, grupo, matches, { edificio = null } = {}) {
   if (!RADAR_REVISOR_PHONE) return;
+  if (soloVisitas.frena("aviso de candidato cercano")) return;
 
   // `formato.parsearPrecio` y no un truthy check crudo: un precio "$0" (label
   // vacio en Wasi) es un string no vacio, asi que pasaria el filtro sin esto

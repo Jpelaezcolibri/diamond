@@ -45,6 +45,8 @@ function textoFallo({ userName, fallos }) {
 async function notificarFalloComando(scope, { userName, textoUsuario, reply, auditoria }) {
   const to = destinos();
   if (to.length === 0) return;
+  // Solo visitas a la asesora: RADAR_WATCHDOG_TO hoy es el numero de Daiana.
+  if (require("../lib/solo-visitas").frena("alerta de Sofi-Comando")) return;
 
   const org = await organizations.findById(scope.orgId);
   if (!org) return;

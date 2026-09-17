@@ -439,6 +439,9 @@ const avisosDemandaRecientes = new Map();
 
 async function avisarDemandaColegaInmediata(ctx, { contacto, contactoTelefono, matches, clasificado, signalId = null }) {
   if (!RADAR_REVISOR_PHONE) return;
+  // Solo visitas a la asesora (src/lib/solo-visitas.js). Si el colega pide
+  // hablar con una persona, eso va por pedir_contacto_asesora, que sigue vivo.
+  if (require("../lib/solo-visitas").frena("pedido directo de un colega")) return;
   const clave = `${ctx.org.id}:${(ctx.lead && ctx.lead.id) || contactoTelefono || contacto}`;
   const antes = avisosDemandaRecientes.get(clave);
   if (antes && Date.now() - antes < VENTANA_REPETIDO_DEMANDA_MS) {

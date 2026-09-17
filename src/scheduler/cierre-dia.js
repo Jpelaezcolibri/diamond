@@ -19,6 +19,7 @@ const radarCierres = require("../data/radar-cierres");
 const cierreDia = require("../groups/cierre-dia");
 const mensajeAsesor = require("../lib/mensaje-asesor");
 const ritmo = require("../lib/ritmo-avisos");
+const soloVisitas = require("../lib/solo-visitas");
 // Mismo patron que group-digest.js, que ya importa de followups: los helpers
 // de hora de Bogota viven ahi y no se duplican.
 const { hourInBogota } = require("./followups");
@@ -51,6 +52,8 @@ function agruparPorAsesora(señales, asesorPrincipalId) {
 
 async function runOnce({ ahora = new Date(), forzar = false } = {}) {
   if (!config.groups.cierre.enabled) return { enviados: 0 };
+  // Solo visitas a la asesora (src/lib/solo-visitas.js).
+  if (soloVisitas.activo()) return { enviados: 0 };
   if (!forzar && hourInBogota(ahora) !== config.groups.cierre.hour) return { enviados: 0 };
 
   const fecha = hoyEnBogota(ahora);

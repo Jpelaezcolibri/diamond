@@ -22,6 +22,7 @@ const leads = require("../data/leads");
 const conversations = require("../data/conversations");
 const mensajeAsesor = require("../lib/mensaje-asesor");
 const advisors = require("../data/advisors");
+const soloVisitas = require("../lib/solo-visitas");
 
 const RADAR_REVISOR_PHONE = () => process.env.RADAR_REVISOR_PHONE || "";
 const RADAR_ESCALADO_PHONE = () => process.env.RADAR_ESCALADO_PHONE || "";
@@ -137,6 +138,8 @@ async function runCompra(org, cutoffIso) {
 }
 
 async function runOnce() {
+  // Solo visitas a la asesora (src/lib/solo-visitas.js).
+  if (soloVisitas.activo()) return { sent: 0 };
   const cutoff = new Date(Date.now() - config.groups.silencio.min * 60 * 1000).toISOString();
   const orgs = await organizations.listActive();
 

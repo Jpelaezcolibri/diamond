@@ -66,6 +66,8 @@ async function anunciar() {
     const org = await organizations.getDefault();
     const { texto } = await informe(org);
     console.log(`[arranque] ${texto}`);
+    // Solo visitas a la asesora: el informe queda en el log (src/lib/solo-visitas.js).
+    if (require("./solo-visitas").activo()) return;
     for (const to of listaEnv("RADAR_WATCHDOG_TO")) {
       const r = await canalWhatsapp.sendWhatsApp(org, to, texto).catch((e) => ({ ok: false, error: e.message }));
       if (!r || !r.ok) console.warn(`[arranque] no se pudo mandar el informe a ${enmascarar(to)}: ${r && r.error}`);

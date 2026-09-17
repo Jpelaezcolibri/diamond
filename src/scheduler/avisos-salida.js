@@ -54,6 +54,7 @@ const entregaAsesor = require("../lib/entrega-asesor");
 const pedidoDirecto = require("../groups/pedido-directo");
 const ritmo = require("../lib/ritmo-avisos");
 const colaPostDm = require("../groups/cola-post-dm");
+const soloVisitas = require("../lib/solo-visitas");
 
 const INTERVALO_MS = 60 * 1000;
 // Cuanto se espera antes de volver a escribirle a la MISMA asesora. No es un
@@ -378,6 +379,8 @@ async function procesarOrg(org, ahora) {
 }
 
 async function runOnce(ahora = Date.now()) {
+  // Solo visitas a la asesora (src/lib/solo-visitas.js).
+  if (soloVisitas.activo()) return [];
   const orgs = await organizations.listActive();
   const salidas = [];
   for (const org of orgs) {

@@ -39,6 +39,9 @@ const VENTANA_CERRADA = /24\s*hours?|24\s*horas?|re-?engagement|131047/i;
 
 async function avisarFalloEnvio(org, telefono, texto, error) {
   if (ADMIN_ALERTA_TO.length === 0) return;
+  // Solo visitas a la asesora: RADAR_WATCHDOG_TO hoy es el numero de Daiana.
+  // El fallo ya queda en el Inbox como delivery "failed".
+  if (require("./solo-visitas").frena(`alerta de envio fallido a ${telefono}`)) return;
   const motivo = VENTANA_CERRADA.test(error || "")
     ? "la ventana de 24h con ese numero esta cerrada (no te escribio en las ultimas 24h, asi que WhatsApp no deja mandarle texto libre)"
     : `error: ${error || "sin detalle"}`;

@@ -28,7 +28,26 @@ Equipo: 1 dev (Juan) + Claude Code. Idioma de la app: español (Colombia).
 Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
 `docs:`, `config:`).
 
-## 2. Estado actual (2026-09-14)
+## 2. Estado actual (2026-09-17)
+
+- **A la asesora solo le llegan visitas (2026-09-17).**
+  - **La regla de Juan:** nada de seguimientos ni alertas. El radar solo le
+    responde por DM al colega, y a la asesora se le escribe solo para una cita
+    o su recordatorio.
+  - **Interruptor:** `ASESORA_SOLO_VISITAS=true` (`src/lib/solo-visitas.js`).
+    Apaga el aviso de pedido, el post-DM, el candidato cercano, el pedido
+    directo de un colega, la bandeja, el escalado por silencio, el
+    recordatorio, el cierre del día, el digest, visitas→ventas, los mandatos y
+    las alertas técnicas a `RADAR_WATCHDOG_TO` (hoy son los dos números de
+    Daiana).
+  - **Sigue saliendo:** citas (aviso, recordatorio, cancelación), clientes
+    directos (transferencia, captador, aliado), el colega que pide hablar con
+    una persona o solo llamada (decisión de Juan), y lo manual.
+  - **Lo que no sale queda en `/grupos`** con su motivo. Un pedido que no
+    califica para DM ya no lo atiende nadie por WhatsApp.
+  - **Pendiente:** con esto el vigilante calla. Si se quiere de vuelta,
+    `RADAR_WATCHDOG_TO` tiene que apuntar a un número que no sea de una
+    asesora.
 
 - **Costo de la API: el clasificador cacheado (2026-09-14).**
   - **Hallazgo:** el clasificador de grupos (`src/groups/classify.js`, Haiku)

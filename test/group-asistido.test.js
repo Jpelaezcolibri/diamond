@@ -1239,3 +1239,35 @@ test("un pedido de un edificio puntual no sale por DM: va a la asesora, igual qu
   assert.strictEqual(politicasGuardadas[0].motivo, "edificio_especifico");
   assert.match(enviadosPorSofi[0].texto, /edificio puntual/);
 });
+
+// SOLO VISITAS A LA ASESORA (Juan, 2026-09-17): "solo que envie respuestas al
+// dm". Con ASESORA_SOLO_VISITAS=true el DM al colega sigue igual y a la asesora
+// no le sale nada del radar. Ver src/lib/solo-visitas.js.
+test("SOLO VISITAS: el pedido aprobado que no sale por DM no se le avisa a la asesora", async () => {
+  process.env.ASESORA_SOLO_VISITAS = "true";
+  try {
+    const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE });
+    assert.strictEqual(r.resultado, "solo_visitas");
+    assert.strictEqual(enviadosPorSofi.length, 0);
+    assert.strictEqual(avisosMarcados.length, 0, "nada se marca como avisado");
+  } finally {
+    delete process.env.ASESORA_SOLO_VISITAS;
+  }
+});
+
+test("SOLO VISITAS: el DM al colega sale y el aviso post-DM no", async () => {
+  process.env.ASESORA_SOLO_VISITAS = "true";
+  try {
+    telefonoColegaResuelto = "573001234567";
+    matchesDevueltos = [match(), match({ ref: "9800000", titulo: "Apartamento en Sabaneta", zona: "Sabaneta" })];
+    veredictoDeSofi = { ...APRUEBA, refs_dudosas: ["9800000"] };
+    const r = await vivo.procesarMensaje(ORG, mensaje(), {
+      grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA",
+    });
+    assert.strictEqual(r.resultado, "dm_enviado");
+    assert.strictEqual(enviosDm.length, 2, "el colega recibe su DM");
+    assert.strictEqual(enviadosPorSofi.length, 0, "la asesora no recibe el post-DM");
+  } finally {
+    delete process.env.ASESORA_SOLO_VISITAS;
+  }
+});

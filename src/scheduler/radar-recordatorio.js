@@ -27,6 +27,7 @@ const signalEvents = require("../data/signal-events");
 // (ver src/lib/mensaje-asesor.js), visible en el panel "Equipo" del CRM.
 const mensajeAsesor = require("../lib/mensaje-asesor");
 const ritmo = require("../lib/ritmo-avisos");
+const soloVisitas = require("../lib/solo-visitas");
 
 function resumenPedido(señal) {
   const texto = (señal.texto_original || "").replace(/\s+/g, " ").trim();
@@ -85,6 +86,8 @@ async function candidatosDeOrg(org, cutoffIso) {
 }
 
 async function runOnce() {
+  // Solo visitas a la asesora (src/lib/solo-visitas.js).
+  if (soloVisitas.activo()) return { sent: 0 };
   if (!config.groups.recordatorio.enabled) return { sent: 0 };
 
   const cutoff = new Date(Date.now() - config.groups.recordatorio.silenceMin * 60 * 1000).toISOString();

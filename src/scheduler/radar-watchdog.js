@@ -22,6 +22,7 @@
 // automatico.
 
 const config = require("../config");
+const soloVisitas = require("../lib/solo-visitas");
 const organizations = require("../data/organizations");
 const syncEstado = require("../data/sync-estado");
 const whatsappGroups = require("../data/whatsapp-groups");
@@ -140,6 +141,9 @@ async function avisar(problemas) {
 }
 
 async function enviar(org, texto) {
+  // Solo visitas a la asesora: RADAR_WATCHDOG_TO hoy es el numero de Daiana.
+  // Queda en el log (src/lib/solo-visitas.js).
+  if (soloVisitas.activo()) return console.warn(`[watchdog] ${texto}`);
   for (const to of DESTINO) {
     const r = await canalWhatsapp.sendWhatsApp(org, to, texto).catch((e) => ({ ok: false, error: e.message }));
     if (!r || !r.ok) {
