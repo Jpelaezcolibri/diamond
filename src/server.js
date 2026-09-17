@@ -96,17 +96,26 @@ app.listen(config.port, () => {
   console.log(`Bot inmobiliario corriendo en puerto ${config.port} — datos: ${modo}`);
   // Temporizador de recordatorios de cita (solo con base real: en modo demo
   // no hay citas persistidas que recordar).
+  // SOLO VISITAS A LA ASESORA (Juan, 2026-09-17): con ASESORA_SOLO_VISITAS=true
+  // los temporizadores que solo existen para escribirle a la asesora (digest,
+  // vigilante, informe de arranque, cierre del dia, recordatorio, escalado por
+  // silencio, bandeja y visitas->ventas) ni arrancan: no consultan la base ni
+  // ensucian el log. Ver src/lib/solo-visitas.js.
+  const soloVisitas = require("./lib/solo-visitas").activo();
+  if (soloVisitas) {
+    console.log("[solo-visitas] activo — a la asesora solo le llegan citas y sus recordatorios; digest, vigilante, cierre, recordatorio, silencio, bandeja y visitas-venta no arrancan.");
+  }
   if (config.supabaseUrl) require("./scheduler/reminders").start();
   if (config.supabaseUrl) require("./scheduler/followups").start();
   // Digest diario del radar de grupos: lo que entro por export o por reenvio
   // no le sirve a nadie si hay que abrir el CRM para verlo.
-  if (config.supabaseUrl) require("./scheduler/group-digest").start();
+  if (config.supabaseUrl && !soloVisitas) require("./scheduler/group-digest").start();
   // Vigila el radar en vivo y el inventario. Los fallos de este ecosistema son
   // silenciosos: el baneo de julio se descubrio porque Juan abrio una pantalla,
   // y el sync de Wasi se salteo cinco dias seguidos sin dejar mas rastro que un
   // hueco en una tabla. Avisa por la linea OFICIAL de Sofi, nunca por la
   // vinculada — si lo que se cayo es esa linea, avisar por ahi no serviria.
-  if (config.supabaseUrl) require("./scheduler/radar-watchdog").start();
+  if (config.supabaseUrl && !soloVisitas) require("./scheduler/radar-watchdog").start();
   // Calienta el directorio de colegas (lid -> telefono) al arrancar y cada
   // hora, para que el DM automatico no dependa de una llamada a WAHA en el
   // momento del pedido (Juan, 2026-09-02: 0 telefonos guardados en una semana
@@ -117,19 +126,19 @@ app.listen(config.port, () => {
   // apagan una funcion en silencio si faltan; el informe las hace visibles en
   // el log y en el WhatsApp del vigilante. A los 10 s, para que la base ya
   // este disponible. Ver src/lib/arranque.js.
-  if (config.supabaseUrl) setTimeout(() => require("./lib/arranque").anunciar(), 10 * 1000);
+  if (config.supabaseUrl && !soloVisitas) setTimeout(() => require("./lib/arranque").anunciar(), 10 * 1000);
   // UN mensaje al final del dia con las PROPIEDADES que se movieron, para que
   // la asesora cuente en que quedo cada una (Juan, 2026-09-06). Reemplaza al
   // recordatorio por pedido, que citaba el texto del colega y que ella no
   // podia relacionar con ninguna propiedad suya.
-  if (config.supabaseUrl) require("./scheduler/cierre-dia").start();
+  if (config.supabaseUrl && !soloVisitas) require("./scheduler/cierre-dia").start();
   // El recordatorio por pedido queda apagado por defecto desde el 2026-09-06
   // (RADAR_RECORDATORIO_ENABLED=true lo revive). Sigue arrancando para que esa
   // vuelta atras no necesite un despliegue de codigo.
-  if (config.supabaseUrl) require("./scheduler/radar-recordatorio").start();
+  if (config.supabaseUrl && !soloVisitas) require("./scheduler/radar-recordatorio").start();
   // Escalado a Catherine si Natalia (asesor PRINCIPAL del radar) no responde
   // el aviso a tiempo, en los dos carriles (venta y compra) — Juan, 2026-08-26.
-  if (config.supabaseUrl) require("./scheduler/radar-silencio").start();
+  if (config.supabaseUrl && !soloVisitas) require("./scheduler/radar-silencio").start();
   // Mantiene abierta la ventana de 24h de Meta con la asesora del radar (Juan,
   // 2026-09-04): su linea vinculada le escribe a Sofi, porque solo un mensaje
   // ENTRANTE de ella reabre la ventana y sin ella los avisos se represan.
@@ -137,7 +146,7 @@ app.listen(config.port, () => {
   if (config.supabaseUrl) require("./scheduler/ventana-asesora").start();
   // Bandeja de salida: junta lo pendiente y le manda a cada asesora un solo
   // mensaje agrupado en vez de uno por oportunidad (Juan, 2026-09-02).
-  if (config.supabaseUrl) require("./scheduler/avisos-salida").start();
+  if (config.supabaseUrl && !soloVisitas) require("./scheduler/avisos-salida").start();
   // Recordatorio unico al asesor si no confirmo una cita PROPUESTA en 2h (Juan,
   // spec 2026-09-10-confirmacion-de-visitas): sin este empujon una cita puede
   // quedar "propuesta" para siempre y el cliente nunca se entera de que nadie
@@ -146,7 +155,7 @@ app.listen(config.port, () => {
   // Cruce diario visitas -> ventas (Juan, 2026-08-21): de lo que el sistema
   // pudo capturar como visita agendada, ¿cual propiedad ya no esta
   // disponible? "quiero tener el control de las visitas y ventas".
-  if (config.supabaseUrl) require("./scheduler/visitas-venta").start();
+  if (config.supabaseUrl && !soloVisitas) require("./scheduler/visitas-venta").start();
   // Inbox de la linea: dice al arrancar si el clasificador esta prendido, como
   // hacen los otros carriles — un interruptor que no se ve es uno que se olvida.
   if (config.supabaseUrl) {
