@@ -68,6 +68,13 @@ async function persistirSenal(org, c, { origen = "export", advisorId = null, aut
     // menciona) es distinto de null (no se sabe), igual que en group-signals.
     amoblado: c.amoblado ?? null,
     periodo: c.periodo ?? null,
+    // El piso que exigio el pedido (2026-09-18). Se guarda desde el primer dia
+    // por la leccion de las dos lineas de arriba: el cruce en vivo usa el
+    // clasificado en memoria, asi que no guardarlo no falla ruidosamente -- lo
+    // pierden el CRM, el aviso y cualquier recalculo. `??` y no `||`: 0 es "no
+    // lo pidio" y es un valor, no un hueco.
+    piso_max: c.piso_max ?? null,
+    piso_min: c.piso_min ?? null,
     contacto: c.contacto || null,
     texto_original: m.texto || null,
     matches: c.matches || [],

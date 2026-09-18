@@ -88,6 +88,14 @@ const ESQUEMA = {
           banos: { type: "integer", description: "0 si no se especifica" },
           garajes: { type: "integer", description: "Parqueaderos. 0 si no se especifica" },
           estrato: { type: "integer", description: "0 si no se especifica" },
+          // EL PISO (Juan, 2026-09-18): 255 de los 1.000 pedidos capturados
+          // entre el 1-ago y el 18-sep lo nombran, y hasta hoy no se extraia.
+          // Dos campos y no uno porque el pedido lo dice en las dos
+          // direcciones: "solo hasta 3er piso" es un techo, "piso alto" es un
+          // piso minimo. Enteros y no texto por la misma razon que el resto de
+          // los numeros del esquema: 0 significa "no lo pidio".
+          piso_max: { type: "integer", description: "Piso mas alto que acepta el pedido. 0 si no se especifica" },
+          piso_min: { type: "integer", description: "Piso mas bajo que acepta el pedido. 0 si no se especifica" },
           contacto: { type: "string", description: "Telefono o nombre si el mensaje lo trae. Vacio si no" },
           notas: { type: "string", description: "Detalle relevante en pocas palabras" },
           // Juan, 2026-08-20 (auditoria del veredicto de Sofi): "depende de si
@@ -142,7 +150,7 @@ const ESQUEMA = {
           "id", "clase", "confianza", "operacion", "tipo", "zonas", "zona", "zonas_excluidas", "ciudad",
           "precio_min", "precio_max", "habitaciones", "area_min", "banos",
           "garajes", "estrato", "contacto", "notas", "flexible_habitaciones", "edificio",
-          "amoblado", "periodo",
+          "amoblado", "periodo", "piso_max", "piso_min",
         ],
         additionalProperties: false,
       },
@@ -175,6 +183,7 @@ Reglas de extracción:
 - \`flexible_habitaciones\`: true SOLO si el mensaje dice "estudio" (ej. "3 alcobas o 2 con estudio", "2 alcobas y estudio") o "para inversión"/"para invertir". No lo actives por intuición ni por el tono del pedido — solo por esas palabras.
 - \`edificio\`: nombre PROPIO de un edificio, torre, conjunto o unidad que el pedido nombre explícitamente — "en el *edificio Murano Plaza*", "Torre Aqua", "Conjunto Los Cerezos". Vacío si el pedido solo da zona/barrio, o si dice "unidad cerrada"/"conjunto cerrado" como característica genérica SIN nombre propio ("que sea unidad cerrada" no cuenta; "en la unidad Reserva del Parque" sí). No confundas esto con el nombre de la inmobiliaria de quien pide, ni con el nombre del barrio.
 - \`amoblado\`: 'si' cuando el pedido pide amoblado o amueblado ("busco amoblado en Sabaneta", "apartamento amoblado en el poblado"). 'no' cuando lo RECHAZA explícitamente — "SIN muebles", "sin amoblar", "vacío", "no amoblado". '' si no lo menciona. Los tres valores son distintos y no se pueden mezclar: '' significa que al colega le da igual, 'no' significa que no lo quiere.
+- \`piso_max\` y \`piso_min\`: el nivel del edificio, no el numero de plantas de una casa. "Sólo hasta 3° piso" y "máximo piso 7" → piso_max 3 y 7. "Sin ascensor máximo segundo" → piso_max 2: cuando el pedido dice que NO hay ascensor o que no quiere subir escalas, ese tope es un piso_max. "Piso alto" u "ojalá de la mitad para arriba" → piso_min 4. "Primer piso" o "piso bajo" (para adultos mayores, mascotas o un local) → piso_max 2. "Piso 5" a secas, sin decir mínimo ni máximo → piso_min 5 y piso_max 5. Los dos van en 0 si el pedido no menciona el piso, y una casa "de dos pisos" NO es un piso: eso no se extrae.
 - \`periodo\`: 'corta' si el arriendo es por noches, días, semanas o una estadía de pocos días ("por 15 días", "3 noches", "renta corta", "airbnb"). 'mes' si es mensual o de largo plazo. '' si no se puede saber. Ojo: un precio alto no implica mensual — "$4.500.000 por 15 días" es 'corta' con precio_max 4500000.
 - Un mensaje de una sola propiedad con foto y ficha es oferta aunque no diga "vendo".
 - Devolvé exactamente un objeto por mensaje de entrada, con su id textual.
@@ -198,6 +207,12 @@ Ejemplos resueltos. Son mensajes inventados con la forma real de los grupos (nom
 
 6. "Necesito apto en Medellín para arriendo, 2 alcobas, hasta 2.5 millones, estrato 4 o 5"
    → demanda · arriendo · apartamento · zonas [] · ciudad "Medellín" · precio_max 2500000 · habitaciones 2 · estrato 4. Medellín sola es la ciudad, no una zona.
+
+7. "Busco apartamento 👉 Laureles 👉 Fátima 👉 2 habitaciones 👉 Sólo hasta 3° piso 👉 Precio $400 Millones"
+   → demanda · venta · apartamento · zonas ["Laureles","Fátima"] · habitaciones 2 · precio_max 400000000 · piso_max 3.
+
+8. "Solo en Sabaneta ✅ 3 alcobas ✅ Sin ascensor máximo segundo piso ✅ hasta 450 millones"
+   → demanda · venta · zonas ["Sabaneta"] · habitaciones 3 · precio_max 450000000 · piso_max 2. Sin ascensor, el tope de piso es una exigencia, no un gusto.
 
 7. "Busco local comercial en Itagüí o La Estrella, arriendo hasta 6 millones, mínimo 120 metros"
    → demanda · arriendo · local · zonas ["Itagüí","La Estrella"] · precio_max 6000000 · area_min 120.

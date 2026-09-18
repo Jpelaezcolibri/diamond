@@ -15,6 +15,7 @@ const allyProperties = require("../data/ally-properties");
 // modulo puro de zonas; properties.js re-exporta solo una parte.
 const zonasLib = require("../lib/zonas");
 const { esAmoblada } = require("./amoblado");
+const { pisoDe } = require("./piso");
 
 // Los dos modulos usan claves distintas para lo mismo: properties espera
 // precio_max / habitaciones_min y ally-properties espera precioMax. Sin
@@ -226,6 +227,38 @@ const {
   zonasPedidas, zonaCoincide, zonasExcluidas, zonaExcluida, zonaVecina, ciudadCoincide, ubicacionCoincide,
 } = require("./ubicacion");
 
+// 6 puntos, lo mismo que baños o garajes: es un requisito verificado del
+// pedido, no el que define el producto.
+const PUNTOS_PISO = 6;
+
+// Una casa, una finca o un lote no estan "en un piso". La lista es la misma
+// que usa la auditoria del inventario.
+function esApartamento(p) {
+  return /apartamento|apartaestudio|loft|penthouse|duplex|dúplex/i.test(`${(p && p.tipo) || ""} ${(p && p.titulo) || ""}`);
+}
+
+// `piso` es lo que dice la ficha: un numero, "alto" o "bajo".
+//
+// Lo CUALITATIVO solo decide cuando es inequivoco contra lo pedido: "alto"
+// contradice un techo bajo y "bajo" contradice un piso minimo alto. Fuera de
+// esos dos casos no confirma nada, y por eso no alcanza para cumplir un
+// requisito numerico que apunte al mismo lado (ahi lo resuelve
+// `piso_sin_confirmar`).
+const PISO_ALTO_DESDE = 4;
+
+function pisoCumple(piso, c) {
+  const max = Number(c.piso_max) || 0;
+  const min = Number(c.piso_min) || 0;
+  if (typeof piso === "number") {
+    if (max > 0 && piso > max) return false;
+    if (min > 0 && piso < min) return false;
+    return true;
+  }
+  if (piso === "alto") return !(max > 0 && max < PISO_ALTO_DESDE);
+  if (piso === "bajo") return !(min > 0 && min >= PISO_ALTO_DESDE);
+  return true;
+}
+
 // Devuelve null si la propiedad no pasa las compuertas; si pasa, el match ya
 // armado con su puntaje y las razones legibles de por que calza.
 function evaluarCandidata(p, c, fuente) {
@@ -246,6 +279,23 @@ function evaluarCandidata(p, c, fuente) {
   const pideAmoblado = String(c.amoblado || "").trim().toLowerCase();
   if (pideAmoblado === "si" && amoblada === false) return null;
   if (pideAmoblado === "no" && amoblada === true) return null;
+
+  // ── Piso: literal, y solo para apartamentos ────────────────────────────
+  //
+  // Juan, 2026-09-18: "quiero que seas muy estricto con los pedidos que exigen
+  // piso". 255 de los 1.000 pedidos del ultimo mes y medio lo exigen.
+  //
+  // SOLO APARTAMENTOS a proposito: una casa no esta "en un piso" -- "casa de
+  // dos pisos" cuenta plantas -- y su ficha nunca va a traer el dato. Aplicarle
+  // la exigencia las borraria todas por un hueco que no se puede llenar.
+  //
+  // Tres estados, igual que amoblado: cumple, no cumple (descarta) y no se
+  // sabe (`piso_sin_confirmar`, que lee publicable.js). El piso se lee del
+  // texto de la ficha -- ver src/groups/piso.js y por que no del campo de Wasi.
+  const pisoPropiedad = esApartamento(p) ? pisoDe(p) : null;
+  const exigePiso = Number(c.piso_max) > 0 || Number(c.piso_min) > 0;
+  const pisoAplica = exigePiso && esApartamento(p);
+  if (pisoAplica && pisoPropiedad !== null && !pisoCumple(pisoPropiedad, c)) return null;
 
   const ubicacion = ubicacionCoincide(p, c);
   if (!ubicacion) return null;
@@ -425,6 +475,14 @@ function evaluarCandidata(p, c, fuente) {
     if (corto && e.castigo) castigos += e.castigo;
   }
 
+  // La razon del piso se agrega aparte del bucle de exigencias: el piso no es
+  // un numero de la fila de `properties`, sale del texto, y sus tres estados
+  // no caben en el `ok(t, q)` de las demas.
+  if (pisoAplica && pisoPropiedad !== null) {
+    razones.push(`piso ${pisoPropiedad}`);
+    puntaje += PUNTOS_PISO;
+  }
+
   return {
     fuente,
     ref: p.ref || null,
@@ -472,6 +530,12 @@ function evaluarCandidata(p, c, fuente) {
     garajes_sin_dato:
       Number(catalogoExigencias.pedido(c, "garajes")) > 0 &&
       !formato.datoCargado(catalogoExigencias.dePropiedad(p, "garajes")),
+    // El piso que se le leyo a la ficha (numero, "alto", "bajo" o null): viaja
+    // para que la ficha del colega y el panel puedan mostrarlo.
+    piso: pisoPropiedad,
+    // Pidio piso y la ficha no lo dice. No descarta -- el apartamento esta en
+    // algun piso y nadie lo escribio -- pero no puede salir solo.
+    piso_sin_confirmar: pisoAplica && pisoPropiedad === null,
     // El plazo es del PEDIDO, no de la propiedad — viaja en el match por la
     // misma razon que el de arriba: es el unico camino hasta publicable.js.
     periodo_no_soportado: String(c.periodo || "").trim().toLowerCase() === "corta",
@@ -597,4 +661,5 @@ module.exports = {
   cruzar, filtrosInventario, filtrosAliados, mismaOperacion, evaluarOferta,
   evaluarCandidata, zonaCoincide, ciudadCoincide, ubicacionCoincide, zonaExcluida, BANDA_INFERIOR,
   MARGEN_PRECIO, MARGEN_AREA, BONUS_PRIORIDAD_VENTA, CASTIGO_CORTO, sinDuplicados,
+  pisoCumple, esApartamento, PISO_ALTO_DESDE,
 };
