@@ -28,7 +28,29 @@ Equipo: 1 dev (Juan) + Claude Code. Idioma de la app: español (Colombia).
 Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
 `docs:`, `config:`).
 
-## 2. Estado actual (2026-09-17)
+## 2. Estado actual (2026-09-18)
+
+- **El motor se volvió literal (2026-09-18, en `main`, SIN desplegar).**
+  - **La regla de Juan:** "que no envíe nada que no esté dentro de la misma
+    zona, municipio, área, presupuesto etc, lo que es números dale un pequeño
+    margen pero lo que es zonas, pisos, parqueaderos, etc hazlo literal".
+  - **El caso:** un colega que pidió "apartamento Envigado $400.000.000"
+    recibió la ref 10012722, que está en Itagüí, con la salvedad impresa en la
+    ficha. Medido sobre el mes anterior: 213 de las 717 fichas enviadas (30%)
+    salieron por zona vecina y 145 con menos parqueaderos de los pedidos.
+  - **Qué cambió:** la zona `vecina` ya no publica (motivo `zona_vecina`); los
+    parqueaderos vuelven a descartar —esto **revierte la apertura del
+    2026-09-04**, los baños no cambian—; y el piso pasa a ser exigencia
+    literal, con `src/groups/piso.js`, `piso_max`/`piso_min` en el clasificador
+    y la migración `2026-09-18_piso.sql`.
+  - **El piso se lee del TEXTO de la ficha, no del campo de Wasi:** ese campo
+    está vacío en 8 de 8 fichas revisadas y en la 10012722 dice "Piso: 1"
+    cuando el apartamento está en el 19.
+  - **Pendiente al desplegar:** correr la migración; volver a medir
+    `cache_read` del clasificador (el prompt creció); y cargar en Wasi lo que
+    falta — 91 de 121 fichas tienen algo por corregir, con la lista en
+    `Claude outputs/wasi-fichas-por-corregir.xlsx`.
+  - Spec: `docs/superpowers/specs/2026-09-18-match-literal-design.md`.
 
 - **A la asesora solo le llegan visitas (2026-09-17).**
   - **La regla de Juan:** nada de seguimientos ni alertas. El radar solo le
