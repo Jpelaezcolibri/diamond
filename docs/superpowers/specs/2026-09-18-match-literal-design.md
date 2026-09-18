@@ -81,9 +81,20 @@ Por eso el piso se lee del texto, igual que `amoblado`:
 - **`src/groups/piso.js`** (módulo hoja, hermano de `amoblado.js`): lee título
   y descripción y devuelve `{ numero }`, `"alto"`, `"bajo"` o `null`. Cubre 40
   de los 90 apartamentos del inventario (44%).
-- **El clasificador** extrae del pedido `piso_max` y `piso_min`. "Solo hasta 3°
-  piso" → `piso_max: 3`. "Sin ascensor máximo segundo" → `piso_max: 2`.
-  "Piso alto" → `piso_min: 4`.
+- **El clasificador** extrae del pedido `piso_max` y `piso_min`, **como banda
+  y nunca como piso exacto** (Juan, el mismo día: *"cuando mencionan más de o
+  menos de tal piso, que no se haga literal... que si dice un piso menos a 10
+  no deje de mostrar un piso nueve"*). Medido sobre las 227 menciones de piso
+  en los pedidos del 1-ago al 18-sep: **140 son un techo, 62 un piso mínimo y 3
+  un rango**; el piso exacto casi no existe. Tres casos que el prompt enseña
+  aparte porque estaban en el corpus y cada uno rompe el motor de un modo
+  distinto: el rango ("Piso 2 al 11", "del 4 a un piso 8"), el deseo que no
+  obliga ("ojalá piso 1") y las **plantas de una casa** ("máximo 2 pisos"), que
+  no son un nivel de edificio. El borde también: "hasta el 10" incluye el 10 y
+  "menos del 10" no, pero en los dos un piso 9 sirve.
+- **Golden set propio**, contra el clasificador real y con frases copiadas de
+  `group_signals`: `railway run --service diamond node scripts/piso-golden.js`
+  → **12/12** el 2026-09-18.
 - **`match.js`**: si el pedido exige piso y el de la propiedad se conoce y no
   cumple → descarta. Si no se conoce → marca `piso_sin_confirmar`.
 - **`publicable.js`**: `piso_sin_confirmar` frena la salida, con su motivo
