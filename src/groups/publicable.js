@@ -83,13 +83,30 @@ function esPublicable(match, { umbral = UMBRAL_DEFAULT, syncFresco = true, refsB
   // Robledo a quien pidio Laureles delante de 80 competidores es exactamente el
   // falso positivo que costo 656 de 731 matches en julio.
   //
-  // Se aceptan `exacta` y `vecina` —contigüidad real, declarada en
-  // src/lib/zonas.js— y nada mas. `ciudad` tampoco: un pedido sin barrio no
-  // habilita a publicar media Medellin.
+  // Se aceptan `exacta` y `zona_general`, y nada mas. `ciudad` tampoco: un
+  // pedido sin barrio no habilita a publicar media Medellin.
   // "zona_general" (2026-09-14): la propiedad esta en la zona general del
   // barrio pedido (Envigado para "Barrio Mesa") y el barrio exacto no esta
   // registrado. Se ofrece, y el mensaje al colega lo dice.
-  if (match.ubicacion && !["exacta", "vecina", "zona_general"].includes(match.ubicacion)) {
+  //
+  // LA VECINA TAMPOCO (Juan, 2026-09-18). Hasta hoy `vecina` publicaba: la
+  // contigüidad esta declarada en src/lib/zonas.js y se consideraba
+  // informacion geografica real. El 18-sep a las 11:00 a. m. un colega que
+  // pidio "apartamento Envigado $400.000.000" recibio la ref 10012722, que
+  // esta en ITAGUI, con la salvedad impresa en la propia ficha ("Aclaracion:
+  // queda en Itagui, vecina de Envigado") — el sistema sabia que no era lo
+  // pedido y lo mando igual. Su respuesta: "Me dice Itagui y solo quiere
+  // Envigado". Medido sobre el mes anterior, 213 de las 717 fichas enviadas
+  // (30%) salieron por esta regla, y esa misma propiedad le llego a pedidos de
+  // Envigado el 16, el 17 y el 18.
+  //
+  // Motivo PROPIO y no `zona_no_publicable`: son dos hechos distintos —"queda
+  // al lado" y "queda en cualquier otra parte"— y la asesora decide distinto
+  // con cada uno. VECINDAD en src/lib/zonas.js no se toca: es lo que hace que
+  // el prefiltro SQL traiga las subzonas al motor.
+  if (match.ubicacion === "vecina") {
+    motivos.push("zona_vecina");
+  } else if (match.ubicacion && !["exacta", "zona_general"].includes(match.ubicacion)) {
     motivos.push("zona_no_publicable");
   }
 
@@ -195,6 +212,7 @@ const MOTIVOS_LEGIBLES = {
   ref_bloqueada: "está apartada a propósito porque tiene un dato mal cargado en Wasi (GRUPOS_REFS_BLOQUEADAS). Se corrige en Wasi y se saca de la lista; mientras tanto no sale a ningún colega",
   no_es_inventario_propio: "es de la red de aliados, no es nuestra: no se ofrece en el gremio",
   zona_no_publicable: "la zona no calza con lo que pidió el colega — mirá si igual le sirve",
+  zona_vecina: "queda en la zona de al lado, no en la que pidió el colega: no sale sola, decidí vos si se la mostrás",
   amoblado_sin_confirmar: "el colega pidió amoblado y no tenemos confirmado que ésta lo esté: Wasi sólo lo dice en el título y esta ficha no lo trae",
   periodo_no_soportado: "el pedido es por días o semanas y nuestro inventario está cotizado por mes",
   puntaje_bajo: "el puntaje quedó por debajo del umbral para salir sola",
@@ -269,6 +287,7 @@ function explicarMotivosSeguro(motivos) {
 // lugar donde se decide que exista (lo fija test/motivos-legibles.test.js).
 const MOTIVOS_SOLO_PUBLICACION = new Set([
   "zona_no_publicable",
+  "zona_vecina",
   "puntaje_bajo",
   "sync_viejo",
   "periodo_no_soportado",
@@ -325,6 +344,9 @@ function clasificarMotivos(motivos) {
 //     filtra por linkWasi antes de armar nada.
 const ACLARACIONES_COLEGA = {
   zona_no_publicable: null,
+  // Misma razon que zona_no_publicable: redactar.js#desvios ya calcula la
+  // aclaracion contra el pedido real ("queda en Itagüí, no en Envigado").
+  zona_vecina: null,
   puntaje_bajo: "no pude verificar todo lo que pediste — confirmame lo que te falte",
   sync_viejo: "confirmame disponibilidad antes de mostrarla",
   periodo_no_soportado: "está cotizada por mes, no por días ni semanas",
