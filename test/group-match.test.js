@@ -313,19 +313,17 @@ test("FLEXIBLE: sigue sin aceptar DOS de menos, ni con la señal activa", () => 
 // razon que el nombre enunciaba. Lo que se afirma ahora es la regla vigente, y
 // discrimina: DOS de menos entra igual -- bajo la regla de alcobas ("una de
 // menos") esto devolveria null.
-test("baños y garajes no tienen tope por abajo: no es el margen de alcobas, es ilimitado", () => {
-  // REVERTIDO (Juan, 2026-09-04): "si no tiene si no un parqueadero o no esta
-  // registrado si tiene o no parqueadero, envialo con la observacion".
+test("los baños no tienen tope por abajo: no es el margen de alcobas, es ilimitado", () => {
+  // Los BAÑOS conservan la gabela del 2026-09-04 ("envialo con la
+  // observacion"). Los GARAJES la perdieron el 2026-09-18, cuando Juan hizo
+  // literal todo lo que no es un numero negociable — ver el test de abajo y
+  // test/group-match-garajes.test.js.
   //
   // garaje:0/banos:0 en el inventario se leen como "sin dato" (no descalifica,
   // pero tampoco entra en esta prueba) — se usan valores reales.
   assert.ok(
     evaluarCandidata(apto({ banos: 1 }), pide({ banos: 3 }), "diamond"),
     "DOS baños de menos, sin la señal: con el margen de alcobas esto seria null"
-  );
-  assert.ok(
-    evaluarCandidata(apto({ garaje: 1 }), pide({ garajes: 3 }), "diamond"),
-    "lo mismo para garajes"
   );
 
   // El contraste que le da sentido: las alcobas SI conservan su tope de una.
@@ -336,17 +334,14 @@ test("baños y garajes no tienen tope por abajo: no es el margen de alcobas, es 
   );
 });
 
-// EL RESCATE DEL 24-AGO, DESBLOQUEADO (Juan, 2026-09-04). revalidar.js tiene
-// `le_falta` desde el caso Edwin Ramirez -- "al menos el apartamento de el
-// portal si se podia enviar con la aclaracion de que solo le falta un
-// parqueadero de todo el pedido". Pero match.js descartaba la propiedad ANTES
-// de que Sofi la viera: `ok: t >= q` solo aflojaba con flexible_habitaciones,
-// true en 49 de 664 demandas (7,4%). Como `corto` exige que ok() haya pasado,
-// CASTIGO_CORTO.garajes era codigo inalcanzable.
-test("un pedido de 2 garajes acepta una propiedad de 1, y lo dice", () => {
+// EL RESCATE DEL 24-AGO, REVERTIDO (Juan, 2026-09-18). Entre el 2026-09-04 y
+// esta fecha, una propiedad de 1 garaje salia para un pedido de 2 "con la
+// observacion" (caso Edwin Ramirez, `le_falta` de revalidar.js). Medido sobre
+// el mes anterior: 145 de las 717 fichas enviadas a colegas salieron asi.
+// La regla nueva: "lo que es zonas, pisos, parqueaderos, etc hazlo literal".
+test("un pedido de 2 garajes YA NO acepta una propiedad de 1", () => {
   const m = evaluarCandidata(apto({ garaje: 1 }), pide({ garajes: 2 }), "diamond");
-  assert.ok(m, "quedarse corto en un garaje no puede descartar la propiedad");
-  assert.match(m.razones.join(" | "), /1 garaje \(pediste 2\)/);
+  assert.strictEqual(m, null, "quedarse corto en un parqueadero descarta: es literal");
 });
 
 test("un pedido de 3 banos acepta una propiedad de 2, y lo dice", () => {
@@ -355,16 +350,18 @@ test("un pedido de 3 banos acepta una propiedad de 2, y lo dice", () => {
   assert.match(m.razones.join(" | "), /2 baños \(pediste 3\)/);
 });
 
-// El castigo deja de ser codigo muerto: quedarse corto entra, pero nunca
-// puede empatar con la que cumple.
-test("la que cumple los garajes puntua mas que la que se queda corta", () => {
+// Ya no hay "corta" con la que comparar: la que se queda corta no existe como
+// candidata. Lo que se conserva es que la que cumple suma sus puntos.
+test("la que cumple los garajes suma por cumplirlos", () => {
   const cumple = evaluarCandidata(apto({ garaje: 2 }), pide({ garajes: 2 }), "diamond");
-  const corta = evaluarCandidata(apto({ garaje: 1 }), pide({ garajes: 2 }), "diamond");
-  assert.ok(cumple.puntaje > corta.puntaje, `cumple ${cumple.puntaje} debe superar a corta ${corta.puntaje}`);
+  const sinPedirlos = evaluarCandidata(apto({ garaje: 2 }), pide({}), "diamond");
+  assert.ok(cumple.puntaje > sinPedirlos.puntaje, `cumple ${cumple.puntaje} vs ${sinPedirlos.puntaje}`);
 });
 
-// Sin dato sigue siendo neutro, no un descarte: el hueco lo declara Sofi en
-// sin_confirmar. Una propiedad sin garaje registrado no puede desaparecer.
+// Sin dato sigue siendo neutro, no un descarte: la propiedad puede tener el
+// parqueadero y nadie lo cargo en Wasi (51 fichas del inventario estan asi).
+// Entra marcada con `garajes_sin_dato`, y publicable.js es quien impide que
+// salga sola — ver test/publicable-garajes.test.js.
 test("una propiedad sin garaje registrado sigue entrando", () => {
   assert.ok(evaluarCandidata(apto({ garaje: null }), pide({ garajes: 2 }), "diamond"));
   assert.ok(evaluarCandidata(apto({ garaje: 0 }), pide({ garajes: 2 }), "diamond"));
@@ -759,15 +756,16 @@ test("cumplir de MAS no se castiga: una alcoba de sobra no es un incumplimiento"
   assert.ok(!conUnaMas.razones.join(" | ").includes("pediste"));
 });
 
-test("area, baños y garajes cortos tambien cuestan, cada uno lo suyo", () => {
+test("area y baños cortos tambien cuestan, cada uno lo suyo", () => {
   const base = { habitaciones: 3, flexible_habitaciones: true, area_min: 100, banos: 3, garajes: 2 };
   const cumpleTodo = apto({ habitaciones: 3, area: "100 m²", banos: 3, garaje: 2 });
   const lleno = evaluarCandidata(cumpleTodo, pide(base), "diamond");
 
+  // Garajes salio de esta lista el 2026-09-18: al volverse literal, quedarse
+  // corto ya no entra con un castigo, directamente no entra.
   for (const [campo, corto] of [
     ["area", { area: "95 m²" }],       // dentro del margen del 10%, pero corto
     ["banos", { banos: 2 }],
-    ["garajes", { garaje: 1 }],
   ]) {
     const m = evaluarCandidata({ ...cumpleTodo, ...corto }, pide(base), "diamond");
     assert.ok(m, `${campo} corto sigue pasando la gabela`);

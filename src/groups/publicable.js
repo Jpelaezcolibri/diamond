@@ -123,6 +123,14 @@ function esPublicable(match, { umbral = UMBRAL_DEFAULT, syncFresco = true, refsB
   // construyo la contradiccion que encontro la auditoria del 2026-09-05.
   if (match.amoblado_sin_confirmar) motivos.push("amoblado_sin_confirmar");
 
+  // PARQUEADERO SIN DATO (Juan, 2026-09-18). Mismo caso que el de arriba: el
+  // colega lo pidio y la ficha de Wasi no trae el campo. La propiedad puede
+  // tenerlo perfectamente -- 51 fichas del inventario estan asi -- pero eso lo
+  // confirma una persona, no lo adivina el bot delante de 80 competidores.
+  // El incumplimiento CONOCIDO (tiene 1, pidieron 2) ni siquiera llega hasta
+  // aca: lo descarta match.js.
+  if (match.garajes_sin_dato) motivos.push("garajes_sin_dato");
+
   // PLAZO NO SOPORTADO (2026-09-07). Nuestro inventario esta cotizado por mes.
   // "$4.500.000 por 15 dias" calza perfecto contra un amoblado mensual del
   // mismo precio, y le ofreceriamos un mes por el precio de quince dias.
@@ -214,6 +222,7 @@ const MOTIVOS_LEGIBLES = {
   zona_no_publicable: "la zona no calza con lo que pidió el colega — mirá si igual le sirve",
   zona_vecina: "queda en la zona de al lado, no en la que pidió el colega: no sale sola, decidí vos si se la mostrás",
   amoblado_sin_confirmar: "el colega pidió amoblado y no tenemos confirmado que ésta lo esté: Wasi sólo lo dice en el título y esta ficha no lo trae",
+  garajes_sin_dato: "el colega pidió parqueadero y esta ficha no tiene el dato cargado en Wasi: confirmalo vos antes de ofrecerla",
   periodo_no_soportado: "el pedido es por días o semanas y nuestro inventario está cotizado por mes",
   puntaje_bajo: "el puntaje quedó por debajo del umbral para salir sola",
   sin_ref: "no tiene referencia",
@@ -292,6 +301,7 @@ const MOTIVOS_SOLO_PUBLICACION = new Set([
   "sync_viejo",
   "periodo_no_soportado",
   "amoblado_sin_confirmar",
+  "garajes_sin_dato",
   "sin_area",
   "sin_zona",
   "sin_titulo",
@@ -351,6 +361,7 @@ const ACLARACIONES_COLEGA = {
   sync_viejo: "confirmame disponibilidad antes de mostrarla",
   periodo_no_soportado: "está cotizada por mes, no por días ni semanas",
   amoblado_sin_confirmar: "no tengo confirmado que esté amoblada",
+  garajes_sin_dato: "no tengo registrado el parqueadero: confirmame si lo necesitás",
   sin_area: "no tengo el área registrada",
   sin_zona: "no tengo la zona registrada",
   sin_titulo: "el nombre puede estar incompleto en mi sistema",

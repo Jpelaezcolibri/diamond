@@ -190,7 +190,9 @@ const CASTIGO_CORTO = {
   habitaciones: 6,
   area: 4,
   banos: 4,
-  garajes: 4,
+  // Garajes ya no lleva castigo (Juan, 2026-09-18): al volverse literal no
+  // hay forma de quedarse corto y seguir siendo candidata, igual que pasa
+  // con el estrato. Quedarse corto descarta.
   // Pasarse del presupuesto dentro del margen ya no recibia la bonificacion
   // de "aprovecha el presupuesto"; ahora ademas cuesta, por la misma razon
   // que el resto: no cumplio lo que se pidio.
@@ -388,11 +390,20 @@ function evaluarCandidata(p, c, fuente) {
       texto: (t) => `${t} baños`, puntos: (t, q) => (t >= q ? 6 : 4),
       castigo: CASTIGO_CORTO.banos,
     },
+    // LOS GARAJES SI DESCARTAN OTRA VEZ (Juan, 2026-09-18): "lo que es numeros
+    // dale un pequeño margen pero lo que es zonas, pisos, parqueaderos, etc
+    // hazlo literal". Esto revierte, solo para garajes, la gabela del
+    // 2026-09-04 que sigue vigente para baños. Medido: 145 de las 717 fichas
+    // enviadas en el mes anterior salieron con menos parqueaderos de los
+    // pedidos.
+    //
+    // Es el mismo trato que `amoblado === false`: un incumplimiento CONOCIDO
+    // descarta. El dato AUSENTE es otra cosa y no pasa por aca (el bucle hace
+    // `continue` antes) — lo marca `garajes_sin_dato`, mas abajo.
     {
       pide: catalogoExigencias.pedido(c, "garajes"), tiene: catalogoExigencias.dePropiedad(p, "garajes"),
-      ok: () => true,
-      texto: (t) => `${t} garaje${t > 1 ? "s" : ""}`, puntos: (t, q) => (t >= q ? 6 : 4),
-      castigo: CASTIGO_CORTO.garajes,
+      ok: (t, q) => t >= q,
+      texto: (t) => `${t} garaje${t > 1 ? "s" : ""}`, puntos: 6,
     },
     // Estrato NO entra en la flexibilidad: no es una preferencia de espacio
     // negociable como una alcoba de menos, es la clasificacion socioeconomica
@@ -454,6 +465,13 @@ function evaluarCandidata(p, c, fuente) {
     // que pidio el colega.
     amoblado: amoblada,
     amoblado_sin_confirmar: pideAmoblado === "si" && amoblada === null,
+    // Pidio parqueadero y la ficha de Wasi no trae el dato. No descarta -- la
+    // propiedad puede tenerlo y nadie lo cargo -- pero tampoco puede salir
+    // sola: es el mismo hueco no verificable que `amoblado_sin_confirmar`.
+    // Hoy 51 fichas del inventario estan asi.
+    garajes_sin_dato:
+      Number(catalogoExigencias.pedido(c, "garajes")) > 0 &&
+      !formato.datoCargado(catalogoExigencias.dePropiedad(p, "garajes")),
     // El plazo es del PEDIDO, no de la propiedad — viaja en el match por la
     // misma razon que el de arriba: es el unico camino hasta publicable.js.
     periodo_no_soportado: String(c.periodo || "").trim().toLowerCase() === "corta",
