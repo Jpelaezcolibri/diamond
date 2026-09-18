@@ -183,7 +183,16 @@ Reglas de extracción:
 - \`flexible_habitaciones\`: true SOLO si el mensaje dice "estudio" (ej. "3 alcobas o 2 con estudio", "2 alcobas y estudio") o "para inversión"/"para invertir". No lo actives por intuición ni por el tono del pedido — solo por esas palabras.
 - \`edificio\`: nombre PROPIO de un edificio, torre, conjunto o unidad que el pedido nombre explícitamente — "en el *edificio Murano Plaza*", "Torre Aqua", "Conjunto Los Cerezos". Vacío si el pedido solo da zona/barrio, o si dice "unidad cerrada"/"conjunto cerrado" como característica genérica SIN nombre propio ("que sea unidad cerrada" no cuenta; "en la unidad Reserva del Parque" sí). No confundas esto con el nombre de la inmobiliaria de quien pide, ni con el nombre del barrio.
 - \`amoblado\`: 'si' cuando el pedido pide amoblado o amueblado ("busco amoblado en Sabaneta", "apartamento amoblado en el poblado"). 'no' cuando lo RECHAZA explícitamente — "SIN muebles", "sin amoblar", "vacío", "no amoblado". '' si no lo menciona. Los tres valores son distintos y no se pueden mezclar: '' significa que al colega le da igual, 'no' significa que no lo quiere.
-- \`piso_max\` y \`piso_min\`: el nivel del edificio, no el numero de plantas de una casa. "Sólo hasta 3° piso" y "máximo piso 7" → piso_max 3 y 7. "Sin ascensor máximo segundo" → piso_max 2: cuando el pedido dice que NO hay ascensor o que no quiere subir escalas, ese tope es un piso_max. "Piso alto" u "ojalá de la mitad para arriba" → piso_min 4. "Primer piso" o "piso bajo" (para adultos mayores, mascotas o un local) → piso_max 2. "Piso 5" a secas, sin decir mínimo ni máximo → piso_min 5 y piso_max 5. Los dos van en 0 si el pedido no menciona el piso, y una casa "de dos pisos" NO es un piso: eso no se extrae.
+- \`piso_max\` y \`piso_min\`: el NIVEL del edificio en el que está el inmueble. Medido sobre los pedidos reales, el piso casi nunca es un número exacto: es un techo, un piso mínimo o un rango. Extraelo como BANDA y no como número exacto, porque un rango leído como exacto borra propiedades que el colega sí acepta.
+  · Techo (lo más común): "Sólo hasta 3° piso", "máximo piso 7", "piso máximo 2", "menos del piso 10", "del 10 para abajo", "no más del 4" → piso_max 3, 7, 2, 9, 10, 4. Ojo con el borde, porque son dos cosas distintas: \"hasta el 10\", \"máximo 10\", \"del 10 para abajo\" y \"no más del 10\" INCLUYEN el 10 → piso_max 10. \"Menos del piso 10\" y \"por debajo del 10\" lo EXCLUYEN → piso_max 9. En los dos casos un piso 9 sirve, que es lo que no puede fallar: un \"menos de 10\" leído como piso exacto 10 borraría todos los pisos de abajo.
+  · Piso mínimo: "del piso 6 hacia arriba", "piso 5 en adelante", "del 4 para arriba", "más del 3", "piso alto", "parte alta" → piso_min 6, 5, 4, 3, 4, 4.
+  · Rango, que llena LOS DOS: "Piso 2 al 11" → piso_min 2 y piso_max 11. "entre un 4 a un piso 8" → 4 y 8. "solo 1 al 3 piso" → 1 y 3. "Piso 1 ó 2" → 1 y 2. "Piso 2 o 3" → 2 y 3.
+  · Sin ascensor: "sin ascensor máximo segundo piso" → piso_max 2. Si el pedido da dos topes según haya ascensor ("sin ascensor máximo 2, hasta el 5 con ascensor"), tomá el más amplio: piso_max 5.
+  · "Primer piso" o "piso bajo" (adultos mayores, mascotas, un local) → piso_max 2.
+  · Un número solo, dicho como exigencia ("3° piso", "que sea en el piso 5") → piso_min y piso_max iguales a ese número. Es el caso MENOS común: antes de usarlo, mirá si la frase trae un "hasta", un "al", un "en adelante" o un "o", porque entonces es banda.
+  · NO es una exigencia y va en 0 si el pedido lo pone como deseo: "ojalá piso 1", "preferiblemente piso bajo", "de ser posible piso alto".
+  · NO es el nivel, y va en 0, el número de PLANTAS de una casa: "casa de dos pisos", "máximo 2 pisos" en un pedido de casa, "casa de un solo piso". Eso describe la casa, no en qué parte del edificio está.
+  · Los dos van en 0 si el pedido no menciona el piso.
 - \`periodo\`: 'corta' si el arriendo es por noches, días, semanas o una estadía de pocos días ("por 15 días", "3 noches", "renta corta", "airbnb"). 'mes' si es mensual o de largo plazo. '' si no se puede saber. Ojo: un precio alto no implica mensual — "$4.500.000 por 15 días" es 'corta' con precio_max 4500000.
 - Un mensaje de una sola propiedad con foto y ficha es oferta aunque no diga "vendo".
 - Devolvé exactamente un objeto por mensaje de entrada, con su id textual.
@@ -213,6 +222,12 @@ Ejemplos resueltos. Son mensajes inventados con la forma real de los grupos (nom
 
 8. "Solo en Sabaneta ✅ 3 alcobas ✅ Sin ascensor máximo segundo piso ✅ hasta 450 millones"
    → demanda · venta · zonas ["Sabaneta"] · habitaciones 3 · precio_max 450000000 · piso_max 2. Sin ascensor, el tope de piso es una exigencia, no un gusto.
+
+9. "Busco para cliente en Belén, 3 habitaciones, del piso 6 hacia arriba, hasta 520 millones"
+   → demanda · venta · zonas ["Belén"] · habitaciones 3 · precio_max 520000000 · piso_min 6 · piso_max 0. Es una banda abierta hacia arriba, no el piso 6 exacto.
+
+10. "Apartamento en Laureles, piso 2 al 11, obligatorio con ascensor, 2 alcobas"
+   → demanda · venta · zonas ["Laureles"] · habitaciones 2 · piso_min 2 · piso_max 11. El rango llena los dos campos; un piso 9 sirve.
 
 7. "Busco local comercial en Itagüí o La Estrella, arriendo hasta 6 millones, mínimo 120 metros"
    → demanda · arriendo · local · zonas ["Itagüí","La Estrella"] · precio_max 6000000 · area_min 120.

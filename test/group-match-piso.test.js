@@ -89,3 +89,28 @@ test("el caso 10012722: pide maximo segundo piso y el del 19 se queda afuera", (
   });
   assert.strictEqual(evaluarCandidata(real, { ...pedido, piso_max: 2 }, "diamond"), null);
 });
+
+// UNA BANDA NO ES UN PISO EXACTO (Juan, 2026-09-18): "si dice un piso menos a
+// 10, que no deje de mostrar un piso nueve porque cree que tiene que ser piso
+// 10". El daño de esta regla es el contrario al de la zona: pasarse de
+// estricto borra propiedades que el colega SI acepta.
+test("pide 'menos del piso 10' y el apartamento esta en el 9 -> sirve", () => {
+  const m = evaluarCandidata(apto({ descripcion: "Piso 9 con vista" }), { ...pedido, piso_max: 10 }, "diamond");
+  assert.ok(m, "el 9 esta por debajo del techo de 10: tiene que pasar");
+});
+
+test("pide 'del piso 6 hacia arriba' y el apartamento esta en el 14 -> sirve", () => {
+  const m = evaluarCandidata(apto({ descripcion: "Piso 14" }), { ...pedido, piso_min: 6 }, "diamond");
+  assert.ok(m);
+});
+
+test("pide un rango 'piso 2 al 11' -> entra el 9 y se cae el 15", () => {
+  const rango = { ...pedido, piso_min: 2, piso_max: 11 };
+  assert.ok(evaluarCandidata(apto({ descripcion: "Piso 9" }), rango, "diamond"), "el 9 esta dentro");
+  assert.strictEqual(evaluarCandidata(apto({ descripcion: "Piso 15" }), rango, "diamond"), null, "el 15 esta fuera");
+});
+
+test("el techo incluye el numero que dijo el colega: pide hasta 3 y el 3 sirve", () => {
+  const m = evaluarCandidata(apto({ descripcion: "Piso 3" }), { ...pedido, piso_max: 3 }, "diamond");
+  assert.ok(m, "'hasta el 3' incluye al 3");
+});

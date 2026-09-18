@@ -37,3 +37,34 @@ test("el prompt le enseña las tres formas reales de pedir piso", () => {
   assert.match(PROMPT_SISTEMA, /ascensor/i, "'sin ascensor maximo segundo' es un techo de piso");
   assert.match(PROMPT_SISTEMA, /piso alto/i, "'piso alto' es un piso minimo");
 });
+
+// EL PISO CASI NUNCA ES UN NUMERO EXACTO (medido sobre las 227 menciones de
+// "piso" en los pedidos del 1-ago al 18-sep): 140 son un techo, 62 un piso
+// minimo y 3 un rango. Juan, 2026-09-18: "cuando mencionan mas de o menos de
+// tal piso (...) que no se haga literal, que si dice un piso menos a 10 no
+// deje de mostrar un piso nueve porque cree que tiene que ser piso 10".
+//
+// El riesgo es la regla contraria a la de la zona: aca el daño es pasarse de
+// estricto y borrar propiedades que el colega SI aceptaria.
+test("el prompt enseña que 'menos de' y 'hasta' son un techo, no un piso exacto", () => {
+  const { SISTEMA } = require("../src/groups/classify");
+  assert.match(SISTEMA, /menos de/i, "'menos del piso 10' es piso_max 10, no piso exacto");
+  assert.match(SISTEMA, /en adelante|hacia arriba|para arriba/i, "'piso 5 en adelante' es piso_min 5");
+});
+
+test("el prompt enseña los rangos: 'piso 2 al 11', 'del 4 al 8', 'piso 1 o 2'", () => {
+  const { SISTEMA } = require("../src/groups/classify");
+  assert.match(SISTEMA, /\bal\b.{0,40}piso|piso.{0,40}\bal\b/i, "un rango llena los DOS campos");
+});
+
+test("el prompt enseña que 'ojalá piso 1' es un deseo y no una exigencia", () => {
+  const { SISTEMA } = require("../src/groups/classify");
+  assert.match(SISTEMA, /ojal[aá]/i);
+});
+
+test("el prompt distingue las PLANTAS de una casa del nivel de un edificio", () => {
+  // "Máximo 2 pisos" en un pedido de casa son plantas. Leerlo como techo de
+  // piso deja el pedido sin una sola propiedad.
+  const { SISTEMA } = require("../src/groups/classify");
+  assert.match(SISTEMA, /plantas?/i);
+});
