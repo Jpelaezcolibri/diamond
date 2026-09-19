@@ -21,6 +21,17 @@ const formato = require("../lib/formato");
 // un boton de contacto por WhatsApp con `?shared=whatsapp` en la URL — asi el
 // colega llega a un asesor sin que el mensaje de Sofi tenga que llevar ningun
 // link propio de Diamond.
+// El dominio publico donde se sirve la ficha de Wasi. Se lee en cada llamada
+// y no al cargar el modulo: el dia que info.diamondinmobiliaria.com este
+// activo, esto cambia con una variable en Railway y sin redesplegar.
+const HOST_WASI_PUBLICO = () => process.env.WASI_PUBLIC_HOST || "info.wasi.co";
+
+// LA FORMA DE UN LINK DE WASI: dos segmentos y el ultimo todos digitos
+// (/apartamento-alquiler-envigado-medellin/10416693). La ficha de nuestra
+// landing es /propiedades/<titulo>-<ref>, cuyo ultimo segmento NO es solo
+// digitos, asi que no calza aca y no se toca.
+const RUTA_DE_WASI = /^\/[^/]+\/\d{4,}$/;
+
 function enlazarWasiPublico(link) {
   if (!link) return link;
   let url;
@@ -29,9 +40,17 @@ function enlazarWasiPublico(link) {
   } catch {
     return link;
   }
+  // WASI TAMBIEN SIRVE EN EL DOMINIO DE LA CUENTA (2026-09-18). Hasta hoy se
+  // miraba solo el dominio, y un link de Wasi generado con NUESTRO dominio
+  // -- https://diamondinmobiliaria.com/apartamento-alquiler-envigado-medellin/10416693 --
+  // salia tal cual: ese dominio lo sirve nuestra landing en Vercel, que no
+  // tiene esa ruta, asi que el colega recibia un 404 y verificar-link.js
+  // descartaba la ref con `link_no_abre`, en silencio. Eran 2 de 105 fichas
+  // disponibles, y crecia con cada ficha nueva que creara Wasi.
   const esDominioWasi = url.hostname === "info.wasi.co" || url.hostname.endsWith(".inmo.co");
-  if (!esDominioWasi) return link;
-  url.hostname = "info.wasi.co";
+  const esRutaDeWasi = RUTA_DE_WASI.test(url.pathname);
+  if (!esDominioWasi && !esRutaDeWasi) return link;
+  url.hostname = HOST_WASI_PUBLICO();
   url.searchParams.set("shared", "whatsapp");
   return url.toString();
 }
