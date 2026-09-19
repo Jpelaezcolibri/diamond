@@ -30,7 +30,7 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
 
 ## 2. Estado actual (2026-09-18)
 
-- **El motor se volvió literal (2026-09-18, en `main`, SIN desplegar).**
+- **El motor se volvió literal (desplegado 2026-09-19, commit `4659f27`).**
   - **La regla de Juan:** "que no envíe nada que no esté dentro de la misma
     zona, municipio, área, presupuesto etc, lo que es números dale un pequeño
     margen pero lo que es zonas, pisos, parqueaderos, etc hazlo literal".
@@ -46,11 +46,34 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
   - **El piso se lee del TEXTO de la ficha, no del campo de Wasi:** ese campo
     está vacío en 8 de 8 fichas revisadas y en la 10012722 dice "Piso: 1"
     cuando el apartamento está en el 19.
-  - **Pendiente al desplegar:** correr la migración; volver a medir
-    `cache_read` del clasificador (el prompt creció); y cargar en Wasi lo que
-    falta — 91 de 121 fichas tienen algo por corregir, con la lista en
-    `Claude outputs/wasi-fichas-por-corregir.xlsx`.
+  - **Efecto medido antes de desplegar:** de las 717 fichas que salieron a
+    colegas entre el 18-ago y el 18-sep, con las reglas nuevas saldría la
+    mitad. 110 de las que se caen vuelven apenas Wasi tenga el parqueadero y
+    el piso cargados; las 169 de zona vecina no vuelven, que es el objetivo.
+  - **Pendiente:** correr `db/migrations/2026-09-18_piso.sql` (el bot funciona
+    sin ella, pero el CRM no ve el piso del pedido); cargar en Wasi lo que
+    falta — 91 de 121 fichas, lista en `Claude outputs/wasi-fichas-por-corregir.xlsx`.
+    El cache del clasificador ya se remidió: 6.024 tokens leídos, 99%.
   - Spec: `docs/superpowers/specs/2026-09-18-match-literal-design.md`.
+
+- **Los links de Wasi, arreglados por los dos lados (desplegado 2026-09-19).**
+  - Wasi arma sus links con el dominio configurado en la cuenta, que era
+    `diamondinmobiliaria.com` — y ese dominio sirve la landing, no el sitio de
+    Wasi. Todo lo compartido desde su panel caía en el 404 propio.
+  - **En el bot:** `enlazarWasiPublico` reconoce un link de Wasi por la FORMA
+    de la ruta (`/slug/10416693`), no por el dominio. Las 2 fichas así
+    (10416693, 9013897) se descartaban con `link_no_abre` y no le podían salir
+    a ningún colega. El destino es `WASI_PUBLIC_HOST` (default `info.wasi.co`).
+  - **En la landing:** `web/app/[slug]/[ref]/page.tsx` redirige 308 a la ficha
+    canónica, para rescatar los links que ya circulan por WhatsApp y que no se
+    pueden corregir.
+  - **DNS ya hecho:** `info.diamondinmobiliaria.com` → A `54.88.200.57` (Wasi),
+    en la cuenta de Vercel **`adminiia` / equipo `adminia`**, donde viven el
+    dominio, `ref-web` (la landing) y `project-x0n55` (el CRM). Falta que Wasi
+    asocie el subdominio y emita el SSL; hasta entonces presenta el
+    certificado `*.inmo.co` y no abre por https.
+  - **Pendiente de negocio:** 8 fichas muestran "Agente Paraiso" con un
+    teléfono ajeno (301 235 5926) y ya salieron 47 veces a colegas.
 
 - **A la asesora solo le llegan visitas (2026-09-17).**
   - **La regla de Juan:** nada de seguimientos ni alertas. El radar solo le
