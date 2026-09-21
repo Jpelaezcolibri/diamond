@@ -104,8 +104,12 @@ function decidir({
   // tipo de dato no verificable que este radar existe para no ofrecer. Se
   // frena SIEMPRE, no solo cuando el puntaje es bajo — un match del 100% en
   // zona sigue sin decir nada sobre el edificio.
-  if (senal.edificio) return no("edificio_especifico");
-  traza.push("sin_edificio_especifico");
+  //
+  // LA EXCEPCION (Juan, 2026-09-21): si la FICHA nombra la unidad pedida, el
+  // dato ya no es inverificable. Se levanta el freno solo si TODAS las que van
+  // a salir la tienen confirmada (match.js#edificio_confirmado).
+  if (senal.edificio && !unidadConfirmada(publicables)) return no("edificio_especifico");
+  traza.push(senal.edificio ? "edificio_confirmado_en_ficha" : "sin_edificio_especifico");
 
   // SIN restriccion de horario (Juan, 2026-08-20): el radar responde 24/7. Un
   // pedido a las 3 a.m. es un cliente real esperando igual que uno a mediodia,
@@ -233,6 +237,9 @@ function decidirDm({
   cuotaLinea = null,
   soloLlamada = false,
   edificio = null,
+  // Las refs que van a salir, ya filtradas por publicable.js. Solo se usan
+  // para la excepcion del edificio confirmado en la ficha.
+  publicables = [],
   limites = LIMITES_DM_DEFAULT,
 } = {}) {
   const traza = [];
@@ -255,7 +262,8 @@ function decidirDm({
   // texto. Mismo freno aca: el pedido va a la asesora, que si sabe si alguna
   // propiedad queda en ese edificio. "Unidad cerrada" sin nombre no llega
   // aca: el clasificador solo llena `edificio` con un nombre propio.
-  if (edificio) return no("edificio_especifico");
+  // Misma excepcion que `decidir`: la ficha nombra la unidad (2026-09-21).
+  if (edificio && !unidadConfirmada(publicables)) return no("edificio_especifico");
 
   // EL DESTINO: TELEFONO, Y SI NO, EL LID (Juan, 2026-09-04). Literal: "todo
   // lo que se pueda resolver con el lids lo hacemos por ahi (...) y si
@@ -329,6 +337,12 @@ function decidirDm({
   if (cuotaLinea) traza.push(`cuota_wa:${cuotaLinea.usados}/${cuotaLinea.total}`);
 
   return { enviarDm: true, motivo: "ok", via, traza };
+}
+
+// ¿Todas las que van a salir tienen la unidad pedida confirmada en su ficha?
+// Sin publicables, no: no hay nada que confirme el edificio.
+function unidadConfirmada(publicables) {
+  return Array.isArray(publicables) && publicables.length > 0 && publicables.every((m) => m && m.edificio_confirmado === true);
 }
 
 module.exports = { decidir, LIMITES_DEFAULT, MODOS, decidirDm, LIMITES_DM_DEFAULT };

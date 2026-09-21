@@ -148,6 +148,9 @@ function esPublicable(match, { umbral = UMBRAL_DEFAULT, syncFresco = true, refsB
   // ascensor" es exactamente el mismo error que la zona vecina: no es una
   // preferencia, es un requisito que el cliente no puede negociar.
   if (match.piso_sin_confirmar) motivos.push("piso_sin_confirmar");
+  // Pidio una unidad con nombre y la ficha no la nombra (2026-09-21). Mismo
+  // hueco no verificable que el piso: no descarta, pero no sale sola.
+  if (match.edificio_sin_confirmar) motivos.push("edificio_sin_confirmar");
 
   // PLAZO NO SOPORTADO (2026-09-07). Nuestro inventario esta cotizado por mes.
   // "$4.500.000 por 15 dias" calza perfecto contra un amoblado mensual del
@@ -243,6 +246,7 @@ const MOTIVOS_LEGIBLES = {
   amoblado_sin_confirmar: "el colega pidió amoblado y no tenemos confirmado que ésta lo esté: Wasi sólo lo dice en el título y esta ficha no lo trae",
   garajes_sin_dato: "el colega pidió parqueadero y esta ficha no tiene el dato cargado en Wasi: confirmalo vos antes de ofrecerla",
   piso_sin_confirmar: "el colega pidió un piso concreto y esta ficha no dice en cuál está: si lo sabés, se lo podés ofrecer vos",
+  edificio_sin_confirmar: "el colega pidió una unidad o edificio con nombre y esta ficha no lo nombra: si sabés que queda ahí, se la podés ofrecer vos",
   periodo_no_soportado: "el pedido es por días o semanas y nuestro inventario está cotizado por mes",
   puntaje_bajo: "el puntaje quedó por debajo del umbral para salir sola",
   sin_ref: "no tiene referencia",
@@ -324,6 +328,7 @@ const MOTIVOS_SOLO_PUBLICACION = new Set([
   "amoblado_sin_confirmar",
   "garajes_sin_dato",
   "piso_sin_confirmar",
+  "edificio_sin_confirmar",
   "sin_area",
   "sin_zona",
   "sin_titulo",
@@ -388,6 +393,7 @@ const ACLARACIONES_COLEGA = {
   amoblado_sin_confirmar: "no tengo confirmado que esté amoblada",
   garajes_sin_dato: "no tengo registrado el parqueadero: confirmame si lo necesitás",
   piso_sin_confirmar: "no tengo registrado en qué piso está: te lo confirmo si te sirve",
+  edificio_sin_confirmar: "no tengo confirmado que esté en la unidad que pediste",
   sin_area: "no tengo el área registrada",
   sin_zona: "no tengo la zona registrada",
   sin_titulo: "el nombre puede estar incompleto en mi sistema",

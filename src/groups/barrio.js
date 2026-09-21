@@ -33,7 +33,7 @@ function normalizar(s) {
     .replace(/&(n)tilde;/gi, "$1")
     .replace(/&[a-z]+;|&#\d+;/gi, " ")
     .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/\p{M}/gu, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
@@ -68,8 +68,17 @@ function aparece(texto, patron) {
 // Aguas" -> camino, aguas; "Barrio Mesa" -> mesa). Mismo criterio que el resto
 // del motor.
 function claves(nombre) {
-  return zonas.distinctiveTokens(zonas.zonaTokens(nombre)).map(normalizar).filter(Boolean);
+  const ks = zonas.distinctiveTokens(zonas.zonaTokens(nombre)).map(normalizar).filter(Boolean);
+  // Una descripcion no es un nombre: "Unidad Completa" confirmaba 9 fichas del
+  // inventario y "Conjunto Cerrado" 1 (medido 2026-09-21). El prompt del
+  // clasificador ya prohibe mandarlas como unidad; esto es por si lo hace.
+  return ks.every((k) => DESCRIPTIVAS.has(k)) ? [] : ks;
 }
+
+const DESCRIPTIVAS = new Set([
+  "unidad", "conjunto", "edificio", "torre", "residencial", "completa", "completo", "cerrada", "cerrado",
+  "nueva", "nuevo", "moderna", "moderno", "tranquila", "tranquilo", "club", "privada", "privado",
+]);
 
 function patronDe(ks) {
   // Una sola palabra: tiene que presentarla un INTRO. Varias: en orden, con

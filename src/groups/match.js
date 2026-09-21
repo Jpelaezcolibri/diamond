@@ -16,6 +16,7 @@ const allyProperties = require("../data/ally-properties");
 const zonasLib = require("../lib/zonas");
 const { esAmoblada } = require("./amoblado");
 const { pisoDe } = require("./piso");
+const barrio = require("./barrio");
 
 // Los dos modulos usan claves distintas para lo mismo: properties espera
 // precio_max / habitaciones_min y ally-properties espera precioMax. Sin
@@ -540,6 +541,13 @@ function evaluarCandidata(p, c, fuente) {
     // Pidio piso y la ficha no lo dice. No descarta -- el apartamento esta en
     // algun piso y nadie lo escribio -- pero no puede salir solo.
     piso_sin_confirmar: pisoAplica && pisoPropiedad === null,
+    // UNIDAD PEDIDA (Juan, 2026-09-21). Desde el 21-ago un pedido con unidad
+    // o edificio con nombre nunca salia solo ("en wasi no las tenemos marcadas
+    // por edificio por seguridad"). Si la ficha nombra la unidad, se confirma
+    // y politica.js levanta ese freno; si no, no sale sola. null = el pedido
+    // no nombro unidad. Se lee con el mismo lector del barrio (./barrio.js).
+    edificio_confirmado: c.edificio ? barrio.nombra(p, c.edificio) : null,
+    edificio_sin_confirmar: Boolean(c.edificio) && !barrio.nombra(p, c.edificio),
     // El plazo es del PEDIDO, no de la propiedad — viaja en el match por la
     // misma razon que el de arriba: es el unico camino hasta publicable.js.
     periodo_no_soportado: String(c.periodo || "").trim().toLowerCase() === "corta",
