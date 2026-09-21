@@ -34,7 +34,25 @@ const zonas = require("../lib/zonas");
 // compatibilidad con lo ya guardado y con el export.
 function zonasPedidas(c) {
   const lista = Array.isArray(c.zonas) && c.zonas.length ? c.zonas : [c.zona];
-  return lista.map((z) => String(z || "").trim()).filter(Boolean);
+  const limpias = lista.map((z) => String(z || "").trim()).filter(Boolean);
+  // EL MUNICIPIO QUE CONTIENE NO ES UNA ALTERNATIVA (Juan, 2026-09-21, caso
+  // Camino de las Aguas). El clasificador lo manda aparte, en `zona_madre`;
+  // si igual lo repite aca, se saca: dejarlo convierte "Envigado · Sector:
+  // Camino de las Aguas" en "Envigado O Camino de las Aguas", y cualquier
+  // propiedad del municipio calza exacta. Si el pedido no nombra nada mas que
+  // el municipio, se conserva: entonces si es lo pedido.
+  const madre = new Set(tokensMadre(c));
+  if (!madre.size) return limpias;
+  const esMadre = (z) => {
+    const t = zonas.distinctiveTokens(zonas.zonaTokens(z));
+    return t.length > 0 && t.every((x) => madre.has(x));
+  };
+  const sectores = limpias.filter((z) => !esMadre(z));
+  return sectores.length ? sectores : limpias;
+}
+
+function tokensMadre(c) {
+  return zonas.distinctiveTokens(zonas.zonaTokens(String(c.zona_madre || "").trim()));
 }
 
 function zonaCoincide(p, c) {
@@ -102,6 +120,11 @@ function zonaGeneral(p, c) {
   const ubic = String(p.zona || "").trim() || String(p.ciudad || "").trim();
   const tokensPropiedad = zonas.zonaTokens(ubic);
   if (!tokensPropiedad.length) return false;
+  // El contenedor que el colega nombro ("Envigado" para "Sector: Camino de
+  // las Aguas"). Sirve aunque el sector no este en SUBZONA_DE: el pedido
+  // mismo dice que el sector queda adentro.
+  const dela = new Set(tokensPropiedad);
+  if (tokensMadre(c).some((t) => dela.has(t))) return true;
   for (const z of zonasPedidas(c)) {
     const tokensPedido = zonas.distinctiveTokens(zonas.zonaTokens(z));
     if (zonas.zonaGeneralCoincide(tokensPedido, tokensPropiedad)) return true;

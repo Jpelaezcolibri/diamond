@@ -69,7 +69,17 @@ const ESQUEMA = {
         type: "array",
         items: { type: "string" },
         description:
-          "TODAS las zonas o barrios que menciona el pedido. 'POBLADO/ENVIGADO' son DOS: ['El Poblado','Envigado']. Lista vacia si no nombra ninguna. Nunca metas la ciudad aca.",
+          "TODAS las zonas o barrios que el pedido acepta, como alternativas. 'POBLADO/ENVIGADO' son DOS: ['El Poblado','Envigado']. Lista vacia si no nombra ninguna. Nunca metas la ciudad aca, ni el municipio que CONTIENE a los sectores pedidos: ese va en zona_madre.",
+      },
+      // EL SECTOR RESTRINGE, EL MUNICIPIO CONTIENE (Juan, 2026-09-21). Antes
+      // los dos iban juntos en `zonas`, y el motor lee esa lista como
+      // alternativas: "Envigado · Sector: Camino de las Aguas" quedaba
+      // "Envigado O Camino de las Aguas", y cualquier propiedad del municipio
+      // calzaba exacta. Ver test/zona-sector-municipio.test.js.
+      zona_madre: {
+        type: "string",
+        description:
+          "Municipio o zona grande que CONTIENE a los sectores de `zonas` cuando el pedido la nombra como contenedor ('PROPIEDAD EN ENVIGADO · Sector: Camino de las Aguas' -> 'Envigado'). Vacio si no nombra contenedor o si las zonas son alternativas ('POBLADO/ENVIGADO').",
       },
       zona: { type: "string", description: "Barrio o sector. Vacio si no se menciona" },
           zonas_excluidas: {
@@ -147,7 +157,7 @@ const ESQUEMA = {
           },
         },
         required: [
-          "id", "clase", "confianza", "operacion", "tipo", "zonas", "zona", "zonas_excluidas", "ciudad",
+          "id", "clase", "confianza", "operacion", "tipo", "zonas", "zona_madre", "zona", "zonas_excluidas", "ciudad",
           "precio_min", "precio_max", "habitaciones", "area_min", "banos",
           "garajes", "estrato", "contacto", "notas", "flexible_habitaciones", "edificio",
           "amoblado", "periodo", "piso_max", "piso_min",
@@ -174,7 +184,10 @@ Reglas de extracción:
 - Los precios van SIEMPRE en pesos colombianos, como entero, sin puntos. Convertí las formas coloquiales: "400 millones" y "400 palos" → 400000000; "1.200.000" → 1200000; "2.3 millones" → 2300000. Si el mensaje da un tope ("hasta 400 millones") es precio_max. Si da un piso ("desde 300") es precio_min. Si da un precio único de venta o arriendo, es precio_max.
 - Un precio sin unidad ("máximo 1.200", "hasta 850", "ppto 1300") se lee por lo que es plausible en el Valle de Aburrá: en VENTA una vivienda vale cientos o miles de millones, así que "máximo 1.200" → 1200000000 y "hasta 850" → 850000000; en ARRIENDO el canon mensual va de ~1 a ~20 millones, así que "hasta 4.500" → 4500000. Una venta nunca queda en 1.200.000 pesos.
 - No inventes datos. Si el mensaje no lo dice, dejá el string vacío o el 0. Esto es especialmente importante en \`zona\`: una demanda sin zona NO se puede cruzar contra el inventario, y es mejor dejarla vacía que poner una zona aproximada — una zona inventada manda al asesor a ofrecer algo del barrio equivocado.
-- \`zonas\` es la LISTA de barrios o sectores que nombra el pedido. Un colega pide en varias a la vez y hay que capturarlas TODAS: "POBLADO/ENVIGADO" → ["El Poblado","Envigado"]; "Laureles o Estadio" → ["Laureles","Estadio"]; "Sabaneta" → ["Sabaneta"]. Lista vacía si no nombra ninguna. Si nombra el barrio Y el municipio ("Camino Verde de Envigado", "ENVIGADO - Loma de los Mesa"), van los dos: ["Camino Verde","Envigado"].
+- \`zonas\` es la LISTA de barrios o sectores que nombra el pedido. Un colega pide en varias a la vez y hay que capturarlas TODAS: "POBLADO/ENVIGADO" → ["El Poblado","Envigado"]; "Laureles o Estadio" → ["Laureles","Estadio"]; "Sabaneta" → ["Sabaneta"]. Lista vacía si no nombra ninguna.
+- \`zona_madre\`: cuando el pedido nombra un municipio o zona grande Y adentro un sector, barrio o unidad ("PROPIEDAD EN ENVIGADO · Sector: Camino de las Aguas", "Camino Verde de Envigado", "ENVIGADO - Loma de los Mesa"), el sector RESTRINGE y el municipio solo lo CONTIENE: el sector va en \`zonas\` y el municipio en \`zona_madre\` → zonas ["Camino de las Aguas"] · zona_madre "Envigado". NUNCA pongas el municipio contenedor también en \`zonas\`: ahí se lee como alternativa, y quien pidió Camino de las Aguas terminaría recibiendo cualquier cosa de Envigado. Si son alternativas ("POBLADO/ENVIGADO", "Envigado o Sabaneta") no hay contenedor: todas van en \`zonas\` y \`zona_madre\` queda vacía. Si solo nombra el municipio ("apto en Envigado"), va en \`zonas\` y \`zona_madre\` vacía.
+  · ANTE LA DUDA, ALTERNATIVA: \`zona_madre\` vacía y todo en \`zonas\`. Equivocarse para este lado solo agrega opciones; equivocarse para el otro borra el municipio que el colega sí aceptaba. El municipio es contenedor SOLO con una marca explícita de que el sector es lo único que sirve: "Sector: X", "solo X", "únicamente X", "X de Envigado", "X (Envigado)", "Envigado (solo X)", "Envigado; X". Todo lo que AMPLÍA o expresa gusto NO es contenedor: "incluyendo X", "sirve X", "también X", "le gusta X", "preferiblemente X", "ojalá X", "hasta X", "Envigado y X", "Envigado o X", "Envigado parte baja o X" → todo en \`zonas\`, \`zona_madre\` vacía. Ejemplos: "Envigado, incluyendo Alto del Escobero" → ["Envigado","Alto del Escobero"]; "La Estrella (sirve Tablaza)" → ["La Estrella","Tablaza"]; "Envigado parte baja o sector San Lucas" → ["Envigado","San Lucas"].
+  · Si nombra DOS o más municipios o zonas grandes, cada uno con sus sectores ("POBLADO (Tesoro, Balsos) · ENVIGADO (Chocho, Cumbres)"), son alternativas: van todos en \`zonas\`, municipios y sectores, y \`zona_madre\` vacía.
 - \`zona\` es la primera de esa lista, o vacío. Se conserva por compatibilidad; lo que importa es \`zonas\`.
 - \`zonas_excluidas\`: BUG real (2026-08-20) — un pedido que decía "❌No Loma del Indio" se guardaba sin ese dato, y el motor podía ofrecer justo lo que el cliente rechazó. Capturá TODA zona que el mensaje excluya explícitamente ("No X", "❌ X", "menos X", "excepto X", "X no"). Una zona nunca va en \`zonas\` y en \`zonas_excluidas\` a la vez.
 - Si el mensaje sólo nombra el municipio ("Medellín"), eso va en \`ciudad\`, no en \`zonas\`. Pero ojo: Envigado, Sabaneta, Itagüí y La Estrella son municipios que en estos grupos se usan como zona — van en \`zonas\`.
@@ -247,7 +260,10 @@ Ejemplos resueltos. Son mensajes inventados con la forma real de los grupos (nom
 12. "Se cambia apartamento en Robledo por casa lote en Girardota o Barbosa, cliente con papeles al día"
    → demanda · permuta · zonas ["Girardota","Barbosa"]. Lo que se cruza contra el inventario es lo que busca a cambio; el apartamento que entrega va en notas.
 
-13. Ruido aunque nombre algo del oficio: "Mil gracias, ya lo contacto" · "Listo, le paso tu número a mi cliente" · "Alguien me recomienda un abogado para una sucesión?" · "Ok" · "Ahí te mandé" · un nombre suelto como respuesta. No hay propiedad ofrecida ni requerimiento concreto: clase ruido, con los campos vacíos o en 0.`;
+13. "🔵 ¡BUSCAMOS *PROPIEDAD EN ENVIGADO!* 📍 Sector: UNIDAD CAMINO DE LAS AGUAS 🏠 Apartamento 📐 Desde 75 m² 🛏️ 3 habitaciones 💻 Espacio para estudio 💰 Presupuesto: hasta $470 millones"
+   → demanda · venta · apartamento · zonas ["Camino de las Aguas"] · zona_madre "Envigado" · precio_max 470000000 · habitaciones 3 · area_min 75 · flexible_habitaciones true. Envigado contiene al sector, no es otra opción: una propiedad en Barrio Mesa, que también es Envigado, NO es lo pedido.
+
+14. Ruido aunque nombre algo del oficio: "Mil gracias, ya lo contacto" · "Listo, le paso tu número a mi cliente" · "Alguien me recomienda un abogado para una sucesión?" · "Ok" · "Ahí te mandé" · un nombre suelto como respuesta. No hay propiedad ofrecida ni requerimiento concreto: clase ruido, con los campos vacíos o en 0.`;
 
 // Caracteres por token del prefijo (system + esquema), medido con
 // count_tokens el 2026-09-14: 2,45 sin los ejemplos; la prosa de los ejemplos
@@ -298,7 +314,10 @@ async function clasificarLote(lote, { reintentos = REINTENTOS, onReintento = () 
 async function pedirLote(lote) {
   const res = await getClient().messages.create({
     model: MODELO,
-    max_tokens: 4000,
+    // Un lote de 20 (import de exports) ya devolvia ~3.700 tokens medido el
+    // 2026-09-21, y zona_madre suma unos 10 por mensaje: con 4.000 el JSON
+    // salia cortado y el lote entero se perdia. Solo se cobra lo generado.
+    max_tokens: 8000,
     // Cacheado (nota 4 arriba). Lo que cambia es el lote, que va en messages
     // y no toca el prefijo.
     system: [{ type: "text", text: SISTEMA, cache_control: CACHE_ESTABLE }],

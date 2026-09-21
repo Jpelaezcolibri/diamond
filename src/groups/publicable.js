@@ -104,9 +104,19 @@ function esPublicable(match, { umbral = UMBRAL_DEFAULT, syncFresco = true, refsB
   // al lado" y "queda en cualquier otra parte"— y la asesora decide distinto
   // con cada uno. VECINDAD en src/lib/zonas.js no se toca: es lo que hace que
   // el prefiltro SQL traiga las subzonas al motor.
+  //
+  // Y ZONA_GENERAL TAMPOCO (Juan, 2026-09-21). Un colega pidio "Envigado ·
+  // Sector: Camino de las Aguas" y recibio la 10077063, de Barrio Mesa: su
+  // respuesta fue "ajusta el Bot, para que el Match tenga un % mayor de
+  // acertividad". `zona_general` es justo eso: la propiedad esta en el
+  // municipio, pero no sabemos si en el sector que el colega pidio. Decision
+  // de Juan: "literal, no sale sola". Motivo propio por la misma razon que la
+  // vecina: "no se si es el sector" y "es otra zona" se deciden distinto.
   if (match.ubicacion === "vecina") {
     motivos.push("zona_vecina");
-  } else if (match.ubicacion && !["exacta", "zona_general"].includes(match.ubicacion)) {
+  } else if (match.ubicacion === "zona_general") {
+    motivos.push("sector_sin_confirmar");
+  } else if (match.ubicacion && match.ubicacion !== "exacta") {
     motivos.push("zona_no_publicable");
   }
 
@@ -229,6 +239,7 @@ const MOTIVOS_LEGIBLES = {
   no_es_inventario_propio: "es de la red de aliados, no es nuestra: no se ofrece en el gremio",
   zona_no_publicable: "la zona no calza con lo que pidió el colega — mirá si igual le sirve",
   zona_vecina: "queda en la zona de al lado, no en la que pidió el colega: no sale sola, decidí vos si se la mostrás",
+  sector_sin_confirmar: "está en el municipio que pidió el colega, pero no tenemos confirmado que esté en el sector o barrio que nombró: no sale sola, decidí vos si se la mostrás",
   amoblado_sin_confirmar: "el colega pidió amoblado y no tenemos confirmado que ésta lo esté: Wasi sólo lo dice en el título y esta ficha no lo trae",
   garajes_sin_dato: "el colega pidió parqueadero y esta ficha no tiene el dato cargado en Wasi: confirmalo vos antes de ofrecerla",
   piso_sin_confirmar: "el colega pidió un piso concreto y esta ficha no dice en cuál está: si lo sabés, se lo podés ofrecer vos",
@@ -306,6 +317,7 @@ function explicarMotivosSeguro(motivos) {
 const MOTIVOS_SOLO_PUBLICACION = new Set([
   "zona_no_publicable",
   "zona_vecina",
+  "sector_sin_confirmar",
   "puntaje_bajo",
   "sync_viejo",
   "periodo_no_soportado",
@@ -367,6 +379,9 @@ const ACLARACIONES_COLEGA = {
   // Misma razon que zona_no_publicable: redactar.js#desvios ya calcula la
   // aclaracion contra el pedido real ("queda en Itagüí, no en Envigado").
   zona_vecina: null,
+  // Misma razon: redactar.js#desvios ya dice "queda en Envigado; el barrio
+  // exacto no lo tengo registrado" para el grado zona_general.
+  sector_sin_confirmar: null,
   puntaje_bajo: "no pude verificar todo lo que pediste — confirmame lo que te falte",
   sync_viejo: "confirmame disponibilidad antes de mostrarla",
   periodo_no_soportado: "está cotizada por mes, no por días ni semanas",

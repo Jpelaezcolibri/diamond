@@ -35,6 +35,10 @@ function filtrosInventario(c) {
   const zonas = zonasPedidas(c);
   if (zonas.length) {
     const tokens = zonas.flatMap((z) => properties.distinctiveTokens(properties.zonaTokens(z)));
+    // El municipio que contiene al sector pedido (Juan, 2026-09-21): no es una
+    // alternativa, pero sus propiedades tienen que llegar al motor para salir
+    // graduadas `zona_general` en /grupos en vez de desaparecer.
+    tokens.push(...properties.distinctiveTokens(properties.zonaTokens(String(c.zona_madre || ""))));
     // Y ademas la zona general de cada barrio pedido ("Barrio Mesa" ->
     // "envigado") y los barrios de cada zona general pedida ("Envigado" ->
     // "antillas", "mesa"...): sin esto, las propiedades registradas solo con

@@ -55,9 +55,14 @@ test("la zona exacta sigue saliendo", () => {
   assert.strictEqual(v.ok, true, `motivos: ${v.motivos.join(",")}`);
 });
 
-test("zona_general sigue saliendo: el barrio pedido esta dentro del municipio que si tenemos", () => {
+// Hasta el 2026-09-21 zona_general salia sola. Ese dia un pedido de "Envigado ·
+// Sector: Camino de las Aguas" recibio una propiedad de Barrio Mesa, y Juan lo
+// cerro con la misma regla literal: no sale sola. Ver
+// test/zona-sector-municipio.test.js.
+test("zona_general NO sale sola: el sector pedido no esta confirmado", () => {
   const v = publicable.esPublicable(matchBueno({ ubicacion: "zona_general" }));
-  assert.strictEqual(v.ok, true, `motivos: ${v.motivos.join(",")}`);
+  assert.strictEqual(v.ok, false);
+  assert.ok(v.motivos.includes("sector_sin_confirmar"), `motivos: ${v.motivos.join(",")}`);
 });
 
 test("el caso real: la 10012722 de Itagui no le sale a un pedido de Envigado", () => {
