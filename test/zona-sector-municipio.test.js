@@ -35,6 +35,10 @@ const mesa = (extra = {}) => ({
   habitaciones: 3, banos: 2, garaje: 0, estrato: 3, area: "83m2",
   link: "https://diamondinmobiliaria.com/propiedades/x-10077063", ...extra,
 });
+// Una propiedad de Envigado cuya ficha NO dice el barrio: es la que queda
+// "sector sin confirmar". La 10077063 real si lo dice (Barrio Mesa), y desde
+// que el motor lee la ficha (test/barrio-ficha.test.js) se descarta entera.
+const sinBarrio = (extra = {}) => mesa({ ref: "X2", titulo: "VENDO APARTAMENTO EN ENVIGADO", ...extra });
 // Lo que devuelve el clasificador despues del arreglo para el pedido real.
 const caminoDeLasAguas = () => pide({ zona: "Camino de las Aguas", zonas: ["Camino de las Aguas"], zona_madre: "Envigado" });
 
@@ -61,9 +65,13 @@ test("el prompt enseña el caso real: municipio que contiene al sector", () => {
 
 // ── El motor ──────────────────────────────────────────────────────────────
 
-test("EL CASO: la 10077063 ya no es exacta para un pedido de Camino de las Aguas", () => {
-  const m = match.evaluarCandidata(mesa(), caminoDeLasAguas(), "diamond");
-  assert.ok(m, "tiene que quedar visible en /grupos, no desaparecer");
+test("EL CASO: la 10077063 ya no le sale a un pedido de Camino de las Aguas: su ficha dice Barrio Mesa", () => {
+  assert.strictEqual(match.evaluarCandidata(mesa(), caminoDeLasAguas(), "diamond"), null);
+});
+
+test("una propiedad de Envigado cuya ficha no dice el barrio queda sin confirmar, visible en /grupos", () => {
+  const m = match.evaluarCandidata(sinBarrio(), caminoDeLasAguas(), "diamond");
+  assert.ok(m, "no puede desaparecer: la asesora decide");
   assert.strictEqual(m.ubicacion, "zona_general");
 });
 
@@ -75,7 +83,7 @@ test("una propiedad EN Camino de las Aguas sigue siendo exacta", () => {
 
 test("si el modelo igual repite el municipio en zonas, el motor no lo usa como alternativa", () => {
   const c = pide({ zona: "Envigado", zonas: ["Envigado", "Camino de las Aguas"], zona_madre: "Envigado" });
-  const m = match.evaluarCandidata(mesa(), c, "diamond");
+  const m = match.evaluarCandidata(sinBarrio(), c, "diamond");
   assert.ok(m);
   assert.strictEqual(m.ubicacion, "zona_general");
 });
@@ -102,7 +110,7 @@ test("la consulta trae las propiedades del municipio madre, para poder graduarla
 // ── Lo que sale ───────────────────────────────────────────────────────────
 
 test("zona_general no sale sola: motivo sector_sin_confirmar", () => {
-  const m = match.evaluarCandidata(mesa(), caminoDeLasAguas(), "diamond");
+  const m = match.evaluarCandidata(sinBarrio(), caminoDeLasAguas(), "diamond");
   const v = publicable.esPublicable(m, { umbral: 0, syncFresco: true });
   assert.strictEqual(v.ok, false);
   assert.ok(v.motivos.includes("sector_sin_confirmar"), v.motivos.join(","));
@@ -119,8 +127,8 @@ test("sector_sin_confirmar se traduce a algo que una persona pueda accionar", ()
   assert.match(texto, /sector|barrio/i);
 });
 
-test("el caso real completo: la 10077063 no le sale a Emprende con Edwin", () => {
-  const m = match.evaluarCandidata(mesa(), caminoDeLasAguas(), "diamond");
+test("una propiedad sin barrio en la ficha no le sale sola a Emprende con Edwin", () => {
+  const m = match.evaluarCandidata(sinBarrio(), caminoDeLasAguas(), "diamond");
   assert.ok(m, "sin match no se prueba la compuerta: se prueba que desaparecio");
   const { publicables, descartados } = publicable.filtrar([m], { umbral: 0 });
   assert.deepStrictEqual(publicables, []);

@@ -29,8 +29,11 @@ const pide = (extra = {}) => ({
   tipo: "apartamento", operacion: "venta", zona: null, zonas: [], ciudad: null,
   habitaciones: 3, precio_max: 600000000, ...extra,
 });
+// El titulo NO nombra el barrio a proposito: desde el 2026-09-21 el motor lee
+// el barrio del texto de la ficha (test/barrio-ficha.test.js), y estos tests
+// prueban lo que pasa cuando la ficha no lo dice.
 const apto = (extra = {}) => ({
-  ref: "10077063", titulo: "Vendo apartamento Envigado Barrio Mesa", tipo: "Apartamento",
+  ref: "10077063", titulo: "Vendo apartamento en Envigado", tipo: "Apartamento",
   operacion: "Venta", precio: "$550.000.000", zona: "Envigado", ciudad: "Medellín",
   habitaciones: 3, banos: 2, garaje: 1, estrato: 4, area: "90 m²",
   link: "https://diamondinmobiliaria.com/propiedades/x-10077063", ...extra,

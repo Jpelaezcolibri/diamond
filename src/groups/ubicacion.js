@@ -14,6 +14,7 @@
 //
 // match.js sigue re-exportando todo esto, asi que nadie mas se movio.
 const zonas = require("../lib/zonas");
+const barrio = require("./barrio");
 
 // La zona pedida se compara SOLO contra la zona de la propiedad. Mezclar la
 // ciudad convertia "Loma del Chocho" en "todo Envigado": ese cruce cruzado
@@ -212,6 +213,15 @@ function ubicacionCoincide(p, c) {
     return { razon: `${donde} (vecina de lo pedido)`, puntos: -5, grado: "vecina" };
   }
   if (pide && zonaGeneral(p, c)) {
+    // EL BARRIO SE LEE DE LA FICHA (Juan, 2026-09-21): "si dice envigado
+    // barrio mesa solo enviar envigado barrio mesa". Wasi guarda la zona
+    // general y el barrio lo pone en el titulo. Si la ficha nombra el sector
+    // pedido, es lo pedido; si nombra otro barrio del municipio, no lo es; y si
+    // no dice nada, sigue sin confirmar. Ver ./barrio.js.
+    const sectores = zonasPedidas(c);
+    const confirmado = sectores.find((s) => barrio.nombra(p, s));
+    if (confirmado) return { razon: `${donde} (${confirmado}, según la ficha)`, puntos: 20, grado: "exacta" };
+    if (barrio.otrosBarrios(p, sectores).length) return null;
     return { razon: `${donde} (el barrio exacto no está registrado)`, puntos: -5, grado: "zona_general" };
   }
   if (pide) {
