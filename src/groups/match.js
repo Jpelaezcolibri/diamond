@@ -16,6 +16,7 @@ const allyProperties = require("../data/ally-properties");
 const zonasLib = require("../lib/zonas");
 const { esAmoblada } = require("./amoblado");
 const { pisoDe } = require("./piso");
+const { exigeRentada, estaRentada } = require("./rentada");
 const barrio = require("./barrio");
 
 // Los dos modulos usan claves distintas para lo mismo: properties espera
@@ -302,6 +303,17 @@ function evaluarCandidata(p, c, fuente) {
   const pisoAplica = exigePiso && esApartamento(p);
   if (pisoAplica && pisoPropiedad !== null && !pisoCumple(pisoPropiedad, c)) return null;
 
+  // ── Renta activa: literal (Juan, 2026-09-22) ───────────────────────────
+  //
+  // "Cuando no se tenga claridad si esta alquilado o no, callar para no
+  // incomodar a los colegas". Tres estados, igual que el piso: la ficha dice
+  // que esta vacia o para estrenar (descarta), dice que renta (pasa), o no
+  // dice nada (`rentada_sin_confirmar`, que calla publicable.js). Ver
+  // src/groups/rentada.js y por que se lee del texto.
+  const pideRenta = exigeRentada(c);
+  const rentada = pideRenta ? estaRentada(p) : null;
+  if (pideRenta && rentada === false) return null;
+
   const ubicacion = ubicacionCoincide(p, c);
   if (!ubicacion) return null;
 
@@ -487,6 +499,7 @@ function evaluarCandidata(p, c, fuente) {
     razones.push(`piso ${pisoPropiedad}`);
     puntaje += PUNTOS_PISO;
   }
+  if (pideRenta && rentada === true) razones.push("actualmente arrendada");
 
   return {
     fuente,
@@ -541,6 +554,9 @@ function evaluarCandidata(p, c, fuente) {
     // Pidio piso y la ficha no lo dice. No descarta -- el apartamento esta en
     // algun piso y nadie lo escribio -- pero no puede salir solo.
     piso_sin_confirmar: pisoAplica && pisoPropiedad === null,
+    // Pidio que ya este rentando y la ficha no lo dice (2026-09-22). No
+    // descarta, pero no le sale al colega.
+    rentada_sin_confirmar: pideRenta && rentada === null,
     // UNIDAD PEDIDA (Juan, 2026-09-21). Desde el 21-ago un pedido con unidad
     // o edificio con nombre nunca salia solo ("en wasi no las tenemos marcadas
     // por edificio por seguridad"). Si la ficha nombra la unidad, se confirma
