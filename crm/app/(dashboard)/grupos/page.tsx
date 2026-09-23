@@ -24,6 +24,7 @@ import { MensajesPorAsesoraPanel, type MensajesPorAsesora } from "@/components/m
 import DashboardMatches, { type MetricasRadar as Metricas } from "@/components/dashboard-matches";
 import Carril from "@/components/carril";
 import PanelPlegable from "@/components/panel-plegable";
+import { enlazarWasiPublico } from "@/lib/wasi-link";
 
 export const dynamic = "force-dynamic";
 
@@ -408,7 +409,7 @@ export default async function GruposPage() {
   if (refsDm.length > 0) {
     const { data: props } = await supabase.from("properties").select("ref, titulo, link").in("ref", refsDm);
     for (const p of props || []) {
-      propiedadDmPorRef.set(p.ref as string, { ref: p.ref as string, titulo: p.titulo as string | null, link: p.link as string | null });
+      propiedadDmPorRef.set(p.ref as string, { ref: p.ref as string, titulo: p.titulo as string | null, link: enlazarWasiPublico(p.link as string | null) });
     }
   }
 
@@ -442,7 +443,7 @@ export default async function GruposPage() {
     const { data: props } = await supabase
       .from("properties").select("ref, titulo, link").in("ref", refsVentas);
     for (const p of props || []) {
-      propiedadPorRef.set(p.ref as string, { titulo: p.titulo as string | null, link: p.link as string | null });
+      propiedadPorRef.set(p.ref as string, { titulo: p.titulo as string | null, link: enlazarWasiPublico(p.link as string | null) });
     }
   }
   const ventas: PosibleVenta[] = ventasCrudas.map((v) => ({

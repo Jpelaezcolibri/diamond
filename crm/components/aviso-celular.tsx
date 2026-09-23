@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { numeroPedido } from "@/lib/pedido";
+import { enlazarWasiPublico } from "@/lib/wasi-link";
 
 // La pantalla que abre la asesora desde el aviso de WhatsApp (Juan,
 // 2026-09-02, opción D). Reproduce el mockup aprobado: una isla oscura arriba
@@ -236,7 +237,7 @@ export default function AvisoCelular({ datos, token }: { datos: DatosAviso; toke
                     {m.link ? (
                       <>
                         {" · "}
-                        <a className="text-indigo-600" href={m.link} target="_blank" rel="noopener noreferrer">Wasi ↗</a>
+                        <a className="text-indigo-600" href={enlazarWasiPublico(m.link) ?? undefined} target="_blank" rel="noopener noreferrer">Wasi ↗</a>
                       </>
                     ) : null}
                   </div>

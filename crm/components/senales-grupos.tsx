@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { fechaHora } from "@/lib/fecha";
 import { formatearArea, formatearPrecio, pluralAlcobas } from "@/lib/formato";
 import { numeroPedido } from "@/lib/pedido";
+import { enlazarWasiPublico } from "@/lib/wasi-link";
 
 export type Match = {
   fuente: string; // "diamond" (inventario propio) | "aliado" (red de colegas)
@@ -262,7 +263,7 @@ function borrador(s: Signal, matches: Match[]) {
       .filter(Boolean)
       .join(" · ");
     const encabezado = [m.ref ? `Ref ${m.ref}` : null, m.titulo || "Propiedad"].filter(Boolean).join(" · ");
-    return `• ${encabezado}\n  ${ficha}${m.linkWasi ? `\n  ${m.linkWasi}` : ""}`;
+    return `• ${encabezado}\n  ${ficha}${m.linkWasi ? `\n  ${enlazarWasiPublico(m.linkWasi)}` : ""}`;
   });
 
   // A qué pedido le contestamos (Juan, 2026-09-10). Misma regla que
@@ -669,7 +670,7 @@ function Ficha({
                             Mandar al colega a Wasi es regalarle la marca. */}
                         {m.link ? (
                           <a
-                            href={m.link}
+                            href={enlazarWasiPublico(m.link) ?? undefined}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-sm font-medium text-slate-900 hover:underline"

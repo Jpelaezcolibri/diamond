@@ -89,6 +89,17 @@ REGLA DE ORO: ante la duda, preguntale que necesita en vez de suponer. Un asesor
   ];
 }
 
+// "22 de septiembre a las 3:08 p. m." en hora de Colombia. null si no hay fecha
+// valida: el bloque sale sin fecha antes que con una inventada.
+function fechaLegible(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return new Intl.DateTimeFormat("es-CO", {
+    timeZone: "America/Bogota", day: "numeric", month: "long", hour: "numeric", minute: "2-digit", hour12: true,
+  }).format(d);
+}
+
 // Un colega de OTRA inmobiliaria escribiendole a Sofi.
 //
 // Es el tercer rol, y hace falta por lo mismo que el del asesor: el 2026-07-29
@@ -133,7 +144,7 @@ SI TE PIDE QUE NO LE ESCRIBAN, O CONTACTO SOLO POR LLAMADA: usa marcar_colega_so
 
 LO QUE NO SABES: no tenes datos de su cliente y no los necesitas. No preguntes por el mas alla de lo que el ofrezca (zona, tipo, tope de precio) para poder buscar.
 
-SI PREGUNTA POR "LA QUE ME MANDASTE": abajo, en el contexto, tenes el ultimo pedido que este colega publico en un grupo y las referencias que le respondimos. Si dice "la que me mandaste", "el apto que me pasaste", "sigue disponible?" sin decir cual, es una de ESAS: buscalas con buscar_propiedades y contestale con el dato exacto. Solo si no hay ninguna listada abajo, o si menciona algo que claramente no esta ahi, preguntale a cual se refiere.
+SI PREGUNTA POR "LA QUE ME MANDASTE": abajo, en el contexto, tenes el ultimo pedido que este colega publico en un grupo y las referencias que le respondimos. Si dice "la que me mandaste", "el apto que me pasaste", "sigue disponible?" sin decir cual, es una de ESAS: buscalas con buscar_propiedades y contestale con el dato exacto. Esas referencias le llegaron por DM desde la linea del radar, que es otro numero: NO estan en el historial de este chat. Si te saluda o te pregunta por "esas opciones" despues de ese DM, hablale de ESAS, nunca de propiedades mas viejas que aparezcan en el historial. Solo si no hay ninguna listada abajo, o si menciona algo que claramente no esta ahi, preguntale a cual se refiere.
 
 REGLA DE ORO: ante la duda, preguntale que necesita. Un colega que escribe "hola" quiere abrir la conversacion, no recibir un catalogo.`;
 
@@ -145,9 +156,19 @@ REGLA DE ORO: ante la duda, preguntale que necesita. Un colega que escribe "hola
   const refs = (ultimoPedido && Array.isArray(ultimoPedido.respuesta_refs) ? ultimoPedido.respuesta_refs : [])
     .filter(Boolean)
     .join(", ");
+  //
+  // CUANDO se lo mandamos (caso Freddy, 2026-09-22): el radar le mando la
+  // 9953099 y la 10013440 a las 3:08 p. m., el colega le escribio "Hola" a
+  // Sofi a las 3:10 y ella le pregunto por "esas dos opciones" — las del
+  // 7-sep, que estaban en el historial del chat. Tenia las refs nuevas aca,
+  // pero sin fecha no sabia que eran lo mas reciente. El DM sale por la
+  // linea del radar, asi que NO esta en el historial de esta conversacion.
+  const cuandoRespondimos = fechaLegible(ultimoPedido && ultimoPedido.respondida_at);
   const bloquePedido = ultimoPedido
     ? `\n\nLO ULTIMO QUE PIDIO EN UN GRUPO: "${String(ultimoPedido.texto_original || "").replace(/\s+/g, " ").slice(0, 300)}"${
-        refs ? `\nREFERENCIAS QUE LE RESPONDIMOS: ${refs}. Si pregunta por "la que me mandaste" sin decir cual, es una de estas.` : ""
+        refs
+          ? `\nREFERENCIAS QUE LE RESPONDIMOS${cuandoRespondimos ? ` (por DM desde la linea del radar, el ${cuandoRespondimos})` : ""}: ${refs}. Es lo MAS RECIENTE que le mandamos, aunque no aparezca en el historial de este chat. Si pregunta por "la que me mandaste" o "esas opciones" sin decir cuales, son estas, no las que aparezcan antes en el historial.`
+          : ""
       }`
     : "";
 
