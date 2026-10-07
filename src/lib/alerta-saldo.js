@@ -34,12 +34,13 @@ async function enviarPorWhatsapp(texto) {
   const org = await organizations.getDefault();
   let alguno = false;
   for (const to of lista) {
-    let r = await canal.sendWhatsApp(org, to, texto).catch((e) => ({ ok: false, error: e.message }));
-    if (!r || !r.ok) {
-      r = await canal
-        .sendWhatsAppTemplate(org, to, { name: "alerta_tecnica", bodyParams: ["Anthropic sin saldo o con tope de gasto: Sofi y el radar no responden."] })
-        .catch((e) => ({ ok: false, error: e.message }));
-    }
+    // PLANTILLA PRIMERO (2026-10-07, prueba con Juan): el texto libre fuera de
+    // la ventana de 24 h lo acepta Meta con un 200 y falla DESPUES (131047),
+    // asi que un "ok" del texto no garantiza nada. La plantilla llega siempre.
+    let r = await canal
+      .sendWhatsAppTemplate(org, to, { name: "alerta_tecnica", bodyParams: ["Anthropic sin saldo o con tope de gasto: Sofi y el radar no responden."] })
+      .catch((e) => ({ ok: false, error: e.message }));
+    if (!r || !r.ok) r = await canal.sendWhatsApp(org, to, texto).catch((e) => ({ ok: false, error: e.message }));
     if (r && r.ok) alguno = true;
     else console.error(`[alerta-saldo] NO se pudo avisar a ${to}: ${r && r.error}`);
   }
