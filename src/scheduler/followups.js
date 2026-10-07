@@ -23,6 +23,7 @@ const leads = require("../data/leads");
 const conversations = require("../data/conversations");
 const { sendWhatsApp } = require("../channels/whatsapp");
 const { getClient } = require("../lib/anthropic");
+const colegas = require("../data/colegas");
 
 // Backstop en memoria contra dobles envios dentro del mismo proceso (si el
 // update del flag falla, el reinicio del server es el unico reintento posible).
@@ -43,6 +44,19 @@ function inQuietHours(hour, { quietStartHour, quietEndHour }) {
   return hour >= quietStartHour || hour < quietEndHour;
 }
 
+// Al COLEGA se le escribe a las 3 h de silencio (SOFI_COLEGA_SILENCIO_MIN),
+// no a los 60 min del cliente: tiene que consultarlo con su cliente
+// (Juan, 2026-10-07). Para el resto devuelve true: decide el worker como
+// siempre. SOFI_SEGUIMIENTO_COLEGA=false apaga el de colegas.
+function colegaListoParaSeguimiento(lead, last, ahora = new Date()) {
+  if (!lead || lead.source !== "colega") return true;
+  if (process.env.SOFI_SEGUIMIENTO_COLEGA === "false") return false;
+  const silencioMin = Number(process.env.SOFI_COLEGA_SILENCIO_MIN || 180);
+  const t = new Date(last && last.created_at).getTime();
+  if (isNaN(t)) return false;
+  return ahora.getTime() - t >= silencioMin * 60 * 1000;
+}
+
 // org: se interpola el nombre en vez de hardcodear "una inmobiliaria en
 // Medellin" — antes el mensaje de seguimiento de CUALQUIER org se presentaba
 // siempre como si fuera Diamond en Medellin.
@@ -54,6 +68,12 @@ function buildFollowupSystemPrompt(org, lead = null) {
     lead?.idioma === "en"
       ? "\n- IMPORTANTE: este cliente se atiende en INGLÉS — escribe el mensaje completamente en ingles."
       : "";
+  // Colega de otra inmobiliaria (2026-10-07): no es un cliente, tiene un
+  // cliente propio. El retome es de vendedora senior entre pares.
+  const colega =
+    lead?.source === "colega"
+      ? "\n- Es un COLEGA de otra inmobiliaria, no un cliente: preguntale si alguna de las opciones le sirvio a su cliente y ofrecele buscar similares o agendar visita. No le preguntes presupuesto ni forma de pago."
+      : "";
   return `Eres Sofi, asesora digital de ${nombre} (tono paisa suave, calido y profesional; nada de muletillas forzadas).
 El cliente dejo de responder hace unas horas. Escribe UN unico mensaje corto de seguimiento para retomar la conversacion por WhatsApp.
 Reglas:
@@ -61,7 +81,7 @@ Reglas:
 - Retoma el contexto real de la conversacion (propiedad, dato pendiente o siguiente paso que quedo en el aire). No repitas informacion ya dada.
 - Cierra con UNA pregunta concreta y facil de responder.
 - No presiones ni insistas; si el cliente ya habia dicho que no le interesa, limita el mensaje a dejarle la puerta abierta.
-- Responde SOLO con el texto del mensaje, sin comillas ni explicaciones.${idioma}`;
+- Responde SOLO con el texto del mensaje, sin comillas ni explicaciones.${idioma}${colega}`;
 }
 
 async function buildFollowupMessage(conversationId, org, lead = null) {
@@ -120,6 +140,12 @@ async function runOnce() {
         // Solo si Sofi hablo de ultimo (el cliente callo).
         const last = await conversations.lastMessage(conv.id);
         if (!last || last.role !== "assistant") continue;
+        if (!colegaListoParaSeguimiento(lead, last)) continue;
+        // Un colega "solo llamada" no recibe nada por escrito (2026-09-10).
+        if (lead.source === "colega") {
+          const solo = await colegas.esSoloLlamada(org.id, { telefono: lead.phone }).catch(() => null);
+          if (solo !== false) continue;
+        }
 
         const texto = await buildFollowupMessage(conv.id, org, lead);
         if (!texto) continue;
@@ -164,4 +190,4 @@ function start() {
   );
 }
 
-module.exports = { start, runOnce, hourInBogota, inQuietHours, buildFollowupMessage, buildFollowupSystemPrompt };
+module.exports = { start, runOnce, hourInBogota, inQuietHours, buildFollowupMessage, buildFollowupSystemPrompt, colegaListoParaSeguimiento };
