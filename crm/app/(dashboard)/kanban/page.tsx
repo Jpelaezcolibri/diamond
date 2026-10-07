@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { isAdmin } from "@/lib/auth";
 import { getTeamRoster } from "@/lib/team";
 import { fetchSafe } from "@/lib/fetch-safe";
+import { miAsesor, filtroMisLeads } from "@/lib/mi-asesor";
 import type { Lead } from "@/lib/types";
 import KanbanBoard from "@/components/kanban-board";
 import ErrorBanner from "@/components/error-banner";
@@ -14,10 +15,14 @@ export default async function KanbanPage() {
     data: { user },
   } = await supabase.auth.getUser();
   const admin = isAdmin(user);
+  // Solo lo mio (App de asesores F1): un asesor ve sus leads; el admin, todos.
+  const asesor = admin ? null : await miAsesor(supabase, user);
+  let consultaLeads = supabase.from("leads").select("*");
+  if (!admin && user) consultaLeads = consultaLeads.or(filtroMisLeads(user.id, asesor));
 
   type ConvRow = { id: string; lead_id: string; estado: string; last_activity_at: string };
   const [leadsRes, convsRes, roster] = await Promise.all([
-    fetchSafe<Lead>(supabase.from("leads").select("*").order("updated_at", { ascending: false }).limit(500), "kanban:leads"),
+    fetchSafe<Lead>(consultaLeads.order("updated_at", { ascending: false }).limit(500), "kanban:leads"),
     fetchSafe<ConvRow>(supabase.from("conversations").select("id, lead_id, estado, last_activity_at"), "kanban:conversations"),
     getTeamRoster(),
   ]);

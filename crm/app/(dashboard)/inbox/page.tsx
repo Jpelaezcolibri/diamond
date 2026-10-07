@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { isAdmin } from "@/lib/auth";
 import { getTeamRoster } from "@/lib/team";
 import { fetchSafe } from "@/lib/fetch-safe";
+import { miAsesor, filtroMisLeads } from "@/lib/mi-asesor";
 import { type Conversation } from "@/lib/types";
 import InboxList from "@/components/inbox-list";
 import ErrorBanner from "@/components/error-banner";
@@ -14,6 +15,15 @@ export default async function InboxPage() {
     data: { user },
   } = await supabase.auth.getUser();
   const admin = isAdmin(user);
+  // Solo lo mio (App de asesores F1): un asesor ve las conversaciones de SUS
+  // leads (el filtro va sobre la tabla leads del join !inner).
+  const asesor = admin ? null : await miAsesor(supabase, user);
+  let consulta = supabase
+    .from("conversations")
+    .select("*, leads!inner(*)")
+    .eq("estado", "activa")
+    .neq("leads.source", "asesor");
+  if (!admin && user) consulta = consulta.or(filtroMisLeads(user.id, asesor), { referencedTable: "leads" });
 
   const [{ data: conversations, hasError, message }, roster] = await Promise.all([
     fetchSafe<Conversation>(
@@ -21,11 +31,7 @@ export default async function InboxPage() {
       // y el equipo (avisos del radar, reenvíos, recordatorios) viven en
       // /equipo desde el 2026-08-18 — sin este filtro se mezclaban acá con
       // los clientes reales, sin ninguna forma de distinguirlas.
-      supabase
-        .from("conversations")
-        .select("*, leads!inner(*)")
-        .eq("estado", "activa")
-        .neq("leads.source", "asesor")
+      consulta
         .order("last_activity_at", { ascending: false })
         .limit(100),
       "inbox:conversations"

@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { isAdmin } from "@/lib/auth";
 import { getTeamRoster } from "@/lib/team";
 import { fetchSafe } from "@/lib/fetch-safe";
+import { miAsesor, filtroMisLeads } from "@/lib/mi-asesor";
 import { type Lead } from "@/lib/types";
 import LeadsTable from "@/components/leads-table";
 import ErrorBanner from "@/components/error-banner";
@@ -14,12 +15,14 @@ export default async function LeadsPage() {
     data: { user },
   } = await supabase.auth.getUser();
   const admin = isAdmin(user);
+  // Solo lo mio (App de asesores F1): un asesor ve sus leads; el admin, todos.
+  const asesor = admin ? null : await miAsesor(supabase, user);
+  let consulta = supabase.from("leads").select("*");
+  if (!admin && user) consulta = consulta.or(filtroMisLeads(user.id, asesor));
 
   const [{ data: leads, hasError, message }, roster] = await Promise.all([
     fetchSafe<Lead>(
-      supabase
-        .from("leads")
-        .select("*")
+      consulta
         .order("score", { ascending: false })
         .order("updated_at", { ascending: false })
         .limit(200),
