@@ -119,6 +119,9 @@ async function listConCitasPropuestasVencidas(silenceMin) {
     const c = l.cita;
     if (!c || citasData.estadoDe(c) !== "propuesta") return false;
     if (c.recordatorio_confirmacion_enviado) return false;
+    // Las citas de la rotacion (con asesor_id, 2026-10-07) las maneja
+    // src/scheduler/citas-escalera.js, no este recordatorio.
+    if (c.asesor_id) return false;
     const creada = new Date(c.creada_at || 0).getTime();
     return !isNaN(creada) && creada <= corteMs;
   };
@@ -132,4 +135,19 @@ async function listConCitasPropuestasVencidas(silenceMin) {
   return (data || []).filter(filtro);
 }
 
-module.exports = { findOrCreate, findById, update, claimFollowup, claimAppointmentReminder, listConCitasPropuestasVencidas };
+// Citas PROPUESTA de la rotacion (con asesor_id), de todas las orgs, para la
+// escalera horaria (src/scheduler/citas-escalera.js).
+async function listCitasPropuestasEnRotacion() {
+  const citasData = require("./citas");
+  const filtro = (l) => l.cita && l.cita.asesor_id && citasData.estadoDe(l.cita) === "propuesta";
+  if (!supabase) return memory.leads.filter(filtro);
+  const { data, error } = await supabase
+    .from("leads")
+    .select("id, org_id, nombre, phone, source, cita")
+    .not("cita", "is", null)
+    .limit(500);
+  if (error) throw error;
+  return (data || []).filter(filtro);
+}
+
+module.exports = { findOrCreate, findById, update, claimFollowup, claimAppointmentReminder, listConCitasPropuestasVencidas, listCitasPropuestasEnRotacion };
