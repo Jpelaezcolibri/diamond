@@ -5,6 +5,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { ESTADO_COLORS, ESTADO_LABELS, absoluteDateTime, dayLabel, type Conversation, type Message } from "@/lib/types";
 import { hora } from "@/lib/fecha";
+import ChatAtencion from "@/components/chat-atencion";
 
 function DaySeparator({ label }: { label: string }) {
   return (
@@ -206,6 +207,9 @@ export default function ChatView({
           {modo === "bot" ? "🙋 Tomar control" : "🤖 Devolver a Sofi"}
         </button>
       </div>
+
+      {/* Pendiente del chat, visita por confirmar y ventana de 24 h (plan 6) */}
+      <ChatAtencion lead={lead} messages={messages} modo={modo} onTomar={() => modo === "bot" && toggleModo()} />
 
       {/* Mensajes — lienzo estilo WhatsApp */}
       <div className="flex-1 space-y-1 overflow-y-auto bg-[#efeae2] p-4" style={{ backgroundImage: "radial-gradient(circle at 1px 1px, rgba(0,0,0,0.04) 1px, transparent 0)", backgroundSize: "18px 18px" }}>

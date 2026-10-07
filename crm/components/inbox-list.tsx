@@ -80,6 +80,11 @@ export default function InboxList({
                         📢 Ads
                       </span>
                     )}
+                    {c.leads?.atencion_pendiente && (
+                      <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+                        {c.leads.atencion_pendiente === "pide_asesor" ? "🙋 pide asesor" : c.leads.atencion_pendiente === "visita" ? "📅 visita por confirmar" : "🔁 transferido"}
+                      </span>
+                    )}
                     {c.modo === "humano" && (
                       <span className="shrink-0 rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-medium text-purple-700">
                         asesor al mando

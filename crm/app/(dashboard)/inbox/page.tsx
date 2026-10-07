@@ -38,11 +38,22 @@ export default async function InboxPage() {
     ),
     getTeamRoster(),
   ]);
+  // Pendientes primero (plan 6): los chats que esperan a un asesor arriba,
+  // el mas viejo primero; despues el resto por actividad, como siempre.
+  conversations.sort((a, b) => {
+    const pa = a.leads?.atencion_pendiente ? 1 : 0;
+    const pb = b.leads?.atencion_pendiente ? 1 : 0;
+    if (pa !== pb) return pb - pa;
+    if (pa && pb) return String(a.leads?.atencion_desde).localeCompare(String(b.leads?.atencion_desde));
+    return 0;
+  });
+  const pendientes = conversations.filter((c) => c.leads?.atencion_pendiente).length;
   const nuevos = conversations.filter((c) => c.leads?.estado === "nuevo").length;
   const calificados = conversations.filter((c) => c.leads?.estado === "calificado").length;
   const humano = conversations.filter((c) => c.modo === "humano").length;
 
   const stats = [
+    { label: "Esperan a un asesor", value: pendientes, color: "text-amber-600" },
     { label: "Conversaciones activas", value: conversations.length, color: "text-slate-900" },
     { label: "Nuevos", value: nuevos, color: "text-slate-600" },
     { label: "Calificados", value: calificados, color: "text-amber-600" },
@@ -53,7 +64,7 @@ export default async function InboxPage() {
     <div className="mx-auto max-w-3xl p-4 sm:p-6">
       <h1 className="mb-5 text-2xl font-bold text-slate-900">Inbox</h1>
       {hasError && <ErrorBanner message={message} />}
-      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-5">
         {stats.map((s) => (
           <div key={s.label} className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
             <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
