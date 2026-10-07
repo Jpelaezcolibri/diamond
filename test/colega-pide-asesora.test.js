@@ -113,3 +113,14 @@ test("sin asesora configurada, texto honesto y ningun envio", async (t) => {
   assert.match(out, /^NO pude avisarle a nadie/);
   assert.strictEqual(envios.length, 0);
 });
+
+test("el pedido de contacto también deja la notificación asesor_solicitado", async (t) => {
+  mocks(t);
+  const notificar = require("../src/notifications/notificar");
+  const notas = [];
+  t.mock.method(notificar, "notificar", async (n) => { notas.push(n); return { ok: true }; });
+  await executeTool("pedir_contacto_asesora", { motivo: "ver la ref 10012722" }, ctxColega());
+  assert.strictEqual(notas.length, 1);
+  assert.strictEqual(notas[0].tipo, "asesor_solicitado");
+  assert.strictEqual(notas[0].advisor.id, "adv-daiana");
+});

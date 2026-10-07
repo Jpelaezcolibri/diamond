@@ -52,6 +52,7 @@ function describeRunOnce() {
     texto: async (_o, to, t) => { enviados.push({ to, t }); return { ok: true }; },
     plantilla: async (_o, to, opts) => { enviados.push({ to, plantilla: opts.name }); return { ok: true }; },
     org: async () => ({ id: "org-1", name: "Diamond" }),
+    notificar: async (n) => { enviados.push({ nota: n.tipo, a: n.advisor.id }); return { ok: true }; },
   });
 
   beforeEach(() => {
@@ -71,6 +72,7 @@ function describeRunOnce() {
     assert.strictEqual(c.historial[0].hasta, "2026-10-08T15:05:00.000Z");
     assert.ok(enviados.find((e) => e.to === "573000008113" && e.aviso));
     assert.ok(enviados.find((e) => e.to === "573011880668" && /pasó a Asesor 2/.test(e.t)));
+    assert.ok(enviados.find((e) => e.nota === "cita_reasignada" && e.a === "a1"), "el anterior ve la notificación");
   });
 
   test("runOnce corta: se cancela y al colega le sale cita_no_confirmada", async () => {
@@ -80,13 +82,14 @@ function describeRunOnce() {
     assert.strictEqual(c.estado, "cancelada");
     assert.strictEqual(c.motivo, "sin_confirmar");
     assert.ok(enviados.find((e) => e.to === "573125550000" && e.plantilla === "cita_no_confirmada"));
+    assert.ok(enviados.find((e) => e.nota === "cita_cancelada" && e.a === "a1"));
   });
 
   test("runOnce no toca citas confirmadas ni las del flujo viejo (sin asesor_id)", async () => {
     memory.leads.push(lead({ estado: "confirmada" }));
     memory.leads.push({ id: "viejo", org_id: "org-1", phone: "573000000001", cita: { estado: "propuesta", fecha_hora: "2026-10-09T20:00:00Z", creada_at: "2026-10-07T15:00:00Z", advisor_id: "u1" } });
     await escalera.runOnce({ ahora: new Date("2026-10-08T15:05:00Z"), deps: deps() });
-    assert.strictEqual(enviados.length, 0);
+    assert.strictEqual(enviados.length, 0, "ni mensajes ni notificaciones");
   });
 }
 

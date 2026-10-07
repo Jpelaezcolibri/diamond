@@ -17,6 +17,7 @@ function canal(deps) {
     texto: deps.texto || ((...a) => require("../channels/whatsapp").sendWhatsApp(...a)),
     plantilla: deps.plantilla || ((...a) => require("../channels/whatsapp").sendWhatsAppTemplate(...a)),
     soloLlamada: deps.soloLlamada || ((orgId, tel) => colegas.esSoloLlamada(orgId, { telefono: tel })),
+    notificar: deps.notificar || ((...a) => require("../notifications/notificar").notificar(...a)),
   };
 }
 
@@ -56,6 +57,12 @@ async function confirmar({ org, lead, advisor, deps = {} }) {
   const otros = [...new Set((cita.historial || []).map((h) => h.asesor_id))].filter((id) => id && id !== advisor.id);
   for (const id of otros) {
     const a = await advisors.findById(org.id, id).catch(() => null);
+    if (a) {
+      await c.notificar({
+        orgId: org.id, advisor: a, tipo: "cita_confirmada", titulo: `La confirmó ${aliasPublico(advisor, org)}`,
+        cuerpo: `${quien} ${cuando}${refLinea}`, link: "/calendario", leadId: lead.id,
+      }).catch(() => {});
+    }
     if (a && a.phone) {
       await c
         .texto(org, a.phone, `La visita de ${quien} ${cuando}${refLinea} ya la confirmó ${aliasPublico(advisor, org)}. No hace falta que hagas nada.`)

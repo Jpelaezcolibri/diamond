@@ -16,6 +16,7 @@ const deps = () => ({
   texto: async (_o, to, t) => { enviados.push({ to, t }); return { ok: true }; },
   plantilla: async (_o, to, opts) => { enviados.push({ to, plantilla: opts.name }); return { ok: true }; },
   soloLlamada: async () => false,
+  notificar: async (n) => { enviados.push({ nota: n.tipo, a: n.advisor.id }); return { ok: true }; },
 });
 
 beforeEach(() => {
@@ -43,6 +44,7 @@ test("confirmar: queda de quien confirma, el colega recibe el alias y el anterio
   assert.match(alColega.t, /Te recibe Asesor 1\./);
   assert.doesNotMatch(alColega.t, /Daiana|573011880668/);
   assert.ok(enviados.find((e) => e.to === "573000008113" && /ya la confirmó Asesor 1/.test(e.t)), "Claudia se entera");
+  assert.ok(enviados.find((e) => e.nota === "cita_confirmada" && e.a === "a2"), "y lo ve en la campana");
 });
 
 test("botón desde el 8024: se resuelve a Asesor 1 activo, no a Natalia", async () => {

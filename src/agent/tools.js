@@ -1735,6 +1735,13 @@ async function pedirContactoAsesora(input, ctx) {
   }
 
   pedidosContactoRecientes.set(clave, Date.now());
+  // Campana y push de la app de asesores (2026-10-07). Best-effort.
+  await require("../notifications/notificar")
+    .notificar({
+      orgId: ctx.org.id, advisor: asesora, tipo: "asesor_solicitado", titulo: `${nombreColega} pide hablar con un asesor`,
+      cuerpo: input && input.motivo ? String(input.motivo).trim() : null, link: "/inbox", leadId: ctx.lead.id,
+    })
+    .catch(() => {});
   return `Listo: ya le avisé a ${alias} y se va a comunicar con el colega. Decíselo así, con ese nombre (${alias}). NO le des ningún número: el contacto lo inicia ${alias}.`;
 }
 

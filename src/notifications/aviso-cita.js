@@ -13,6 +13,7 @@ async function avisarCitaPorConfirmar({ org, advisor, lead, cita, deps = {} }) {
   // Requires tardios: whatsapp.js y entrega-asesor.js arrastran engine.js.
   const plantilla = deps.plantilla || ((...a) => require("../channels/whatsapp").sendWhatsAppTemplate(...a));
   const respaldo = deps.respaldo || ((...a) => require("../lib/entrega-asesor").entregarConRespaldo(...a));
+  const notificar = deps.notificar || ((...a) => require("./notificar").notificar(...a));
   const tel = String((advisor && advisor.phone) || "").replace(/\D/g, "");
   const quien = `${lead.nombre || `+${lead.phone}`}${lead.source === "colega" ? " (colega)" : ""}`;
   const params = [cita.ref || "sin ref", cuando(cita.fecha_hora), quien, cuando(cita.corte_at)];
@@ -22,6 +23,11 @@ async function avisarCitaPorConfirmar({ org, advisor, lead, cita, deps = {} }) {
     bodyParams: params,
     buttonPayloads: [`cita:${lead.id}:confirmar`, `cita:${lead.id}:otro`],
   }).catch((e) => ({ ok: false, error: e.message }));
+  // Campana y push de la app (2026-10-07), salga o no la plantilla.
+  await notificar({
+    orgId: org && org.id, advisor, tipo: "cita_por_confirmar", titulo: "Nueva visita por confirmar",
+    cuerpo: `Ref ${params[0]} · ${params[1]} · ${params[2]}`, link: "/pendientes", leadId: lead.id,
+  }).catch(() => {});
   if (r && r.ok) return { ok: true, via: "plantilla" };
 
   console.warn(`[aviso-cita] La plantilla no salio a ${advisor && advisor.name}: ${r && r.error}. Va por texto.`);

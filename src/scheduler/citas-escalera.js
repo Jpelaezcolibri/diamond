@@ -46,6 +46,7 @@ function canal(deps) {
     texto: deps.texto || ((...a) => require("../channels/whatsapp").sendWhatsApp(...a)),
     plantilla: deps.plantilla || ((...a) => require("../channels/whatsapp").sendWhatsAppTemplate(...a)),
     org: deps.org || ((id) => organizations.findById(id)),
+    notificar: deps.notificar || ((...a) => require("../notifications/notificar").notificar(...a)),
   };
 }
 
@@ -69,6 +70,12 @@ async function rotar({ org, lead, ciclo, nuevo, ahora, c }) {
   await leads.update(lead.id, { cita });
   lead.cita = cita;
   await c.aviso({ org, advisor: nuevo, lead, cita }).catch((e) => console.warn("[citas-escalera] aviso al nuevo:", e.message));
+  if (anterior) {
+    await c.notificar({
+      orgId: org.id, advisor: anterior, tipo: "cita_reasignada", titulo: `La visita pasó a ${aliasPublico(nuevo, org)}`,
+      cuerpo: `${lead.nombre || `+${lead.phone}`} ${cuandoDe(cita)}`, link: "/calendario", leadId: lead.id,
+    }).catch(() => {});
+  }
   if (anterior && anterior.phone) {
     const quien = lead.nombre || `+${lead.phone}`;
     await c
@@ -90,6 +97,12 @@ async function cortar({ org, lead, ciclo, ahora, c }) {
       bodyParams: [lead.nombre || "", fh ? `${fh.fecha} a las ${fh.hora}` : "acordada", cita.ref || "sin ref"],
     })
     .catch((e) => console.warn("[citas-escalera] aviso de corte al cliente:", e.message));
+  if (actual) {
+    await c.notificar({
+      orgId: org.id, advisor: actual, tipo: "cita_cancelada", titulo: "Visita cancelada por falta de confirmación",
+      cuerpo: `${lead.nombre || `+${lead.phone}`} ${cuandoDe(cita)}`, link: "/calendario", leadId: lead.id,
+    }).catch(() => {});
+  }
   if (actual && actual.phone) {
     const quien = lead.nombre || `+${lead.phone}`;
     await c.texto(org, actual.phone, `Se canceló la visita de ${quien} ${cuandoDe(cita)}: nadie la confirmó a tiempo. Ya le ofrecimos otro horario.`).catch(() => {});

@@ -37,3 +37,14 @@ test("si la plantilla falla, cae al texto con respaldo", async () => {
   });
   assert.deepStrictEqual(r, { ok: true, via: "texto" });
 });
+
+test("también deja la notificación para la campana y el push", async () => {
+  const notas = [];
+  await avisarCitaPorConfirmar({
+    org: ORG, advisor: ADV, lead: LEAD, cita: CITA,
+    deps: { plantilla: async () => ({ ok: true }), respaldo: async () => ({ ok: true }), notificar: async (n) => { notas.push(n); return { ok: true }; } },
+  });
+  assert.strictEqual(notas[0].tipo, "cita_por_confirmar");
+  assert.strictEqual(notas[0].advisor, ADV);
+  assert.strictEqual(notas[0].leadId, "l1");
+});
