@@ -86,7 +86,6 @@ Hacia **adentro** (avisos a la asesora, CRM, Sofi-Comando) no cambia nada.
 | `src/agent/tools.js:850` transferencia | nombre + link `wa.me` al asesor | "Asesor N te va a contactar"; sin link |
 | `src/agent/tools.js:1647-1698` `pedir_contacto_asesora` | nombre + celular | "Asesor N te va a escribir/llamar"; sin celular |
 | `src/agent/prompts.js:183` bloque COORDINA LAS VISITAS | nombre + celular | se elimina; Sofi solo sabe "Asesor N coordina" |
-| `src/scheduler/reminders.js:39` plantilla `recordatorio_cita` | `{{n}}` = nombre | `{{n}}` = alias |
 | `src/groups/redactar.js` firma del DM | "— Sofi, asistente virtual" | igual + "de Diamond" |
 
 Cuando alguien pide hablar con una persona: Sofi le avisa a la asesora dueña
@@ -250,19 +249,27 @@ Ojo: la cuota de WhatsApp no cuenta los envíos por lid (memoria
 `cuota-whatsapp-no-cuadra-con-la-base`); la protección real del +4 h por la
 línea de grupos es `RADAR_DM_TOPE_DIA`. Mirar la línea la primera semana.
 
-## 6. Plantillas a crear en Meta (las crea Juan)
+## 6. Plantillas de Meta
 
-Categoría **utilidad**, idioma `es`.
+**Subidas a revisión el 2026-10-07** en la WABA "Diamond" (`1702397800906189`),
+categoría UTILITY, idioma `es`, pie "Sofi · Diamond Inmobiliaria". Estado al
+subir: PENDING.
 
-1. `cita_por_confirmar` — "Nueva visita por confirmar: {{1}} (ref {{2}}),
-   {{3}}. Pedido de {{4}}. Si no se confirma antes de {{5}} se cancela." +
-   botones *Confirmar* / *Otro horario*.
-2. `seguimiento_colega` — "Hola {{1}}, te escribe Sofi de Diamond por tu
-   pedido de {{2}}. ¿Te sirvió alguna de las opciones? Si querés más o tenés
-   dudas, respondé este mensaje."
-3. `cita_no_confirmada` — "Hola {{1}}, no pudimos confirmar tu visita de
-   {{2}} a la ref {{3}}. ¿Te sirve otro horario? Respondé este mensaje y lo
-   reagendamos."
+1. `cita_por_confirmar` (id `1275860604664515`) — a la asesora.
+   "Nueva visita por confirmar 📅 / Propiedad: ref {{1}} / Fecha y hora: {{2}}
+   / Solicitada por: {{3}} / Si no se confirma antes de {{4}}, la visita se
+   cancela automáticamente." + botones QUICK_REPLY *Confirmar* / *Otro horario*.
+2. `seguimiento_colega` (id `1289669134239903`) — al colega.
+   "Hola {{1}}, te escribe Sofi, asistente virtual de Diamond Inmobiliaria,
+   sobre tu pedido de {{2}}. ¿Alguna de las opciones que te enviamos le sirve a
+   tu cliente? Si necesitás más opciones o tenés alguna duda, respondé este
+   mensaje."
+3. `cita_no_confirmada` (id `1163858416438726`) — al colega/cliente.
+   "Hola {{1}}, no pudimos confirmar tu visita del {{2}} a la propiedad ref
+   {{3}}. ¿Te sirve otro horario? Respondé este mensaje y la reagendamos."
+
+Nota: `recordatorio_cita` (ya aprobada) le llega al **asesor**, no al cliente,
+así que no entra en la regla de identidad pública de §2.
 
 Hasta que estén aprobadas, cada camino cae al envío actual (texto libre /
 `entregarConRespaldo`) y se registra en log.
