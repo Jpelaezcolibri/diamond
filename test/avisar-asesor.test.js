@@ -66,3 +66,12 @@ test("sin asesor no hace nada", async () => {
   assert.deepStrictEqual(await avisarAsesor({ org: ORG, advisor: null, motivo: "pide_asesor", lead: LEAD, titulo: "x" }, d), { ok: false });
   assert.strictEqual(log.notas.length, 0);
 });
+
+test("la transferencia del webhook va por avisarAsesor y no por un texto al celular", () => {
+  const fuente = require("node:fs").readFileSync(require("node:path").join(__dirname, "..", "src", "channels", "whatsapp.js"), "utf8");
+  const i = fuente.indexOf("if (transfer) {");
+  const bloque = fuente.slice(i, i + 1500);
+  assert.match(bloque, /avisarAsesor\(/);
+  assert.match(bloque, /motivo: "transferido"/);
+  assert.doesNotMatch(bloque, /sendWhatsApp\(org, transfer\.advisorPhone, transfer\.advisorAlert/);
+});

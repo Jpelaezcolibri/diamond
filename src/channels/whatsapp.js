@@ -447,7 +447,19 @@ router.post("/webhook", async (req, res) => {
       // telefono, que error) y, para transfer -el caso que Juan reporto-,
       // ademas queda una nota EN LA MISMA conversacion que ya se esta mirando.
       if (transfer) {
-        const r = await sendWhatsApp(org, transfer.advisorPhone, transfer.advisorAlert, { fromPhoneId: phoneNumberId });
+        // TODO AL CHAT DEL CRM (plan 6, 2026-10-07): la transferencia queda en
+        // el chat de este cliente, asignado al asesor; notificacion en la app
+        // con link al chat y aviso corto por WhatsApp sin datos. El asesor toma
+        // la conversacion desde el CRM y escribe por el numero de Sofi.
+        const { avisarAsesor } = require("../notifications/avisar-asesor");
+        const r = await avisarAsesor({
+          org,
+          advisor: transfer.advisor,
+          motivo: "transferido",
+          lead: leadAtendido,
+          titulo: `Sofi te transfirió a ${(leadAtendido && leadAtendido.nombre) || `+${userPhone}`}`,
+          cuerpo: transfer.motivo || null,
+        }).catch((e) => ({ ok: false, error: e.message }));
         if (!r.ok) {
           console.error(`[whatsapp] Aviso de transferencia a ${transfer.advisorName} (${transfer.advisorPhone}) NO se pudo enviar:`, r.error);
           if (transfer.conversationId) {

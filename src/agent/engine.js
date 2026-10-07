@@ -394,6 +394,7 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
     transfer = {
       motivo: ctx.transfer.motivo,
       especialidad: ctx.transfer.especialidad,
+      advisor,
       advisorName: advisor.name,
       advisorPhone: advisor.phone,
       advisorAlert: buildAdvisorAlert(org, lead, ctx.transfer.motivo, ctx.propertyInteres, ctx.transfer.especialidad, ctx.cita, ctx.allyMatch),
