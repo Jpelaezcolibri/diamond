@@ -55,8 +55,8 @@ test("agendar_cita: la cita nace propuesta, nunca confirmada de una", async (t) 
   assert.match(r, /solicitad/i);
 });
 
-test("agendar_cita: a un colega tambien le queda propuesta, y el texto de retorno menciona al coordinador para confirmar directo", async (t) => {
-  t.mock.method(advisors, "findAsesorPrincipalRadar", async () => ({ name: "Daiana Zea", phone: "573011880668" }));
+test("agendar_cita: a un colega tambien le queda propuesta, y el texto de retorno nombra a quien coordina por su alias, sin celular", async (t) => {
+  t.mock.method(advisors, "findAsesorPrincipalRadar", async () => ({ name: "Daiana Zea", phone: "573011880668", alias_publico: "Asesor 1" }));
   t.mock.method(appointments, "checkAvailability", async () => ({ disponible: true }));
   t.mock.method(leads, "update", async (id, fields) => ({ id, ...fields }));
 
@@ -68,8 +68,9 @@ test("agendar_cita: a un colega tambien le queda propuesta, y el texto de retorn
   const r = await executeTool("agendar_cita", { fecha_hora_iso: "2026-09-12T15:00:00-05:00", tipo: "visita", descripcion: "ver la casa" }, ctx);
 
   assert.strictEqual(ctx.cita.estado, "propuesta");
-  assert.match(r, /Daiana Zea/);
-  assert.match(r, /573011880668/);
+  // Identidad publica (2026-10-07): el alias, nunca el nombre real ni el celular.
+  assert.match(r, /Asesor 1 la confirma/);
+  assert.doesNotMatch(r, /Daiana|573011880668/);
 });
 
 test("la cita de un CLIENTE va a quien coordina las visitas, nunca a la rotacion de transferencias", async (t) => {

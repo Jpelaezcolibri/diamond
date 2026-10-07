@@ -7,7 +7,7 @@ const appointments = require("../data/appointments");
 const { computeScore, isQualified } = require("./qualification");
 const propertyOwnerAlerts = require("../data/property-owner-alerts");
 const { buildAllyClientMatchAlert, buildAppointmentAlert, buildColegaAppointmentAlert, buildCaptadorInterestAlert, formatCitaFechaHora } = require("../notifications/advisor");
-const { textoCitaConfirmada, instruccionTransferencia } = require("../lib/identidad-publica");
+const { textoCitaConfirmada, instruccionTransferencia, aliasPublico } = require("../lib/identidad-publica");
 const { LEGAL_TOPICS, LEGAL_DISCLAIMER } = require("./knowledge");
 const crypto = require("node:crypto");
 const groupSignals = require("../data/group-signals");
@@ -780,11 +780,9 @@ async function executeTool(name, input, ctx) {
       ? " El asesor ya fue notificado, pero TODAVIA NO CONFIRMO la cita."
       : " Cuando transfieras al asesor la vera en la alerta.";
     const comoDecirlo = ctx.colega
-      ? `Decile al colega que la visita quedo SOLICITADA${cita.fecha_hora ? ` para ${cita.fecha_hora}` : ""}, que en breve ${
-          coordinador?.name || "la asesora"
-        } lo contacta para confirmarla${
-          coordinador?.phone ? `, y que si quiere confirmarla directo puede escribirle a +${coordinador.phone}` : ""
-        }. Nunca digas "confirmada".`
+      ? `Decile al colega que la visita quedo SOLICITADA${cita.fecha_hora ? ` para ${cita.fecha_hora}` : ""} y que en breve ${
+          aliasPublico(coordinador, ctx.org)
+        } la confirma y le escribe. NO le des ningún número. Nunca digas "confirmada".`
       : `Decile al cliente que la visita quedo SOLICITADA${cita.fecha_hora ? ` para ${cita.fecha_hora}` : ""} y que en breve el asesor la revisa y se pone en contacto. Nunca digas que ya quedo en firme ni que "queda lista": todavia falta que el asesor la revise.`;
     return `Cita registrada: ${cita.descripcion}${cita.fecha_hora ? ` (${cita.fecha_hora})` : ""} — tipo ${cita.tipo}.${notificado} ${comoDecirlo}`;
   }

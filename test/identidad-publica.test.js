@@ -49,3 +49,8 @@ test("tools.js arma la confirmación y la transferencia con identidad-publica", 
   assert.doesNotMatch(fuenteTools, /Te recibe \$\{ctx\.advisor\.name\}/, "el nombre real ya no va al cliente");
   assert.doesNotMatch(fuenteTools, /link EXACTO para que el cliente hable directo con el asesor/);
 });
+
+test("agendar_cita no le pasa a Sofi el celular de quien coordina", () => {
+  assert.doesNotMatch(fuenteTools, /puede escribirle a \+\$\{coordinador\.phone\}/);
+  assert.doesNotMatch(fuenteTools, /coordinador\?\.name \|\| "la asesora"/);
+});
