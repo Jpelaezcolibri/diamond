@@ -198,6 +198,13 @@ siempre cae de día).
   `button` con el payload `cita:<lead_id>:confirmar|otro`.
 - Si la plantilla falla (no aprobada aún), cae a `entregarConRespaldo` como
   hoy.
+- **Respaldo de entrega (Juan, 2026-10-07):** el 8024 ("Daiana Zea (línea
+  2)") es el respaldo de entrega de Asesor 1: si el aviso no llega al 0668,
+  sale por el 8024. Tiene `alias_publico='Asesor 1'` y `recibe_citas=false`
+  (no rota como asesor propio). Rotación: Asesor 1 Daiana, Asesor 2 Claudia
+  Valencia, Asesor 3 Catherine Uribe.
+- Ojo: Natalia Velez (inactiva) tiene el mismo teléfono 8024; toda búsqueda
+  de asesor por teléfono en este flujo debe filtrar `activo=true`.
 - **Respuesta:** el webhook reconoce el payload del botón y llama a la misma
   lógica de `confirmar_cita` (sigue funcionando "OK CONFIRMADA" escrito).
   "Otro horario" → Sofi le pregunta a la asesora qué hora propone y se la
