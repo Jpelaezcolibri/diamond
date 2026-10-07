@@ -178,16 +178,25 @@ cae al comportamiento actual (no rompe producción antes de configurarlo).
 Nuevo worker `src/scheduler/citas-escalera.js` (reemplaza la lógica de
 `citas-recordatorio.js`), cada 5 min, sobre citas `propuesta`:
 
+**Rotación cada hora (Juan, 2026-10-07; reemplaza la escalera 2 h / 6 h):**
+
 | Momento | Acción |
 |---|---|
-| 0 h | Aviso a la dueña (§4.4) |
-| +2 h sin confirmar | Recordatorio a la dueña |
-| +6 h sin confirmar | Reasignar al siguiente asesor de la rotación con hora libre; aviso a él/ella; se reinicia el reloj de +2 h para el nuevo |
+| 0 h | Aviso a Asesor 1 (§4.4) |
+| +1 h sin confirmar | Pasa a Asesor 2 (aviso con plantilla). A Asesor 1: "la visita de {cuándo} ya la tiene Asesor 2" |
+| +2 h sin confirmar | Pasa a Asesor 3. A Asesor 2: "ya la tiene Asesor 3" |
+| +3 h sin confirmar | Vuelve a Asesor 1, y así en ciclo **hasta que alguien confirme** |
 | `corte_at` (faltan 4 h) sin confirmar | `estado=cancelada`, `motivo=sin_confirmar`; Sofi le escribe al colega/cliente: "no pudimos confirmar tu visita de {cuándo}, ¿te sirve otro horario?" |
 
-Horas de silencio 20:00–08:00: los pasos de +2 h y +6 h que caigan ahí salen
-a las 08:00. El corte se ejecuta siempre (por la anticipación de 24 h casi
-siempre cae de día).
+- El ciclo arranca en el asesor que tocó por rotación (§4.2), no siempre en
+  Asesor 1, y salta a quien no tenga esa hora libre.
+- `ESCALERA_PASO_MIN=60`.
+- Cualquiera de los asesores del ciclo puede confirmar en cualquier momento
+  (también uno anterior): la cita queda de quien confirma y a los demás se les
+  avisa que ya está confirmada.
+- Horas de silencio 20:00–08:00: el ciclo se pausa y sigue a las 08:00 con el
+  siguiente asesor. El corte se ejecuta siempre (por la anticipación de 24 h
+  casi siempre cae de día).
 
 ### 4.4 Aviso efectivo
 
@@ -209,8 +218,8 @@ siempre cae de día).
   lógica de `confirmar_cita` (sigue funcionando "OK CONFIRMADA" escrito).
   "Otro horario" → Sofi le pregunta a la asesora qué hora propone y se la
   ofrece al colega.
-- Solo puede confirmar la dueña actual; si confirma una anterior tras la
-  reasignación, se acepta y se avisa a la actual que ya no es suya.
+- Puede confirmar cualquier asesor del ciclo (§4.3); la cita queda de quien
+  confirma y a los demás se les avisa que ya está confirmada.
 - **CRM:** la cita aparece en vivo (Realtime sobre `leads`), con sonido y
   contador hasta `corte_at`.
 
