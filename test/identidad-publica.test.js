@@ -44,7 +44,9 @@ const path = require("node:path");
 const fuenteTools = fs.readFileSync(path.join(__dirname, "..", "src", "agent", "tools.js"), "utf8");
 
 test("tools.js arma la confirmación y la transferencia con identidad-publica", () => {
-  assert.match(fuenteTools, /textoCitaConfirmada\(/);
+  // Desde 2026-10-07 la confirmacion vive en confirmar-cita.js (tool y boton).
+  const fuenteConfirmar = fs.readFileSync(path.join(__dirname, "..", "src", "lib", "confirmar-cita.js"), "utf8");
+  assert.match(fuenteConfirmar, /textoCitaConfirmada\(/);
   assert.match(fuenteTools, /instruccionTransferencia\(/);
   assert.doesNotMatch(fuenteTools, /Te recibe \$\{ctx\.advisor\.name\}/, "el nombre real ya no va al cliente");
   assert.doesNotMatch(fuenteTools, /link EXACTO para que el cliente hable directo con el asesor/);

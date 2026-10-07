@@ -7,7 +7,7 @@ const appointments = require("../data/appointments");
 const { computeScore, isQualified } = require("./qualification");
 const propertyOwnerAlerts = require("../data/property-owner-alerts");
 const { buildAllyClientMatchAlert, buildAppointmentAlert, buildColegaAppointmentAlert, buildCaptadorInterestAlert, formatCitaFechaHora } = require("../notifications/advisor");
-const { textoCitaConfirmada, instruccionTransferencia, aliasPublico } = require("../lib/identidad-publica");
+const { instruccionTransferencia, aliasPublico } = require("../lib/identidad-publica");
 const { LEGAL_TOPICS, LEGAL_DISCLAIMER } = require("./knowledge");
 const crypto = require("node:crypto");
 const groupSignals = require("../data/group-signals");
@@ -916,7 +916,7 @@ async function executeTool(name, input, ctx) {
     }
     let pendientes;
     try {
-      pendientes = await appointments.citasPendientesDeConfirmar(ctx.org.id, ctx.advisor.auth_user_id);
+      pendientes = await appointments.citasPendientesDeConfirmar(ctx.org.id, ctx.advisor);
     } catch (e) {
       console.warn("[tools] No se pudieron leer las citas pendientes de confirmar:", e.message);
       return "No pude leer tus citas pendientes ahorita. Intenta de nuevo en un momento.";
@@ -936,54 +936,17 @@ async function executeTool(name, input, ctx) {
     }
 
     const lead = pendientes[0];
-    const cita = {
-      ...lead.cita,
-      estado: "confirmada",
-      confirmada_at: new Date().toISOString(),
-      confirmada_por: ctx.advisor.name,
-    };
-    try {
-      await leads.update(lead.id, { cita });
-    } catch (e) {
-      console.warn("[tools] No se pudo persistir la confirmacion de la cita:", e.message);
-      return "No pude confirmar la cita en el sistema ahorita, intentá de nuevo.";
-    }
-
-    // AVISO AL CLIENTE/COLEGA, SIEMPRE POR LA LINEA OFICIAL (2026-09-11):
-    // nunca por WAHA -- esta cita puede ser de un cliente final que nunca
-    // estuvo en un grupo. Un colega marcado "solo llamada" no recibe nada:
-    // se le pide al asesor que lo llame. Require tardio del canal (mismo
-    // motivo que src/channels/whatsapp.js#procesarBotonRadar con
-    // ../agent/tools): channels/whatsapp.js -> agent/engine.js -> este
-    // archivo forma un ciclo si se requiere arriba, al tope del modulo.
-    const canalWhatsapp = require("../channels/whatsapp");
-    const esColega = lead.source === "colega";
-    const soloLlamada = esColega
-      ? await colegas.esSoloLlamada(ctx.org.id, { telefono: lead.phone }).catch((e) => {
-          console.warn("[tools] No se pudo verificar si el colega es solo-llamada:", e.message);
-          return null;
-        })
-      : false;
-
-    const fechaHora = formatCitaFechaHora(cita.fecha_hora);
-    const cuando = fechaHora ? `del ${fechaHora.fecha} a las ${fechaHora.hora}` : cita.descripcion || "acordada";
-    const refLinea = cita.ref ? ` a la ref ${cita.ref}` : "";
-    // Hacia el cliente/colega va el alias, nunca el nombre ni el celular (identidad-publica.js).
-    const textoCliente = textoCitaConfirmada({ cuando, ref: cita.ref, advisor: ctx.advisor, org: ctx.org });
-
-    const quien = lead.nombre || `+${lead.phone}`;
-    if (soloLlamada !== false) {
-      return `Confirmada en el sistema la cita con ${quien}${refLinea} para ${cuando} — pidió que lo contacten solo por llamada, así que no le escribí: avisale vos por llamada.`;
-    }
-
-    const envio = await canalWhatsapp.sendWhatsApp(ctx.org, lead.phone, textoCliente).catch((e) => {
-      console.warn("[tools] No se pudo enviar el aviso de confirmacion de cita por WhatsApp:", e.message);
-      return { ok: false, error: e.message };
-    });
-    if (envio && envio.ok) {
-      return `Confirmada la cita con ${quien}${refLinea} para ${cuando}. Ya le avisé por WhatsApp.`;
-    }
-    return `Confirmada en el sistema la cita con ${quien}${refLinea} para ${cuando}, pero no le pude avisar por acá (probablemente la ventana de 24h está cerrada) — avisale vos.`;
+    // Confirmar vive en src/lib/confirmar-cita.js (2026-10-07): lo comparten
+    // esta tool ("OK CONFIRMADA") y el boton Confirmar de la plantilla. Avisa
+    // al cliente/colega con el alias, respeta "solo llamada" y le avisa a los
+    // otros asesores que tuvieron la cita en la rotacion.
+    const r = await require("../lib/confirmar-cita")
+      .confirmar({ org: ctx.org, lead, advisor: ctx.advisor })
+      .catch((e) => {
+        console.warn("[tools] No se pudo confirmar la cita:", e.message);
+        return null;
+      });
+    return r ? r.texto : "No pude confirmar la cita en el sistema ahorita, intentá de nuevo.";
   }
 
   return `Herramienta desconocida: ${name}`;

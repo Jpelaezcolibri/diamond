@@ -175,12 +175,24 @@ async function dueReminders(orgId, { windowMin = 60, nowMs = null } = {}) {
 // (src/agent/tools.js) sepa cuales ofrecerle. Ordenadas por fecha_hora
 // ascendente: la mas proxima primero, que es la que casi siempre quiere decir
 // cuando responde "OK CONFIRMADA" sin mas contexto.
-async function citasPendientesDeConfirmar(orgId, advisorId) {
-  if (!advisorId) return [];
+//
+// `asesor` puede ser el advisor completo (2026-10-07) o, como antes, su
+// auth_user_id. Con el advisor, cuentan las citas que hoy son suyas
+// (cita.asesor_id o el auth de las viejas) y las que tuvo en la rotacion
+// (cita.historial): cualquiera del ciclo puede confirmar.
+function esPendienteDe(cita, asesor) {
+  if (!cita || citasData.estadoDe(cita) !== "propuesta") return false;
+  if (typeof asesor === "string") return cita.advisor_id === asesor;
+  if (cita.asesor_id && cita.asesor_id === asesor.id) return true;
+  if (!cita.asesor_id && asesor.auth_user_id && cita.advisor_id === asesor.auth_user_id) return true;
+  return Array.isArray(cita.historial) && cita.historial.some((h) => h && h.asesor_id === asesor.id);
+}
+
+async function citasPendientesDeConfirmar(orgId, asesor) {
+  if (!asesor || (typeof asesor !== "string" && !asesor.id && !asesor.auth_user_id)) return [];
+  const porFecha = (a, b) => new Date(a.cita.fecha_hora || 0) - new Date(b.cita.fecha_hora || 0);
   if (!supabase) {
-    return memory.leads
-      .filter((l) => l.org_id === orgId && l.cita && l.cita.advisor_id === advisorId && citasData.estadoDe(l.cita) === "propuesta")
-      .sort((a, b) => new Date(a.cita.fecha_hora || 0) - new Date(b.cita.fecha_hora || 0));
+    return memory.leads.filter((l) => l.org_id === orgId && esPendienteDe(l.cita, asesor)).sort(porFecha);
   }
   const { data, error } = await supabase
     .from("leads")
@@ -189,9 +201,7 @@ async function citasPendientesDeConfirmar(orgId, advisorId) {
     .not("cita", "is", null)
     .limit(500);
   if (error) throw error;
-  return (data || [])
-    .filter((l) => l.cita && l.cita.advisor_id === advisorId && citasData.estadoDe(l.cita) === "propuesta")
-    .sort((a, b) => new Date(a.cita.fecha_hora || 0) - new Date(b.cita.fecha_hora || 0));
+  return (data || []).filter((l) => esPendienteDe(l.cita, asesor)).sort(porFecha);
 }
 
 module.exports = {
@@ -205,4 +215,5 @@ module.exports = {
   isReminderDue,
   dueReminders,
   citasPendientesDeConfirmar,
+  citasDeLaOrg,
 };
