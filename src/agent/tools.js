@@ -6,7 +6,8 @@ const propertyContext = require("../data/property-context");
 const appointments = require("../data/appointments");
 const { computeScore, isQualified } = require("./qualification");
 const propertyOwnerAlerts = require("../data/property-owner-alerts");
-const { buildClientLink, buildAllyClientMatchAlert, buildAppointmentAlert, buildColegaAppointmentAlert, buildCaptadorInterestAlert, formatCitaFechaHora } = require("../notifications/advisor");
+const { buildAllyClientMatchAlert, buildAppointmentAlert, buildColegaAppointmentAlert, buildCaptadorInterestAlert, formatCitaFechaHora } = require("../notifications/advisor");
+const { textoCitaConfirmada, instruccionTransferencia } = require("../lib/identidad-publica");
 const { LEGAL_TOPICS, LEGAL_DISCLAIMER } = require("./knowledge");
 const crypto = require("node:crypto");
 const groupSignals = require("../data/group-signals");
@@ -846,8 +847,8 @@ async function executeTool(name, input, ctx) {
         console.warn("[tools] No se pudo persistir intencion (revisar migracion leads.intencion):", e.message);
       }
     }
-    const link = buildClientLink(advisor, ctx.lead, ctx.propertyInteres, ctx.cita);
-    return `Transferencia registrada al asesor de ${especialidad}: ${advisor.name}. Ya fue alertado con el resumen del cliente. En tu respuesta despidete brevemente e incluye este link EXACTO para que el cliente hable directo con el asesor:\n${link}`;
+    // Sin link ni celular del asesor (Juan, 2026-10-07): el asesor contacta al cliente.
+    return instruccionTransferencia({ especialidad, advisor, org: ctx.org });
   }
 
   if (name === "registrar_propiedad_aliado") {
@@ -969,9 +970,8 @@ async function executeTool(name, input, ctx) {
     const fechaHora = formatCitaFechaHora(cita.fecha_hora);
     const cuando = fechaHora ? `del ${fechaHora.fecha} a las ${fechaHora.hora}` : cita.descripcion || "acordada";
     const refLinea = cita.ref ? ` a la ref ${cita.ref}` : "";
-    const textoCliente = `Tu visita ${cuando}${refLinea} quedó CONFIRMADA. Te recibe ${ctx.advisor.name}${
-      ctx.advisor.phone ? `, +${ctx.advisor.phone}` : ""
-    }.`;
+    // Hacia el cliente/colega va el alias, nunca el nombre ni el celular (identidad-publica.js).
+    const textoCliente = textoCitaConfirmada({ cuando, ref: cita.ref, advisor: ctx.advisor, org: ctx.org });
 
     const quien = lead.nombre || `+${lead.phone}`;
     if (soloLlamada !== false) {

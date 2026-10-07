@@ -38,3 +38,14 @@ test("la transferencia no le da link ni celular al cliente: el asesor lo contact
   assert.doesNotMatch(t, /wa\.me/);
   sinFiltrar(t);
 });
+
+const fs = require("node:fs");
+const path = require("node:path");
+const fuenteTools = fs.readFileSync(path.join(__dirname, "..", "src", "agent", "tools.js"), "utf8");
+
+test("tools.js arma la confirmación y la transferencia con identidad-publica", () => {
+  assert.match(fuenteTools, /textoCitaConfirmada\(/);
+  assert.match(fuenteTools, /instruccionTransferencia\(/);
+  assert.doesNotMatch(fuenteTools, /Te recibe \$\{ctx\.advisor\.name\}/, "el nombre real ya no va al cliente");
+  assert.doesNotMatch(fuenteTools, /link EXACTO para que el cliente hable directo con el asesor/);
+});

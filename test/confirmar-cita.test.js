@@ -8,7 +8,7 @@ const colegas = require("../src/data/colegas");
 const canalWhatsapp = require("../src/channels/whatsapp");
 
 const ORG = { id: "org-1", name: "Diamond" };
-const ADVISOR = { name: "Catherine Uribe", phone: "573028536489", auth_user_id: "adv-catherine" };
+const ADVISOR = { name: "Catherine Uribe", phone: "573028536489", auth_user_id: "adv-catherine", alias_publico: "Asesor 3" };
 
 function ctxAsesor() {
   return { org: ORG, advisor: ADVISOR, colega: null, lead: { id: "lead-asesor", phone: ADVISOR.phone } };
@@ -53,7 +53,8 @@ test("confirmar_cita: una sola pendiente, la confirma y avisa al cliente por la 
   assert.strictEqual(updates[0].patch.cita.confirmada_por, "Catherine Uribe");
   assert.strictEqual(envios[0].phone, "573009998888");
   assert.match(envios[0].texto, /confirmada/i);
-  assert.match(envios[0].texto, /Catherine Uribe/);
+  assert.match(envios[0].texto, /Te recibe Asesor 3./);
+  assert.doesNotMatch(envios[0].texto, /Catherine|573028536489/, "al cliente no va el nombre real ni el celular (2026-10-07)");
   assert.match(r, /confirmada/i);
   assert.match(r, /ya le avis/i);
 });
