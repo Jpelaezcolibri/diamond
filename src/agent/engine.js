@@ -272,8 +272,16 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
         })
     : null;
 
+  // Memoria del colega (2026-10-07): sus ultimos pedidos y lo que se le mando.
+  const historial = colega
+    ? await groupSignals.historialColega(org.id, { lid: colega.lid, telefono: phone }).catch((e) => {
+        console.warn("[engine] No se pudo leer el historial del colega:", e.message);
+        return [];
+      })
+    : [];
+
   const system = buildSystemPrompt({
-    org, lead, qualified: isQualified(lead), now: nowInBogota(), advisor, colega, ultimoPedido, coordinador,
+    org, lead, qualified: isQualified(lead), now: nowInBogota(), advisor, colega, ultimoPedido, coordinador, historial,
   });
 
   const extractText = (r) =>

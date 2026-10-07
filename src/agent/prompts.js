@@ -115,7 +115,28 @@ function fechaLegible(iso) {
 //
 // La diferencia con el asesor de la casa: al asesor NUNCA se le ofrecen
 // propiedades sin que las pida; al colega SI — viene justamente a eso.
-function promptColega({ org, colega, now, ultimoPedido = null, coordinador = null }) {
+// LO QUE YA HABLAMOS (Juan, 2026-10-07: "sofi atiende y recuerda"): los
+// ultimos pedidos respondidos del colega y lo que se le mando, mas su cita.
+// Va en el bloque volatil (cambia por colega). Sirve para no repetirle refs y
+// para retomar donde quedo: el DM sale por la linea del radar y no esta en el
+// historial de este chat.
+function bloqueHistorial(historial, lead) {
+  const lineas = (historial || []).map((h) => {
+    const fecha = fechaLegible(h.created_at) || "fecha sin dato";
+    const que = [h.tipo, h.operacion].filter(Boolean).join(" ") || "pedido";
+    const donde = h.zona ? ` en ${h.zona}` : "";
+    const refs = Array.isArray(h.respuesta_refs) && h.respuesta_refs.length ? ` — le mandamos refs ${h.respuesta_refs.join(", ")}` : "";
+    return `- ${fecha}: ${que}${donde}${refs}`;
+  });
+  const c = lead && lead.cita;
+  const cita = c && c.fecha_hora
+    ? `Cita: ${c.estado || "confirmada"} para ${fechaLegible(c.fecha_hora) || c.fecha_hora}${c.ref ? `, ref ${c.ref}` : ""}.`
+    : "";
+  if (!lineas.length && !cita) return "";
+  return `\n\nLO QUE YA HABLAMOS (mas reciente primero):\n${[...lineas, cita].filter(Boolean).join("\n")}`;
+}
+
+function promptColega({ org, colega, now, ultimoPedido = null, coordinador = null, historial = [], lead = null }) {
   const stable = `Eres Sofi, la asistente virtual de ${org.name} en Colombia. Eres mujer y paisa (de Medellin).
 
 CON QUIEN ESTAS HABLANDO: un colega de otra inmobiliaria. NO es un cliente: es un par del gremio, y ya publico o va a publicar pedidos en los grupos donde estamos. Casi siempre escribe porque tiene un CLIENTE PROPIO buscando algo.
@@ -185,7 +206,7 @@ REGLA DE ORO: ante la duda, preguntale que necesita. Un colega que escribe "hola
       ? `\n\nCOORDINA LAS VISITAS: ${coordinador.alias}. Es quien valida la visita y le escribe o lo llama para confirmarla.`
       : "";
 
-  const contexto = `${now ? `FECHA Y HORA ACTUAL EN COLOMBIA: ${now.legible} (referencia ISO: ${now.iso}).\n\n` : ""}COLEGA: ${colega.nombre || "un colega del gremio"}.${bloqueCoordinador}${bloquePedido}`;
+  const contexto = `${now ? `FECHA Y HORA ACTUAL EN COLOMBIA: ${now.legible} (referencia ISO: ${now.iso}).\n\n` : ""}COLEGA: ${colega.nombre || "un colega del gremio"}.${bloqueCoordinador}${bloquePedido}${bloqueHistorial(historial, lead)}`;
 
   return [
     { type: "text", text: stable, cache_control: CACHE_ESTABLE },
@@ -193,11 +214,11 @@ REGLA DE ORO: ante la duda, preguntale que necesita. Un colega que escribe "hola
   ];
 }
 
-function buildSystemPrompt({ org, lead, qualified, now, advisor = null, colega = null, ultimoPedido = null, coordinador = null }) {
+function buildSystemPrompt({ org, lead, qualified, now, advisor = null, colega = null, ultimoPedido = null, coordinador = null, historial = [] }) {
   if (advisor) return promptAsesor({ org, advisor, now });
   // Un asesor propio que ademas esta en un grupo gremial sigue siendo de la
   // casa: por eso este orden y no el contrario.
-  if (colega) return promptColega({ org, colega, now, ultimoPedido, coordinador });
+  if (colega) return promptColega({ org, colega, now, ultimoPedido, coordinador, historial, lead });
 
   const datosLead = [
     lead.nombre && `Nombre: ${lead.nombre}`,

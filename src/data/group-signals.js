@@ -1068,6 +1068,42 @@ async function buscarPorTelefono(orgId, telefono) {
   return data;
 }
 
+// Los ultimos pedidos RESPONDIDOS de un colega, por su lid (guardado con o
+// sin el sufijo @lid segun el camino, ver CLAUDE.md 2026-09-08) o por su
+// telefono. Es la memoria de Sofi con el colega (2026-10-07): el DM sale por
+// la linea del radar y no queda en el historial del chat de la linea oficial.
+async function historialColega(orgId, { lid = null, telefono = null } = {}, n = 5) {
+  const lidDig = String(lid || "").replace(/@.*$/, "").replace(/\D/g, "");
+  const tel = String(telefono || "").replace(/\D/g, "");
+  if (!lidDig && !tel) return [];
+  const esDelColega = (s) =>
+    (lidDig && String(s.respuesta_destino_lid || "").replace(/@.*$/, "") === lidDig) ||
+    (tel && (s.respuesta_destino_telefono === tel || s.autor_telefono === tel));
+  if (!supabase) {
+    return memory.groupSignals
+      .filter((s) => s.org_id === orgId && s.clase === "demanda" && s.respondida_at && esDelColega(s))
+      .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
+      .slice(0, n);
+  }
+  const ors = [];
+  if (lidDig) ors.push(`respuesta_destino_lid.eq.${lidDig}`, `respuesta_destino_lid.eq.${lidDig}@lid`);
+  if (tel) ors.push(`respuesta_destino_telefono.eq.${tel}`, `autor_telefono.eq.${tel}`);
+  const { data, error } = await supabase
+    .from("group_signals")
+    .select("id, created_at, texto_original, zona, tipo, operacion, respuesta_refs, respondida_at")
+    .eq("org_id", orgId)
+    .eq("clase", "demanda")
+    .not("respondida_at", "is", null)
+    .or(ors.join(","))
+    .order("created_at", { ascending: false })
+    .limit(n);
+  if (error) {
+    console.warn("[grupos] No se pudo leer el historial del colega:", error.message);
+    return [];
+  }
+  return data || [];
+}
+
 async function buscarPorLid(orgId, lid) {
   if (!lid) return null;
   if (!supabase) {
@@ -1176,7 +1212,7 @@ module.exports = {
   create, list, setEstado, resumen, marcarEnviada, ultimaFechaImportada,
   pendientesDigest, marcarDigest, revertirDigest,
   marcarRespondida, respuestasDesde, guardarRevalidacion, marcarAvisoEnviado,
-  guardarPolitica, obtenerPorId, calladosPendientes, buscarPorTelefono, buscarPorLid, aprobadasSinAvisar,
+  guardarPolitica, obtenerPorId, calladosPendientes, buscarPorTelefono, buscarPorLid, historialColega, aprobadasSinAvisar,
   pedidosDirectosSinAvisar,
   findByWamid, pendientesDeAviso, candidatosRecordatorio, claimRecordatorio,
   candidatosEscaladoSilencio, claimEscaladoSilencio,
