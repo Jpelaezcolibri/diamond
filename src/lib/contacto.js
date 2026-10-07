@@ -139,9 +139,13 @@ function telefonoEnTexto(texto) {
 // "https://wa.me/message/YOUR_CONTACT_LINK", un placeholder inventado. El
 // link lo arma el codigo, nunca la IA -- sin ningun numero definido (ni org
 // ni env), el aviso sale SIN esta linea, nunca con un link a medias.
-function linkContactoOficial(org = null) {
+// `texto` (2026-10-07): mensaje prellenado (?text=), para los links del DM con
+// el codigo del pedido. Sin texto, el link de siempre.
+function linkContactoOficial(org = null, texto = null) {
   const numero = (org && org.contact_whatsapp_number) || process.env.CONTACT_WHATSAPP_NUMBER;
-  return linkWhatsapp(numero);
+  const link = linkWhatsapp(numero);
+  if (!link || !texto) return link;
+  return `${link}?text=${encodeURIComponent(texto)}`;
 }
 
 // La instruccion real cuando no hay telefono marcable para un colega: tocar

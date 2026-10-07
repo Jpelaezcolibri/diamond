@@ -474,7 +474,7 @@ const MAX_POR_DM = Number(process.env.RADAR_DM_MAX_PROPIEDADES || 3);
 function mensajesAlColega(
   senal,
   publicables,
-  { org = null, sinConfirmar = [], leFalta = [], pedido = null, ahora = new Date(), max = MAX_POR_DM } = {}
+  { org = null, sinConfirmar = [], leFalta = [], pedido = null, ahora = new Date(), max = MAX_POR_DM, codigo = null } = {}
 ) {
   const todas = publicables || [];
   const props = todas.slice(0, Math.max(1, Number(max) || 1));
@@ -491,10 +491,30 @@ function mensajesAlColega(
 
   // Con opciones de mas, la invitacion a Sofi pasa a ser el camino para
   // verlas: un solo renglon con el link, no dos invitaciones seguidas.
+  //
+  // Con codigo (spec 2026-10-07 §3), el cierre trae dos links a Sofi con texto
+  // prellenado: agendar visita y mas opciones/dudas. Van SOLO en este primer
+  // mensaje: las fichas se reenvian tal cual al cliente final, y un link con
+  // el codigo del colega en una ficha le abriria al cliente la puerta a Sofi
+  // saltandose al colega. Sin codigo, el cierre de siempre.
   const linkSofi = linkContactoOficial(org);
   const cuantasMas = restantes === 1 ? "1 opción más" : `${restantes} opciones más`;
-  const cierre =
-    restantes > 0
+  const linkAgendar = codigo ? linkContactoOficial(org, `Hola Sofi, quiero agendar una visita para mi PEDIDO (cód. ${codigo})`) : null;
+  const linkMas = codigo ? linkContactoOficial(org, `Hola Sofi, quiero más opciones para mi PEDIDO (cód. ${codigo})`) : null;
+  const cierre = linkAgendar && linkMas
+    ? [
+        "Comision compartida.",
+        "— Sofi, asistente virtual",
+        "",
+        "📅 ¿Agendamos una visita? Escribile a Sofi:",
+        linkAgendar,
+        "",
+        restantes > 0
+          ? `🔎 Tengo ${cuantasMas} para este pedido; ${restantes === 1 ? "pedísela" : "pedíselas"} a Sofi:`
+          : "🔎 ¿Más opciones o alguna duda?",
+        linkMas,
+      ]
+    : restantes > 0
       ? [
           "Comision compartida.",
           "— Sofi, asistente virtual",

@@ -222,3 +222,40 @@ test("una administracion en texto va con dos puntos y en minuscula; un monto va 
   assert.match(redactar.ficha(PROP("B", { administracion: "$470.000" }), 1), /administración \$470\.000/);
   assert.doesNotMatch(redactar.ficha(PROP("C", { administracion: "" }), 1), /administración/);
 });
+
+// Puente a Sofi (spec 2026-10-07 §3): los links con el codigo van SOLO en el
+// primer mensaje; las fichas se reenvian al cliente final.
+const conNumeroOficial = (fn) => {
+  const antes = process.env.CONTACT_WHATSAPP_NUMBER;
+  process.env.CONTACT_WHATSAPP_NUMBER = "573009998877";
+  try {
+    fn();
+  } finally {
+    if (antes === undefined) delete process.env.CONTACT_WHATSAPP_NUMBER;
+    else process.env.CONTACT_WHATSAPP_NUMBER = antes;
+  }
+};
+
+test("con código, el primer mensaje trae los dos links a Sofi y las fichas NO", () => {
+  conNumeroOficial(() => {
+    const r = redactar.mensajesAlColega({ autor_nombre: "Laura" }, [PROP("A"), PROP("B")], { codigo: "D7K2" });
+    const primero = r.mensajes[0].texto;
+    assert.match(primero, /📅 ¿Agendamos una visita\? Escribile a Sofi:\nhttps:\/\/wa\.me\/573009998877\?text=[^\n]*agendar[^\n]*D7K2/);
+    assert.match(primero, /🔎 ¿Más opciones o alguna duda\?\nhttps:\/\/wa\.me\/573009998877\?text=[^\n]*m%C3%A1s%20opciones[^\n]*D7K2/);
+    assert.match(primero, /— Sofi, asistente virtual/);
+    for (const f of r.mensajes.slice(1)) assert.doesNotMatch(f.texto, /D7K2|wa\.me\/573009998877/, "las fichas se reenvían al cliente: sin código");
+  });
+});
+
+test("con código y opciones de más, el link de más opciones lo dice", () => {
+  conNumeroOficial(() => {
+    const r = redactar.mensajesAlColega({ autor_nombre: "Ana" }, [PROP("A"), PROP("B"), PROP("C"), PROP("D")], { codigo: "D7K2", max: 3 });
+    assert.match(r.mensajes[0].texto, /🔎 Tengo 1 opción más para este pedido; pedísela a Sofi:\nhttps:\/\/wa\.me\/\S+D7K2/);
+  });
+});
+
+test("sin código, el DM sale exactamente como antes", () => {
+  const conCodigoNulo = redactar.mensajesAlColega({ autor_nombre: "Ana" }, [PROP("A")], { codigo: null });
+  const sinOpcion = redactar.mensajesAlColega({ autor_nombre: "Ana" }, [PROP("A")], {});
+  assert.deepStrictEqual(conCodigoNulo, sinOpcion);
+});

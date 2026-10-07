@@ -135,3 +135,17 @@ test("tocarNombreEnGrupo nombra a la persona y da la accion real (tocar el nombr
   assert.match(texto, /tocá el nombre/i);
   assert.doesNotMatch(texto.normalize("NFD").replace(/[̀-ͯ]/g, ""), /responde\w*\s+en el grupo/i);
 });
+
+test("linkContactoOficial con texto prellenado lo codifica en ?text=", () => {
+  const antes = process.env.CONTACT_WHATSAPP_NUMBER;
+  process.env.CONTACT_WHATSAPP_NUMBER = "573009998877";
+  try {
+    assert.strictEqual(
+      linkContactoOficial(null, "Hola Sofi (cód. D7K2)"),
+      "https://wa.me/573009998877?text=Hola%20Sofi%20(c%C3%B3d.%20D7K2)"
+    );
+  } finally {
+    if (antes === undefined) delete process.env.CONTACT_WHATSAPP_NUMBER;
+    else process.env.CONTACT_WHATSAPP_NUMBER = antes;
+  }
+});
