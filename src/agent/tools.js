@@ -1639,12 +1639,15 @@ async function pedirContactoAsesora(input, ctx) {
     return "NO pude avisarle a nadie: no hay una asesora configurada para los colegas. NO le digas que ya le avisaste; decile que el equipo le escribe apenas pueda.";
   }
   const nombreAsesora = asesora.name || "la asesora";
-  const celularAsesora = celularLegible(asesora.phone);
+  // Hacia el colega va el alias y nunca el celular (Juan, 2026-10-07): el
+  // contacto lo inicia la asesora. El nombre real queda solo para el log.
+  const { aliasPublico } = require("../lib/identidad-publica");
+  const alias = aliasPublico(asesora, ctx.org);
 
   const clave = `${ctx.org.id}:${ctx.lead.id}`;
   const antes = pedidosContactoRecientes.get(clave);
   if (antes && Date.now() - antes < VENTANA_REPETIDO_CONTACTO_MS) {
-    return `Ya le avisé a ${nombreAsesora} hace un rato; no hace falta otro aviso. Decile al colega que ya tiene el aviso y repetile el contacto: ${nombreAsesora}, ${celularAsesora}.`;
+    return `Ya le avisé a ${alias} hace un rato; no hace falta otro aviso. Decile al colega que ya tiene el aviso y que ${alias} le va a escribir o llamar. NO le des ningún número.`;
   }
 
   const telColega = String(ctx.lead.phone || "").replace(/\D/g, "");
@@ -1691,11 +1694,11 @@ async function pedirContactoAsesora(input, ctx) {
 
   if (!principal || !principal.ok) {
     console.warn(`[tools] No le llego a ${nombreAsesora} el pedido de contacto del colega:`, principal && principal.error);
-    return `NO le llegó el aviso a ${nombreAsesora} (WhatsApp lo rechazó). NO le digas al colega que ya le avisaste: pasale directamente el contacto, ${nombreAsesora}, ${celularAsesora}, para que se comunique directo.`;
+    return `NO le llegó el aviso a ${alias} (WhatsApp lo rechazó). NO le digas al colega que ya le avisaste ni le des ningún número: decile que quedó registrado y que el equipo le va a escribir apenas pueda.`;
   }
 
   pedidosContactoRecientes.set(clave, Date.now());
-  return `Listo: ya le avisé a ${nombreAsesora} y se va a comunicar con el colega. Decíselo con su nombre y su celular: ${nombreAsesora}, ${celularAsesora}.`;
+  return `Listo: ya le avisé a ${alias} y se va a comunicar con el colega. Decíselo así, con ese nombre (${alias}). NO le des ningún número: el contacto lo inicia ${alias}.`;
 }
 
 function _resetPedidosContacto() {

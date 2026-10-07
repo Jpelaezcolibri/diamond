@@ -14,7 +14,7 @@ const advisors = require("../src/data/advisors");
 const groupSignals = require("../src/data/group-signals");
 const mensajeAsesor = require("../src/lib/mensaje-asesor");
 
-const DAIANA = { id: "adv-daiana", name: "Daiana Zea", phone: "573011880668" };
+const DAIANA = { id: "adv-daiana", name: "Daiana Zea", phone: "573011880668", alias_publico: "Asesor 1" };
 const ctxColega = (extra = {}) => ({
   org: { id: "org-1", name: "Diamond" },
   lead: { id: "lead-santiago", phone: "573125802350", nombre: null },
@@ -65,8 +65,9 @@ test("un colega pide hablar con alguien: aviso inmediato a la asesora con copia 
   assert.match(aviso, /Busco apto en Laureles/);
   assert.match(aviso, /Ref 9921137, Ref 10129664/);
   assert.doesNotMatch(aviso, /contactalo|llamalo|llamala/i, "copy neutro");
-  assert.match(out, /^Listo: ya le avisé a Daiana Zea/);
-  assert.match(out, /\+57 301 188 0668/);
+  assert.match(out, /^Listo: ya le avisé a Asesor 1/);
+  assert.doesNotMatch(out, /Daiana|301 188 0668|573011880668/, "Sofi no recibe nombre real ni celular");
+  assert.match(out, /NO le des ningún número/);
 });
 
 test("si lo vuelve a pedir en 30 minutos no sale un segundo aviso", async (t) => {
@@ -74,7 +75,8 @@ test("si lo vuelve a pedir en 30 minutos no sale un segundo aviso", async (t) =>
   await executeTool("pedir_contacto_asesora", {}, ctxColega());
   const out = await executeTool("pedir_contacto_asesora", {}, ctxColega());
   assert.strictEqual(envios.length, 2, "solo los dos envios del primer pedido (asesora + copia)");
-  assert.match(out, /^Ya le avisé a Daiana Zea hace un rato/);
+  assert.match(out, /^Ya le avisé a Asesor 1 hace un rato/);
+  assert.doesNotMatch(out, /301 188 0668/);
 });
 
 test("un colega 'solo llamada': el aviso trae el numero para marcar, no un link para escribirle", async (t) => {
@@ -88,7 +90,9 @@ test("un colega 'solo llamada': el aviso trae el numero para marcar, no un link 
 test("si el aviso no llega, Sofi NO puede decir que aviso, y el pedido no queda marcado como repetido", async (t) => {
   mocks(t, { enviarOk: false });
   const out = await executeTool("pedir_contacto_asesora", {}, ctxColega());
-  assert.match(out, /^NO le llegó el aviso a Daiana Zea/);
+  assert.match(out, /^NO le llegó el aviso a Asesor 1/);
+  assert.doesNotMatch(out, /301 188 0668|573011880668/, "ni siquiera cuando falla se le da el celular");
+  assert.match(out, /el equipo le va a escribir/);
   assert.match(out, /NO le digas al colega que ya le avisaste/);
   assert.doesNotMatch(out, /^Listo/);
 
