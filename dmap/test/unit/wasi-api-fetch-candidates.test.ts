@@ -79,6 +79,28 @@ describe("fetchCandidates: una propiedad rota no tumba el inventario", () => {
     expect(candidatos.filter((c) => c.gone).map((c) => c.propertyId)).toEqual(["uuid-9"]);
   });
 
+  // 2026-10-07: Wasi arma los links con el dominio de la cuenta
+  // (diamondinmobiliaria.com). La 9013897 salio de Wasi y quedo "disponible"
+  // porque el link no era info.wasi.co ni .inmo.co.
+  it("un link de Wasi con el dominio propio (/slug/<ref>) SI se marca retirado", async () => {
+    listPropertiesByOrg.mockResolvedValue([
+      { id: "uuid-7", ref: "9013897", disponible: true, link: "https://diamondinmobiliaria.com/lote-terreno-venta-belen-medellin/9013897" }
+    ] as never);
+    moquearWasi([[sana(1)], []]);
+    const candidatos = await new WasiApiSource().fetchCandidates(ORG);
+    expect(candidatos.filter((c) => c.gone).map((c) => c.propertyId)).toEqual(["uuid-7"]);
+  });
+
+  it("una propiedad cargada a mano (link que no es de Wasi) NO se marca retirada", async () => {
+    listPropertiesByOrg.mockResolvedValue([
+      { id: "uuid-8", ref: "MANUAL-1", disponible: true, link: "https://diamondinmobiliaria.com/propiedades/apartamento-laureles" },
+      { id: "uuid-6", ref: "MANUAL-2", disponible: true, link: null }
+    ] as never);
+    moquearWasi([[sana(1)], []]);
+    const candidatos = await new WasiApiSource().fetchCandidates(ORG);
+    expect(candidatos.filter((c) => c.gone)).toEqual([]);
+  });
+
   it("un descarte no corta la paginacion: la pagina llena sigue a la siguiente", async () => {
     const llena = [...Array(99).keys()].map((i) => sana(i + 1));
     moquearWasi([[...llena, irreparable(999)], [sana(500)], []]);

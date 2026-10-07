@@ -354,9 +354,25 @@ const wasiPropertyTypeSchema = z
   })
   .passthrough();
 
-/** Un link de propiedad gestionada por Wasi (pagina publica vieja o sitio inmo.co nuevo). */
-function isWasiManagedLink(link: string | null): boolean {
-  return Boolean(link && /info\.wasi\.co|\.inmo\.co/.test(link));
+/**
+ * Un link de propiedad gestionada por Wasi: pagina publica vieja, sitio inmo.co,
+ * o el dominio propio que la cuenta tenga configurado en Wasi.
+ *
+ * El dominio propio (2026-10-07): Wasi arma los links con el dominio de la
+ * cuenta (diamondinmobiliaria.com), asi que el dominio no alcanza para saber si
+ * es de Wasi. Se reconoce por la FORMA de la ruta, `/<slug>/<ref>`, igual que
+ * enlazarWasiPublico en el bot. Sin esto, la 9013897 salio de Wasi y siguio
+ * "disponible". Una propiedad cargada a mano no tiene esa ruta con su ref.
+ */
+function isWasiManagedLink(link: string | null, ref: string): boolean {
+  if (!link) return false;
+  if (/info\.wasi\.co|\.inmo\.co/.test(link)) return true;
+  try {
+    const partes = new URL(link).pathname.split("/").filter(Boolean);
+    return partes.length === 2 && /^\d+$/.test(partes[1]!) && partes[1] === ref;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -494,7 +510,7 @@ export class WasiApiSource implements WasiSource {
     for (const property of existing) {
       if (!property.disponible) continue;
       if (fetchedRefs.has(property.ref)) continue;
-      if (!isWasiManagedLink(property.link)) continue;
+      if (!isWasiManagedLink(property.link, property.ref)) continue;
       candidates.push({ propertyId: property.id, wasiId: null, gone: true, data: null });
     }
 
