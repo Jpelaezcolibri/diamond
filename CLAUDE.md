@@ -28,7 +28,37 @@ Equipo: 1 dev (Juan) + Claude Code. Idioma de la app: español (Colombia).
 Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
 `docs:`, `config:`).
 
-## 2. Estado actual (2026-09-18)
+## 2. Estado actual (2026-10-07)
+
+- **Sofi vendedora + agenda con rotación (desplegado 2026-10-07, commits
+  `aa6c5f2`…`9b2d4ec`).** Spec `docs/superpowers/specs/2026-10-07-sofi-vendedora-y-agenda-design.md`,
+  planes 1–4 en `docs/superpowers/plans/2026-10-07-plan-*.md`.
+  - **Identidad pública:** hacia colegas/clientes los asesores son "Asesor N"
+    (`advisors.alias_publico`), nunca nombre ni celular; todo en
+    `src/lib/identidad-publica.js`. Rotación: Asesor 1 Daiana, 2 Claudia,
+    3 Catherine; el 8024 es respaldo de entrega de Asesor 1.
+  - **Puente colega→Sofi:** el primer mensaje del DM lleva dos links a Sofi
+    con código (`group_signals.codigo_colega`); las fichas NO (se reenvían
+    al cliente final). Sofi reconoce el código y amarra el teléfono al colega.
+  - **Agenda:** ≥ 24 h de anticipación, 60 + 90 min por asesor; la cita va
+    por la plantilla `cita_por_confirmar` (botones Confirmar / Otro horario)
+    y rota de asesor cada hora (`src/scheduler/citas-escalera.js`) hasta que
+    alguien confirme; 4 h antes se cancela. `cita.asesor_id` = `advisors.id`
+    (Claudia no tiene usuario del CRM).
+  - **Vendedora senior y seguimientos:** prompt de colega nuevo, memoria
+    "LO QUE YA HABLAMOS", seguimiento a las 3 h (followups.js), +4 h del DM y
+    +24 h por plantilla (`src/scheduler/seguimiento-colega.js`).
+  - **Alerta de saldo de Anthropic** a `ALERTA_TECNICA_TO` (falta cargar el
+    número de Juan en Railway). Del 25-sep al 7-oct la cuenta estuvo sin
+    saldo y Sofi y el radar callaron 12 días sin que nadie se enterara.
+  - **Sync de Wasi arreglado:** da de baja links `diamondinmobiliaria.com` y
+    refresca zona/área/alcobas en cada corrida. Validar con
+    `railway run --service dmap npx tsx dmap/scripts/wasi-vs-base.ts`.
+  - **Pendientes:** recargar Anthropic; `ALERTA_TECNICA_TO`; plantillas
+    `asesor_solicitado` y `alerta_tecnica` en revisión; usuario del CRM para
+    Claudia (sin él no recibe el recordatorio de 1 h antes de la visita);
+    20 propiedades sin zona en Wasi; App de asesores
+    (`docs/superpowers/specs/2026-10-07-app-diamond-asesores-design.md`).
 
 - **El motor se volvió literal (desplegado 2026-09-19, commit `4659f27`).**
   - **La regla de Juan:** "que no envíe nada que no esté dentro de la misma
