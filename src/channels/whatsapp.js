@@ -417,7 +417,7 @@ router.post("/webhook", async (req, res) => {
       // anuncio de clic-a-WhatsApp (Meta adjunta este objeto automaticamente).
       const adReferral = message.referral || null;
 
-      const { reply, transfer, allyAlert, appointmentAlert, captadorAlert, assistantMessageId } = await engine.procesarMensaje({
+      const { reply, lead: leadAtendido, transfer, allyAlert, appointmentAlert, captadorAlert, assistantMessageId } = await engine.procesarMensaje({
         org,
         phone: userPhone,
         text: userText,
@@ -461,7 +461,19 @@ router.post("/webhook", async (req, res) => {
         const r = await sendWhatsApp(org, allyAlert.advisorPhone, allyAlert.advisorAlert, { fromPhoneId: phoneNumberId });
         if (!r.ok) console.error(`[whatsapp] Aviso de match de aliado a ${allyAlert.advisorPhone} NO se pudo enviar:`, r.error);
       }
-      if (appointmentAlert) {
+      if (appointmentAlert && appointmentAlert.porPlantilla) {
+        // ROTACION (2026-10-07): la cita va por la plantilla cita_por_confirmar
+        // con botones Confirmar / Otro horario; si la plantilla falla, por
+        // texto con respaldo. Ver src/notifications/aviso-cita.js.
+        const { avisarCitaPorConfirmar } = require("../notifications/aviso-cita");
+        const r = await avisarCitaPorConfirmar({
+          org,
+          advisor: appointmentAlert.advisor,
+          lead: leadAtendido,
+          cita: leadAtendido && leadAtendido.cita,
+        }).catch((e) => ({ ok: false, error: e.message }));
+        if (!r.ok) console.error(`[whatsapp] Aviso de cita a ${appointmentAlert.advisorName} NO se pudo entregar:`, r.error);
+      } else if (appointmentAlert) {
         // CON RESPALDO (Juan, 2026-09-11): "siempre las citas van al numero de
         // Daiana que tiene la ventana abierta... y luego al otro numero". Antes
         // salia con sendWhatsApp directo: la visita de Sebastian Velasquez se

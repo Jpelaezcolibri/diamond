@@ -393,6 +393,67 @@ async function resolveLeadAdvisor(ctx, especialidad) {
 // Sin copias desde 2026-09-11 (Juan: "el principal es el que tenemos con la
 // automatizacion de la ventana abierta y luego al otro numero"): el segundo
 // numero recibe lo que el primero no pudo, no una copia de todo.
+// La cita en la rotacion de asesores (ver agendar_cita). Si nadie puede a esa
+// hora, no se guarda nada y Sofi recibe 3 horarios validos para ofrecer.
+async function agendarEnRotacion(ctx, cita, ciclo) {
+  const rotacion = require("../data/rotacion-citas");
+  const reglas = require("../lib/agenda-reglas");
+  const ahora = new Date();
+  const citasOrg = await appointments.citasDeLaOrg(ctx.org.id).catch((e) => {
+    console.warn("[tools] No se pudo leer la agenda de la org:", e.message);
+    return [];
+  });
+  const elegido = rotacion.elegirAsesor({ ciclo, citasOrg, fechaHoraIso: cita.fecha_hora, ahora, excluirLeadId: ctx.lead.id });
+
+  if (!elegido) {
+    const v = reglas.validarHora({ fechaHoraIso: cita.fecha_hora, ahora, horario: ciclo[0].horario, ocupadas: [] });
+    const motivo =
+      v.motivo === "anticipacion"
+        ? "necesitamos al menos 24 horas de anticipación para poder confirmarla"
+        : v.motivo === "fuera_de_horario"
+          ? "ese horario está fuera del horario de visitas"
+          : "a esa hora no hay ningún asesor libre";
+    const alt = ciclo
+      .flatMap((a) => reglas.alternativas({ ahora, horario: a.horario, ocupadas: rotacion.ocupadasDe(citasOrg, a, { excluirLeadId: ctx.lead.id }) }))
+      .sort()
+      .filter((x, i, arr) => arr.indexOf(x) === i)
+      .slice(0, 3);
+    const lista = alt
+      .map((iso) => {
+        const fh = formatCitaFechaHora(iso);
+        return `- ${fh ? `${fh.fecha} a las ${fh.hora}` : iso}`;
+      })
+      .join("\n");
+    return `No se pudo agendar: ${motivo}. Ofrecele estos horarios (o que proponga otro con al menos 24 horas):\n${lista}`;
+  }
+
+  const ahoraIso = ahora.toISOString();
+  cita.asesor_id = elegido.id;
+  if (elegido.auth_user_id) cita.advisor_id = elegido.auth_user_id;
+  cita.asignada_at = ahoraIso;
+  cita.corte_at = reglas.corteDe(cita.fecha_hora);
+  cita.historial = [{ asesor_id: elegido.id, desde: ahoraIso }];
+  ctx.appointmentAlert = {
+    porPlantilla: true,
+    advisor: elegido,
+    advisorPhone: elegido.phone,
+    advisorName: elegido.name || null,
+    advisorId: elegido.id,
+  };
+  ctx.cita = cita;
+  ctx.lead.cita = cita;
+  try {
+    Object.assign(ctx.lead, await leads.update(ctx.lead.id, { cita }));
+  } catch (e) {
+    console.warn("[tools] No se pudo persistir la cita:", e.message);
+  }
+
+  const fh = formatCitaFechaHora(cita.corte_at);
+  const corte = fh ? `el ${fh.fecha} a las ${fh.hora}` : "antes de la visita";
+  const quien = ctx.colega ? "al colega" : "al cliente";
+  return `Cita registrada como PROPUESTA (${cita.fecha_hora}). Ya se le avisó al equipo para confirmarla. Decile ${quien} que la visita quedó SOLICITADA y que se la confirmamos antes de ${corte}. NO le des ningún número ni nombre de persona. Nunca digas "confirmada".`;
+}
+
 async function armarAvisoCitaColega(ctx, advisor, cita, ref) {
   const advisorAlert = await buildColegaAppointmentAlert({
     org: ctx.org,
@@ -705,6 +766,21 @@ async function executeTool(name, input, ctx) {
     // tiene property_ref_origen ni ctx.propertyInteres (ver engine.js). Se
     // guarda solo si vino, para no cambiarle el shape a las citas de siempre.
     if (input.ref) cita.ref = String(input.ref).trim();
+
+    // ROTACION (Juan, 2026-10-07; spec 2026-10-07-sofi-vendedora-y-agenda §4):
+    // si hay asesores con recibe_citas, la cita respeta 24 h de anticipacion y
+    // 60+90 min por asesor, va al asesor del ciclo con la hora libre y menos
+    // citas, sale por la plantilla cita_por_confirmar (whatsapp.js) y la
+    // escalera (citas-escalera.js) la rota cada hora hasta que alguien la
+    // confirme o llegue el corte. Sin ciclo configurado: el camino de abajo.
+    if (cita.fecha_hora) {
+      const rotacion = require("../data/rotacion-citas");
+      const ciclo = await rotacion.asesoresDelCiclo(ctx.org.id).catch((e) => {
+        console.warn("[tools] No se pudo leer el ciclo de citas:", e.message);
+        return [];
+      });
+      if (ciclo.length > 0) return agendarEnRotacion(ctx, cita, ciclo);
+    }
 
     // A QUIEN VA LA CITA (Juan, 2026-09-11): "siempre las citas van al numero
     // de Daiana que tiene la ventana abierta". Cliente o colega, la cita va a
