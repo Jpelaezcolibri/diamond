@@ -313,21 +313,21 @@ test("promptColega ya no dice que no existe herramienta: Sofi SI puede agendar",
   assert.match(p, /registrar_demanda_colega/);
 });
 
-test("el contacto de quien coordina se INYECTA, no se hardcodea", () => {
+test("quien coordina se INYECTA con su alias, sin nombre real ni celular", () => {
   const bloques = buildSystemPrompt({
     org: ORG,
     lead: { id: "l1", estado: "nuevo" },
     qualified: false,
     now: null,
     colega: { nombre: "Esteban Higuita" },
-    coordinador: { nombre: "Natalia Velez", telefono: "573001878024" },
+    coordinador: { alias: "Asesor 1" },
   });
   const estable = bloques[0].text;
   const volatil = bloques[bloques.length - 1].text;
-  assert.match(volatil, /Natalia Velez/, "va en el bloque volatil, como now y ultimoPedido");
-  assert.match(volatil, /573001878024/);
-  assert.doesNotMatch(estable, /Natalia/, "nada de Diamond hardcodeado en el bloque cacheado");
-  assert.doesNotMatch(estable, /573001878024/);
+  assert.match(volatil, /COORDINA LAS VISITAS: Asesor 1/, "va en el bloque volatil");
+  assert.doesNotMatch(volatil, /celular|\+57|57300/i, "sin celular");
+  assert.doesNotMatch(estable, /pasale el nombre y el celular/i, "el prompt ya no le pide dar celulares");
+  assert.match(estable, /NUNCA le des el celular de nadie del equipo/);
 });
 
 test("sin coordinador resuelto, el contexto no trae ningun contacto que Sofi pueda leer", () => {
@@ -342,7 +342,7 @@ test("sin coordinador resuelto, el contexto no trae ningun contacto que Sofi pue
   // hacer si no esta); el que no puede existir es el dato en el volatil.
   const volatil = bloques[bloques.length - 1].text;
   assert.doesNotMatch(volatil, /COORDINA LAS VISITAS/);
-  assert.match(bloques[0].text, /si abajo no aparece ninguno/i, "el prompt tiene que decirle que hacer cuando no hay contacto");
+  assert.match(bloques[0].text, /si abajo no aparece ninguno/i, "el prompt tiene que decirle que hacer cuando no hay quien coordine");
 });
 
 // ── El cableado (engine) ──────────────────────────────────────────────────
@@ -360,4 +360,5 @@ test("engine.js resuelve el coordinador con findAsesorPrincipalRadar y se lo pas
   const i = fuente.indexOf("buildSystemPrompt({");
   assert.ok(i > -1);
   assert.match(fuente.slice(i, i + 300), /coordinador/, "el prompt tiene que recibirlo");
+  assert.match(fuente, /aliasPublico/, "engine pasa el alias, no el nombre ni el telefono");
 });

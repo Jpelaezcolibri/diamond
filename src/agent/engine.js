@@ -11,6 +11,7 @@ const { isQualified } = require("./qualification");
 const { buildAdvisorAlert, formatCitaFechaHora } = require("../notifications/advisor");
 const { detectSellerIntent, detectClientLanguage } = require("./intent");
 const { getClient, registrarUso } = require("../lib/anthropic");
+const { aliasPublico } = require("../lib/identidad-publica");
 
 const MAX_TOOL_ITERATIONS = 5;
 const HISTORY_LIMIT = 12;
@@ -250,7 +251,7 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
   const coordinador = colega
     ? await advisors
         .findAsesorPrincipalRadar(org)
-        .then((a) => (a ? { nombre: a.name, telefono: a.phone } : null))
+        .then((a) => (a ? { alias: aliasPublico(a, org) } : null))
         .catch((e) => {
           console.warn("[engine] No se pudo resolver quien coordina las visitas del colega:", e.message);
           return null;
