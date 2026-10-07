@@ -123,8 +123,13 @@ prellenado (`?text=` urlencoded):
 
 - **Presentación:** 🔎 *Más opciones o dudas* →
   `Hola Sofi, quiero más opciones para mi PEDIDO (cód. D7K2)`
-- **Cada ficha:** 📅 *Agendar visita a esta* →
-  `Hola Sofi, quiero agendar visita a la ref 10012722 (cód. D7K2)`
+- **Presentación (también):** 📅 *¿Agendamos una visita?* →
+  `Hola Sofi, quiero agendar una visita para mi PEDIDO (cód. D7K2)`
+
+**Ajuste 2026-10-07 (al planear):** los dos links van SOLO en el primer
+mensaje (el del colega), nunca en las fichas. Las fichas se reenvían tal cual
+al cliente final; un link con el código del colega en una ficha haría que el
+cliente le escriba a Sofi saltándose al colega. Sofi pregunta a cuál ref.
 
 Reemplaza el renglón actual "Para que la conversación quede en nuestro
 sistema…".
