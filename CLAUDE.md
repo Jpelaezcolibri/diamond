@@ -337,6 +337,9 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
   `2026-09-08_linea_dm_lid.sql` (columna `remitente_lid` en `linea_dm`)
   corrida por Juan y **verificada por REST** el 2026-09-08: `select
   remitente_lid` responde y el filtro `.eq("remitente_lid", …)` también.
+  `2026-10-07_asesor_alias_y_citas.sql` (alias público, rotación de citas,
+  código del DM al colega) corrida por Juan y **verificada por REST** el
+  2026-10-07: las 7 columnas responden y el filtro por `codigo_colega` también.
   **No hay migraciones pendientes.**
   Regla: antes de declarar una migración "pendiente" acá, verificarla con un
   `select` por REST — esta lista estuvo desactualizada del 2026-08-18 al
