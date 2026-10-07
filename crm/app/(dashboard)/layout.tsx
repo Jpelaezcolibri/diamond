@@ -2,6 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isAdmin } from "@/lib/auth";
+import { miAsesor } from "@/lib/mi-asesor";
+import Campana from "@/components/campana";
 import LogoutButton from "@/components/logout-button";
 import NavLink from "@/components/nav-link";
 
@@ -12,6 +14,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
   const admin = isAdmin(user);
+  // Con fila de asesor: campana de notificaciones propias (App de asesores F1).
+  const asesor = await miAsesor(supabase, user);
 
   const { count: alertCount } = await supabase
     .from("leads")
@@ -19,6 +23,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     .eq("estado", "calificado");
 
   const links = [
+    { href: "/pendientes", label: "Para atender" },
     { href: "/sofi", label: "SOFI" },
     { href: "/inbox", label: "Inbox" },
     { href: "/kanban", label: "Kanban" },
@@ -53,6 +58,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
             </nav>
           </div>
           <div className="flex shrink-0 items-center gap-1.5 text-sm text-slate-400 sm:gap-4">
+            {asesor ? (
+              <Campana advisorId={asesor.id} />
+            ) : (
             <Link
               href="/leads"
               className="relative rounded-full p-2 text-slate-300 transition hover:bg-white/5 hover:text-[#c9a24b]"
@@ -65,6 +73,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
                 </span>
               )}
             </Link>
+            )}
             <span className="hidden max-w-[14rem] truncate md:inline" title={user.email || undefined}>
               {user.email}
             </span>

@@ -37,7 +37,7 @@ export async function middleware(request: NextRequest) {
   }
   if (user && isLogin) {
     const url = request.nextUrl.clone();
-    url.pathname = "/inbox";
+    url.pathname = "/pendientes";
     return NextResponse.redirect(url);
   }
 
@@ -49,6 +49,7 @@ export const config = {
   // abre desde WhatsApp sin sesion; el token irrepetible de la URL es la
   // autorizacion, y el bot es quien lo valida.
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|api|aviso|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    // sw.js y manifest.webmanifest: la app instalable (2026-10-07) los pide sin sesion.
+    "/((?!_next/static|_next/image|favicon.ico|api|aviso|sw\\.js|manifest\\.webmanifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };
