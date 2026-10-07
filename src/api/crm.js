@@ -989,9 +989,49 @@ router.post("/api/conversations/:id/modo", async (req, res) => {
       return res.status(400).json({ error: "modo debe ser 'bot' o 'humano'" });
     }
     const conv = await conversations.setModo(req.params.id, modo);
+    // Tomar el control ATIENDE el pendiente del chat (pide asesor, transferido;
+    // la visita se limpia al confirmarla o cancelarla) — plan 6, 2026-10-07.
+    if (modo === "humano" && conv && conv.lead_id && supabase) {
+      await supabase
+        .from("leads")
+        .update({ atencion_pendiente: null, atencion_desde: null })
+        .eq("id", conv.lead_id)
+        .in("atencion_pendiente", ["pide_asesor", "transferido"])
+        .then(({ error }) => error && console.warn("[api] No se pudo limpiar atencion_pendiente:", error.message));
+    }
     res.json({ ok: true, modo: conv.modo });
   } catch (e) {
     console.error("[api] Error en modo:", e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Confirmar u "Otro horario" de una visita DESDE EL CHAT DEL CRM (plan 6,
+// 2026-10-07). El CRM manda el auth del usuario; se resuelve a su fila de
+// advisors (activa). Misma logica que el boton de WhatsApp y "OK CONFIRMADA".
+router.post("/api/citas/accion", async (req, res) => {
+  try {
+    const { leadId, accion, authUserId } = req.body || {};
+    if (!leadId || !["confirmar", "otro"].includes(accion) || !authUserId) {
+      return res.status(400).json({ error: "faltan leadId, accion (confirmar|otro) o authUserId" });
+    }
+    const org = await organizations.getDefault();
+    const advisors = require("../data/advisors");
+    const leads = require("../data/leads");
+    const citasData = require("../data/citas");
+    const advisor = await advisors.findByAuthUserId(org.id, authUserId);
+    if (!advisor || advisor.activo === false) return res.status(403).json({ error: "tu usuario no está ligado a un asesor activo" });
+    const lead = await leads.findById(org.id, leadId);
+    if (!lead || !lead.cita) return res.status(404).json({ error: "no hay cita para ese lead" });
+    if (citasData.estadoDe(lead.cita) !== "propuesta") {
+      return res.status(409).json({ error: `esa visita ya estaba ${citasData.estadoDe(lead.cita)}` });
+    }
+    const cc = require("../lib/confirmar-cita");
+    const r = accion === "otro" ? await cc.pedirOtroHorario({ org, lead, advisor }) : await cc.confirmar({ org, lead, advisor });
+    if (supabase) await supabase.from("leads").update({ atencion_pendiente: null, atencion_desde: null }).eq("id", leadId).eq("atencion_pendiente", "visita");
+    res.json({ ok: true, texto: r.texto });
+  } catch (e) {
+    console.error("[api] Error en citas/accion:", e);
     res.status(500).json({ error: e.message });
   }
 });

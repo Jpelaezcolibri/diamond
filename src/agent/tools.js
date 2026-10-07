@@ -1689,60 +1689,38 @@ async function pedirContactoAsesora(input, ctx) {
 
   const telColega = String(ctx.lead.phone || "").replace(/\D/g, "");
   const nombreColega = ctx.colega.nombre || ctx.lead.nombre || "Un colega";
-  // Solo `true` cambia el formato: esto es informacion para la asesora, no un
-  // envio al colega, asi que una consulta fallida no justifica afirmar que
-  // pidio solo llamadas.
+  // Solo `true` cambia el texto: es informacion para la asesora, no un envio
+  // al colega, asi que una consulta fallida no justifica afirmar que pidio
+  // solo llamadas.
   const soloLlamada = await colegas.esSoloLlamada(ctx.org.id, { telefono: telColega }).catch(() => null);
   const pedido = await groupSignals.buscarPorTelefono(ctx.org.id, telColega).catch(() => null);
   const refs = pedido && Array.isArray(pedido.respuesta_refs) ? pedido.respuesta_refs.filter(Boolean) : [];
-  const { linkWhatsappEstricto } = require("../lib/contacto");
-  const contacto = soloLlamada === true
-    ? `📞 ${celularLegible(telColega)} — pidió contacto solo por llamada: llamá, no le escribas`
-    : linkWhatsappEstricto(telColega) || celularLegible(telColega);
 
-  const texto = [
-    `🙋 Un colega pide hablar con una asesora — comunicate ya`,
-    ``,
-    `Colega: ${nombreColega}`,
-    `Contacto: ${contacto}`,
+  // TODO AL CHAT DEL CRM (Juan, 2026-10-07; plan 6): el pedido queda en el
+  // chat de este colega, asignado a la asesora, con notificacion en la app
+  // (link al chat) y un aviso corto por WhatsApp sin datos. Ella toma la
+  // conversacion desde el CRM y le escribe por el numero de Sofi. Reemplaza
+  // al texto completo a su celular y a la copia al escalado.
+  const cuerpo = [
     input && input.motivo ? `Para qué: ${String(input.motivo).trim()}` : null,
-    pedido && pedido.texto_original
-      ? `Su último pedido: "${String(pedido.texto_original).replace(/\s+/g, " ").slice(0, 150)}"`
-      : null,
+    soloLlamada === true ? `Pidió contacto solo por llamada: ${celularLegible(telColega)}` : null,
+    pedido && pedido.texto_original ? `Su último pedido: "${String(pedido.texto_original).replace(/\s+/g, " ").slice(0, 120)}"` : null,
     refs.length ? `Le respondimos: ${refs.map((r) => `Ref ${r}`).join(", ")}` : null,
-    ``,
-    `Lo pidió en el chat con Sofi. Es un negocio compartido con otra inmobiliaria, no un cliente propio.`,
-  ].filter((l) => l !== null).join("\n");
-
-  // Require tardio (ciclo: este archivo -> mensaje-asesor.js -> whatsapp.js -> engine.js -> este archivo).
-  const mensajeAsesor = require("../lib/mensaje-asesor");
-  const principal = await mensajeAsesor
-    .enviarYRegistrar(ctx.org, String(asesora.phone).replace(/\D/g, ""), texto)
+  ].filter(Boolean).join(" · ") || null;
+  const aviso = await require("../notifications/avisar-asesor")
+    .avisarAsesor({
+      org: ctx.org, advisor: asesora, motivo: "pide_asesor", lead: ctx.lead,
+      titulo: `${nombreColega} pide hablar con un asesor`, cuerpo,
+    })
     .catch((e) => ({ ok: false, error: e.message }));
 
-  // Copia al escalado, como las citas de colega (armarAvisoCitaColega). Una
-  // copia que no sale nunca tumba el aviso principal.
-  const escalado = String(process.env.RADAR_ESCALADO_PHONE || "").replace(/\D/g, "");
-  if (escalado && !advisors.mismoTelefono(escalado, asesora.phone)) {
-    await mensajeAsesor
-      .enviarYRegistrar(ctx.org, escalado, texto)
-      .catch((e) => console.warn("[tools] No se pudo copiar al escalado el pedido de contacto:", e.message));
-  }
-
-  if (!principal || !principal.ok) {
-    console.warn(`[tools] No le llego a ${nombreAsesora} el pedido de contacto del colega:`, principal && principal.error);
-    return `NO le llegó el aviso a ${alias} (WhatsApp lo rechazó). NO le digas al colega que ya le avisaste ni le des ningún número: decile que quedó registrado y que el equipo le va a escribir apenas pueda.`;
+  if (!aviso || !aviso.ok) {
+    console.warn(`[tools] No se pudo dejar el pedido de contacto para ${nombreAsesora}:`, aviso && aviso.error);
+    return `NO le llegó el aviso a ${alias}. NO le digas al colega que ya le avisaste ni le des ningún número: decile que quedó registrado y que el equipo le va a escribir apenas pueda.`;
   }
 
   pedidosContactoRecientes.set(clave, Date.now());
-  // Campana y push de la app de asesores (2026-10-07). Best-effort.
-  await require("../notifications/notificar")
-    .notificar({
-      orgId: ctx.org.id, advisor: asesora, tipo: "asesor_solicitado", titulo: `${nombreColega} pide hablar con un asesor`,
-      cuerpo: input && input.motivo ? String(input.motivo).trim() : null, link: "/inbox", leadId: ctx.lead.id,
-    })
-    .catch(() => {});
-  return `Listo: ya le avisé a ${alias} y se va a comunicar con el colega. Decíselo así, con ese nombre (${alias}). NO le des ningún número: el contacto lo inicia ${alias}.`;
+  return `Listo: ya le avisé a ${alias} y se va a comunicar con el colega por este mismo chat. Decíselo así, con ese nombre (${alias}). NO le des ningún número: el contacto lo inicia ${alias}.`;
 }
 
 function _resetPedidosContacto() {

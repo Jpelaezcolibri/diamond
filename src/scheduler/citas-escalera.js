@@ -76,19 +76,14 @@ async function rotar({ org, lead, ciclo, nuevo, ahora, c }) {
       cuerpo: `${lead.nombre || `+${lead.phone}`} ${cuandoDe(cita)}`, link: "/calendario", leadId: lead.id,
     }).catch(() => {});
   }
-  if (anterior && anterior.phone) {
-    const quien = lead.nombre || `+${lead.phone}`;
-    await c
-      .texto(org, anterior.phone, `La visita de ${quien} ${cuandoDe(cita)} pasó a ${aliasPublico(nuevo, org)} porque no se confirmó en una hora. Si igual podés tomarla, tocá Confirmar en el aviso anterior.`)
-      .catch(() => {});
-  }
+  // Sin WhatsApp al celular (plan 6): el anterior se entera en la app.
   console.log(`[citas-escalera] lead ${lead.id}: ${anterior ? anterior.name : "?"} -> ${nuevo.name}`);
 }
 
 async function cortar({ org, lead, ciclo, ahora, c }) {
   const actual = ciclo.find((a) => a.id === lead.cita.asesor_id) || null;
   const cita = { ...lead.cita, estado: "cancelada", cancelada_at: ahora.toISOString(), motivo: "sin_confirmar" };
-  await leads.update(lead.id, { cita });
+  await leads.update(lead.id, { cita, ...(lead.atencion_pendiente === "visita" ? { atencion_pendiente: null, atencion_desde: null } : {}) });
   lead.cita = cita;
   const fh = formatCitaFechaHora(cita.fecha_hora);
   await c
@@ -102,10 +97,6 @@ async function cortar({ org, lead, ciclo, ahora, c }) {
       orgId: org.id, advisor: actual, tipo: "cita_cancelada", titulo: "Visita cancelada por falta de confirmación",
       cuerpo: `${lead.nombre || `+${lead.phone}`} ${cuandoDe(cita)}`, link: "/calendario", leadId: lead.id,
     }).catch(() => {});
-  }
-  if (actual && actual.phone) {
-    const quien = lead.nombre || `+${lead.phone}`;
-    await c.texto(org, actual.phone, `Se canceló la visita de ${quien} ${cuandoDe(cita)}: nadie la confirmó a tiempo. Ya le ofrecimos otro horario.`).catch(() => {});
   }
   console.log(`[citas-escalera] lead ${lead.id}: cancelada por falta de confirmacion`);
 }

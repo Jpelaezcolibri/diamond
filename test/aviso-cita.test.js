@@ -1,5 +1,5 @@
-// Aviso de cita por confirmar por plantilla (2026-10-07): llega aunque la
-// ventana de 24 h este cerrada; si la plantilla falla, cae al texto.
+// Aviso de cita por confirmar (plan 6, 2026-10-07): va al chat del CRM por
+// avisar-asesor (motivo "visita"); el WhatsApp es solo el aviso corto.
 const { test } = require("node:test");
 const assert = require("node:assert");
 const { avisarCitaPorConfirmar } = require("../src/notifications/aviso-cita");
@@ -9,42 +9,20 @@ const ADV = { id: "a2", name: "Claudia Valencia", phone: "573000008113" };
 const LEAD = { id: "l1", nombre: "Laura", phone: "573125550000", source: "colega" };
 const CITA = { fecha_hora: "2026-10-09T20:00:00Z", ref: "10012722", corte_at: "2026-10-09T16:00:00Z" };
 
-test("sale por plantilla con los dos botones de esa cita", async () => {
+test("la visita se avisa con motivo visita y los datos van a la app, no al WhatsApp", async () => {
   const llamadas = [];
   const r = await avisarCitaPorConfirmar({
     org: ORG, advisor: ADV, lead: LEAD, cita: CITA,
-    deps: {
-      plantilla: async (...a) => { llamadas.push(a); return { ok: true }; },
-      respaldo: async () => { throw new Error("no debía usarse"); },
-    },
+    deps: { avisar: async (args) => { llamadas.push(args); return { ok: true }; } },
   });
-  assert.deepStrictEqual(r, { ok: true, via: "plantilla" });
-  const [, to, opts] = llamadas[0];
-  assert.strictEqual(to, "573000008113");
-  assert.strictEqual(opts.name, "cita_por_confirmar");
-  assert.strictEqual(opts.bodyParams[0], "10012722");
-  assert.match(opts.bodyParams[2], /Laura \(colega\)/);
-  assert.deepStrictEqual(opts.buttonPayloads, ["cita:l1:confirmar", "cita:l1:otro"]);
+  assert.deepStrictEqual(r, { ok: true, via: "app" });
+  assert.strictEqual(llamadas[0].motivo, "visita");
+  assert.strictEqual(llamadas[0].advisor, ADV);
+  assert.strictEqual(llamadas[0].lead, LEAD);
+  assert.match(llamadas[0].cuerpo, /Ref 10012722 .* Laura \(colega\) · confirmá antes de/);
 });
 
-test("si la plantilla falla, cae al texto con respaldo", async () => {
-  const r = await avisarCitaPorConfirmar({
-    org: ORG, advisor: ADV, lead: LEAD, cita: CITA,
-    deps: {
-      plantilla: async () => ({ ok: false, error: "template not approved" }),
-      respaldo: async (_org, _adv, texto) => { assert.match(texto, /OK CONFIRMADA/); return { ok: true }; },
-    },
-  });
-  assert.deepStrictEqual(r, { ok: true, via: "texto" });
-});
-
-test("también deja la notificación para la campana y el push", async () => {
-  const notas = [];
-  await avisarCitaPorConfirmar({
-    org: ORG, advisor: ADV, lead: LEAD, cita: CITA,
-    deps: { plantilla: async () => ({ ok: true }), respaldo: async () => ({ ok: true }), notificar: async (n) => { notas.push(n); return { ok: true }; } },
-  });
-  assert.strictEqual(notas[0].tipo, "cita_por_confirmar");
-  assert.strictEqual(notas[0].advisor, ADV);
-  assert.strictEqual(notas[0].leadId, "l1");
+test("si avisar falla, lo informa sin lanzar", async () => {
+  const r = await avisarCitaPorConfirmar({ org: ORG, advisor: ADV, lead: LEAD, cita: CITA, deps: { avisar: async () => { throw new Error("x"); } } });
+  assert.strictEqual(r.ok, false);
 });

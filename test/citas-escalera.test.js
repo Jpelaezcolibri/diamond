@@ -71,7 +71,7 @@ function describeRunOnce() {
     assert.strictEqual(c.historial.length, 2);
     assert.strictEqual(c.historial[0].hasta, "2026-10-08T15:05:00.000Z");
     assert.ok(enviados.find((e) => e.to === "573000008113" && e.aviso));
-    assert.ok(enviados.find((e) => e.to === "573011880668" && /pasó a Asesor 2/.test(e.t)));
+    assert.ok(!enviados.find((e) => e.to === "573011880668" && e.t), "sin WhatsApp al celular del anterior (plan 6)");
     assert.ok(enviados.find((e) => e.nota === "cita_reasignada" && e.a === "a1"), "el anterior ve la notificación");
   });
 

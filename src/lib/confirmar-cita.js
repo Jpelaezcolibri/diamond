@@ -36,7 +36,8 @@ async function confirmar({ org, lead, advisor, deps = {} }) {
     asesor_id: advisor.id,
     advisor_id: advisor.auth_user_id || lead.cita.advisor_id || null,
   };
-  await leads.update(lead.id, { cita });
+  // La visita deja de estar pendiente en el chat del CRM (plan 6).
+  await leads.update(lead.id, { cita, ...(lead.atencion_pendiente === "visita" ? { atencion_pendiente: null, atencion_desde: null } : {}) });
   lead.cita = cita;
 
   const quien = lead.nombre || `+${lead.phone}`;
@@ -63,11 +64,6 @@ async function confirmar({ org, lead, advisor, deps = {} }) {
         cuerpo: `${quien} ${cuando}${refLinea}`, link: "/calendario", leadId: lead.id,
       }).catch(() => {});
     }
-    if (a && a.phone) {
-      await c
-        .texto(org, a.phone, `La visita de ${quien} ${cuando}${refLinea} ya la confirmó ${aliasPublico(advisor, org)}. No hace falta que hagas nada.`)
-        .catch(() => {});
-    }
   }
 
   if (solo !== false) {
@@ -93,7 +89,8 @@ async function pedirOtroHorario({ org, lead, advisor, deps = {} }) {
     cancelada_por: advisor.name,
     motivo: "asesor_pidio_otro_horario",
   };
-  await leads.update(lead.id, { cita });
+  // La visita deja de estar pendiente en el chat del CRM (plan 6).
+  await leads.update(lead.id, { cita, ...(lead.atencion_pendiente === "visita" ? { atencion_pendiente: null, atencion_desde: null } : {}) });
   lead.cita = cita;
   const fh = formatCitaFechaHora(cita.fecha_hora);
   const r = await c
