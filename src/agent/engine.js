@@ -12,6 +12,7 @@ const { buildAdvisorAlert, formatCitaFechaHora } = require("../notifications/adv
 const { detectSellerIntent, detectClientLanguage } = require("./intent");
 const { getClient, registrarUso } = require("../lib/anthropic");
 const { aliasPublico } = require("../lib/identidad-publica");
+const codigoColega = require("../groups/codigo-colega");
 
 const MAX_TOOL_ITERATIONS = 5;
 const HISTORY_LIMIT = 12;
@@ -78,7 +79,17 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
   //
   // Falla ABIERTA, igual que la del asesor: si revienta se lo atiende como
   // cliente, que es el comportamiento de siempre.
-  const colega = advisor ? null : await directorio.esColega(org.id, phone).catch((e) => {
+  //
+  // Antes del directorio, el puente del DM (spec 2026-10-07 §3): si escribe
+  // con el codigo de un DM del radar, es ese colega y ese pedido, aunque solo
+  // lo tuvieramos por lid. Falla abierta: sin codigo, el flujo de siempre.
+  const porCodigo = advisor
+    ? null
+    : await codigoColega.reconocer(org.id, phone, text).catch((e) => {
+        console.warn("[engine] No se pudo reconocer el codigo del colega:", e.message);
+        return null;
+      });
+  const colega = advisor ? null : (porCodigo && porCodigo.colega) || await directorio.esColega(org.id, phone).catch((e) => {
     console.warn("[engine] No se pudo verificar si el telefono es de un colega:", e.message);
     return null;
   });
@@ -233,12 +244,15 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
   // Que le respondimos la ultima vez a este colega (auditoria 2026-09-02):
   // solo si ES un colega, y best-effort — si la consulta falla, Sofi lo
   // atiende igual, solo que sin el contexto.
-  const ultimoPedido = colega
-    ? await groupSignals.buscarPorTelefono(org.id, phone).catch((e) => {
-        console.warn("[engine] No se pudo traer el ultimo pedido del colega:", e.message);
-        return null;
-      })
-    : null;
+  // Si llego con el codigo de un DM, el pedido es ESE, no el mas reciente.
+  const ultimoPedido = porCodigo && porCodigo.senal
+    ? porCodigo.senal
+    : colega
+      ? await groupSignals.buscarPorTelefono(org.id, phone).catch((e) => {
+          console.warn("[engine] No se pudo traer el ultimo pedido del colega:", e.message);
+          return null;
+        })
+      : null;
 
   // Quien coordina las visitas del gremio, para que Sofi pueda pasarle el
   // contacto al colega al confirmarle una cita (Juan, 2026-09-04: "el mensaje

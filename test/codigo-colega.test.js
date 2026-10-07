@@ -67,3 +67,11 @@ test("vivo.js pide el código antes de cada mensajesAlColega", () => {
   const conCodigo = (fuente.match(/codigo: await codigoColega\.asignarCodigo\(/g) || []).length;
   assert.strictEqual(conCodigo, llamados, "cada armado del DM lleva su código");
 });
+
+test("engine reconoce por código ANTES del directorio y usa esa señal como último pedido", () => {
+  const fuente = fs.readFileSync(path.join(__dirname, "..", "src", "agent", "engine.js"), "utf8");
+  const iCodigo = fuente.indexOf("codigoColega.reconocer(");
+  const iDirectorio = fuente.indexOf("directorio.esColega(");
+  assert.ok(iCodigo > -1 && iCodigo < iDirectorio, "primero el código, después el directorio");
+  assert.match(fuente, /porCodigo && porCodigo\.senal/, "el pedido del código manda sobre buscarPorTelefono");
+});
