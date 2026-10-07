@@ -60,3 +60,10 @@ test("reconocer: sin código o código desconocido devuelve null", async () => {
   assert.strictEqual(await cc.reconocer("org-1", "573125550000", "hola"), null);
   assert.strictEqual(await cc.reconocer("org-1", "573125550000", "(cód. ZZZZ)"), null);
 });
+
+test("vivo.js pide el código antes de cada mensajesAlColega", () => {
+  const fuente = fs.readFileSync(path.join(__dirname, "..", "src", "groups", "vivo.js"), "utf8");
+  const llamados = fuente.split("redactar.mensajesAlColega(").length - 1;
+  const conCodigo = (fuente.match(/codigo: await codigoColega\.asignarCodigo\(/g) || []).length;
+  assert.strictEqual(conCodigo, llamados, "cada armado del DM lleva su código");
+});

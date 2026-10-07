@@ -28,6 +28,7 @@ const alertaAsesor = require("./alerta-asesor");
 const feedComando = require("./feed-comando");
 const verificarLink = require("./verificar-link");
 const politica = require("./politica");
+const codigoColega = require("./codigo-colega");
 const redactar = require("./redactar");
 const envioColega = require("./envio-colega");
 const groupSignals = require("../data/group-signals");
@@ -653,6 +654,7 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
     // su link de Wasi. Ver redactar.mensajesAlColega y envio-colega.js.
     const armado = redactar.mensajesAlColega({ autor_nombre: mensaje.autor }, utilesDm, {
       org,
+      codigo: await codigoColega.asignarCodigo(org.id, signal.id),
       sinConfirmar: veredicto.sin_confirmar || [],
       leFalta: veredicto.le_falta || [],
       pedido: pedidoDe(c, { texto: mensaje.texto, fechaIso: mensaje.instanteIso }),
@@ -1247,6 +1249,7 @@ async function aprobarManual(org, signalId) {
   // UNA PROPIEDAD POR MENSAJE, igual que el camino automatico.
   const armado = redactar.mensajesAlColega({ autor_nombre: signal.autor_nombre }, aEnviar, {
     org,
+    codigo: await codigoColega.asignarCodigo(org.id, signal.id),
     sinConfirmar: sinConfirmarManual,
     leFalta: leFaltaManual,
     pedido: pedidoDe(signal),
@@ -1484,6 +1487,7 @@ async function responderPorDmManual(org, signalId, { sesion = null, refs = null 
   // UNA PROPIEDAD POR MENSAJE, igual que el camino automatico.
   const armado = redactar.mensajesAlColega({ autor_nombre: signal.autor_nombre }, aEnviar, {
     org,
+    codigo: await codigoColega.asignarCodigo(org.id, signal.id),
     sinConfirmar,
     leFalta,
     pedido: pedidoDe(signal),
@@ -1711,6 +1715,7 @@ async function prepararAviso(org, signalId, { sesion = null } = {}) {
     ? (
         redactar.mensajesAlColega({ autor_nombre: signal.autor_nombre }, utiles, {
           org,
+          codigo: await codigoColega.asignarCodigo(org.id, signal.id),
           sinConfirmar: rev.sin_confirmar || [],
           leFalta: rev.le_falta || [],
           pedido: pedidoDe(signal),
