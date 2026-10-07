@@ -13,9 +13,33 @@ const DEFAULT_TIMEOUT_MS = 60 * 1000;
 let client = null;
 let testClient = null;
 
+// Todo error de la API pasa por alerta-saldo antes de seguir su camino: si es
+// saldo agotado o tope de gasto, avisa a ALERTA_TECNICA_TO (2026-10-07). El
+// error se vuelve a lanzar igual; observar nunca cambia el comportamiento.
+// observarError se lee en cada error (no al cargar) para que un test pueda
+// reemplazarlo.
+function conVigilancia(c) {
+  if (!c || !c.messages || c.messages.__vigilado) return c;
+  const original = c.messages.create.bind(c.messages);
+  c.messages.create = async (...args) => {
+    try {
+      return await original(...args);
+    } catch (e) {
+      try {
+        require("./alerta-saldo").observarError(e).catch(() => {});
+      } catch {
+        // Observar nunca puede romper la llamada.
+      }
+      throw e;
+    }
+  };
+  c.messages.__vigilado = true;
+  return c;
+}
+
 function getClient() {
-  if (testClient) return testClient;
-  if (!client) client = new Anthropic({ apiKey: config.anthropicApiKey, timeout: DEFAULT_TIMEOUT_MS });
+  if (testClient) return conVigilancia(testClient);
+  if (!client) client = conVigilancia(new Anthropic({ apiKey: config.anthropicApiKey, timeout: DEFAULT_TIMEOUT_MS }));
   return client;
 }
 
