@@ -132,12 +132,22 @@ async function sendWhatsAppButtons(org, to, body, buttons, opts = {}) {
 // a alguien fuera de la ventana de 24h (ej. recordatorios proactivos al
 // asesor). bodyParams son los valores de {{1}}..{{n}} del cuerpo, en orden.
 // Devuelve {ok, wamid, error} (error si la plantilla aun no esta aprobada).
-async function sendWhatsAppTemplate(org, to, { name, language = "es", bodyParams = [], fromPhoneId } = {}) {
+// buttonPayloads (2026-10-07): un payload por quick reply de la plantilla, en
+// orden. Vuelve en el webhook como message.button.payload, asi el toque dice
+// que cita y que accion es (ver botonDeMensaje y src/lib/confirmar-cita.js).
+async function sendWhatsAppTemplate(org, to, { name, language = "es", bodyParams = [], buttonPayloads = [], fromPhoneId } = {}) {
   const { token, phoneId } = credsFor(org, fromPhoneId);
   if (!token || !phoneId) {
     console.warn("[whatsapp] Sin token/phoneId — plantilla no enviada:", name);
     return { ok: false, wamid: null, error: "sin_credenciales" };
   }
+  const components = [];
+  if (bodyParams.length) {
+    components.push({ type: "body", parameters: bodyParams.map((t) => ({ type: "text", text: String(t) })) });
+  }
+  buttonPayloads.forEach((payload, i) =>
+    components.push({ type: "button", sub_type: "quick_reply", index: String(i), parameters: [{ type: "payload", payload }] })
+  );
   const body = {
     messaging_product: "whatsapp",
     to,
@@ -145,12 +155,21 @@ async function sendWhatsAppTemplate(org, to, { name, language = "es", bodyParams
     template: {
       name,
       language: { code: language },
-      ...(bodyParams.length
-        ? { components: [{ type: "body", parameters: bodyParams.map((t) => ({ type: "text", text: String(t) })) }] }
-        : {}),
+      ...(components.length ? { components } : {}),
     },
   };
   return graphSendMessage(phoneId, token, body, `plantilla ${name}`);
+}
+
+// El id de un boton tocado: el interactivo (los del radar) o el quick reply
+// de una plantilla (los de cita_por_confirmar). null si no es un boton.
+function botonDeMensaje(message) {
+  if (!message) return null;
+  if (message.type === "interactive" && message.interactive?.type === "button_reply") {
+    return message.interactive.button_reply?.id || null;
+  }
+  if (message.type === "button") return message.button?.payload || null;
+  return null;
 }
 
 // Sube un archivo a Meta y devuelve el media_id
@@ -346,11 +365,15 @@ router.post("/webhook", async (req, res) => {
       // pedido ni depender de que el modelo interprete un "si"/"no" suelto en
       // medio de otra conversacion — la causa real de "se enreda con las
       // respuestas" cuando hay mas de un pedido pendiente a la vez.
-      const botonId = message.type === "interactive" && message.interactive?.type === "button_reply"
-        ? message.interactive.button_reply?.id
-        : null;
+      const botonId = botonDeMensaje(message);
       if (botonId) {
-        await procesarBotonRadar(org, userPhone, botonId, message.interactive.button_reply?.title, phoneNumberId);
+        if (String(botonId).startsWith("cita:")) {
+          // Confirmar / Otro horario de la plantilla cita_por_confirmar.
+          // Require tardio: confirmar-cita -> whatsapp (este archivo).
+          await require("../lib/confirmar-cita").procesarBotonCita(org, userPhone, botonId);
+        } else {
+          await procesarBotonRadar(org, userPhone, botonId, message.interactive?.button_reply?.title, phoneNumberId);
+        }
         return;
       }
 
@@ -486,6 +509,7 @@ module.exports = router;
 module.exports.sendWhatsApp = sendWhatsApp;
 module.exports.sendWhatsAppButtons = sendWhatsAppButtons;
 module.exports.sendWhatsAppTemplate = sendWhatsAppTemplate;
+module.exports.botonDeMensaje = botonDeMensaje;
 module.exports.uploadMediaToMeta = uploadMediaToMeta;
 module.exports.sendWhatsAppMedia = sendWhatsAppMedia;
 module.exports.procesarBotonRadar = procesarBotonRadar;
