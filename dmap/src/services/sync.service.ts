@@ -1,6 +1,7 @@
 import { logger } from "../lib/logger.js";
 import { applyCognitiveInvalidation } from "../cognitive/application/invalidation.service.js";
 import { diffPropertySnapshot, type PropertySnapshot } from "../sync/diff.js";
+import { camposQueSeRefrescan } from "../sync/refresh.js";
 import { WasiApiSource } from "../sync/wasi-api.source.js";
 import { WasiPublicSource } from "../sync/wasi-public.source.js";
 import type { SyncCandidate, WasiSource } from "../sync/wasi-source.js";
@@ -163,17 +164,10 @@ async function processCandidate(orgId: string, syncRunId: string, candidate: Syn
   // Solo se escribe cuando la fuente TIENE el dato: si Wasi lo manda vacio se
   // conserva lo que haya en la fila (ej. lo que cargo el import de Excel del
   // 2026-07), en vez de borrarlo.
-  if (data.garaje !== null) patch.garaje = data.garaje;
-  if (data.estrato !== null) patch.estrato = data.estrato;
-  // Caracteristicas, con el mismo criterio (2026-09-05): se refrescan en cada
-  // corrida y solo cuando la fuente las trae. Las 33 filas con texto del
-  // import viejo no se borran si la API no manda features para esa propiedad;
-  // si las manda, la API gana, porque es la fuente activa y la que el asesor
-  // edita en Wasi.
-  if (data.caracteristicas !== null) patch.caracteristicas = data.caracteristicas;
-  // Administracion (2026-09-13), mismo criterio: cada corrida y solo si la
-  // fuente la trae, para no borrar la que alguien haya cargado a mano.
-  if (data.administracion !== null) patch.administracion = data.administracion;
+  //
+  // Desde 2026-10-07 la misma regla cubre zona, ciudad, tipo, operacion, area,
+  // habitaciones y banos — ver camposQueSeRefrescan.
+  Object.assign(patch, camposQueSeRefrescan(data));
 
   for (const event of diff.events) {
     if (event.changeType === "price_changed") patch.precio = data.precio;

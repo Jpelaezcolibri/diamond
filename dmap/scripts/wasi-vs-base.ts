@@ -24,6 +24,29 @@ async function main() {
   const refsBase = new Set(disponibles.map((p) => p.ref));
   const faltan = [...enWasi].filter((r) => !refsBase.has(r));
   console.log(`En Wasi y no disponibles en la base (${faltan.length}): ${faltan.join(", ")}`);
+
+  // Campo por campo: lo que dice Wasi hoy contra lo que tiene la base.
+  const campos = ["titulo", "tipo", "operacion", "precio", "zona", "habitaciones", "area", "link"] as const;
+  const porRef = new Map(base.map((p) => [p.ref, p as unknown as Record<string, unknown>]));
+  // El link se compara por la ref al final de la ruta: Wasi cambio el dominio
+  // (inmo.co -> diamondinmobiliaria.com) y el slug, pero apunta a la misma ficha.
+  const norm = (v: unknown) => {
+    const s = String(v ?? "").trim().toLowerCase();
+    return /^https?:\/\//.test(s) ? s.replace(/\/+$/, "").split("/").pop()! : s;
+  };
+  const igual = (a: unknown, b: unknown) => norm(a) === norm(b);
+  let distintas = 0;
+  for (const c of candidates) {
+    if (c.gone || !c.data) continue;
+    const fila = porRef.get(c.data.ref);
+    if (!fila) continue;
+    const difs = campos.filter((k) => !igual((c.data as unknown as Record<string, unknown>)[k], fila[k]));
+    if (difs.length) {
+      distintas += 1;
+      console.log(`  DIFERENTE ${c.data.ref}: ` + difs.map((k) => `${k} wasi="${(c.data as unknown as Record<string, unknown>)[k]}" base="${fila[k]}"`).join(" · "));
+    }
+  }
+  console.log(`Propiedades con algún campo distinto a Wasi: ${distintas} de ${enWasi.size}`);
 }
 
 main().catch((e) => {
