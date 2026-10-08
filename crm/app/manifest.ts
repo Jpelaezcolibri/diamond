@@ -11,7 +11,11 @@ export default function manifest(): MetadataRoute.Manifest {
     background_color: "#0b1526",
     theme_color: "#0b1526",
     icons: [
-      { src: "/icon.png", sizes: "1254x1254", type: "image/png", purpose: "any" },
+      // El emblema de Diamond (sin el texto, que no se lee a tamaño de icono).
+      { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+      { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+      // Android lo recorta en círculo: este trae margen de zona segura.
+      { src: "/icons/maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
     ],
   };
 }

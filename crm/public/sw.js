@@ -31,8 +31,8 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(data.titulo || "Diamond", {
       body: data.cuerpo || "",
-      icon: "/icon.png",
-      badge: "/icon.png",
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-96.png",
       data: { link: data.link || "/pendientes" },
     })
   );
