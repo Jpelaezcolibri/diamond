@@ -48,13 +48,15 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
   - **Vendedora senior y seguimientos:** prompt de colega nuevo, memoria
     "LO QUE YA HABLAMOS", seguimiento a las 3 h (followups.js), +4 h del DM y
     +24 h por plantilla (`src/scheduler/seguimiento-colega.js`).
-  - **Alerta de saldo de Anthropic** a `ALERTA_TECNICA_TO` (falta cargar el
-    número de Juan en Railway). Del 25-sep al 7-oct la cuenta estuvo sin
+  - **Alerta de saldo de Anthropic** (`src/lib/alerta-saldo.js`): probada
+    con Juan el 2026-10-07 y luego **apagada a pedido suyo** (sin
+    `ALERTA_TECNICA_TO` en Railway): el aviso queda solo en el log
+    (`[alerta-saldo]`). Del 25-sep al 7-oct la cuenta estuvo sin
     saldo y Sofi y el radar callaron 12 días sin que nadie se enterara.
   - **Sync de Wasi arreglado:** da de baja links `diamondinmobiliaria.com` y
     refresca zona/área/alcobas en cada corrida. Validar con
     `railway run --service dmap npx tsx dmap/scripts/wasi-vs-base.ts`.
-  - **Pendientes:** recargar Anthropic; `ALERTA_TECNICA_TO`; plantillas
+  - **Pendientes:** recargar Anthropic; plantillas
     `asesor_solicitado` y `alerta_tecnica` en revisión; usuario del CRM para
     Claudia (sin él no recibe el recordatorio de 1 h antes de la visita);
     20 propiedades sin zona en Wasi; App de asesores
