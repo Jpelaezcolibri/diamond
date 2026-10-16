@@ -79,3 +79,17 @@ test("la tool nueva esta declarada y transferir acepta la intencion", () => {
   const dato = TOOLS.find((x) => x.name === "registrar_dato_lead");
   assert.match(dato.input_schema.properties.valor.description, /consignar_arriendo/);
 });
+
+test("intencion: consignar_arriendo solo con el valor exacto", async (t) => {
+  t.mock.method(leads, "update", async (id, patch) => patch);
+  const casos = [
+    ["soy dueño, quiero vender, no arrendar", "vender"],
+    ["no soy dueño, busco arrendar", "arrendar"],
+    ["Consignar_Arriendo ", "consignar_arriendo"],
+  ];
+  for (const [valor, esperado] of casos) {
+    const ctx = baseCtx();
+    await executeTool("registrar_dato_lead", { campo: "intencion", valor }, ctx);
+    assert.strictEqual(ctx.lead.intencion, esperado, valor);
+  }
+});

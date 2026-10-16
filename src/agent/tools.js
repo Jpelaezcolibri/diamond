@@ -47,7 +47,7 @@ const TOOL_DEFINITIONS = [
           type: "string",
           enum: ["nombre", "presupuesto", "zona_interes", "tipo_interes", "urgencia", "forma_pago", "intencion"],
           description:
-            "El dato a registrar. forma_pago: como piensa pagar (credito hipotecario, recursos propios, mixto). intencion: que quiere hacer el cliente — 'comprar', 'arrendar' o 'vender' (registrala APENAS quede claro, sobre todo 'vender' cuando el cliente sea un propietario que quiere entregar su inmueble).",
+            "El dato a registrar. forma_pago: como piensa pagar (credito hipotecario, recursos propios, mixto). intencion: que quiere hacer el cliente — 'comprar', 'arrendar' (busca inmueble), 'vender' o 'consignar_arriendo' (dueno que quiere que le arrendemos su inmueble) (registrala APENAS quede claro, sobre todo 'vender' cuando el cliente sea un propietario que quiere entregar su inmueble).",
         },
         valor: { type: "string", description: "El valor tal como lo expreso el cliente. Para intencion usa exactamente: comprar, arrendar (busca inmueble para arrendar), vender, o consignar_arriendo (es DUENO y quiere que le arrendemos SU inmueble, mensual o por noches)." },
       },
@@ -726,7 +726,7 @@ async function executeTool(name, input, ctx) {
       const v = input.valor.toLowerCase();
       // consignar_arriendo va PRIMERO (2026-10-16): el regex de "arrend" lo
       // convertia en inquilino y Sofi le ofrecia inventario a un dueno.
-      const intencion = /consignar_arriendo|due[ñn]o.*(arrend|alquil|renta)/.test(v)
+      const intencion = /^consignar[_ ]arriendo$/.test(v.trim())
         ? "consignar_arriendo"
         : /vend|consign/.test(v)
           ? "vender"
