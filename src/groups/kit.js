@@ -4,7 +4,7 @@
 // pueden publicar, se arma el texto y se registra quien compartio que.
 const supabase = require("../data/supabase");
 const { withLandingLink } = require("../data/properties");
-const { estadoDelInventario } = require("../data/sync-estado");
+const syncEstado = require("../data/sync-estado");
 const { REFS_BLOQUEADAS } = require("./publicable");
 const verificarLink = require("./verificar-link");
 const { postGrupo } = require("./redactar");
@@ -49,10 +49,15 @@ async function ultimasPublicaciones(orgId) {
 
 // Alias publico por auth user id: nunca el nombre.
 async function aliasPorUsuario(orgId) {
-  const { data, error } = await supabase.from("advisors").select("auth_user_id, alias_publico, name").eq("org_id", orgId);
-  if (error) return {};
+  const { data, error } = await supabase.from("advisors").select("auth_user_id, alias_publico").eq("org_id", orgId);
+  if (error) {
+    console.warn("[kit] No se pudo leer advisors:", error.message);
+    return {};
+  }
   const mapa = {};
-  for (const a of data || []) if (a.auth_user_id) mapa[a.auth_user_id] = aliasPublico(a);
+  // Sin alias_publico no se pone nada: la etiqueta queda sin "por ..." en vez
+  // de mostrar el texto de reemplazo de aliasPublico.
+  for (const a of data || []) if (a.auth_user_id && String(a.alias_publico || "").trim()) mapa[a.auth_user_id] = aliasPublico(a);
   return mapa;
 }
 
@@ -66,7 +71,7 @@ async function contarDesde(tabla, orgId, columna, desdeIso) {
 }
 
 async function listar(org, { operacion = "Venta", zona = null } = {}) {
-  const inventario = await estadoDelInventario(org.id);
+  const inventario = await syncEstado.estadoDelInventario(org.id);
   if (!inventario.fresco) return { fresco: false, horas: inventario.horas, items: [], kpis: null };
 
   let q = supabase.from("properties").select("*").eq("org_id", org.id).eq("disponible", true).eq("operacion", operacion);
@@ -98,10 +103,16 @@ async function listar(org, { operacion = "Venta", zona = null } = {}) {
     contarDesde("kit_publicaciones", org.id, "created_at", semana),
     contarDesde("leads", org.id, "kit_at", semana),
   ]);
+  // kpis: los conteos pueden ser null si la migracion no corrio (el CRM muestra "—").
   return { fresco: true, horas: inventario.horas, items, kpis: { compartidasSemana, clientesSemana, listas: items.length } };
 }
 
+// La ref llega del request y va a ilike: solo caracteres de una ref, sin
+// comodines de LIKE (% _ \).
+const REF_VALIDA = /^[A-Za-z0-9-]+$/;
+
 async function post(org, ref, { comision = true } = {}) {
+  if (!REF_VALIDA.test(String(ref || ""))) return null;
   const { data, error } = await supabase
     .from("properties")
     .select("*")
