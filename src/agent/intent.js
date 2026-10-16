@@ -12,6 +12,30 @@ function detectSellerIntent(text) {
   return SELLER_RE.test(String(text || "")) ? "vender" : null;
 }
 
+// Dueno que quiere ARRENDAR su propio inmueble (2026-10-16, spec kit +
+// duenos para arriendo). Antes no existia: "quiero arrendar mi apto" caia en
+// tools.js como `arrendar` (inquilino) y Sofi le ofrecia inventario a un
+// propietario. Mismo criterio que SELLER_RE: solo frases de ALTA precision,
+// con el posesivo ("mi", "mis") o "tengo un ... para arrendar". "busco
+// arrendar un apto" es un inquilino y no dispara.
+const INMUEBLE = "(propiedad|casa|apartamento|apto|apartaestudio|inmueble|finca|local|oficina)";
+const OWNER_RENT_RE = new RegExp(
+  [
+    String.raw`\b(arrendar|rentar|alquilar|arriendo|alquilo|rento)\s+(mi|mis|nuestr[ao]s?)\b`,
+    String.raw`\bpon(er|go|dr[ée])\s+(en\s+(arriendo|renta|alquiler)\s+(mi|mis|nuestr[ao]s?)|(mi|mis|nuestr[ao]s?)\s+${INMUEBLE}\s+en\s+(arriendo|renta|alquiler|airbnb))\b`,
+    String.raw`\btengo\s+(un|una)\s+${INMUEBLE}\s+para\s+(arrendar|rentar|alquilar|arriendo|renta)\b`,
+    String.raw`\bmi\s+${INMUEBLE}[^.?!]{0,40}(arrendar|rentar|alquilar|arriendo|airbnb)\b`,
+    String.raw`\b(administran|manejan|reciben)\s+(arriendos|propiedades\s+para\s+arriendo|inmuebles\s+para\s+arrendar)\b`,
+  ].join("|"),
+  "i"
+);
+
+// Devuelve "consignar_arriendo" si el mensaje expresa intencion de arrendar el
+// propio inmueble (arriendo mensual o renta corta).
+function detectOwnerRentIntent(text) {
+  return OWNER_RENT_RE.test(String(text || "")) ? "consignar_arriendo" : null;
+}
+
 // ── Idioma del cliente ──────────────────────────────────────────────────────
 // Senal fuerte: los prellenados EN de la landing traducida (son NUESTROS, los
 // conocemos exactos — ver web/config/tenants/*.ts). Señal debil: heuristica
@@ -39,4 +63,4 @@ function detectClientLanguage(text) {
   return null;
 }
 
-module.exports = { detectSellerIntent, detectClientLanguage };
+module.exports = { detectSellerIntent, detectOwnerRentIntent, detectClientLanguage };

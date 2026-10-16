@@ -44,3 +44,45 @@ test("tolera entradas vacias o nulas", () => {
   assert.strictEqual(detectSellerIntent(null), null);
   assert.strictEqual(detectSellerIntent(undefined), null);
 });
+
+const { detectOwnerRentIntent } = require("../src/agent/intent");
+
+const duenoArrienda = [
+  "Hola, quiero arrendar mi apartamento con ustedes",
+  "quiero poner en arriendo mi casa",
+  "necesito arrendar mi apto de Envigado",
+  "tengo un apartamento para arrendar",
+  "tengo un apto para rentar en Sabaneta",
+  "quiero rentar mi apto por noches",
+  "quiero poner mi apto en Airbnb",
+  "mi apartamento lo quiero arrendar",
+  "ustedes administran arriendos?",
+  "Hola, quiero poner en arriendo mi propiedad",
+];
+
+const inquilino = [
+  "busco arrendar un apartamento en Envigado",
+  "quiero arrendar un apto en el poblado",
+  "necesito un apartamento en arriendo",
+  "tienen apartamentos para arrendar en Laureles?",
+  "busco algo en renta corta para diciembre",
+  "quiero vender mi apartamento",
+  "me interesa la propiedad 10077063",
+];
+
+test("detecta al dueno que quiere arrendar su inmueble (mensual o renta corta)", () => {
+  for (const t of duenoArrienda) {
+    assert.strictEqual(detectOwnerRentIntent(t), "consignar_arriendo", `deberia detectar dueno en: "${t}"`);
+  }
+});
+
+test("NO confunde a un inquilino ni a un vendedor con un dueno que arrienda", () => {
+  for (const t of inquilino) {
+    assert.strictEqual(detectOwnerRentIntent(t), null, `NO deberia detectar dueno en: "${t}"`);
+  }
+});
+
+test("las frases de vender siguen dando vender y no consignar_arriendo", () => {
+  assert.strictEqual(detectSellerIntent("quiero vender mi casa"), "vender");
+  assert.strictEqual(detectOwnerRentIntent("quiero vender mi casa"), null);
+});
