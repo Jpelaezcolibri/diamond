@@ -231,6 +231,45 @@ router.post("/api/grupos/metricas", async (req, res) => {
   }
 });
 
+// ── Kit de publicacion (spec 2026-10-16) ───────────────────────────────
+// Se llama `kit.<funcion>` (no destructurado) para que los tests puedan
+// pisarlas con t.mock.method.
+const kit = require("../groups/kit");
+
+router.post("/api/kit/propiedades", async (req, res) => {
+  try {
+    const org = await organizations.getDefault();
+    const operacion = req.body?.operacion === "Arriendo" ? "Arriendo" : "Venta";
+    const zona = String(req.body?.zona || "").trim() || null;
+    res.json(await kit.listar(org, { operacion, zona }));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post("/api/kit/post", async (req, res) => {
+  const ref = String(req.body?.ref || "").trim();
+  if (!ref) return res.status(400).json({ error: "Falta la ref" });
+  try {
+    const org = await organizations.getDefault();
+    const r = await kit.post(org, ref, { comision: req.body?.comision !== false });
+    if (!r) return res.status(404).json({ error: "Esta propiedad no se puede publicar (no disponible, sin link o sin fotos)" });
+    res.json(r);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post("/api/kit/registrar", async (req, res) => {
+  try {
+    const org = await organizations.getDefault();
+    const { ref, userId = null, accion } = req.body || {};
+    res.json(await kit.registrar(org, { ref, userId, accion }));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── Import de exports .txt ──────────────────────────────────────────────
 //
 // La via segura para leer los grupos: el asesor exporta el chat desde su
