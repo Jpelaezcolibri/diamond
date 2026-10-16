@@ -252,18 +252,22 @@ function FichaPost({ item, onVolver }: { item: Item; onVolver: () => void }) {
       return;
     }
     setOcupado(true);
-    for (const f of archivos) {
-      const url = URL.createObjectURL(f);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = f.name;
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1500);
-      await new Promise((r) => setTimeout(r, 300));
+    try {
+      for (const f of archivos) {
+        const url = URL.createObjectURL(f);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = f.name;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1500);
+        await new Promise((r) => setTimeout(r, 300));
+      }
+      await registrar("descargar");
+      setEstado(`${archivos.length} fotos descargadas.`);
+    } finally {
+      // Si algo falla a medio camino, el boton no puede quedar bloqueado.
+      setOcupado(false);
     }
-    await registrar("descargar");
-    setEstado(`${archivos.length} fotos descargadas.`);
-    setOcupado(false);
   }
 
   return (
