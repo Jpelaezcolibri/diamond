@@ -40,6 +40,10 @@ export const diamond = {
         es: "Hola, quiero vender mi propiedad con ustedes",
         en: "Hi, I want to sell my property with you",
       },
+      ownerRentMessage: {
+        es: "Hola, quiero poner en arriendo mi propiedad",
+        en: "Hi, I want to rent out my property",
+      },
     },
     socials: {
       instagram: "https://www.instagram.com/diamondinmobiliarialux/",

@@ -20,6 +20,16 @@ export function sellerWhatsAppUrl(config: TenantConfig, lang: Language = "es"): 
   return waUrl(config.contact.whatsapp.number, localizeText(config.contact.whatsapp.sellerMessage, lang));
 }
 
+/** Dueno que quiere arrendar su inmueble: Sofi lo reconoce (detectOwnerRentIntent). */
+export function ownerRentWhatsAppUrl(config: TenantConfig, lang: Language = "es"): string {
+  const message = config.contact.whatsapp.ownerRentMessage
+    ? localizeText(config.contact.whatsapp.ownerRentMessage, lang)
+    : lang === "en"
+      ? "Hi, I want to rent out my property"
+      : "Hola, quiero poner en arriendo mi propiedad";
+  return waUrl(config.contact.whatsapp.number, message);
+}
+
 /** CTA de una propiedad: mensaje con la ref precargada (patron del playbook). */
 export function propertyWhatsAppUrl(config: TenantConfig, ref: string, lang: Language = "es"): string {
   const message = localizeText(config.contact.whatsapp.propertyMessage, lang).replace("{ref}", ref);

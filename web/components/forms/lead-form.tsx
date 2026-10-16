@@ -134,6 +134,7 @@ export function LeadForm({ context, propertyRef, className }: LeadFormProps) {
             <option value="comprar">{t("leadForm.operationBuy")}</option>
             <option value="arrendar">{t("leadForm.operationRent")}</option>
             <option value="vender">{t("leadForm.operationSell")}</option>
+            <option value="arrendar_propiedad">{t("leadForm.operationRentOut")}</option>
           </NativeSelect>
         </Field>
 

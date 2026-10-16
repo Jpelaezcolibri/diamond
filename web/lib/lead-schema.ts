@@ -10,7 +10,7 @@ export const LeadFormSchema = z.object({
     .string()
     .trim()
     .regex(/^[\d\s+()-]{7,20}$/, "Escribe un número de celular válido"),
-  operacion: z.enum(["comprar", "arrendar", "vender"], { message: "Elige una opción" }),
+  operacion: z.enum(["comprar", "arrendar", "vender", "arrendar_propiedad"], { message: "Elige una opción" }),
   zona: z.string().trim().max(120).optional().or(z.literal("")),
   presupuesto: z.string().trim().max(80).optional().or(z.literal("")),
   /** Ref si el form viene del detalle de una propiedad. Alfanumérica: los refs

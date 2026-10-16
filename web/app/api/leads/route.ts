@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getTenantConfig } from "@/config/tenant";
 import { LeadFormSchema, normalizePhone } from "@/lib/lead-schema";
 import { createAdminClient } from "@/lib/admin-supabase";
-import { generalWhatsAppUrl, propertyWhatsAppUrl, sellerWhatsAppUrl } from "@/lib/whatsapp";
+import { generalWhatsAppUrl, ownerRentWhatsAppUrl, propertyWhatsAppUrl, sellerWhatsAppUrl } from "@/lib/whatsapp";
 import { trackLead } from "@/services/tracking";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
 
@@ -17,10 +17,12 @@ const CATEGORIA: Record<string, string> = {
   comprar: "compra",
   arrendar: "alquiler",
   vender: "otros",
+  arrendar_propiedad: "alquiler",
 };
 
-function whatsappFor(context: string, propertyRef: string | undefined, lang: "es" | "en" = "es") {
+function whatsappFor(context: string, propertyRef: string | undefined, lang: "es" | "en" = "es", operacion?: string) {
   const config = getTenantConfig();
+  if (operacion === "arrendar_propiedad") return ownerRentWhatsAppUrl(config, lang);
   if (context === "property" && propertyRef) return propertyWhatsAppUrl(config, propertyRef, lang);
   if (context === "seller") return sellerWhatsAppUrl(config, lang);
   return generalWhatsAppUrl(config, lang);
@@ -56,7 +58,7 @@ export async function POST(request: Request) {
   // Anti-spam: honeypot lleno o submit en <2s → 200 fake (sin señal al bot).
   const tooFast = Date.now() - values._ts < 2000;
   if (values._gotcha || tooFast) {
-    return NextResponse.json({ ok: true, whatsappUrl: whatsappFor(values.context, values.propertyRef, values.idioma) });
+    return NextResponse.json({ ok: true, whatsappUrl: whatsappFor(values.context, values.propertyRef, values.idioma, values.operacion) });
   }
 
   const phone = normalizePhone(values.telefono);
@@ -64,7 +66,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "Teléfono inválido" }, { status: 400 });
   }
 
-  const whatsappUrl = whatsappFor(values.context, values.propertyRef, values.idioma);
+  const whatsappUrl = whatsappFor(values.context, values.propertyRef, values.idioma, values.operacion);
   const supabase = createAdminClient();
   const orgId = process.env.TENANT_ORG_ID;
 
@@ -119,6 +121,7 @@ export async function POST(request: Request) {
       source: "landing",
       property_ref_origen: values.propertyRef ?? null,
     };
+    if (values.operacion === "arrendar_propiedad") row.intencion = "consignar_arriendo";
     // El lead nace marcado en ingles si el visitante envio el form en EN
     // (Sofi lo atiende en ingles desde el primer mensaje). Best-effort: si la
     // columna no existe (migracion 2026-07-24_lead_idioma pendiente), se

@@ -162,6 +162,7 @@ export const TenantConfigSchema = z.object({
       propertyMessage: LocalizedString,
       generalMessage: LocalizedString,
       sellerMessage: LocalizedString,
+      ownerRentMessage: LocalizedString.optional(),
     }),
     phone: z.string().optional(),
     email: z.string().email().optional(),
