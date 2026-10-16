@@ -24,9 +24,28 @@ const barrio = require("./barrio");
 // traducir, el filtro de precio se ignora en silencio y TODO parece matchear
 // — que es exactamente el resultado que haria pasar la compuerta de negocio
 // por la razon equivocada.
+// Un pedido puede traer varios tipos en un solo string ("apartamento, casa",
+// "lote / casa", "casa o finca"): el clasificador los guarda asi. Comparar el
+// string entero no matcheaba nunca (27 de 27 pedidos sin match en 14 dias,
+// hallado 2026-09-11). Se parte y alcanza con que calce cualquiera.
+function tiposPedidos(c) {
+  return String((c && c.tipo) || "")
+    .toLowerCase()
+    .split(/\s*(?:,|\/|;|\bo\b|\by\b)\s*/)
+    .map((t) => t.trim())
+    .filter(Boolean);
+}
+
+// Al prefiltro de la base (ilike) solo viaja un tipo unico. Con varios, la
+// consulta no filtra por tipo y la compuerta la aplica evaluarCandidata.
+function tipoParaConsulta(c) {
+  const tipos = tiposPedidos(c);
+  return tipos.length === 1 ? tipos[0] : null;
+}
+
 function filtrosInventario(c) {
   const f = {};
-  if (c.tipo) f.tipo = c.tipo;
+  if (tipoParaConsulta(c)) f.tipo = tipoParaConsulta(c);
   // El prefiltro de la base busca el termino en zona O ciudad — es permisivo a
   // proposito. La graduacion (exacta / vecina / otra_zona) esta en
   // ubicacionCoincide; aca solo se acota cuantas filas viajan.
@@ -88,7 +107,7 @@ function filtrosAliados(c) {
   // con informacion que no verificamos. Esas se usan solo hacia adentro, para
   // un cliente propio, en src/agent/tools.js.
   const f = { origen: "asesor" };
-  if (c.tipo) f.tipo = c.tipo;
+  if (tipoParaConsulta(c)) f.tipo = tipoParaConsulta(c);
   const zonasAliado = zonasPedidas(c);
   if (zonasAliado.length) f.zona = zonasAliado.join(" ");
   else if (c.ciudad) f.zona = c.ciudad;
@@ -269,7 +288,8 @@ function pisoCumple(piso, c) {
 // armado con su puntaje y las razones legibles de por que calza.
 function evaluarCandidata(p, c, fuente) {
   if (!mismaOperacion(p, c)) return null;
-  if (c.tipo && !String(p.tipo || "").toLowerCase().includes(String(c.tipo).toLowerCase())) return null;
+  const tipos = tiposPedidos(c);
+  if (tipos.length && !tipos.some((t) => String(p.tipo || "").toLowerCase().includes(t))) return null;
 
   // ── Amoblado: compuerta en las DOS direcciones ──────────────────────────
   //
@@ -689,5 +709,5 @@ module.exports = {
   cruzar, filtrosInventario, filtrosAliados, mismaOperacion, evaluarOferta,
   evaluarCandidata, zonaCoincide, ciudadCoincide, ubicacionCoincide, zonaExcluida, BANDA_INFERIOR,
   MARGEN_PRECIO, MARGEN_AREA, BONUS_PRIORIDAD_VENTA, CASTIGO_CORTO, sinDuplicados,
-  pisoCumple, esApartamento, PISO_ALTO_DESDE,
+  pisoCumple, esApartamento, PISO_ALTO_DESDE, tiposPedidos,
 };
