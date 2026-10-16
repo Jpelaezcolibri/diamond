@@ -3,6 +3,7 @@ const { tocarNombreEnGrupo, telefonoNormalizado } = require("../lib/contacto");
 // Etiquetas legibles de la intencion del cliente para la alerta al asesor.
 const INTENCION_LABEL = {
   vender: "QUIERE VENDER su propiedad",
+  consignar_arriendo: "Dueño · quiere arrendar su propiedad",
   comprar: "quiere comprar",
   arrendar: "quiere arrendar",
   vehiculos: "pregunta por vehiculos",
@@ -63,6 +64,8 @@ function buildClientLink(advisor, lead, propertyInteres, cita) {
         : `${saludo}quiero confirmar ${tipoLabel}: ${citaObj.descripcion}`;
   } else if (intencion === "vender") {
     texto = en ? `${saludo}I want to sell my property with you` : `${saludo}quiero vender mi propiedad con ustedes`;
+  } else if (intencion === "consignar_arriendo") {
+    texto = en ? `${saludo}I want to rent out my property with you` : `${saludo}quiero poner en arriendo mi propiedad con ustedes`;
   } else if (advisor.especialidad === "vehiculos" || intencion === "vehiculos") {
     texto = en ? `${saludo}I'm interested in a vehicle` : `${saludo}estoy interesado en un vehiculo`;
   } else {
@@ -370,11 +373,37 @@ async function buildColegaAppointmentAlert({ org, colega, lead, cita, ref }) {
     .join("\n");
 }
 
+// Ficha del inmueble de un dueno que quiere arrendar (spec 2026-10-16 §4.3).
+// Solo lo que dijo: un dato que falta no aparece.
+function fichaInmuebleOfrecido(ficha) {
+  if (!ficha || typeof ficha !== "object") return [];
+  const inmueble = [ficha.tipo, ficha.amoblado === "si" ? "amoblado" : ficha.amoblado === "no" ? "sin amoblar" : null]
+    .filter(Boolean)
+    .join(" ");
+  const corta = ficha.periodo === "corta";
+  return [
+    inmueble && `Inmueble: ${inmueble}`,
+    ficha.zona && `Zona: ${ficha.zona}`,
+    ficha.habitaciones && `Alcobas: ${ficha.habitaciones}`,
+    ficha.canon && `Espera: ${ficha.canon}`,
+    corta && ficha.rnt && `RNT: ${ficha.rnt}`,
+    corta && ficha.ph_permite && `Edificio permite renta corta: ${ficha.ph_permite.replace("_", " ")}`,
+  ].filter(Boolean);
+}
+
+function encabezadoDueno(lead) {
+  const periodo = lead.inmueble_ofrecido?.periodo;
+  if (periodo === "corta") return "Dueño · renta corta";
+  if (periodo === "mensual") return "Dueño · arriendo mensual";
+  return INTENCION_LABEL.consignar_arriendo;
+}
+
 // Mensaje de alerta que recibe el asesor cuando un lead es transferido.
 function buildAdvisorAlert(org, lead, motivo, propertyInteres, especialidad, cita, allyMatch) {
   const intencion = lead.intencion;
   const esVendedor = intencion === "vender";
-  const encabezadoIntencion = INTENCION_LABEL[intencion];
+  const esDuenoArriendo = intencion === "consignar_arriendo";
+  const encabezadoIntencion = esDuenoArriendo ? encabezadoDueno(lead) : INTENCION_LABEL[intencion];
   const citaObj = cita || lead.cita;
   // La alerta se construye en el instante de la transferencia: "ahora" ES la
   // fecha/hora de la transferencia (hora Colombia).
@@ -388,6 +417,7 @@ function buildAdvisorAlert(org, lead, motivo, propertyInteres, especialidad, cit
     `Cliente: ${lead.nombre || "Sin nombre"}`,
     `Numero: +${lead.phone}`,
     idiomaLine(lead),
+    ...(esDuenoArriendo ? fichaInmuebleOfrecido(lead.inmueble_ofrecido) : []),
     lead.presupuesto && `Presupuesto: ${lead.presupuesto}`,
     lead.zona_interes && `Zona: ${lead.zona_interes}`,
     lead.tipo_interes && `Tipo: ${lead.tipo_interes}`,
@@ -398,7 +428,7 @@ function buildAdvisorAlert(org, lead, motivo, propertyInteres, especialidad, cit
     citaObj && buildCalendarLink(citaObj, lead) && `Agendar en tu calendario: ${buildCalendarLink(citaObj, lead)}`,
     // Para un vendedor, el inmueble de origen es por donde entro (contexto), no lo
     // que quiere: nunca lo presentes como "propiedad de interes".
-    esVendedor
+    esVendedor || esDuenoArriendo
       ? lead.property_ref_origen && `Entro por la publicacion: ${lead.property_ref_origen}`
       : propertyInteres
         ? `Propiedad de interes: ${propertyInteres.ref} — ${propertyInteres.link}`
@@ -412,4 +442,4 @@ function buildAdvisorAlert(org, lead, motivo, propertyInteres, especialidad, cit
   return lines.join("\n");
 }
 
-module.exports = { buildClientLink, buildAdvisorAlert, buildAllyClientMatchAlert, buildAllyOfferMatchAlert, buildGroupDemandAlert, buildAppointmentAlert, buildColegaAppointmentAlert, buildCaptadorInterestAlert, formatCitaFechaHora };
+module.exports = { buildClientLink, buildAdvisorAlert, fichaInmuebleOfrecido, buildAllyClientMatchAlert, buildAllyOfferMatchAlert, buildGroupDemandAlert, buildAppointmentAlert, buildColegaAppointmentAlert, buildCaptadorInterestAlert, formatCitaFechaHora };
