@@ -101,6 +101,7 @@ export default function KitPublicacion() {
           <button
             key={op}
             onClick={() => setOperacion(op)}
+            aria-pressed={operacion === op}
             className={`flex-1 rounded-md py-1.5 text-sm ${operacion === op ? "bg-white font-semibold text-slate-900 shadow-sm" : "text-slate-500"}`}
           >
             {op}
@@ -161,6 +162,7 @@ function Chip({ activo, onClick, children }: { activo: boolean; onClick: () => v
   return (
     <button
       onClick={onClick}
+      aria-pressed={activo}
       className={`whitespace-nowrap rounded-full border px-3 py-1 text-xs ${activo ? "border-[#0b1526] bg-[#0b1526] text-white" : "border-slate-200 bg-white text-slate-700"}`}
     >
       {children}
@@ -173,16 +175,24 @@ const AYUDA_SIN_SHARE = "Este celular no deja compartir fotos desde el navegador
 function FichaPost({ item, onVolver }: { item: Item; onVolver: () => void }) {
   const [comision, setComision] = useState(true);
   const [post, setPost] = useState<Post | null>(null);
+  const [archivos, setArchivos] = useState<File[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [estado, setEstado] = useState<string | null>(null);
+  const [ocupado, setOcupado] = useState(false);
 
   useEffect(() => {
     let cancelado = false; // el interruptor puede cambiar antes de que llegue la respuesta anterior
     setPost(null);
+    setArchivos(null);
     setError(null);
     kitApi<Post>({ action: "post", ref: item.ref, comision })
       .then((p) => {
-        if (!cancelado) setPost(p);
+        if (cancelado) return;
+        setPost(p);
+        // Se precargan las fotos para que navigator.share se llame sin await previo (conserva el gesto del toque).
+        return fotosComoArchivos(item.ref, p.fotos.length).then((f) => {
+          if (!cancelado) setArchivos(f);
+        });
       })
       .catch((e) => {
         if (!cancelado) setError((e as Error).message);
@@ -195,51 +205,65 @@ function FichaPost({ item, onVolver }: { item: Item; onVolver: () => void }) {
   const registrar = (accion: "compartir" | "copiar" | "descargar") =>
     kitApi({ action: "registrar", ref: item.ref, accion }).catch(() => undefined);
 
-  async function compartir() {
-    if (!post) return;
-    setEstado("Preparando fotos…");
-    const archivos = await fotosComoArchivos(item.ref, post.fotos.length);
+  const listo = !!post && post.linkOk && archivos !== null && !ocupado;
+  const preparando = !!post && archivos === null;
+
+  function compartir() {
+    if (!post || !archivos || ocupado) return;
     const datos: ShareData = archivos.length ? { files: archivos, text: post.texto } : { text: post.texto };
     if (!navigator.canShare?.(datos)) {
       setEstado(AYUDA_SIN_SHARE);
       return;
     }
-    try {
-      await navigator.share(datos);
-    } catch (e) {
-      const nombre = (e as Error).name;
-      // AbortError: la asesora cerró el menú. NotAllowedError: el navegador perdió el gesto del toque.
-      setEstado(nombre === "AbortError" ? null : AYUDA_SIN_SHARE);
-      return;
-    }
-    await registrar("compartir");
-    setEstado(archivos.length < post.fotos.length ? "Compartida (algunas fotos no bajaron)." : "Compartida.");
+    setOcupado(true);
+    setEstado(null);
+    // Sin await antes de share: el navegador exige que salga del mismo toque.
+    navigator
+      .share(datos)
+      .then(async () => {
+        await registrar("compartir");
+        setEstado(archivos.length < post.fotos.length ? "Compartida (algunas fotos no bajaron)." : "Compartida.");
+      })
+      .catch((e) => {
+        // AbortError: la asesora cerró el menú. Otro (NotAllowedError...): mostrar la alternativa.
+        setEstado((e as Error).name === "AbortError" ? null : AYUDA_SIN_SHARE);
+      })
+      .finally(() => setOcupado(false));
   }
 
   async function copiar() {
-    if (!post) return;
+    if (!post || ocupado) return;
+    setOcupado(true);
     try {
       await navigator.clipboard.writeText(post.texto);
+      await registrar("copiar");
+      setEstado("Texto copiado.");
     } catch {
       setEstado("No se pudo copiar. Mantené presionado el texto para copiarlo.");
-      return;
+    } finally {
+      setOcupado(false);
     }
-    await registrar("copiar");
-    setEstado("Texto copiado.");
   }
 
   async function descargar() {
-    if (!post) return;
-    const archivos = await fotosComoArchivos(item.ref, post.fotos.length);
+    if (!archivos || ocupado) return;
+    if (archivos.length === 0) {
+      setEstado("No se pudieron bajar las fotos.");
+      return;
+    }
+    setOcupado(true);
     for (const f of archivos) {
+      const url = URL.createObjectURL(f);
       const a = document.createElement("a");
-      a.href = URL.createObjectURL(f);
+      a.href = url;
       a.download = f.name;
       a.click();
-      URL.revokeObjectURL(a.href);
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+      await new Promise((r) => setTimeout(r, 300));
     }
     await registrar("descargar");
     setEstado(`${archivos.length} fotos descargadas.`);
+    setOcupado(false);
   }
 
   return (
@@ -261,6 +285,7 @@ function FichaPost({ item, onVolver }: { item: Item; onVolver: () => void }) {
         )}
 
         {post && (
+          <div className="relative">
           <div className="grid h-48 grid-cols-3 grid-rows-2 gap-1 overflow-hidden rounded-xl">
             {post.fotos.slice(0, 3).map((_, i) => (
               // eslint-disable-next-line @next/next/no-img-element
@@ -271,6 +296,8 @@ function FichaPost({ item, onVolver }: { item: Item; onVolver: () => void }) {
                 className={`h-full w-full object-cover ${i === 0 ? "col-span-2 row-span-2" : ""}`}
               />
             ))}
+          </div>
+          <span className="absolute bottom-2 right-2 rounded-full bg-black/70 px-2 py-0.5 text-[11px] text-white">{Math.min(post.fotos.length, 4)} fotos ✓</span>
           </div>
         )}
 
@@ -284,7 +311,7 @@ function FichaPost({ item, onVolver }: { item: Item; onVolver: () => void }) {
 
         <label className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm">
           <span>Incluir “Comparto comisión con colegas”</span>
-          <input type="checkbox" checked={comision} onChange={(e) => setComision(e.target.checked)} className="h-5 w-5 accent-teal-600" />
+          <input type="checkbox" checked={comision} onChange={(e) => { setComision(e.target.checked); setEstado(null); }} className="h-5 w-5 accent-teal-600" />
         </label>
         {estado && <p className="text-center text-sm text-slate-600">{estado}</p>}
       </div>
@@ -292,16 +319,16 @@ function FichaPost({ item, onVolver }: { item: Item; onVolver: () => void }) {
       <div className="sticky bottom-0 border-t border-slate-200 bg-white p-3">
         <button
           onClick={compartir}
-          disabled={!post || !post.linkOk}
+          disabled={!listo}
           className="w-full rounded-xl bg-[#25d366] py-3 text-base font-semibold text-white disabled:opacity-40"
         >
-          Compartir en WhatsApp
+          {preparando ? "Preparando fotos…" : "Compartir en WhatsApp"}
         </button>
         <div className="mt-2 flex gap-2">
-          <button onClick={copiar} disabled={!post || !post.linkOk} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm disabled:opacity-40">
+          <button onClick={copiar} disabled={!post || !post.linkOk || ocupado} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm disabled:opacity-40">
             Copiar texto
           </button>
-          <button onClick={descargar} disabled={!post || !post.linkOk} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm disabled:opacity-40">
+          <button onClick={descargar} disabled={!listo} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm disabled:opacity-40">
             Descargar fotos
           </button>
         </div>
