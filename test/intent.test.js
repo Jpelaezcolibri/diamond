@@ -58,6 +58,10 @@ const duenoArrienda = [
   "mi apartamento lo quiero arrendar",
   "ustedes administran arriendos?",
   "Hola, quiero poner en arriendo mi propiedad",
+  "quiero alquilar mi apartamento",
+  "quiero poner mi apto en arriendo",
+  "tengo una casa para arriendo",
+  "mi apto esta desocupado, como lo arriendo?",
 ];
 
 const inquilino = [
@@ -68,6 +72,15 @@ const inquilino = [
   "busco algo en renta corta para diciembre",
   "quiero vender mi apartamento",
   "me interesa la propiedad 10077063",
+  "quiero arrendar mi primer apartamento",
+  "busco arrendar mi primer apto",
+  "estoy buscando para arrendar mi familia",
+  "quiero arrendar mis vacaciones en un apto",
+  "quiero rentar mi carro",
+  "mi localidad favorita es Envigado, busco arrendar",
+  "mi casa actual es pequena, busco arrendar un apto",
+  "mi apartamento actual se vende, busco arrendar otro",
+  "mi oficina queda lejos, necesito arrendar apto cerca",
 ];
 
 test("detecta al dueno que quiere arrendar su inmueble (mensual o renta corta)", () => {
