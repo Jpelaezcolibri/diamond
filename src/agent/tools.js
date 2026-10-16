@@ -49,7 +49,7 @@ const TOOL_DEFINITIONS = [
           description:
             "El dato a registrar. forma_pago: como piensa pagar (credito hipotecario, recursos propios, mixto). intencion: que quiere hacer el cliente — 'comprar', 'arrendar' o 'vender' (registrala APENAS quede claro, sobre todo 'vender' cuando el cliente sea un propietario que quiere entregar su inmueble).",
         },
-        valor: { type: "string", description: "El valor tal como lo expreso el cliente. Para intencion usa exactamente: comprar, arrendar o vender." },
+        valor: { type: "string", description: "El valor tal como lo expreso el cliente. Para intencion usa exactamente: comprar, arrendar (busca inmueble para arrendar), vender, o consignar_arriendo (es DUENO y quiere que le arrendemos SU inmueble, mensual o por noches)." },
       },
       required: ["campo", "valor"],
     },
@@ -125,12 +125,30 @@ const TOOL_DEFINITIONS = [
         },
         intencion: {
           type: "string",
-          enum: ["comprar", "arrendar", "vender", "vehiculos", "otro"],
+          enum: ["comprar", "arrendar", "vender", "consignar_arriendo", "vehiculos", "otro"],
           description:
-            "Que quiere hacer el cliente (define el mensaje que recibe el asesor): comprar o arrendar (busca inmueble), vender (quiere que la inmobiliaria venda SU propiedad), vehiculos, u otro. IMPORTANTE: si el cliente quiere vender su propiedad usa 'vender' con especialidad 'venta'.",
+            "Que quiere hacer el cliente (define el mensaje que recibe el asesor): comprar o arrendar (busca inmueble), vender (quiere que la inmobiliaria venda SU propiedad), consignar_arriendo (es dueno y quiere que le arrendemos SU propiedad; va con especialidad 'arriendo'), vehiculos, u otro. IMPORTANTE: si el cliente quiere vender su propiedad usa 'vender' con especialidad 'venta'.",
         },
       },
       required: ["motivo", "especialidad", "intencion"],
+    },
+  },
+  {
+    name: "registrar_inmueble_ofrecido",
+    description:
+      "Guarda los datos del inmueble de un DUENO que quiere que le arrendemos su propiedad (intencion consignar_arriendo). Llamala cada vez que el dueno cuente un dato nuevo; solo manda los campos que dijo. NO la uses con alguien que busca arrendar (inquilino) ni con quien quiere vender.",
+    input_schema: {
+      type: "object",
+      properties: {
+        zona: { type: "string", description: "Barrio y municipio, como lo dijo" },
+        tipo: { type: "string", description: "apartamento, casa, apartaestudio, local, oficina, finca..." },
+        habitaciones: { type: "number" },
+        canon: { type: "string", description: "Lo que espera recibir, tal como lo dijo (por mes o por noche)" },
+        amoblado: { type: "string", enum: ["si", "no"] },
+        periodo: { type: "string", enum: ["mensual", "corta"], description: "mensual = arriendo tradicional; corta = por noches (Airbnb)" },
+        rnt: { type: "string", description: "Solo renta corta: si tiene Registro Nacional de Turismo (si, no, en tramite)" },
+        ph_permite: { type: "string", enum: ["si", "no", "no_sabe"], description: "Solo renta corta: si el edificio permite renta por noches" },
+      },
     },
   },
   {
@@ -364,7 +382,8 @@ async function resolveLeadAdvisor(ctx, especialidad) {
   // agenda, que es contra la que se valida el choque de horarios.
   if (ctx.colega) return advisors.findAsesorPrincipalRadar(ctx.org);
   const intencion = ctx.lead.intencion;
-  const sigueFlujoEspecial = intencion === "vender" || intencion === "vehiculos" || especialidad === "vehiculos";
+  const sigueFlujoEspecial =
+    intencion === "vender" || intencion === "consignar_arriendo" || intencion === "vehiculos" || especialidad === "vehiculos";
   if (!sigueFlujoEspecial && ctx.propertyInteres?.captador_id) {
     try {
       const captador = await advisors.findById(ctx.org.id, ctx.propertyInteres.captador_id);
@@ -705,7 +724,15 @@ async function executeTool(name, input, ctx) {
     // el link y la alerta al asesor salgan con el encuadre correcto.
     if (input.campo === "intencion") {
       const v = input.valor.toLowerCase();
-      const intencion = /vend|consign/.test(v) ? "vender" : /arriendo|arrend|alquil|rentar|renta/.test(v) ? "arrendar" : "comprar";
+      // consignar_arriendo va PRIMERO (2026-10-16): el regex de "arrend" lo
+      // convertia en inquilino y Sofi le ofrecia inventario a un dueno.
+      const intencion = /consignar_arriendo|due[ñn]o.*(arrend|alquil|renta)/.test(v)
+        ? "consignar_arriendo"
+        : /vend|consign/.test(v)
+          ? "vender"
+          : /arriendo|arrend|alquil|rentar|renta/.test(v)
+            ? "arrendar"
+            : "comprar";
       ctx.lead.intencion = intencion;
       try {
         Object.assign(ctx.lead, await leads.update(ctx.lead.id, { intencion }));
@@ -715,7 +742,9 @@ async function executeTool(name, input, ctx) {
       return `Intencion registrada: ${intencion}. ${
         intencion === "vender"
           ? "El cliente es un PROPIETARIO que quiere vender: no le ofrezcas inventario para comprar; conectalo con el asesor de ventas (intencion vender)."
-          : "Sigue asesorando segun lo que busca."
+          : intencion === "consignar_arriendo"
+            ? "El cliente es un PROPIETARIO que quiere ARRENDAR su inmueble: no le ofrezcas inventario. Ve guardando su ficha con registrar_inmueble_ofrecido y transfierelo con especialidad arriendo e intencion consignar_arriendo."
+            : "Sigue asesorando segun lo que busca."
       }`;
     }
 
@@ -871,6 +900,32 @@ async function executeTool(name, input, ctx) {
     return `${topic.contenido}\n\n${LEGAL_DISCLAIMER}`;
   }
 
+  if (name === "registrar_inmueble_ofrecido") {
+    const CAMPOS = ["zona", "tipo", "habitaciones", "canon", "amoblado", "periodo", "rnt", "ph_permite"];
+    const nuevos = {};
+    for (const campo of CAMPOS) {
+      const v = input?.[campo];
+      if (v === undefined || v === null) continue;
+      if (typeof v === "string" && !v.trim()) continue;
+      nuevos[campo] = typeof v === "string" ? v.trim() : v;
+    }
+    const ficha = { ...(ctx.lead.inmueble_ofrecido || {}), ...nuevos };
+    ctx.lead.inmueble_ofrecido = ficha;
+    // Best-effort como `intencion`: sin la columna la ficha igual viaja en la
+    // alerta de este turno (ctx.lead).
+    try {
+      await leads.update(ctx.lead.id, { inmueble_ofrecido: ficha });
+    } catch (e) {
+      console.warn("[tools] No se pudo persistir inmueble_ofrecido (revisar migracion 2026-10-16_kit_publicacion):", e.message);
+    }
+    const falta = ["zona", "tipo"].filter((c) => !ficha[c]);
+    return `Datos del inmueble registrados. ${
+      falta.length
+        ? `Todavia falta: ${falta.join(", ")}.`
+        : "Con zona, tipo y su nombre ya puedes transferir con especialidad arriendo e intencion consignar_arriendo."
+    }`;
+  }
+
   if (name === "transferir_a_asesor") {
     // GATE DE COLEGA (code review post-merge, 2026-08-24 — mismo criterio que
     // maybeCaptadorAlert en tools.js:244). Un colega de otra inmobiliaria
@@ -889,7 +944,7 @@ async function executeTool(name, input, ctx) {
     // enrutamientos absurdos, ej. mandar un vendedor al asesor de vehiculos.
     const intencion = ctx.lead.intencion || input.intencion || (input.especialidad === "vehiculos" ? "vehiculos" : null);
     if (intencion) ctx.lead.intencion = intencion;
-    const ESP_POR_INTENCION = { vender: "venta", comprar: "venta", arrendar: "arriendo", vehiculos: "vehiculos" };
+    const ESP_POR_INTENCION = { vender: "venta", comprar: "venta", arrendar: "arriendo", consignar_arriendo: "arriendo", vehiculos: "vehiculos" };
     const especialidad =
       ESP_POR_INTENCION[intencion] ||
       input.especialidad ||
