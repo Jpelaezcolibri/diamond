@@ -28,7 +28,30 @@ Equipo: 1 dev (Juan) + Claude Code. Idioma de la app: español (Colombia).
 Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
 `docs:`, `config:`).
 
-## 2. Estado actual (2026-10-07)
+## 2. Estado actual (2026-10-16)
+
+- **Kit de publicación + dueños para arriendo (rama `kit-y-duenos-arriendo`,
+  2026-10-16, SIN desplegar).** Spec
+  `docs/superpowers/specs/2026-10-16-kit-publicacion-y-duenos-arriendo-design.md`,
+  plan y mockup en `docs/superpowers/`.
+  - **Kit `/kit` del CRM:** la asesora elige una propiedad publicable
+    (`src/groups/kit.js`: disponible, link de Wasi, foto, sync fresco) y la
+    comparte con fotos + texto desde SU celular (`navigator.share`). El texto
+    es `redactar.postGrupo`, sin IA. **No envía nada por WAHA ni Cloud API.**
+    Registra en `kit_publicaciones` y atribuye el lead que llega con "vi en
+    un grupo la Ref N" (`leads.kit_ref`).
+  - **Dueño que quiere arrendar (mensual o renta corta):** intención
+    `consignar_arriendo` (`intent.js`, decidida por el mensaje actual), tool
+    `registrar_inmueble_ofrecido` → `leads.inmueble_ofrecido`, reglas
+    33a-33d del prompt, alerta "Dueño · renta corta / arriendo mensual" y
+    opción "Arrendar mi propiedad" en la landing.
+  - **Migración pendiente:** `db/migrations/2026-10-16_kit_publicacion.sql`
+    (solo agrega). Sin ella todo funciona y solo se pierden el aviso de
+    repetición, los KPIs y la ficha guardada (va igual en la alerta).
+  - **Pendiente de probar:** Compartir con fotos en el celular de Daiana
+    (iOS puede soltar el texto: queda Copiar).
+  - La rama incluye `52ffabc` (radar: pedido con varios tipos), commiteado
+    desde otra sesión.
 
 - **Sofi vendedora + agenda con rotación (desplegado 2026-10-07, commits
   `aa6c5f2`…`9b2d4ec`).** Spec `docs/superpowers/specs/2026-10-07-sofi-vendedora-y-agenda-design.md`,
