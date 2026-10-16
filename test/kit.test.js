@@ -2,10 +2,10 @@ const { test } = require("node:test");
 const assert = require("node:assert");
 // Supabase falso (el real es null bajo el runner). Se instala ANTES de cargar kit.
 const supabasePath = require.resolve("../src/data/supabase");
-const fake = { inserts: [], propiedad: null, tablas: {}, from(tabla) {
+const fake = { inserts: [], ors: [], ilikes: [], propiedad: null, tablas: {}, from(tabla) {
   const self = this;
   const chain = {
-    select: () => chain, eq: () => chain, ilike: () => chain, gte: () => chain, order: () => chain, limit: () => chain,
+    select: () => chain, eq: () => chain, ilike: (c, v) => { self.ilikes.push([c, v]); return chain; }, or: (f) => { self.ors.push(f); return chain; }, gte: () => chain, order: () => chain, limit: () => chain,
     maybeSingle: async () => ({ data: self.propiedad, error: null }),
     insert: async (fila) => { self.inserts.push({ tabla, fila }); return { error: null }; },
     then: (ok, ko) => Promise.resolve({ data: self.tablas[tabla] || [], count: 3, error: null }).then(ok, ko),
@@ -109,4 +109,34 @@ test("listar: filtra sin fotos y arma la etiqueta con el alias", async (t) => {
   assert.strictEqual(r.items[0].foto, "a");
   assert.strictEqual(r.kpis.listas, 1);
   fake.tablas = {};
+});
+
+test("filtroZonaOr: 'Itagüí' arma un patron que tambien trae 'Itagüi' (sin ilike con tilde)", () => {
+  const { filtroZonaOr } = require("../src/data/properties");
+  const f = filtroZonaOr("Itagüí");
+  assert.ok(f.includes("zona.imatch."), f);
+  const patron = f.split(",")[0].replace("zona.imatch.", "");
+  assert.ok(new RegExp(patron, "i").test("Itagüi"), "el patron " + patron + " debe traer Itagüi");
+  assert.ok(new RegExp(patron, "i").test("Itagui"));
+  // zona de varias palabras: usa el token distintivo, no "El"
+  const p = filtroZonaOr("El Poblado");
+  assert.ok(new RegExp(p.split(",")[0].replace("zona.imatch.", ""), "i").test("Poblado"));
+  assert.strictEqual(filtroZonaOr(""), null);
+});
+
+test("listar con zona: usa el filtro imatch y no ilike sobre zona", async (t) => {
+  t.mock.method(syncEstado, "estadoDelInventario", async () => ({ fresco: true, horas: 2 }));
+  fake.tablas = {}; fake.ors.length = 0; fake.ilikes.length = 0;
+  await kit.listar(ORG, { operacion: "Venta", zona: "Itagüí" });
+  assert.strictEqual(fake.ors.length, 1);
+  assert.match(fake.ors[0], /zona.imatch./);
+  assert.ok(!fake.ilikes.some(([c]) => c === "zona"), "no debe usar ilike sobre zona");
+});
+
+test("registrar: una ref con comodines LIKE o vacia se rechaza sin tocar la base", async () => {
+  fake.inserts.length = 0;
+  for (const ref of ["%", "10_7", "a b", "", null]) {
+    assert.deepStrictEqual(await kit.registrar({ id: "o1" }, { ref, accion: "copiar" }), { ok: false });
+  }
+  assert.strictEqual(fake.inserts.length, 0);
 });

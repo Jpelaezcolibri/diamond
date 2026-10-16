@@ -3,12 +3,16 @@
 // celular: aca no se envia nada a WhatsApp, solo se decide QUE propiedades se
 // pueden publicar, se arma el texto y se registra quien compartio que.
 const supabase = require("../data/supabase");
-const { withLandingLink } = require("../data/properties");
+const { withLandingLink, filtroZonaOr } = require("../data/properties");
 const syncEstado = require("../data/sync-estado");
 const { REFS_BLOQUEADAS } = require("./publicable");
 const verificarLink = require("./verificar-link");
 const { postGrupo } = require("./redactar");
 const { aliasPublico } = require("../lib/identidad-publica");
+
+// La ref llega del request y va a ilike (post) o a la tabla (registrar): solo
+// caracteres de una ref, sin comodines de LIKE (% _ ).
+const REF_VALIDA = /^[A-Za-z0-9-]+$/;
 
 const FOTOS_MAX = 4;
 const DIAS_RECIENTE = 7;
@@ -75,7 +79,10 @@ async function listar(org, { operacion = "Venta", zona = null } = {}) {
   if (!inventario.fresco) return { fresco: false, horas: inventario.horas, items: [], kpis: null };
 
   let q = supabase.from("properties").select("*").eq("org_id", org.id).eq("disponible", true).eq("operacion", operacion);
-  if (zona) q = q.ilike("zona", `%${zona}%`);
+  // Mismo filtro que properties.search: ilike con tilde no trae "Itagüi" al pedir
+  // "Itagüí" (ver filtroZonaOr). Sin token util no se filtra por zona.
+  const filtroZona = zona ? filtroZonaOr(zona) : null;
+  if (filtroZona) q = q.or(filtroZona);
   const { data, error } = await q.order("created_at", { ascending: false }).limit(300);
   if (error) throw error;
 
@@ -106,11 +113,6 @@ async function listar(org, { operacion = "Venta", zona = null } = {}) {
   // kpis: los conteos pueden ser null si la migracion no corrio (el CRM muestra "—").
   return { fresco: true, horas: inventario.horas, items, kpis: { compartidasSemana, clientesSemana, listas: items.length } };
 }
-
-// La ref llega del request y va a ilike: solo caracteres de una ref, sin
-// comodines de LIKE (% _ \).
-const REF_VALIDA = /^[A-Za-z0-9-]+$/;
-
 async function post(org, ref, { comision = true } = {}) {
   if (!REF_VALIDA.test(String(ref || ""))) return null;
   const { data, error } = await supabase
@@ -135,7 +137,7 @@ async function post(org, ref, { comision = true } = {}) {
 const ACCIONES = new Set(["compartir", "copiar", "descargar"]);
 
 async function registrar(org, { ref, userId = null, accion }) {
-  if (!ref || !ACCIONES.has(accion)) return { ok: false };
+  if (!REF_VALIDA.test(String(ref || "")) || !ACCIONES.has(accion)) return { ok: false };
   const { error } = await supabase
     .from("kit_publicaciones")
     .insert({ org_id: org.id, property_ref: String(ref), user_id: userId, accion });

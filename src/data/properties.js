@@ -110,6 +110,22 @@ function matchesFilters(p, f) {
   return true;
 }
 
+// Filtro PostgREST (.or) de zona, compartido con el kit de publicacion.
+// imatch (regex sin mayusculas) con clases de caracteres en vez de ilike: la
+// base no tiene unaccent y guarda "Belén" e "Itagüi" mientras los colegas piden
+// "Belen" e "Itagüí". Medido el 2026-09-05: ilike '%itagüí%' traia 0 filas; el
+// patron trae las 2. Ver patronSinTildes. Devuelve null si no hay token util.
+function filtroZonaOr(zona) {
+  const tokens = distinctiveTokens(zonaTokens(zona));
+  if (tokens.length === 0) return null;
+  return tokens
+    .flatMap((t) => {
+      const patron = patronSinTildes(t);
+      return [`zona.imatch.${patron}`, `ciudad.imatch.${patron}`];
+    })
+    .join(",");
+}
+
 // Busca propiedades disponibles de la org. filters: {ref, zona, tipo, precio_max, habitaciones_min}
 async function search(orgOrId, filters = {}, limit = 5) {
   const org = resolveOrg(orgOrId);
@@ -123,18 +139,8 @@ async function search(orgOrId, filters = {}, limit = 5) {
   let query = supabase.from("properties").select("*").eq("org_id", orgId).eq("disponible", true);
   if (filters.ref) query = query.ilike("ref", filters.ref);
   if (filters.zona) {
-    const tokens = distinctiveTokens(zonaTokens(filters.zona));
-    if (tokens.length > 0) {
-      // imatch (regex sin mayusculas) con clases de caracteres en vez de
-      // ilike: la base no tiene unaccent y guarda "Belén" e "Itagüi" mientras
-      // los colegas piden "Belen" e "Itagüí". Medido el 2026-09-05: ilike
-      // '%itagüí%' traia 0 filas; el patron trae las 2. Ver patronSinTildes.
-      const ors = tokens.flatMap((t) => {
-        const patron = patronSinTildes(t);
-        return [`zona.imatch.${patron}`, `ciudad.imatch.${patron}`];
-      });
-      query = query.or(ors.join(","));
-    }
+    const filtro = filtroZonaOr(filters.zona);
+    if (filtro) query = query.or(filtro);
   }
   if (filters.tipo) query = query.ilike("tipo", `%${filters.tipo}%`);
   if (filters.habitaciones_min) query = query.gte("habitaciones", filters.habitaciones_min);
@@ -221,4 +227,4 @@ async function listByCaptador(orgId, advisorId, limit = 20) {
   return data || [];
 }
 
-module.exports = { search, findByRef, matchesFilters, zonaTokens, distinctiveTokens, sonVecinas, vecinosDe, subzonaCoincide, withLandingLink, enlazarWasiPublico, setCaptador, listByCaptador, setPrioridadVenta };
+module.exports = { search, filtroZonaOr, findByRef, matchesFilters, zonaTokens, distinctiveTokens, sonVecinas, vecinosDe, subzonaCoincide, withLandingLink, enlazarWasiPublico, setCaptador, listByCaptador, setPrioridadVenta };
