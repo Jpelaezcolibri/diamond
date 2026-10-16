@@ -121,3 +121,20 @@ from organizations o,
 ) as p(ref, titulo, tipo, operacion, precio, area, habitaciones, banos, garaje, estrato, administracion, zona, ciudad, descripcion, caracteristicas, link, disponible)
 where o.whatsapp_phone_id = 'DEMO_PHONE_ID'
 on conflict (org_id, ref) do nothing;
+
+-- Kit de publicacion en grupos + captacion de duenos para arriendo
+create table if not exists kit_publicaciones (
+  id uuid primary key default gen_random_uuid(),
+  org_id uuid not null references organizations(id) on delete cascade,
+  property_ref text not null,
+  user_id uuid references auth.users(id) on delete set null,
+  accion text not null, -- compartir | copiar | descargar
+  created_at timestamptz not null default now()
+);
+create index if not exists kit_publicaciones_org_ref_idx
+  on kit_publicaciones (org_id, property_ref, created_at desc);
+alter table kit_publicaciones enable row level security;
+
+alter table leads add column if not exists kit_ref text;
+alter table leads add column if not exists kit_at timestamptz;
+alter table leads add column if not exists inmueble_ofrecido jsonb;
