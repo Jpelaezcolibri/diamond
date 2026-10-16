@@ -142,6 +142,26 @@ function textoAdministracion(valor) {
   return `administración: ${v.charAt(0).toLocaleLowerCase("es-CO")}${v.slice(1)}`;
 }
 
+// Piezas que comparten la ficha del DM y el post del kit: una sola regla para
+// "lo no cargado no aparece".
+function lineaMedidas(p) {
+  return [
+    formato.formatearArea(p.area),
+    formato.pluralizar(p.habitaciones, "alcoba"),
+    formato.formatearPrecio(p.precio),
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+function listaCaracteristicas(p) {
+  return String(p.caracteristicas || "")
+    .split(",")
+    .map((c) => c.trim())
+    .filter(Boolean)
+    .slice(0, 6);
+}
+
 function ficha(match, indice, { detalleFalta = null } = {}) {
   const titulo = tituloUtil(match);
   const operacion = String(match.operacion || "").trim();
@@ -149,13 +169,7 @@ function ficha(match, indice, { detalleFalta = null } = {}) {
 
   const identidad = [`Ref ${match.ref}`, operacion || null, zona || null].filter(Boolean).join(" · ");
 
-  const medidas = [
-    formato.formatearArea(match.area),
-    formato.pluralizar(match.habitaciones, "alcoba"),
-    formato.formatearPrecio(match.precio),
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const medidas = lineaMedidas(match);
 
   // Solo si el inventario los tiene: un hueco de sync no se disfraza de "0
   // baños" o "estrato 0", que es peor que no decir nada (ver la misma regla
@@ -181,11 +195,7 @@ function ficha(match, indice, { detalleFalta = null } = {}) {
   // pregunta despues del primer mensaje; si lo tenemos, va en la ficha. Hasta
   // 6 para que una propiedad con 20 amenidades no se vuelva un muro; el link
   // trae el resto. Solo si hay: la ausencia no es "no tiene nada".
-  const caracteristicas = String(match.caracteristicas || "")
-    .split(",")
-    .map((c) => c.trim())
-    .filter(Boolean)
-    .slice(0, 6);
+  const caracteristicas = listaCaracteristicas(match);
   if (caracteristicas.length) lineas.push(`   ${caracteristicas.join(" · ")}`);
   // Antes del link a proposito: el colega lee la aclaracion mientras todavia
   // esta mirando los datos de la propiedad, no despues de haberse ido al link.
@@ -539,4 +549,33 @@ function mensajesAlColega(
   };
 }
 
-module.exports = { mensajeGrupo, mensajesAlColega, MAX_POR_DM, detallesPorFicha, lineasCierre, ficha, desvios, primerNombre, tituloUtil, lineaSalvedad, unirConNi, MAX_PROPIEDADES };
+// EL POST DEL KIT DE PUBLICACION (spec 2026-10-16 §3.3). La asesora lo pega
+// en sus grupos desde su celular junto con las fotos. Mismos datos que la
+// ficha del DM, pero sin el "1)" ni la sangria: es un post suelto, no un item
+// de una lista. Nunca lleva el nombre ni el celular de la asesora. El link a
+// Sofi trae la ref escrita para que el lead quede atribuido
+// (src/agent/kit-origen.js).
+function postGrupo(propiedad, { org = null, comision = true } = {}) {
+  const titulo = tituloUtil(propiedad) || `Propiedad Ref ${propiedad.ref}`;
+  const identidad = [`Ref ${propiedad.ref}`, String(propiedad.operacion || "").trim() || null, String(propiedad.zona || "").trim() || null]
+    .filter(Boolean)
+    .join(" · ");
+  const detalles = [
+    formato.pluralizar(propiedad.banos, "baño", "baños"),
+    formato.pluralizar(propiedad.garajes, "garaje"),
+    formato.datoCargado(propiedad.estrato) ? `estrato ${propiedad.estrato}` : null,
+    textoAdministracion(propiedad.administracion),
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const caracteristicas = listaCaracteristicas(propiedad).join(" · ");
+
+  const lineas = [titulo, identidad, lineaMedidas(propiedad), detalles, caracteristicas].filter(Boolean);
+  if (comision) lineas.push("", "Comparto comisión con colegas 🤝");
+  lineas.push("", `Fotos y ficha: ${propiedad.linkWasi}`);
+  const sofi = linkContactoOficial(org, `Hola, vi en un grupo la Ref ${propiedad.ref}`);
+  if (sofi) lineas.push(`Info o visita con Sofi: ${sofi}`);
+  return lineas.join("\n");
+}
+
+module.exports = { postGrupo, mensajeGrupo, mensajesAlColega, MAX_POR_DM, detallesPorFicha, lineasCierre, ficha, desvios, primerNombre, tituloUtil, lineaSalvedad, unirConNi, MAX_PROPIEDADES };
