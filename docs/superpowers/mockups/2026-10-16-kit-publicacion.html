@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kit de publicación</title>
+<style>
+  :root {
+    --navy: #0b1526; --gold: #c9a24b; --bg: #eef1f5; --card: #fff; --ink: #0f172a;
+    --muted: #64748b; --line: #e2e8f0; --indigo: #4f46e5; --teal: #0d9488;
+    --amber: #d97706; --red: #dc2626; --wa: #25d366;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--ink); }
+  header.top { background: var(--navy); color: #fff; padding: 20px 24px; }
+  header.top h1 { margin: 0; font-size: 20px; } header.top h1 span { color: var(--gold); }
+  header.top p { margin: 6px 0 0; color: #cbd5e1; font-size: 14px; max-width: 900px; }
+  .stage { display: flex; gap: 28px; padding: 28px 24px 48px; overflow-x: auto; align-items: flex-start; }
+  .col { flex: 0 0 auto; }
+  .col h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 10px 4px; }
+  .phone { width: 360px; height: 740px; background: var(--card); border: 10px solid #111; border-radius: 38px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 20px 40px rgba(15,23,42,.18); position: relative; }
+  .bar { background: var(--navy); color: #fff; padding: 14px 16px 12px; display: flex; align-items: center; gap: 10px; }
+  .bar b { font-size: 16px; } .bar .gold { color: var(--gold); font-size: 12px; margin-left: auto; }
+  .back { color: var(--gold); font-size: 20px; line-height: 1; }
+  .scroll { flex: 1; overflow-y: auto; padding: 12px; background: #f8fafc; }
+  .kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+  .kpi { border-radius: 12px; padding: 10px; color: #fff; }
+  .kpi b { display: block; font-size: 20px; } .kpi small { font-size: 11px; opacity: .9; }
+  .k1 { background: var(--indigo); } .k2 { background: var(--teal); } .k3 { background: var(--amber); }
+  .seg { display: flex; background: #e2e8f0; border-radius: 10px; padding: 3px; margin-bottom: 8px; }
+  .seg span { flex: 1; text-align: center; font-size: 13px; padding: 7px 0; border-radius: 8px; color: var(--muted); }
+  .seg .on { background: #fff; color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+  .filters { display: flex; gap: 6px; margin-bottom: 12px; overflow-x: auto; }
+  .chip { white-space: nowrap; font-size: 12px; border: 1px solid var(--line); background: #fff; padding: 6px 10px; border-radius: 999px; }
+  .chip.on { border-color: var(--navy); background: var(--navy); color: #fff; }
+  .prop { display: flex; gap: 10px; background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 8px; margin-bottom: 8px; }
+  .thumb { width: 78px; height: 78px; border-radius: 10px; flex: 0 0 auto; }
+  .p1 { background: linear-gradient(135deg,#94a3b8,#cbd5e1 60%,#e2e8f0); }
+  .p2 { background: linear-gradient(135deg,#a8a29e,#d6d3d1); }
+  .p3 { background: linear-gradient(135deg,#7dd3fc,#e0f2fe); }
+  .p4 { background: linear-gradient(135deg,#86efac,#dcfce7); }
+  .prop .t { font-size: 14px; font-weight: 600; } .prop .m { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .prop .price { font-size: 14px; font-weight: 700; margin-top: 4px; }
+  .tag { display: inline-block; font-size: 11px; padding: 2px 7px; border-radius: 999px; margin-top: 5px; }
+  .tag.ok { background: #ccfbf1; color: #115e59; } .tag.warn { background: #fef3c7; color: #92400e; }
+  .gallery { display: grid; grid-template-columns: 2fr 1fr; grid-template-rows: 1fr 1fr; gap: 4px; height: 190px; border-radius: 14px; overflow: hidden; margin-bottom: 10px; position: relative; }
+  .gallery div:first-child { grid-row: span 2; }
+  .gallery .count { position: absolute; right: 8px; bottom: 8px; background: rgba(11,21,38,.8); color: #fff; font-size: 11px; padding: 3px 8px; border-radius: 999px; }
+  .label { font-size: 12px; color: var(--muted); margin: 10px 2px 6px; display: flex; justify-content: space-between; }
+  .post { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 12px; font-size: 13px; line-height: 1.45; white-space: pre-wrap; }
+  .post a { color: #0369a1; word-break: break-all; }
+  .toggle { display: flex; align-items: center; justify-content: space-between; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; font-size: 13px; margin-top: 8px; }
+  .sw { width: 38px; height: 22px; background: var(--teal); border-radius: 999px; position: relative; }
+  .sw::after { content: ""; position: absolute; right: 3px; top: 3px; width: 16px; height: 16px; background: #fff; border-radius: 50%; }
+  .alert { background: #fef3c7; border: 1px solid #fcd34d; color: #78350f; border-radius: 12px; padding: 10px 12px; font-size: 12.5px; margin-bottom: 10px; }
+  .actions { padding: 10px 12px 14px; border-top: 1px solid var(--line); background: #fff; }
+  .btn { display: block; width: 100%; text-align: center; border: 0; border-radius: 12px; padding: 13px; font-size: 15px; font-weight: 600; }
+  .btn.share { background: var(--wa); color: #fff; }
+  .row2 { display: flex; gap: 8px; margin-top: 8px; }
+  .btn.ghost { background: #fff; border: 1px solid var(--line); color: var(--ink); font-size: 13px; padding: 10px; }
+  /* hoja de compartir del sistema */
+  .dim { position: absolute; inset: 0; background: rgba(15,23,42,.45); }
+  .sheet { position: absolute; left: 0; right: 0; bottom: 0; background: #fff; border-radius: 20px 20px 0 0; padding: 14px 16px 22px; }
+  .sheet .grab { width: 40px; height: 4px; background: #cbd5e1; border-radius: 4px; margin: 0 auto 12px; }
+  .sheet .pv { display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--muted); margin-bottom: 14px; }
+  .sheet .mini { width: 38px; height: 38px; border-radius: 8px; }
+  .apps { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; text-align: center; font-size: 11px; }
+  .app { width: 48px; height: 48px; border-radius: 14px; margin: 0 auto 4px; }
+  /* chat CRM */
+  .msg { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; font-size: 13px; margin-bottom: 8px; line-height: 1.4; }
+  .msg.in { background: #fff; } .msg.out { background: #ecfdf5; border-color: #a7f3d0; margin-left: 30px; }
+  .island { background: var(--navy); color: #fff; border-radius: 14px; padding: 12px; margin-bottom: 10px; }
+  .island .h { color: var(--gold); font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+  .island dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; margin: 8px 0 0; font-size: 13px; }
+  .island dt { color: #94a3b8; } .island dd { margin: 0; }
+  .pill { display: inline-block; background: var(--gold); color: var(--navy); font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; margin-left: 6px; }
+  .note { max-width: 360px; font-size: 12.5px; color: var(--muted); margin: 12px 4px 0; line-height: 1.45; }
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>Kit de publicación <span>· mockup para aprobar</span></h1>
+  <p>La asesora abre <b>crm.diamondinmobiliaria.com/kit</b> en el celular, elige una propiedad y la comparte con fotos y texto a sus grupos de WhatsApp desde su propio teléfono. Datos de ejemplo.</p>
+</header>
+
+<div class="stage">
+
+  <!-- 1. LISTA -->
+  <div class="col">
+    <h2>1 · Elegir propiedad</h2>
+    <div class="phone">
+      <div class="bar"><b>Kit de publicación</b><span class="gold">◆ Diamond</span></div>
+      <div class="scroll">
+        <div class="kpis">
+          <div class="kpi k1"><b>14</b><small>compartidas esta semana</small></div>
+          <div class="kpi k2"><b>5</b><small>clientes llegaron a Sofi</small></div>
+          <div class="kpi k3"><b>96</b><small>listas para publicar</small></div>
+        </div>
+        <div class="seg"><span class="on">Venta</span><span>Arriendo</span></div>
+        <div class="filters">
+          <span class="chip on">Todas las zonas</span><span class="chip">Envigado</span><span class="chip">El Poblado</span><span class="chip">Laureles</span><span class="chip">Sabaneta</span>
+        </div>
+        <div class="prop"><div class="thumb p1"></div><div>
+          <div class="t">Apartamento en La Frontera</div>
+          <div class="m">Envigado · 85 m² · 3 alc · Ref 10077063</div>
+          <div class="price">$480.000.000</div>
+          <span class="tag ok">Nunca compartida</span></div></div>
+        <div class="prop"><div class="thumb p2"></div><div>
+          <div class="t">Casa en Loma del Esmeraldal</div>
+          <div class="m">Envigado · 210 m² · 4 alc · Ref 10390204</div>
+          <div class="price">$1.250.000.000</div>
+          <span class="tag warn">Compartida hace 2 días por Asesor 1</span></div></div>
+        <div class="prop"><div class="thumb p3"></div><div>
+          <div class="t">Apartaestudio en Laureles</div>
+          <div class="m">Medellín · 42 m² · 1 alc · Ref 9944723</div>
+          <div class="price">$310.000.000</div>
+          <span class="tag ok">Compartida hace 9 días</span></div></div>
+        <div class="prop"><div class="thumb p4"></div><div>
+          <div class="t">Apartamento en Sabaneta</div>
+          <div class="m">Sabaneta · 68 m² · 2 alc · Ref 10299014</div>
+          <div class="price">$365.000.000</div>
+          <span class="tag ok">Nunca compartida</span></div></div>
+      </div>
+    </div>
+    <p class="note">Solo aparecen propiedades disponibles, con link de Wasi que abre y sync al día (la misma compuerta del radar). Lo que no pasa no se muestra: nunca sale una vendida.</p>
+  </div>
+
+  <!-- 2. POST -->
+  <div class="col">
+    <h2>2 · Revisar el post</h2>
+    <div class="phone">
+      <div class="bar"><span class="back">‹</span><b>Ref 10077063</b></div>
+      <div class="scroll">
+        <div class="gallery"><div class="p1"></div><div class="p2"></div><div class="p3"></div><span class="count">4 fotos ✓</span></div>
+        <div class="label"><span>Texto del post</span><span>sin IA · $0</span></div>
+<div class="post">Apartamento en La Frontera, Envigado
+Ref 10077063 · Venta
+85 m² · 3 alcobas · $480.000.000
+2 baños · 1 garaje · estrato 4 · administración $350.000
+Piscina · Gimnasio · Portería 24 h
+
+Comparto comisión con colegas 🤝
+
+Fotos y ficha: <a>info.wasi.co/apartamento-venta-envigado/10077063</a>
+Info o visita con Sofi: <a>wa.me/573xxxxxxxxx?text=Hola, vi en un grupo la Ref 10077063</a></div>
+        <div class="toggle"><span>Incluir “Comparto comisión con colegas”</span><span class="sw"></span></div>
+      </div>
+      <div class="actions">
+        <button class="btn share">Compartir en WhatsApp</button>
+        <div class="row2"><button class="btn ghost">Copiar texto</button><button class="btn ghost">Descargar fotos</button></div>
+      </div>
+    </div>
+    <p class="note">El texto sale de la misma ficha que ya usan los DM (sin nombre ni celular de la asesora). El link a Sofi lleva la ref escrita: así Sofi atiende al interesado y el lead queda marcado como “llegó por un grupo”.</p>
+  </div>
+
+  <!-- 3. COMPARTIR -->
+  <div class="col">
+    <h2>3 · Compartir (menú del celular)</h2>
+    <div class="phone">
+      <div class="bar"><span class="back">‹</span><b>Ref 10077063</b></div>
+      <div class="scroll">
+        <div class="gallery"><div class="p1"></div><div class="p2"></div><div class="p3"></div></div>
+      </div>
+      <div class="dim"></div>
+      <div class="sheet">
+        <div class="grab"></div>
+        <div class="pv"><div class="mini p1"></div><div>4 imágenes + texto<br><b style="color:#0f172a">Apartamento en La Frontera…</b></div></div>
+        <div class="apps">
+          <div><div class="app" style="background:var(--wa)"></div>WhatsApp</div>
+          <div><div class="app" style="background:#128c7e"></div>WA Business</div>
+          <div><div class="app" style="background:#94a3b8"></div>Guardar</div>
+          <div><div class="app" style="background:#cbd5e1"></div>Más</div>
+        </div>
+      </div>
+    </div>
+    <p class="note">Es el menú nativo de Android/iPhone: WhatsApp se abre con las fotos y el texto juntos y la asesora marca los grupos. Lo envía ella, como siempre: no pasa por WAHA ni arriesga la línea. Al tocar Compartir se registra “compartida” para el aviso de repetición.</p>
+  </div>
+
+  <!-- 4. DUEÑO EN EL CRM -->
+  <div class="col">
+    <h2>Bonus · Dueño que quiere arrendar</h2>
+    <div class="phone">
+      <div class="bar"><span class="back">‹</span><b>Marta Restrepo</b><span class="gold">Sofi</span></div>
+      <div class="scroll">
+        <div class="island">
+          <div class="h">Dueño · renta corta <span class="pill">CAPTACIÓN</span></div>
+          <dl>
+            <dt>Inmueble</dt><dd>Apartamento amoblado</dd>
+            <dt>Zona</dt><dd>El Poblado · Provenza</dd>
+            <dt>Alcobas</dt><dd>2</dd>
+            <dt>Espera</dt><dd>$280.000 por noche</dd>
+            <dt>RNT</dt><dd>Sí, en trámite</dd>
+            <dt>Edificio</dt><dd>Permite renta corta</dd>
+          </dl>
+        </div>
+        <div class="msg in">Hola, tengo un apto en Provenza y lo quiero poner para Airbnb, ¿ustedes lo manejan?</div>
+        <div class="msg out">¡Hola Marta! Sí, con gusto te ayudamos. Contame: ¿cuántas alcobas tiene y está amoblado?</div>
+        <div class="msg in">2 alcobas, todo amoblado</div>
+        <div class="msg out">Perfecto. ¿Ya tiene RNT y el edificio permite renta por noches?</div>
+        <div class="msg in">El RNT está en trámite, el edificio sí deja</div>
+        <div class="msg out">Listo, Marta. Le paso tus datos a nuestra asesora de arriendos para coordinar la visita al apartamento 🙌</div>
+      </div>
+    </div>
+    <p class="note">Hoy Sofi trataría a Marta como inquilina y le ofrecería apartamentos. Con el cambio, la ficha llega al chat del CRM con la etiqueta “Dueño · renta corta” o “Dueño · arriendo mensual”.</p>
+  </div>
+
+</div>
+</body>
+</html>
