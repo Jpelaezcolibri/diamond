@@ -21,10 +21,10 @@ function detectSellerIntent(text) {
 const INMUEBLE = "(propiedad|casa|apartamento|apto|apartaestudio|inmueble|finca|local|oficina)s?";
 const OWNER_RENT_RE = new RegExp(
   [
-    String.raw`\b(arrendar|rentar|alquilar|arriendo|alquilo|rento)\s+(mi|mis|nuestr[ao]s?)\s+(?!primer)${INMUEBLE}\b`,
+    String.raw`\b(arrendar|rentar|alquilar|arriendo|alquilo|rento)\s+(mi|mis|nuestr[ao]s?)\s+(?!primer)${INMUEBLE}\b(?!\s+(?:ideal|so[ñn]ad[oa]))`,
     String.raw`\bpon(er|go|dr[ée])\s+(en\s+(arriendo|renta|alquiler)\s+(mi|mis|nuestr[ao]s?)|(mi|mis|nuestr[ao]s?)\s+${INMUEBLE}\s+en\s+(arriendo|renta|alquiler|airbnb))\b`,
     String.raw`\btengo\s+(un|una)\s+${INMUEBLE}\s+para\s+(arrendar|rentar|alquilar|arriendo|renta)\b`,
-    String.raw`\bmi\s+${INMUEBLE}\b(?:(?!\b(?:busco|buscando|necesito)\b)[^.?!]){0,40}\b(arrendar|rentar|alquilar|arriendo|airbnb)\b`,
+    String.raw`\bmi\s+${INMUEBLE}\b(?:(?!\b(?:busco|buscando|necesito)\b)[^.?!]){0,40}\b(?:(?:arrendar|rentar|alquilar)(?!\s+(?:un|una|uno|algo|otro|otra)\b)|arriendo|airbnb)\b`,
     String.raw`\b(administran|manejan|reciben)\s+(arriendos|propiedades\s+para\s+arriendo|inmuebles\s+para\s+arrendar)\b`,
   ].join("|"),
   "i"
@@ -34,6 +34,18 @@ const OWNER_RENT_RE = new RegExp(
 // propio inmueble (arriendo mensual o renta corta).
 function detectOwnerRentIntent(text) {
   return OWNER_RENT_RE.test(String(text || "")) ? "consignar_arriendo" : null;
+}
+
+// Decision por TURNO (2026-10-16, revision final): se mira solo el mensaje
+// ACTUAL, no el historial. Con el historial, si Sofi corregia a un inquilino
+// mal etiquetado (registrar_dato_lead intencion=arrendar), el turno siguiente
+// lo volvia a voltear a dueno. Mismo blindaje: no asesor, no colega, vender
+// gana, y no se repite si ya es consignar_arriendo.
+function intencionDeDuenoEnTurno({ text, lead, advisor = null, colega = null }) {
+  if (advisor || colega) return null;
+  if (["vender", "consignar_arriendo"].includes(lead && lead.intencion)) return null;
+  if (detectSellerIntent(text)) return null;
+  return detectOwnerRentIntent(text);
 }
 
 // ── Idioma del cliente ──────────────────────────────────────────────────────
@@ -63,4 +75,4 @@ function detectClientLanguage(text) {
   return null;
 }
 
-module.exports = { detectSellerIntent, detectOwnerRentIntent, detectClientLanguage };
+module.exports = { detectSellerIntent, detectOwnerRentIntent, intencionDeDuenoEnTurno, detectClientLanguage };

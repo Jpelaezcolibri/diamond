@@ -9,7 +9,7 @@ const { buildSystemPrompt } = require("./prompts");
 const { TOOL_DEFINITIONS, executeTool, maybeCaptadorAlert } = require("./tools");
 const { isQualified } = require("./qualification");
 const { buildAdvisorAlert, formatCitaFechaHora } = require("../notifications/advisor");
-const { detectSellerIntent, detectOwnerRentIntent, detectClientLanguage } = require("./intent");
+const { detectSellerIntent, intencionDeDuenoEnTurno, detectClientLanguage } = require("./intent");
 const { refDeKit } = require("./kit-origen");
 const { getClient, registrarUso } = require("../lib/anthropic");
 const { aliasPublico } = require("../lib/identidad-publica");
@@ -223,16 +223,14 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
 
   // Dueno que quiere ARRENDAR su inmueble (2026-10-16): mismo piso de
   // confiabilidad que el vendedor, con el mismo blindaje para asesor y colega.
-  // Vender gana: si en el historial dijo las dos cosas, sigue el flujo de venta.
-  if (!advisor && !colega && !["vender", "consignar_arriendo"].includes(lead.intencion)) {
-    const clienteDijoArrendarSuyo = history.some((m) => m.role === "user" && detectOwnerRentIntent(m.content));
-    if (clienteDijoArrendarSuyo) {
-      lead.intencion = "consignar_arriendo";
-      try {
-        Object.assign(lead, await leads.update(lead.id, { intencion: "consignar_arriendo" }));
-      } catch {
-        // Sin la columna queda en memoria; se re-detecta del historial.
-      }
+  // Vender gana. Solo se mira el mensaje ACTUAL (no el historial): si Sofi
+  // corrige a un inquilino mal etiquetado, el turno siguiente no lo revierte.
+  if (intencionDeDuenoEnTurno({ text, lead, advisor, colega }) === "consignar_arriendo") {
+    lead.intencion = "consignar_arriendo";
+    try {
+      Object.assign(lead, await leads.update(lead.id, { intencion: "consignar_arriendo" }));
+    } catch {
+      // Sin la columna queda en memoria para este turno.
     }
   }
 

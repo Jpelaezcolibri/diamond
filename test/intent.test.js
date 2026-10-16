@@ -81,6 +81,11 @@ const inquilino = [
   "mi casa actual es pequena, busco arrendar un apto",
   "mi apartamento actual se vende, busco arrendar otro",
   "mi oficina queda lejos, necesito arrendar apto cerca",
+  "mi apto queda en Envigado y quiero arrendar algo cerca",
+  "quiero arrendar mi apartamento ideal en Laureles",
+  "mi casa es pequena y quiero arrendar una mas grande",
+  "mi oficina necesita arrendar un local",
+  "busco arrendar mi apartamento ideal",
 ];
 
 test("detecta al dueno que quiere arrendar su inmueble (mensual o renta corta)", () => {
@@ -98,4 +103,18 @@ test("NO confunde a un inquilino ni a un vendedor con un dueno que arrienda", ()
 test("las frases de vender siguen dando vender y no consignar_arriendo", () => {
   assert.strictEqual(detectSellerIntent("quiero vender mi casa"), "vender");
   assert.strictEqual(detectOwnerRentIntent("quiero vender mi casa"), null);
+});
+
+const { intencionDeDuenoEnTurno } = require("../src/agent/intent");
+
+test("intencionDeDuenoEnTurno: solo mira el mensaje actual y respeta los blindajes", () => {
+  const dueno = "quiero arrendar mi apartamento";
+  assert.strictEqual(intencionDeDuenoEnTurno({ text: dueno, lead: {} }), "consignar_arriendo");
+  // Sofi corrigio a arrendar (inquilino) y el mensaje actual no lo repite: no vuelve a "dueno".
+  assert.strictEqual(intencionDeDuenoEnTurno({ text: "gracias, y que opciones hay en Envigado?", lead: { intencion: "arrendar" } }), null);
+  assert.strictEqual(intencionDeDuenoEnTurno({ text: dueno, lead: {}, advisor: { id: 1 } }), null);
+  assert.strictEqual(intencionDeDuenoEnTurno({ text: dueno, lead: {}, colega: { id: 1 } }), null);
+  assert.strictEqual(intencionDeDuenoEnTurno({ text: dueno, lead: { intencion: "vender" } }), null);
+  assert.strictEqual(intencionDeDuenoEnTurno({ text: dueno, lead: { intencion: "consignar_arriendo" } }), null);
+  assert.strictEqual(intencionDeDuenoEnTurno({ text: "quiero vender mi casa y arrendar mi apto", lead: {} }), null);
 });
