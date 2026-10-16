@@ -9,7 +9,8 @@ const { buildSystemPrompt } = require("./prompts");
 const { TOOL_DEFINITIONS, executeTool, maybeCaptadorAlert } = require("./tools");
 const { isQualified } = require("./qualification");
 const { buildAdvisorAlert, formatCitaFechaHora } = require("../notifications/advisor");
-const { detectSellerIntent, detectClientLanguage } = require("./intent");
+const { detectSellerIntent, detectOwnerRentIntent, detectClientLanguage } = require("./intent");
+const { refDeKit } = require("./kit-origen");
 const { getClient, registrarUso } = require("../lib/anthropic");
 const { aliasPublico } = require("../lib/identidad-publica");
 const codigoColega = require("../groups/codigo-colega");
@@ -156,6 +157,17 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
   if (refMatch && !lead.property_ref_origen) {
     Object.assign(lead, await leads.update(lead.id, { property_ref_origen: refMatch[1] }));
   }
+  // Lead que llego por un post del kit de publicacion (spec 2026-10-16).
+  // No se toca `source` (es el canal). Best-effort: sin la migracion
+  // 2026-10-16_kit_publicacion.sql solo se pierde la medicion.
+  const refKit = refDeKit(text);
+  if (refKit && !lead.kit_ref) {
+    try {
+      Object.assign(lead, await leads.update(lead.id, { kit_ref: refKit, kit_at: new Date().toISOString() }));
+    } catch (e) {
+      console.warn("[kit] No se pudo guardar el origen del kit (revisar migracion 2026-10-16_kit_publicacion):", e.message);
+    }
+  }
   // Igual que arriba: solo se guarda del PRIMER mensaje que lo trae (el
   // origen del lead no cambia si mas adelante escribe mencionando otro anuncio).
   if (adReferral && !lead.ad_referral) {
@@ -205,6 +217,21 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
       } catch {
         // Columna aun no existe (migracion pendiente): queda en memoria, suficiente
         // para este turno; se re-detecta del historial en los siguientes.
+      }
+    }
+  }
+
+  // Dueno que quiere ARRENDAR su inmueble (2026-10-16): mismo piso de
+  // confiabilidad que el vendedor, con el mismo blindaje para asesor y colega.
+  // Vender gana: si en el historial dijo las dos cosas, sigue el flujo de venta.
+  if (!advisor && !colega && !["vender", "consignar_arriendo"].includes(lead.intencion)) {
+    const clienteDijoArrendarSuyo = history.some((m) => m.role === "user" && detectOwnerRentIntent(m.content));
+    if (clienteDijoArrendarSuyo) {
+      lead.intencion = "consignar_arriendo";
+      try {
+        Object.assign(lead, await leads.update(lead.id, { intencion: "consignar_arriendo" }));
+      } catch {
+        // Sin la columna queda en memoria; se re-detecta del historial.
       }
     }
   }
