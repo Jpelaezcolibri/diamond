@@ -342,6 +342,23 @@ function precioInconsistente(p) {
   return Math.abs(texto - campo) / campo > 0.03;
 }
 
+// PRESUPUESTO MARCADO COMO MAXIMO (Juan, 2026-10-17: "déjalo en 3% cuando
+// diga MAX"). "presupuesto MAX $450millones" recibia la 10077063 a $490M,
+// dentro del margen general del 10 %. Cuando el colega le pone MAX/maximo/
+// tope AL PRECIO, el margen baja a 3 %. Un "Max piso 10" o "120 m2 maximo"
+// no cuenta: el MAX tiene que ir pegado al presupuesto o a una cifra de plata.
+const MARGEN_PRECIO_TOPE = 0.03;
+const TOPE_TRAS_PRESUPUESTO = /\b(?:presupuesto|ppto|precio)\s*(?:de\s+)?(?:m[aá]x(?:imo)?|tope)\b/i;
+const TOPE_ANTES_DE_PLATA = /\b(?:m[aá]x(?:imo)?|tope)\b\s*[:=]?\s*(?:de\s+)?(?:\$|\d[\d.,]*\s*(?:millones|mill|mll|mm)\b)/i;
+const TOPE_DESPUES_DE_PLATA = /(?:\$\s*[\d.,]+|\d[\d.,]*\s*(?:millones|mill|mll|mm)\b)\s*(?:millones|mm)?\s*(?:m[aá]x(?:imo)?|tope)\b/i;
+function presupuestoEsTope(texto) {
+  const t = String(texto || "");
+  return TOPE_TRAS_PRESUPUESTO.test(t) || TOPE_ANTES_DE_PLATA.test(t) || TOPE_DESPUES_DE_PLATA.test(t);
+}
+function margenPrecioDe(c) {
+  return presupuestoEsTope(textoDelPedido(c)) ? MARGEN_PRECIO_TOPE : MARGEN_PRECIO;
+}
+
 // Devuelve null si la propiedad no pasa las compuertas; si pasa, el match ya
 // armado con su puntaje y las razones legibles de por que calza.
 function evaluarCandidata(p, c, fuente) {
@@ -441,7 +458,7 @@ function evaluarCandidata(p, c, fuente) {
   // ── Precio: banda, no techo — con margen de captura sobre el techo ──
   const precio = formato.parsearPrecio(p.precio);
   const techo = c.precio_max > 0 ? c.precio_max : null;
-  const techoConMargen = techo ? Math.round(techo * (1 + MARGEN_PRECIO)) : null;
+  const techoConMargen = techo ? Math.round(techo * (1 + margenPrecioDe(c))) : null;
   const piso = c.precio_min > 0 ? c.precio_min : techo ? Math.round(techo * BANDA_INFERIOR) : null;
   if (precio && techo) {
     if (precio > techoConMargen) return null;
@@ -777,5 +794,5 @@ module.exports = {
   cruzar, filtrosInventario, filtrosAliados, mismaOperacion, evaluarOferta,
   evaluarCandidata, zonaCoincide, ciudadCoincide, ubicacionCoincide, zonaExcluida, BANDA_INFERIOR,
   MARGEN_PRECIO, MARGEN_AREA, BONUS_PRIORIDAD_VENTA, CASTIGO_CORTO, sinDuplicados,
-  pisoCumple, esApartamento, PISO_ALTO_DESDE, tiposPedidos, areaMaxDe, variosPedidos, precioTextoDe,
+  pisoCumple, esApartamento, PISO_ALTO_DESDE, tiposPedidos, areaMaxDe, variosPedidos, precioTextoDe, presupuestoEsTope, margenPrecioDe,
 };

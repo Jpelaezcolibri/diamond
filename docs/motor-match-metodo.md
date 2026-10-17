@@ -43,7 +43,7 @@ pedidos** en un mensaje (se detecta en el texto, `variosPedidos`).
 | Piso conocido fuera de la banda (solo apartamentos) | `pisoCumple` |
 | Pide que esté rentando y la ficha dice vacía | `estaRentada` |
 | Zona: otra zona, otra ciudad o excluida | `ubicacionCoincide`, `zonaExcluida` |
-| Precio > tope × (1 + 10 %), o muy por debajo del mínimo | margen `GRUPOS_MARGEN_PRECIO` |
+| Precio > tope × (1 + 10 %), o muy por debajo del mínimo. **Si el colega escribe MAX / máximo / tope junto al presupuesto, el margen es 3 %** (Juan, 2026-10-17) | `margenPrecioDe`, `GRUPOS_MARGEN_PRECIO` |
 | Área < mínimo × (1 − 10 %), alcobas o parqueaderos cortos | `catalogoExigencias` |
 
 ## 4. Marcas: NO SALE SOLA (queda para que una persona decida)
