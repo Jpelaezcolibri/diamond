@@ -368,6 +368,22 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
 
   const finalText = extractText(response);
   if (finalText) textParts.push(finalText);
+  // PROMESA COLGADA (2026-10-17, Catherine Uribe): Sofi escribio "Déjame
+  // buscarte..." en el mismo turno de la herramienta, la busqueda volvio vacia
+  // y el modelo no dio respuesta final. Como ya habia texto, el reintento de
+  // abajo no corria y el cliente se quedaba esperando una promesa. Si hubo
+  // herramientas y no hay respuesta final, se pide de nuevo; si tampoco llega,
+  // se cierra la promesa con una salida honesta.
+  if (!finalText && iterations > 0 && response.stop_reason !== "tool_use") {
+    console.warn("[engine] Sin respuesta final despues de usar herramientas — reintentando");
+    response = await client.messages.create({ model: config.claudeModel, max_tokens: 2048, system, messages, tools: TOOL_DEFINITIONS });
+    registrarUso("engine:reintento_final", response.usage);
+    const reintento = extractText(response);
+    textParts.push(
+      reintento ||
+        "Revisé y en este momento no encontré opciones con esos datos. ¿Quieres que busquemos en otra zona o con otro presupuesto, o prefieres que una asesora te ayude directamente? 🙌"
+    );
+  }
   let reply = textParts.join("\n").trim();
 
   if (!reply && response.stop_reason !== "tool_use") {
