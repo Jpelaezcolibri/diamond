@@ -190,7 +190,10 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
   }
 
   const history = await conversations.getRecentMessages(conv.id, HISTORY_LIMIT);
-  const messages = history.map((m) => ({ role: m.role, content: m.content }));
+  // Solo los ultimos 7 dias llegan al modelo (Juan, 2026-10-17). La pausa se
+  // mide sobre el historial completo, antes del recorte.
+  const vigente = require("./pausa").historialVigente(history);
+  const messages = vigente.map((m) => ({ role: m.role, content: m.content }));
 
   // Intencion de VENTA detectada de forma deterministica sobre TODO el historial
   // reciente del cliente (no solo el mensaje actual): la declaracion "quiero
@@ -209,7 +212,7 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
   // solo para el asesor porque el colega como rol no existia todavia; el
   // riesgo es identico.
   if (!advisor && !colega && lead.intencion !== "vender") {
-    const clienteDijoVender = history.some((m) => m.role === "user" && detectSellerIntent(m.content));
+    const clienteDijoVender = vigente.some((m) => m.role === "user" && detectSellerIntent(m.content));
     if (clienteDijoVender) {
       lead.intencion = "vender";
       try {

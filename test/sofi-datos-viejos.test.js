@@ -45,3 +45,27 @@ test("sin pausa, los datos siguen llegando como siempre", () => {
   assert.match(t, /DATOS QUE YA CONOCES DEL CLIENTE:/);
   assert.doesNotMatch(t, /conversación anterior/i);
 });
+
+// Juan, 2026-10-17: "necesito que todos los mensajes que tengan mas de 7
+// dias no se tome el historial".
+const { historialVigente } = require("../src/agent/pausa");
+
+test("historialVigente deja afuera los mensajes de mas de 7 dias", () => {
+  const h = [msg("user", "2026-09-02T14:14:00Z"), msg("assistant", "2026-09-02T14:15:00Z"), msg("user", "2026-10-16T10:00:00Z"), msg("user", "2026-10-17T16:15:00Z")];
+  const v = historialVigente(h, ahora);
+  assert.deepStrictEqual(v.map((m) => m.created_at), ["2026-10-16T10:00:00Z", "2026-10-17T16:15:00Z"]);
+});
+
+test("si lo vigente arranca con un mensaje de Sofi, se antepone una nota de usuario (la API exige empezar por el usuario)", () => {
+  const h = [msg("user", "2026-09-02T14:14:00Z"), msg("assistant", "2026-10-17T16:04:00Z"), msg("user", "2026-10-17T16:15:00Z")];
+  const v = historialVigente(h, ahora);
+  assert.strictEqual(v[0].role, "user");
+  assert.match(v[0].content, /más de 7 días/);
+  assert.strictEqual(v[1].role, "assistant");
+  assert.strictEqual(v.length, 3);
+});
+
+test("sin fechas (memoria en tests) no corta nada", () => {
+  const h = [{ role: "user", content: "hola" }, { role: "assistant", content: "hola" }];
+  assert.deepStrictEqual(historialVigente(h, ahora), h);
+});
