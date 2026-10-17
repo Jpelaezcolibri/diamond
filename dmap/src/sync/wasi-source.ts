@@ -53,6 +53,8 @@ export interface SyncCandidate {
   wasiId: string | null;
   gone: boolean;
   data: CanonicalProperty | null;
+  /** La fila existia retirada (disponible=false) y la fuente la vuelve a publicar. */
+  reaparece?: boolean;
 }
 
 export interface WasiSource {

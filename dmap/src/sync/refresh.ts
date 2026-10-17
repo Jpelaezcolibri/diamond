@@ -42,3 +42,12 @@ export function camposQueSeRefrescan(data: CanonicalProperty): Record<string, un
   }
   return patch;
 }
+
+/**
+ * Una propiedad que el sync habia dado de baja y que Wasi vuelve a publicar
+ * (2026-10-17, caso 9921084) se reactiva. La API solo devuelve inventario
+ * publicado, asi que "la fuente la trae" alcanza para ponerla disponible.
+ */
+export function patchReaparicion(candidate: { reaparece?: boolean }): { disponible?: true } {
+  return candidate.reaparece ? { disponible: true } : {};
+}

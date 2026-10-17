@@ -1,7 +1,7 @@
 import { logger } from "../lib/logger.js";
 import { applyCognitiveInvalidation } from "../cognitive/application/invalidation.service.js";
 import { diffPropertySnapshot, type PropertySnapshot } from "../sync/diff.js";
-import { camposQueSeRefrescan } from "../sync/refresh.js";
+import { camposQueSeRefrescan, patchReaparicion } from "../sync/refresh.js";
 import { WasiApiSource } from "../sync/wasi-api.source.js";
 import { WasiPublicSource } from "../sync/wasi-public.source.js";
 import type { SyncCandidate, WasiSource } from "../sync/wasi-source.js";
@@ -168,6 +168,7 @@ async function processCandidate(orgId: string, syncRunId: string, candidate: Syn
   // Desde 2026-10-07 la misma regla cubre zona, ciudad, tipo, operacion, area,
   // habitaciones y banos — ver camposQueSeRefrescan.
   Object.assign(patch, camposQueSeRefrescan(data));
+  Object.assign(patch, patchReaparicion(candidate));
 
   for (const event of diff.events) {
     if (event.changeType === "price_changed") patch.precio = data.precio;
@@ -190,6 +191,18 @@ async function processCandidate(orgId: string, syncRunId: string, candidate: Syn
     images_hash: diff.imagesHash,
     raw: snapshot as unknown as Record<string, unknown>
   });
+
+  if (candidate.reaparece && !isNew) {
+    await syncRepo.recordPropertyChangeEvent({
+      org_id: orgId,
+      property_id: propertyId,
+      sync_run_id: syncRunId,
+      change_type: "status_changed",
+      old_value: { disponible: false },
+      new_value: { disponible: true }
+    });
+    stats.updated += 1;
+  }
 
   for (const event of diff.events) {
     await syncRepo.recordPropertyChangeEvent({

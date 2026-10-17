@@ -511,6 +511,9 @@ export class WasiApiSource implements WasiSource {
 
     const existing = await listPropertiesByOrg(orgId);
     const existingByRef = new Map(existing.map((p) => [p.ref, p.id]));
+    // Retiradas que Wasi vuelve a publicar (2026-10-17, caso 9921084): sin esta
+    // marca el sync nunca las reactivaba.
+    const retiradas = new Set(existing.filter((p) => p.disponible === false).map((p) => p.ref));
 
     const candidates: SyncCandidate[] = allProperties.map((raw) => {
       const data = toCanonicalProperty(raw, propertyTypes);
@@ -518,6 +521,7 @@ export class WasiApiSource implements WasiSource {
       if (data.estrato !== null) conEstrato += 1;
       return {
         propertyId: existingByRef.get(data.ref) ?? null,
+        reaparece: retiradas.has(data.ref),
         wasiId: String(raw.id_property),
         gone: false,
         data
