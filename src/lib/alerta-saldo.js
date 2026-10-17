@@ -66,7 +66,7 @@ async function observarError(err, { ahora = new Date(), enviar = enviarPorWhatsa
 // Wasi, src/scheduler/alerta-sync.js). Solo a ALERTA_TECNICA_TO, nunca a una
 // asesora. La plantilla no admite saltos de linea: va en una sola.
 function enviarAlertaTecnica(resumen, detalle = "") {
-  const linea = `${resumen} ${detalle}`.replace(/s+/g, " ").trim().slice(0, 900);
+  const linea = `${resumen} ${detalle}`.replace(/\s+/g, " ").trim().slice(0, 900);
   console.error(`[alerta-tecnica] ${linea}`);
   return enviarPorWhatsapp(`🚨 ${linea}`, linea);
 }
