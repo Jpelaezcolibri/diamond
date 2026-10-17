@@ -23,6 +23,10 @@ const { primerNombre } = require("./redactar");
 const VALORES_APAGADO = new Set(["false", "0", "no", "off"]);
 const MAX_PREGUNTA = 300;
 const SEMANA_MS = 7 * 24 * 60 * 60 * 1000;
+// "Hola Sofi", "hola sofy", "Sofi buenas": un mensaje que LE HABLA a Sofi.
+// Anclado al comienzo a proposito: los resumenes que Sofi le manda a Daiana
+// la NOMBRAN en el medio ("lo que Sofi hace sola") y no deben disparar nada.
+const SALUDA_A_SOFI = /^\s*(?:hola|buen[oa]s?(?:\s+(?:d[ií]as|tardes|noches))?|hey|ola)?[\s,!.]*sof(?:[iyí]|[ií]a)\b/i;
 
 function activo() {
   return !VALORES_APAGADO.has(String(process.env.RADAR_PUENTE_SOFI ?? "").trim().toLowerCase());
@@ -73,7 +77,10 @@ async function tenderPuente(org, { mensaje, señal, identidad, dmId }, deps = nu
   // Solo si quien escribe esta en nuestros grupos: a Wasi cobrando o a una
   // empresa de carros no se les contesta desde la linea.
   const colega = señal || !d.esColega ? null : await d.esColega(org.id, identidad).catch(() => null);
-  if (!señal && !colega) return { resultado: "sin_senal" };
+  // Caso Catherine Uribe (2026-10-17): "Hola sofy" a la linea del radar,
+  // sin ser colega de los grupos. Si le habla a Sofi, tambien va el puente.
+  const leHablaASofi = SALUDA_A_SOFI.test(String(mensaje.texto || ""));
+  if (!señal && !colega && !leHablaASofi) return { resultado: "sin_senal" };
 
   const historial = await d.historial(org.id, identidad).catch(() => []);
   const otros = historial.filter((m) => m.id !== dmId);
@@ -84,7 +91,7 @@ async function tenderPuente(org, { mensaje, señal, identidad, dmId }, deps = nu
   if (señal && !codigo) return { resultado: "sin_codigo" };
 
   const pregunta = recortar(mensaje.texto, MAX_PREGUNTA);
-  const encabezado = codigo ? `Hola Sofi, sobre mi PEDIDO (cód. ${codigo})` : "Hola Sofi, soy colega inmobiliario";
+  const encabezado = codigo ? `Hola Sofi, sobre mi PEDIDO (cód. ${codigo})` : colega ? "Hola Sofi, soy colega inmobiliario" : "Hola Sofi";
   const link = linkContactoOficial(org, `${encabezado}${pregunta ? `: ${pregunta}` : ""}`);
   if (!link) return { resultado: "sin_link" };
 

@@ -157,3 +157,22 @@ test("sin pedido ligado, si el colega ya escribio en la ultima semana no se repi
   assert.strictEqual(r.resultado, "ya_tendido");
   assert.strictEqual(llamadas.enviados.length, 0);
 });
+
+// Caso real 2026-10-17: Catherine Uribe ("Cathe U") le escribio a la linea
+// del radar "Hola sofy" / "Enviame apto Amoblados" / "Hola sigo esperando".
+// No es colega de nuestros grupos ni tiene pedido ligado, pero le hablaba a
+// Sofi: la gente cree que esa linea es Sofi porque las fichas van firmadas
+// por ella. Si el mensaje SALUDA a Sofi, tambien se le tiende el puente.
+test("un saludo a Sofi en la linea del radar recibe el puente aunque no sea colega", async () => {
+  const { d, llamadas } = deps({ esColega: async () => null, historial: async () => [{ id: "dm-1", senal_id: null, created_at: new Date().toISOString() }] });
+  const r = await puente.tenderPuente(ORG, { mensaje: mensaje({ remitenteNombre: "Cathe U", texto: "Hola sofy" }), señal: null, identidad, dmId: "dm-1" }, d);
+  assert.strictEqual(r.resultado, "tendido");
+  assert.strictEqual(llamadas.enviados.length, 1);
+});
+
+test("un mensaje que solo NOMBRA a Sofi (los resumenes que Sofi le manda a Daiana) no dispara nada", async () => {
+  const { d, llamadas } = deps({ esColega: async () => null });
+  const r = await puente.tenderPuente(ORG, { mensaje: mensaje({ remitenteNombre: "Diamond", texto: "📋 Daiana, pendientes... 4️⃣ Lo que Sofi ya está haciendo sola" }), señal: null, identidad, dmId: "dm-1" }, d);
+  assert.strictEqual(r.resultado, "sin_senal");
+  assert.strictEqual(llamadas.enviados.length, 0);
+});
