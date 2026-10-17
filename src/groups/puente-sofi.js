@@ -22,6 +22,7 @@ const { primerNombre } = require("./redactar");
 
 const VALORES_APAGADO = new Set(["false", "0", "no", "off"]);
 const MAX_PREGUNTA = 300;
+const SEMANA_MS = 7 * 24 * 60 * 60 * 1000;
 
 function activo() {
   return !VALORES_APAGADO.has(String(process.env.RADAR_PUENTE_SOFI ?? "").trim().toLowerCase());
@@ -34,6 +35,18 @@ function depsPorDefecto() {
     enviar: (args) => require("./envio-colega").enviarAlColega(args),
     asesor: (org) => require("../data/advisors").findAsesorPrincipalRadar(org),
     notificar: (args) => require("../notifications/notificar").notificar(args),
+    // Esta en nuestros grupos? colegas_grupos guarda el lid en digitos.
+    esColega: async (orgId, identidad) => {
+      const supabase = require("../data/supabase");
+      if (!supabase) return null;
+      const lid = String(identidad.lid || "").replace(/@.*$/, "");
+      let q = supabase.from("colegas_grupos").select("nombre").eq("org_id", orgId);
+      if (lid) q = q.eq("lid", lid);
+      else if (identidad.telefono) q = q.eq("telefono", identidad.telefono);
+      else return null;
+      const { data } = await q.limit(1);
+      return (data && data[0]) || null;
+    },
   };
 }
 
@@ -52,22 +65,30 @@ function textoPuente(nombre, link) {
  */
 async function tenderPuente(org, { mensaje, señal, identidad, dmId }, deps = null) {
   if (!activo()) return { resultado: "apagado" };
-  // Sin pedido ligado no sabemos si es un colega ni de que habla: no se le
-  // contesta a nadie desde la linea.
-  if (!señal || !org) return { resultado: "sin_senal" };
+  if (!org) return { resultado: "sin_senal" };
   const d = deps || depsPorDefecto();
 
-  const historial = await d.historial(org.id, identidad).catch(() => []);
-  if (historial.some((m) => m.id !== dmId && m.senal_id === señal.id)) return { resultado: "ya_tendido" };
+  // SIN PEDIDO LIGADO (Juan, 2026-10-17: "puente a Sofi tambien"). Caso:
+  // Avitárea pidio "los de 2 y 3 habitaciones" el 5-oct y nadie le contesto.
+  // Solo si quien escribe esta en nuestros grupos: a Wasi cobrando o a una
+  // empresa de carros no se les contesta desde la linea.
+  const colega = señal || !d.esColega ? null : await d.esColega(org.id, identidad).catch(() => null);
+  if (!señal && !colega) return { resultado: "sin_senal" };
 
-  const codigo = señal.codigo_colega || (await d.asignarCodigo(org.id, señal.id).catch(() => null));
-  if (!codigo) return { resultado: "sin_codigo" };
+  const historial = await d.historial(org.id, identidad).catch(() => []);
+  const otros = historial.filter((m) => m.id !== dmId);
+  if (señal && otros.some((m) => m.senal_id === señal.id)) return { resultado: "ya_tendido" };
+  if (!señal && otros.some((m) => Date.now() - new Date(m.created_at).getTime() < SEMANA_MS)) return { resultado: "ya_tendido" };
+
+  const codigo = señal ? señal.codigo_colega || (await d.asignarCodigo(org.id, señal.id).catch(() => null)) : null;
+  if (señal && !codigo) return { resultado: "sin_codigo" };
 
   const pregunta = recortar(mensaje.texto, MAX_PREGUNTA);
-  const link = linkContactoOficial(org, `Hola Sofi, sobre mi PEDIDO (cód. ${codigo})${pregunta ? `: ${pregunta}` : ""}`);
+  const encabezado = codigo ? `Hola Sofi, sobre mi PEDIDO (cód. ${codigo})` : "Hola Sofi, soy colega inmobiliario";
+  const link = linkContactoOficial(org, `${encabezado}${pregunta ? `: ${pregunta}` : ""}`);
   if (!link) return { resultado: "sin_link" };
 
-  const nombre = mensaje.remitenteNombre || señal.autor_nombre || "Un colega";
+  const nombre = mensaje.remitenteNombre || (señal && señal.autor_nombre) || (colega && colega.nombre) || "Un colega";
   const envio = await d
     .enviar({ sesion: mensaje.sesion, orgId: org.id, telefono: identidad.telefono, lid: identidad.lid, mensajes: [{ texto: textoPuente(nombre, link) }] })
     .catch((e) => ({ ok: false, error: e.message }));
@@ -80,7 +101,7 @@ async function tenderPuente(org, { mensaje, señal, identidad, dmId }, deps = nu
         advisor: asesor,
         tipo: "aviso",
         titulo: `Respondió un colega: ${nombre}`,
-        cuerpo: `"${recortar(mensaje.texto, 200)}" · ${envio && envio.ok ? "le pasamos el link a Sofi" : "no se le pudo mandar el link a Sofi"} (cód. ${codigo})`,
+        cuerpo: `"${recortar(mensaje.texto, 200)}" · ${envio && envio.ok ? "le pasamos el link a Sofi" : "no se le pudo mandar el link a Sofi"}${codigo ? ` (cód. ${codigo})` : " (sin pedido ligado)"}`,
         link: "/grupos",
       })
       .catch(() => {});

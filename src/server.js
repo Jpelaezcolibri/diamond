@@ -163,6 +163,8 @@ app.listen(config.port, () => {
   if (config.supabaseUrl) require("./scheduler/visitas-venta").start();
   // Resumen de pedidos para la asesora, 12 m. y 5 p. m. (Juan, 2026-10-17).
   if (config.supabaseUrl) require("./scheduler/resumen-pedidos").start();
+  // Alerta tecnica si falla el sync de Wasi, solo a ALERTA_TECNICA_TO (2026-10-17).
+  if (config.supabaseUrl) require("./scheduler/alerta-sync").start();
   // Inbox de la linea: dice al arrancar si el clasificador esta prendido, como
   // hacen los otros carriles — un interruptor que no se ve es uno que se olvida.
   if (config.supabaseUrl) {

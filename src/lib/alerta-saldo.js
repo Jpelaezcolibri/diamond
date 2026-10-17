@@ -22,7 +22,7 @@ function destinos() {
   return String(process.env.ALERTA_TECNICA_TO || "").split(",").map((t) => t.replace(/\D/g, "")).filter(Boolean);
 }
 
-async function enviarPorWhatsapp(texto) {
+async function enviarPorWhatsapp(texto, resumenPlantilla = "Anthropic sin saldo o con tope de gasto: Sofi y el radar no responden.") {
   const lista = destinos();
   if (lista.length === 0) {
     console.error(`[alerta-saldo] ALERTA_TECNICA_TO vacio. ${texto}`);
@@ -38,7 +38,7 @@ async function enviarPorWhatsapp(texto) {
     // la ventana de 24 h lo acepta Meta con un 200 y falla DESPUES (131047),
     // asi que un "ok" del texto no garantiza nada. La plantilla llega siempre.
     let r = await canal
-      .sendWhatsAppTemplate(org, to, { name: "alerta_tecnica", bodyParams: ["Anthropic sin saldo o con tope de gasto: Sofi y el radar no responden."] })
+      .sendWhatsAppTemplate(org, to, { name: "alerta_tecnica", bodyParams: [resumenPlantilla] })
       .catch((e) => ({ ok: false, error: e.message }));
     if (!r || !r.ok) r = await canal.sendWhatsApp(org, to, texto).catch((e) => ({ ok: false, error: e.message }));
     if (r && r.ok) alguno = true;
@@ -62,8 +62,17 @@ async function observarError(err, { ahora = new Date(), enviar = enviarPorWhatsa
   });
 }
 
+// El mismo canal para otras alertas tecnicas (2026-10-17: falla del sync de
+// Wasi, src/scheduler/alerta-sync.js). Solo a ALERTA_TECNICA_TO, nunca a una
+// asesora. La plantilla no admite saltos de linea: va en una sola.
+function enviarAlertaTecnica(resumen, detalle = "") {
+  const linea = `${resumen} ${detalle}`.replace(/s+/g, " ").trim().slice(0, 900);
+  console.error(`[alerta-tecnica] ${linea}`);
+  return enviarPorWhatsapp(`🚨 ${linea}`, linea);
+}
+
 function _reset() {
   ultimoAviso = 0;
 }
 
-module.exports = { esErrorDeSaldo, observarError, _reset };
+module.exports = { esErrorDeSaldo, observarError, enviarAlertaTecnica, _reset };

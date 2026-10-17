@@ -123,3 +123,37 @@ test("una pregunta larguisima no rompe el link: se recorta", async () => {
   const link = llamadas.enviados[0].mensajes[0].texto.match(/https:\/\/wa\.me\/\S+/)[0];
   assert.ok(decodeURIComponent(link.split("?text=")[1]).length < 400);
 });
+
+// ── Sin pedido ligado (Juan, 2026-10-17: "puente a Sofi también") ─────────
+// Caso: Avitárea escribio "me compartes porfa los de 2 y 3 habitaciones" a la
+// linea del radar el 5-oct, sin pedido ligado, y nadie le contesto. Si quien
+// escribe esta en nuestros grupos (colegas_grupos), se le tiende el mismo
+// puente; si no (Wasi cobrando, una empresa de carros), no se le contesta.
+test("sin pedido ligado, a un colega de nuestros grupos tambien se le tiende el puente", async () => {
+  const { d, llamadas } = deps({ esColega: async () => ({ nombre: "Avitárea" }), historial: async () => [{ id: "dm-1", senal_id: null, created_at: new Date().toISOString() }] });
+  const r = await puente.tenderPuente(ORG, { mensaje: mensaje({ remitenteNombre: "Avitárea", texto: "me compartes porfa los de 2 y 3 habitaciones" }), señal: null, identidad, dmId: "dm-1" }, d);
+  assert.strictEqual(r.resultado, "tendido");
+  const link = llamadas.enviados[0].mensajes[0].texto.match(/https:\/\/wa\.me\/\S+/)[0];
+  const textoLink = decodeURIComponent(link.split("?text=")[1]);
+  assert.match(textoLink, /colega/i);
+  assert.match(textoLink, /2 y 3 habitaciones/);
+  assert.strictEqual(llamadas.avisos.length, 1);
+});
+
+test("sin pedido ligado y sin ser colega (Wasi, una empresa), no se le contesta", async () => {
+  const { d, llamadas } = deps({ esColega: async () => null });
+  const r = await puente.tenderPuente(ORG, { mensaje: mensaje({ remitenteNombre: "Wasi" }), señal: null, identidad, dmId: "dm-1" }, d);
+  assert.strictEqual(r.resultado, "sin_senal");
+  assert.strictEqual(llamadas.enviados.length, 0);
+});
+
+test("sin pedido ligado, si el colega ya escribio en la ultima semana no se repite", async () => {
+  const hace2dias = new Date(Date.now() - 2 * 864e5).toISOString();
+  const { d, llamadas } = deps({
+    esColega: async () => ({ nombre: "Avitárea" }),
+    historial: async () => [{ id: "dm-1", senal_id: null, created_at: new Date().toISOString() }, { id: "dm-0", senal_id: null, created_at: hace2dias }],
+  });
+  const r = await puente.tenderPuente(ORG, { mensaje: mensaje(), señal: null, identidad, dmId: "dm-1" }, d);
+  assert.strictEqual(r.resultado, "ya_tendido");
+  assert.strictEqual(llamadas.enviados.length, 0);
+});
