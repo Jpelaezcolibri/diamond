@@ -24,7 +24,7 @@ const TOOL_DEFINITIONS = [
   {
     name: "buscar_propiedades",
     description:
-      "Busca propiedades en el inventario de la inmobiliaria. Usala siempre que necesites informacion de propiedades: cuando el cliente mencione una referencia (ej AP001), describa lo que busca (zona, tipo, presupuesto) o pidas alternativas. Devuelve solo propiedades reales del inventario.",
+      "Busca propiedades en el inventario de la inmobiliaria. Usala siempre que necesites informacion de propiedades: cuando el cliente mencione una referencia (ej AP001), describa lo que busca (zona, tipo, presupuesto) o pidas alternativas. Si el cliente busca ARRIENDO (incluye amoblados y renta por meses) pasa operacion 'arriendo'; si quiere COMPRAR, 'venta': sin eso la busqueda mezcla las dos y los arriendos pueden no aparecer. Devuelve solo propiedades reales del inventario.",
     input_schema: {
       type: "object",
       properties: {
@@ -33,6 +33,7 @@ const TOOL_DEFINITIONS = [
         tipo: { type: "string", description: "Tipo de propiedad: Apartamento, Casa, Apartaestudio" },
         precio_max: { type: "integer", description: "Precio maximo en pesos, ej 1200000" },
         habitaciones_min: { type: "integer", description: "Minimo de habitaciones" },
+        operacion: { type: "string", enum: ["venta", "arriendo"], description: "venta si quiere comprar; arriendo si busca arrendar (todo nuestro arriendo es amoblado)" },
       },
     },
   },
