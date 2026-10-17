@@ -107,11 +107,11 @@ async function getRecentMessages(conversationId, limit = 12) {
     return memory.messages
       .filter((m) => m.conversation_id === conversationId && m.role !== "system")
       .slice(-limit)
-      .map((m) => ({ role: m.role, content: m.content }));
+      .map((m) => ({ role: m.role, content: m.content, created_at: m.created_at }));
   }
   const { data, error } = await supabase
     .from("messages")
-    .select("role, content")
+    .select("role, content, created_at")
     .eq("conversation_id", conversationId)
     .in("role", ["user", "assistant"])
     .order("created_at", { ascending: false })

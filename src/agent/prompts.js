@@ -214,7 +214,17 @@ REGLA DE ORO: ante la duda, preguntale que necesita. Un colega que escribe "hola
   ];
 }
 
-function buildSystemPrompt({ org, lead, qualified, now, advisor = null, colega = null, ultimoPedido = null, coordinador = null, historial = [] }) {
+// Con una pausa larga, lo guardado es de OTRA conversacion (2026-10-17: Sofi
+// le aplico a un cliente el presupuesto que dio 45 dias antes, para otra zona).
+function bloqueDatos(datosLead, pausaDias) {
+  if (!(pausaDias >= 7) || !datosLead) return `DATOS QUE YA CONOCES DEL CLIENTE:
+${datosLead || "Ninguno todavia."}`;
+  return `DATOS DE UNA CONVERSACIÓN ANTERIOR (de hace ${pausaDias} días; el cliente acaba de retomar):
+${datosLead}
+No los des por vigentes: lo que busca pudo cambiar. Confirma con el cliente el presupuesto, la zona y el tipo antes de usarlos en una búsqueda o en una respuesta ("la vez pasada me hablaste de hasta 400 millones, ¿sigue siendo así?"), y nunca digas que te los dio hoy. Lo que aparece en el historial antes de la pausa también es de esa conversación anterior.`;
+}
+
+function buildSystemPrompt({ org, lead, qualified, now, advisor = null, colega = null, ultimoPedido = null, coordinador = null, historial = [], pausaDias = 0 }) {
   if (advisor) return promptAsesor({ org, advisor, now });
   // Un asesor propio que ademas esta en un grupo gremial sigue siendo de la
   // casa: por eso este orden y no el contrario.
@@ -333,8 +343,7 @@ AGENDAMIENTO DE CITAS (dia y hora — dato critico que no se puede perder):
     lead.idioma === "en"
       ? `IDIOMA DEL CLIENTE: INGLÉS. Este cliente llego desde la pagina en ingles o escribe en ingles: atiendelo COMPLETAMENTE en ingles desde tu primera respuesta (saludo, fichas, preguntas de calificacion, citas y despedida), manteniendo tu mismo tono calido. Los datos de las propiedades (titulo, descripcion, caracteristicas) estan en español: traducelos tu al presentarlos, sin inventar datos nuevos. Los precios siguen en pesos colombianos (COP). Si el cliente cambia a español, siguelo en español.\n\n`
       : "";
-  const contexto = `${idiomaBloque}${now ? `FECHA Y HORA ACTUAL EN COLOMBIA: ${now.legible} (referencia ISO: ${now.iso}). Usala para resolver fechas relativas que diga el cliente ("manana", "el jueves", "este fin de semana") cuando agendes una cita.\n\n` : ""}DATOS QUE YA CONOCES DEL CLIENTE:
-${datosLead || "Ninguno todavia."}
+  const contexto = `${idiomaBloque}${now ? `FECHA Y HORA ACTUAL EN COLOMBIA: ${now.legible} (referencia ISO: ${now.iso}). Usala para resolver fechas relativas que diga el cliente ("manana", "el jueves", "este fin de semana") cuando agendes una cita.\n\n` : ""}${bloqueDatos(datosLead, pausaDias)}
 
 ESTADO DE CALIFICACION: ${qualified ? "CALIFICADO — ya conoces presupuesto, urgencia y preferencia. Ofrece activamente conectarlo con el asesor humano usando la herramienta transferir_a_asesor cuando acepte." : "EN CALIFICACION — te falta conocer presupuesto, urgencia o preferencia (zona/tipo). Averigua estos datos de forma natural durante la conversacion, UNA pregunta a la vez."}`;
 

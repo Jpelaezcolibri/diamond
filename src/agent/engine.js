@@ -307,6 +307,7 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
 
   const system = buildSystemPrompt({
     org, lead, qualified: isQualified(lead), now: nowInBogota(), advisor, colega, ultimoPedido, coordinador, historial,
+    pausaDias: require("./pausa").diasDePausa(history),
   });
 
   const extractText = (r) =>
