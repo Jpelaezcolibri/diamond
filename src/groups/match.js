@@ -46,6 +46,10 @@ function tipoParaConsulta(c) {
 function filtrosInventario(c) {
   const f = {};
   if (tipoParaConsulta(c)) f.tipo = tipoParaConsulta(c);
+  // Venta o arriendo viaja al prefiltro: sin esto la consulta traia las dos
+  // mezcladas y, con el corte de filas, los arriendos quedaban afuera.
+  const operacion = normOperacion(c.operacion);
+  if (operacion === "venta" || operacion === "arriendo") f.operacion = operacion;
   // El prefiltro de la base busca el termino en zona O ciudad — es permisivo a
   // proposito. La graduacion (exacta / vecina / otra_zona) esta en
   // ubicacionCoincide; aca solo se acota cuantas filas viajan.

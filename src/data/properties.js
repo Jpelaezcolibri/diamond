@@ -96,6 +96,7 @@ function matchesFilters(p, f) {
     if (tokens.length > 0 && !tokens.some((t) => haystack.includes(t))) return false;
   }
   if (f.tipo && !p.tipo.toLowerCase().includes(f.tipo.toLowerCase())) return false;
+  if (f.operacion && String(p.operacion || "").toLowerCase() !== String(f.operacion).toLowerCase()) return false;
   if (f.habitaciones_min && p.habitaciones < f.habitaciones_min) return false;
   if (f.precio_max) {
     // Antes esto hacia `parseInt(replace(/\D/g, ""))`, que sobre el formato real
@@ -126,7 +127,9 @@ function filtroZonaOr(zona) {
     .join(",");
 }
 
-// Busca propiedades disponibles de la org. filters: {ref, zona, tipo, precio_max, habitaciones_min}
+const MAX_FILAS_CON_PRECIO = 1000;
+
+// Busca propiedades disponibles de la org. filters: {ref, zona, tipo, operacion, precio_max, habitaciones_min}
 async function search(orgOrId, filters = {}, limit = 5) {
   const org = resolveOrg(orgOrId);
   const orgId = org.id;
@@ -143,10 +146,15 @@ async function search(orgOrId, filters = {}, limit = 5) {
     if (filtro) query = query.or(filtro);
   }
   if (filters.tipo) query = query.ilike("tipo", `%${filters.tipo}%`);
+  if (filters.operacion) query = query.ilike("operacion", filters.operacion);
   if (filters.habitaciones_min) query = query.gte("habitaciones", filters.habitaciones_min);
-  const { data, error } = await query.limit(limit * 2);
+  // precio es texto — el filtro de precio se aplica en codigo, asi que con
+  // precio hay que traer TODAS las filas que pasan el resto de filtros y
+  // cortar despues. Con `limit * 2` antes del filtro (bug hasta 2026-10-17),
+  // un arriendo de $7M en El Poblado quedaba tapado por 60 ventas caras y el
+  // motor nunca lo veia. El inventario es de cientos de filas: alcanza.
+  const { data, error } = await query.limit(filters.precio_max ? MAX_FILAS_CON_PRECIO : limit * 2);
   if (error) throw error;
-  // precio es texto — el filtro de precio se aplica en codigo
   const result = filters.precio_max ? data.filter((p) => matchesFilters(p, { precio_max: filters.precio_max })) : data;
   return result.slice(0, limit).map((p) => withLandingLink(p, org.landing_base_url));
 }
