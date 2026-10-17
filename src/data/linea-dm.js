@@ -132,7 +132,7 @@ async function historialDe(orgId, identidad, { limite = 10 } = {}) {
   }
   const { data, error } = await supabase
     .from("linea_dm")
-    .select("id, texto, created_at")
+    .select("id, texto, created_at, senal_id")
     .eq("org_id", orgId)
     .eq(filtro.columna, filtro.valor)
     .order("created_at", { ascending: false })

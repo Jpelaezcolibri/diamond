@@ -176,6 +176,17 @@ async function procesarMensaje(org, mensaje, { ahora = new Date() } = {}) {
   if (duplicado) return { resultado: "duplicado" };
   if (!guardado) return { resultado: "sin_tabla" };
 
+  // Puente a Sofi (Juan, 2026-10-17): la linea no conversa, pero a la primera
+  // respuesta de un colega a un DM del radar le pasa el link a Sofi con su
+  // pregunta y avisa en la app. Ver src/groups/puente-sofi.js. Falla abierta:
+  // si revienta, el mensaje ya quedo guardado y el resto sigue igual.
+  const puente = await require("./puente-sofi")
+    .tenderPuente(org, { mensaje, señal, identidad, dmId: guardado.id })
+    .catch((e) => ({ resultado: "error", error: e.message }));
+  if (puente.resultado !== "sin_senal" && puente.resultado !== "apagado") {
+    console.log(`[puente-sofi] ${puente.resultado}${puente.error ? ` (${puente.error})` : ""} — señal ${señal ? señal.id : "-"}`);
+  }
+
   // Fase 1 (Juan, 2026-09-08): leer, no interpretar. Se corta ACA, despues
   // de guardar y ligar, y antes de cualquier llamada a la IA.
   if (!clasificadorActivo()) return { resultado: "guardado", dmId: guardado.id };
