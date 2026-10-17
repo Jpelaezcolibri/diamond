@@ -125,10 +125,16 @@ async function findForTransfer(org, especialidad) {
     const lastId = await lastTransferredId(org.id, rotation.map((a) => a.id));
     return nextInRotation(rotation, lastId);
   }
-  // Sin elegibles de la especialidad: cualquier elegible activo (nunca uno
-  // excluido de transferencias), y de ultimas el asesor de la organizacion.
-  const fallback = list.find((a) => a.recibe_transferencias !== false);
-  if (fallback) return fallback;
+  // Sin elegibles de la especialidad: rotan TODAS las que reciben
+  // transferencias (Juan, 2026-10-17: "rotar entre las 3"; las tres son de
+  // venta y un cliente de arriendo o vehiculos caia siempre en la primera).
+  // Nunca una excluida de transferencias; de ultimas, el asesor de la org.
+  const elegibles = list.filter((a) => a.activo && a.recibe_transferencias !== false);
+  if (elegibles.length === 1) return elegibles[0];
+  if (elegibles.length > 1) {
+    const lastId = await lastTransferredId(org.id, elegibles.map((a) => a.id));
+    return nextInRotation(elegibles, lastId);
+  }
   return org.advisor_phone
     ? { name: org.advisor_name || "Asesor", phone: org.advisor_phone, especialidad: "general" }
     : null;

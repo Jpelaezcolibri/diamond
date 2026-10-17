@@ -89,3 +89,24 @@ test("findAsesorPrincipalRadar: sin RADAR_REVISOR_PHONE (o sin resolver a nadie)
     else process.env.RADAR_REVISOR_PHONE = previo;
   }
 });
+
+// Juan, 2026-10-17: "rotar entre las 3" (Daiana, Claudia, Catherine). Las
+// tres tienen especialidad "venta": un cliente de ARRIENDO o VEHICULOS no
+// encontraba a nadie de su especialidad y caia siempre en la primera de la
+// lista, sin rotar. Sin elegibles de la especialidad, rotan las que reciben.
+test("findForTransfer: sin asesoras de la especialidad, rotan todas las que reciben transferencias", async () => {
+  const ORG = { id: "org-rot-esp" };
+  const D = { id: "a-daiana", org_id: ORG.id, name: "Daiana", especialidad: "venta", activo: true, recibe_transferencias: true };
+  const C = { id: "a-claudia", org_id: ORG.id, name: "Claudia", especialidad: "venta", activo: true, recibe_transferencias: true };
+  const K = { id: "a-catherine", org_id: ORG.id, name: "Catherine", especialidad: "venta", activo: true, recibe_transferencias: true };
+  const J = { id: "a-juan", org_id: ORG.id, name: "Juan", especialidad: "venta", activo: true, recibe_transferencias: false };
+  memory.advisors.push(J, D, C, K);
+  const vistos = [];
+  for (let i = 0; i < 3; i++) {
+    const a = await advisors.findForTransfer(ORG, "arriendo");
+    vistos.push(a.id);
+    memory.leads.push({ id: `l-${i}`, org_id: ORG.id, transferido_advisor_id: a.id, transferido_at: new Date(Date.now() + i * 1000).toISOString() });
+  }
+  assert.deepStrictEqual([...vistos].sort(), ["a-catherine", "a-claudia", "a-daiana"]);
+  assert.ok(!vistos.includes("a-juan"));
+});
