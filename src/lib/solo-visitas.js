@@ -26,6 +26,9 @@
 //     de Juan el mismo dia)
 //   - lo que un humano pide a mano (Sofi-Comando, botones, CRM)
 //   - el cruce diario visitas -> ventas (Juan lo quiso dejar el mismo dia)
+//   - el resumen de pedidos de las 12 m. y las 5 p. m. (Juan, 2026-10-17):
+//     solo pedidos con ficha nuestra que no salieron solos. Tiene su propio
+//     interruptor, RADAR_RESUMEN_PEDIDOS (src/scheduler/resumen-pedidos.js)
 //
 // Nada se pierde: la señal queda guardada con su motivo y se ve en /grupos.
 // Un solo interruptor, sin excepciones por camino (ver la memoria

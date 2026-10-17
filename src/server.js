@@ -161,6 +161,8 @@ app.listen(config.port, () => {
   // disponible? "quiero tener el control de las visitas y ventas".
   // Sigue con solo visitas: Juan quiere el cruce visitas -> ventas (2026-09-17).
   if (config.supabaseUrl) require("./scheduler/visitas-venta").start();
+  // Resumen de pedidos para la asesora, 12 m. y 5 p. m. (Juan, 2026-10-17).
+  if (config.supabaseUrl) require("./scheduler/resumen-pedidos").start();
   // Inbox de la linea: dice al arrancar si el clasificador esta prendido, como
   // hacen los otros carriles — un interruptor que no se ve es uno que se olvida.
   if (config.supabaseUrl) {

@@ -123,3 +123,25 @@ test("un numero absurdo en el texto (administracion, typo) no cuenta como precio
   const adm = evaluarCandidata(apto({ precio: "$470.000.000", descripcion: "precio administración $200.000" }), pide(), "diamond");
   assert.strictEqual(adm.precio_sin_confirmar, false);
 });
+
+// Margarita Echeverri pidio "250m2 aproximadamente" y le calzaba una casa
+// campestre de 2.800 m². "Aproximadamente" tambien es un techo.
+test("areaMaxDe: 'N m2 aproximadamente' es techo", () => {
+  assert.strictEqual(areaMaxDe({ texto_original: "la Calleja 250m2 aproximadamente 4 habitaciones" }), 250);
+  assert.strictEqual(areaMaxDe({ texto_original: "aprox 120 mts, 3 alcobas" }), 120);
+  assert.strictEqual(areaMaxDe({ texto_original: "de aproximadamente 90 metros" }), 90);
+});
+
+test("una casa de 2.800 m² no le sale a quien pidio 250 m² aproximadamente", () => {
+  const c = pide({ tipo: "casa", texto_original: "casa 250m2 aproximadamente" });
+  assert.strictEqual(evaluarCandidata(apto({ tipo: "Casa", area: "2.800 m²" }), c, "diamond"), null);
+});
+
+test("parsearArea entiende el punto de miles ('2.800 m²' son 2800, no 2,8)", () => {
+  const { parsearArea } = require("../src/lib/formato");
+  assert.strictEqual(parsearArea("2.800 m²"), 2800);
+  assert.strictEqual(parsearArea("1.250 m2"), 1250);
+  assert.strictEqual(parsearArea("98,4 m²"), 98.4);
+  assert.strictEqual(parsearArea("10.5 m2"), 10.5);
+  assert.strictEqual(parsearArea("186m2"), 186);
+});

@@ -68,7 +68,10 @@ function formatearPrecioCorto(valor) {
 function parsearArea(raw) {
   if (raw === null || raw === undefined) return null;
   if (typeof raw === "number") return raw > 0 ? raw : null;
-  const encontrado = String(raw).replace(",", ".").match(/\d+(?:\.\d+)?/);
+  // "2.800 m²" es separador de miles, no 2,8 m² (2026-10-17): con el techo de
+  // area, leerlo como decimal dejaba pasar una casa de 2.800 m² a un pedido de 250.
+  const sinMiles = String(raw).replace(/(\d{1,3})\.(\d{3})(?!\d)/g, "$1$2");
+  const encontrado = sinMiles.replace(",", ".").match(/\d+(?:\.\d+)?/);
   if (!encontrado) return null;
   const valor = Number(encontrado[0]);
   return valor > 0 ? valor : null;

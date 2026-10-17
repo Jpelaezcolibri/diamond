@@ -302,10 +302,19 @@ function textoDelPedido(c) {
 // el rango viene con unidad de metros (un "2 al 11" es de pisos, y "3-4
 // hectareas" no es un apartamento). 0 = el pedido no puso techo.
 const RANGO_AREA = /(\d{2,4})\s*(?:-|–|—|a|al|y|hasta)\s*(\d{2,4})\s*(?:m2|m²|mts2?|mt2|metros|mts)(?![a-z])/i;
+// "250m2 aproximadamente" tambien es un techo (caso Margarita Echeverri,
+// 2026-10-17: le calzaba una casa campestre de 2.800 m²). Con el margen del
+// 10 % queda en 275.
+const AREA_APROX_DESPUES = /(\d{2,4})\s*(?:m2|m²|mts2?|mt2|metros|mts)\s*aprox/i;
+const AREA_APROX_ANTES = /aprox(?:imadamente|\.)?\s*(?:de\s+)?(\d{2,4})\s*(?:m2|m²|mts2?|mt2|metros|mts)(?![a-z])/i;
 function areaMaxDe(c) {
   if (Number(c && c.area_max) > 0) return Number(c.area_max);
-  const m = RANGO_AREA.exec(textoDelPedido(c));
-  if (!m) return 0;
+  const texto = textoDelPedido(c);
+  const m = RANGO_AREA.exec(texto);
+  if (!m) {
+    const aprox = AREA_APROX_DESPUES.exec(texto) || AREA_APROX_ANTES.exec(texto);
+    return aprox ? Number(aprox[1]) : 0;
+  }
   const [desde, hasta] = [Number(m[1]), Number(m[2])];
   return hasta > desde && hasta <= 5000 ? hasta : 0;
 }
