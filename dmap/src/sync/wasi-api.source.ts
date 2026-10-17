@@ -111,6 +111,11 @@ const MAX_RATIO_DESCARTES = 0.05;
  */
 const MIN_DESCARTES_TOLERADOS = 2;
 
+// Tope de retiros por corrida: mas de la mitad del inventario disponible (o
+// mas de 5, si el inventario es chico) aborta la corrida. Ver verificarRetiros.
+const MAX_RATIO_RETIROS = 0.5;
+const MIN_RETIROS_TOLERADOS = 5;
+
 /**
  * La ref que tendria la entrada si hubiera parseado — misma regla que
  * toCanonicalProperty. Se lee a mano, sin zod, porque justamente lo que falla
@@ -178,6 +183,36 @@ export function verificarDescartes(parseadas: number, descartadas: number): void
         `(${Math.round(ratio * 100)}%, tope ${tope}). ` +
         "Se aborta la corrida: sincronizar el resto seria publicar un inventario mutilado. " +
         "Revisa wasiApiPropertySchema contra la forma actual de la API."
+    );
+  }
+}
+
+/**
+ * Wasi responde los errores de autenticacion con HTTP 200 y
+ * {"status":"error","message":"id_company or wasi_token is wrong."}. Sin esta
+ * verificacion esa respuesta se leia como una pagina vacia: el 2026-10-16 la
+ * corrida "vio" 0 propiedades y dio de baja las 105 disponibles, en 'success'.
+ */
+export function verificarRespuestaWasi(body: unknown, path: string): void {
+  if (body && typeof body === "object" && (body as { status?: unknown }).status === "error") {
+    const message = (body as { message?: unknown }).message;
+    throw new Error(`Wasi rechazo la consulta a ${path}: ${typeof message === "string" ? message : "sin mensaje"}`);
+  }
+}
+
+/**
+ * Freno de retiros masivos (incidente 2026-10-16). Vender o despublicar la
+ * mitad del inventario en un dia no pasa; que la API devuelva de menos, si.
+ * Retirar de mas deja al radar y a Sofi sin nada que ofrecer, asi que ante la
+ * duda la corrida falla y el inventario de ayer sigue vigente.
+ */
+export function verificarRetiros(traidas: number, disponibles: number, retiros: number): void {
+  if (retiros === 0) return;
+  const tope = Math.max(MIN_RETIROS_TOLERADOS, Math.floor(disponibles * MAX_RATIO_RETIROS));
+  if (traidas === 0 || retiros > tope) {
+    throw new Error(
+      `La corrida retiraria ${retiros} de ${disponibles} propiedades disponibles (Wasi trajo ${traidas}, tope ${tope}). ` +
+        "Se aborta: lo mas probable es que la API haya devuelto de menos, no que se haya vendido medio inventario."
     );
   }
 }
@@ -405,7 +440,9 @@ export class WasiApiSource implements WasiSource {
       if (!response.ok) {
         throw new Error(`Wasi API respondio ${response.status} en ${path}`);
       }
-      return response.json();
+      const body: unknown = await response.json();
+      verificarRespuestaWasi(body, path);
+      return body;
     };
 
     // Catalogo de tipos (id -> "Apartamento", "Casa", ...) para poblar properties.tipo.
@@ -507,12 +544,16 @@ export class WasiApiSource implements WasiSource {
     // sistema que se vendieron — un dato falso salido de un bug nuestro.
     const fetchedRefs = new Set(candidates.map((c) => c.data!.ref));
     for (const d of descartes) if (d.ref) fetchedRefs.add(d.ref);
+    const disponibles = existing.filter((p) => p.disponible && isWasiManagedLink(p.link, p.ref)).length;
+    let retiros = 0;
     for (const property of existing) {
       if (!property.disponible) continue;
       if (fetchedRefs.has(property.ref)) continue;
       if (!isWasiManagedLink(property.link, property.ref)) continue;
       candidates.push({ propertyId: property.id, wasiId: null, gone: true, data: null });
+      retiros += 1;
     }
+    verificarRetiros(allProperties.length, disponibles, retiros);
 
     return candidates;
   }
