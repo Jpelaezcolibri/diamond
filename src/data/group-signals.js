@@ -26,6 +26,8 @@ const COLUMNAS_NUEVAS = [
   "area_min", "banos", "garajes", "estrato", "flexible_habitaciones",
   // 2026-09-07_amoblado.sql
   "amoblado", "periodo",
+  // 2026-09-18_piso.sql
+  "piso_max", "piso_min",
 ];
 let faltanColumnas = false;
 // Cuales faltan DE VERDAD, no "alguna falta". Hasta el 2026-08-24 esto era un
@@ -125,6 +127,11 @@ async function create(orgId, fields) {
     // distintos, y `|| null` los colapsaria a los dos en null.
     amoblado: fields.amoblado ?? null,
     periodo: fields.periodo ?? null,
+    // El piso que exigio el pedido (bug hasta 2026-10-17: persistir.js lo
+    // mandaba y aca no se escribia — 0 de 105 pedidos con piso lo tenian en
+    // la base, y todo lo recalculado desde la base ignoraba el piso).
+    piso_max: fields.piso_max || null,
+    piso_min: fields.piso_min || null,
     contacto: fields.contacto || null,
     texto_original: fields.texto_original || null,
     matches: fields.matches || [],

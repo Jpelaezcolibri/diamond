@@ -288,12 +288,71 @@ function pisoCumple(piso, c) {
   return true;
 }
 
+// ── Afinado 2026-10-17 (Juan: "que cada respuesta sea lo mas cerca posible") ──
+//
+// El texto del pedido: en vivo viaja en c.mensaje.texto; recalculado desde la
+// base, en c.texto_original. Las tres lecturas de abajo usan los dos caminos
+// para que el motor decida lo mismo en vivo y en un DM manual.
+function textoDelPedido(c) {
+  return String((c && (c.texto_original || (c.mensaje && c.mensaje.texto))) || "");
+}
+
+// TECHO DE AREA. "75–85 m²" recibio un apartamento de 153 m²: el clasificador
+// solo extrae area_min y un rango tiene techo. Se lee del texto, solo cuando
+// el rango viene con unidad de metros (un "2 al 11" es de pisos, y "3-4
+// hectareas" no es un apartamento). 0 = el pedido no puso techo.
+const RANGO_AREA = /(\d{2,4})\s*(?:-|–|—|a|al|y|hasta)\s*(\d{2,4})\s*(?:m2|m²|mts2?|mt2|metros|mts)(?![a-z])/i;
+function areaMaxDe(c) {
+  if (Number(c && c.area_max) > 0) return Number(c.area_max);
+  const m = RANGO_AREA.exec(textoDelPedido(c));
+  if (!m) return 0;
+  const [desde, hasta] = [Number(m[1]), Number(m[2])];
+  return hasta > desde && hasta <= 5000 ? hasta : 0;
+}
+
+// VARIOS PEDIDOS EN UN MENSAJE. Hexagono mando "1️⃣ ... 2️⃣ ... 3️⃣" y el
+// clasificador los fundio en uno (zonas de uno, area de otro, precio del
+// tercero). Lo que se cruce contra ese pedido mezclado no puede salir solo.
+function variosPedidos(texto) {
+  const t = String(texto || "");
+  const emojis = new Set((t.match(/[1-9]\uFE0F?\u20E3/g) || []).map((e) => e[0]));
+  const rotulos = new Set([...t.matchAll(/pedido\s*#?\s*(\d)\b/gi)].map((m) => m[1]));
+  return emojis.size >= 2 || rotulos.size >= 2;
+}
+
+// PRECIO ESCRITO EN LA DESCRIPCION. 7 fichas dicen un precio en el campo de
+// Wasi y otro en el texto (9307551: $750M contra $650M): el colega abre el
+// link y ve otro numero. null si el texto no dice "precio ... $X".
+function precioTextoDe(p) {
+  const texto = String((p && p.descripcion) || "").replace(/<[^>]+>/g, " ").replace(/&[a-z]+;/gi, " ");
+  const m = /precio[^$\d\n]{0,40}\$\s*([\d.]{5,})/i.exec(texto);
+  if (!m) return null;
+  const n = Number(m[1].replace(/\./g, ""));
+  return Number.isSafeInteger(n) && n >= 1000000 ? n : null;
+}
+
+// Solo cuenta si los dos numeros son de la misma magnitud: un typo de Wasi
+// ($550.000.000.000) o un valor de administracion no es "otro precio".
+function precioInconsistente(p) {
+  const campo = formato.parsearPrecio(p.precio);
+  const texto = precioTextoDe(p);
+  if (!campo || !texto) return false;
+  const ratio = texto / campo;
+  if (ratio < 1 / 3 || ratio > 3) return false;
+  return Math.abs(texto - campo) / campo > 0.03;
+}
+
 // Devuelve null si la propiedad no pasa las compuertas; si pasa, el match ya
 // armado con su puntaje y las razones legibles de por que calza.
 function evaluarCandidata(p, c, fuente) {
   if (!mismaOperacion(p, c)) return null;
   const tipos = tiposPedidos(c);
   if (tipos.length && !tipos.some((t) => String(p.tipo || "").toLowerCase().includes(t))) return null;
+
+  // Techo de area, literal con el mismo margen que el piso de area.
+  const areaMax = areaMaxDe(c);
+  const areaPropiedad = formato.parsearArea(p.area);
+  if (areaMax > 0 && areaPropiedad && areaPropiedad > areaMax * (1 + MARGEN_AREA)) return null;
 
   // ── Amoblado: compuerta en las DOS direcciones ──────────────────────────
   //
@@ -591,6 +650,11 @@ function evaluarCandidata(p, c, fuente) {
     // El plazo es del PEDIDO, no de la propiedad — viaja en el match por la
     // misma razon que el de arriba: es el unico camino hasta publicable.js.
     periodo_no_soportado: String(c.periodo || "").trim().toLowerCase() === "corta",
+    // Afinado 2026-10-17: el mensaje traia varios pedidos y el cruce es contra
+    // una mezcla; y el precio del texto de la ficha no cuadra con el de Wasi.
+    // Ninguno descarta, ninguno sale solo (los lee publicable.js).
+    varios_pedidos: variosPedidos(textoDelPedido(c)),
+    precio_sin_confirmar: fuente === "diamond" && precioInconsistente(p),
     // El castigo se resta DESPUES del tope (ver CASTIGO_CORTO arriba): es lo
     // que hace que 100 vuelva a significar "cumple todo lo que se pudo
     // verificar". Piso en 0 porque una zona muy castigada mas dos huecos
@@ -713,5 +777,5 @@ module.exports = {
   cruzar, filtrosInventario, filtrosAliados, mismaOperacion, evaluarOferta,
   evaluarCandidata, zonaCoincide, ciudadCoincide, ubicacionCoincide, zonaExcluida, BANDA_INFERIOR,
   MARGEN_PRECIO, MARGEN_AREA, BONUS_PRIORIDAD_VENTA, CASTIGO_CORTO, sinDuplicados,
-  pisoCumple, esApartamento, PISO_ALTO_DESDE, tiposPedidos,
+  pisoCumple, esApartamento, PISO_ALTO_DESDE, tiposPedidos, areaMaxDe, variosPedidos, precioTextoDe,
 };

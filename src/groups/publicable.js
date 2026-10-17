@@ -162,6 +162,12 @@ function esPublicable(match, { umbral = UMBRAL_DEFAULT, syncFresco = true, refsB
   // mismo precio, y le ofreceriamos un mes por el precio de quince dias.
   if (match.periodo_no_soportado) motivos.push("periodo_no_soportado");
 
+  // AFINADO 2026-10-17. El mensaje traia varios pedidos numerados y el cruce
+  // se hizo contra una mezcla de ellos; o el precio escrito en la ficha no
+  // cuadra con el de Wasi. Los dos los decide una persona.
+  if (match.varios_pedidos) motivos.push("varios_pedidos");
+  if (match.precio_sin_confirmar) motivos.push("precio_sin_confirmar");
+
   if (!(Number(match.puntaje) >= umbral)) motivos.push("puntaje_bajo");
 
   const ref = String(match.ref || "").trim();
@@ -254,6 +260,8 @@ const MOTIVOS_LEGIBLES = {
   edificio_sin_confirmar: "el colega pidió una unidad o edificio con nombre y esta ficha no lo nombra: si sabés que queda ahí, se la podés ofrecer vos",
   rentada_sin_confirmar: "el colega pidió que ya esté arrendada y esta ficha no dice si está rentando: si lo sabés, se la podés ofrecer vos",
   periodo_no_soportado: "el pedido es por días o semanas y nuestro inventario está cotizado por mes",
+  varios_pedidos: "el mensaje traía varios pedidos y el sistema los pudo haber mezclado: revisá a cuál le sirve antes de mandarla",
+  precio_sin_confirmar: "el precio de Wasi y el que dice la descripción de la ficha no coinciden: confirmalo y corregilo en Wasi antes de ofrecerla",
   puntaje_bajo: "el puntaje quedó por debajo del umbral para salir sola",
   sin_ref: "no tiene referencia",
   sin_titulo: "no tiene título cargado",
@@ -331,6 +339,8 @@ const MOTIVOS_SOLO_PUBLICACION = new Set([
   "puntaje_bajo",
   "sync_viejo",
   "periodo_no_soportado",
+  "varios_pedidos",
+  "precio_sin_confirmar",
   "amoblado_sin_confirmar",
   "garajes_sin_dato",
   "piso_sin_confirmar",
@@ -397,6 +407,8 @@ const ACLARACIONES_COLEGA = {
   puntaje_bajo: "no pude verificar todo lo que pediste — confirmame lo que te falte",
   sync_viejo: "confirmame disponibilidad antes de mostrarla",
   periodo_no_soportado: "está cotizada por mes, no por días ni semanas",
+  varios_pedidos: "decime a cuál de tus pedidos le apunta y te confirmo",
+  precio_sin_confirmar: "te confirmo el precio final",
   amoblado_sin_confirmar: "no tengo confirmado que esté amoblada",
   garajes_sin_dato: "no tengo registrado el parqueadero: confirmame si lo necesitás",
   piso_sin_confirmar: "no tengo registrado en qué piso está: te lo confirmo si te sirve",
