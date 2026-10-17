@@ -32,3 +32,23 @@ test("buildFollowupSystemPrompt sin org cae a un texto generico", () => {
   const prompt = buildFollowupSystemPrompt(null);
   assert.match(prompt, /la inmobiliaria/);
 });
+
+// BUG (2026-10-17): una plantilla NO abre la ventana de 24 h; solo la abre un
+// mensaje del cliente. Tras retomar 9 chats con la plantilla retomar_cliente,
+// la Fase 1 iba a mandarles texto libre una hora despues: Meta lo rechaza
+// (131047) y el lead quedaba marcado como "seguimiento hecho".
+const { ventanaAbierta } = require("../src/scheduler/followups");
+
+test("ventanaAbierta: el cliente escribio hace 3 horas -> abierta", () => {
+  const ahora = new Date("2026-10-17T16:00:00Z");
+  assert.strictEqual(ventanaAbierta("2026-10-17T13:00:00Z", ahora), true);
+});
+
+test("ventanaAbierta: el ultimo mensaje del cliente es de hace dias -> cerrada", () => {
+  const ahora = new Date("2026-10-17T16:00:00Z");
+  assert.strictEqual(ventanaAbierta("2026-10-10T14:00:00Z", ahora), false);
+});
+
+test("ventanaAbierta: si el cliente nunca escribio -> cerrada", () => {
+  assert.strictEqual(ventanaAbierta(null, new Date()), false);
+});

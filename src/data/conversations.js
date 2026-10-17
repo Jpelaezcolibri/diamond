@@ -212,6 +212,19 @@ async function followupCandidates(orgId, { minSilenceMin, maxSilenceMin, estados
   return (data || []).filter((c) => !c.leads?.seguimiento?.t24_sent_at);
 }
 
+// Fecha del ultimo mensaje DEL CLIENTE: es lo que abre la ventana de 24 h.
+async function lastUserMessageAt(conversationId) {
+  if (!supabase) {
+    const msgs = memory.messages.filter((m) => m.conversation_id === conversationId && m.role === "user");
+    const ultimo = msgs[msgs.length - 1];
+    return ultimo ? new Date(ultimo.created_at).toISOString() : null;
+  }
+  const { data } = await supabase
+    .from("messages").select("created_at").eq("conversation_id", conversationId).eq("role", "user")
+    .order("created_at", { ascending: false }).limit(1);
+  return (data && data[0] && data[0].created_at) || null;
+}
+
 // Ultimo mensaje de una conversacion (para saber quien hablo de ultimo).
 async function lastMessage(conversationId) {
   if (!supabase) {
@@ -276,5 +289,4 @@ module.exports = {
   findByWaMessageId,
   followupCandidates,
   lastMessage,
-  hayMensajeEntranteDespues,
-};
+  hayMensajeEntranteDespues, lastUserMessageAt };

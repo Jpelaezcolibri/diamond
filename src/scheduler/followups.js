@@ -40,6 +40,17 @@ function hourInBogota(date = new Date()) {
 
 // Horario de silencio: [quietStartHour, 24) U [0, quietEndHour). Con los
 // defaults (20 y 8): nada de 8pm a 8am.
+// La ventana de 24 h de WhatsApp la abre SOLO un mensaje del cliente; una
+// plantilla no la abre (2026-10-17: tras retomar 9 chats con retomar_cliente,
+// este worker iba a mandarles texto libre que Meta rechaza con 131047). Margen
+// de 1 h antes del cierre.
+const VENTANA_MS = 23 * 60 * 60 * 1000;
+function ventanaAbierta(ultimoDelClienteIso, ahora = new Date()) {
+  if (!ultimoDelClienteIso) return false;
+  const t = new Date(ultimoDelClienteIso).getTime();
+  return !isNaN(t) && ahora.getTime() - t < VENTANA_MS;
+}
+
 function inQuietHours(hour, { quietStartHour, quietEndHour }) {
   return hour >= quietStartHour || hour < quietEndHour;
 }
@@ -140,6 +151,9 @@ async function runOnce() {
         // Solo si Sofi hablo de ultimo (el cliente callo).
         const last = await conversations.lastMessage(conv.id);
         if (!last || last.role !== "assistant") continue;
+        // Sin ventana abierta el texto libre no se entrega: eso es de la Fase 2
+        // (seguimiento por plantilla, src/scheduler/seguimiento-plantilla.js).
+        if (!ventanaAbierta(await conversations.lastUserMessageAt(conv.id))) continue;
         if (!colegaListoParaSeguimiento(lead, last)) continue;
         // Un colega "solo llamada" no recibe nada por escrito (2026-09-10).
         if (lead.source === "colega") {
@@ -190,4 +204,4 @@ function start() {
   );
 }
 
-module.exports = { start, runOnce, hourInBogota, inQuietHours, buildFollowupMessage, buildFollowupSystemPrompt, colegaListoParaSeguimiento };
+module.exports = { start, runOnce, hourInBogota, inQuietHours, buildFollowupMessage, buildFollowupSystemPrompt, colegaListoParaSeguimiento, ventanaAbierta };
