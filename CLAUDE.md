@@ -43,11 +43,10 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
     `ALERTA_TECNICA_TO`). `RADAR_PUBLICAR_ACTIVO=true` en Railway.
   - **El 19-oct salieron 7 posts a mano** (7/7 OK, registro en
     `Claude outputs/publicaciones-grupos-2026-10-19.json`).
-  - **Migraciones pendientes (Juan, SQL Editor):**
+  - **Migraciones corridas por Juan y verificadas por REST el 2026-10-19:**
     `2026-10-16_kit_publicacion.sql` y `2026-10-19_publicador_grupos.sql`
-    (juntas en `Claude outputs/migraciones-pendientes-2026-10-19.sql`). Sin la
-    segunda el publicador no publica (falla cerrado); sin la primera no se
-    atribuye `leads.kit_ref`.
+    (10 grupos marcados, 7 posts cargados). Primer post automático: Ref
+    10479033 → Fincas 7AM 8PM, 4:52 p. m.
   - WAHA es CORE: solo texto; la foto llega por la vista previa del link.
 
 - **Kit de publicación + dueños para arriendo (rama `kit-y-duenos-arriendo`,
@@ -65,9 +64,8 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
     `registrar_inmueble_ofrecido` → `leads.inmueble_ofrecido`, reglas
     33a-33d del prompt, alerta "Dueño · renta corta / arriendo mensual" y
     opción "Arrendar mi propiedad" en la landing.
-  - **Migración pendiente:** `db/migrations/2026-10-16_kit_publicacion.sql`
-    (solo agrega). Sin ella todo funciona y solo se pierden el aviso de
-    repetición, los KPIs y la ficha guardada (va igual en la alerta).
+  - **Migración `2026-10-16_kit_publicacion.sql` corrida el 2026-10-19**
+    (verificada por REST).
   - **Pendiente de probar:** Compartir con fotos en el celular de Daiana
     (iOS puede soltar el texto: queda Copiar).
   - La rama incluye `52ffabc` (radar: pedido con varios tipos), commiteado
