@@ -165,6 +165,8 @@ app.listen(config.port, () => {
   if (config.supabaseUrl) require("./scheduler/resumen-pedidos").start();
   // Alerta tecnica si falla el sync de Wasi, solo a ALERTA_TECNICA_TO (2026-10-17).
   if (config.supabaseUrl) require("./scheduler/alerta-sync").start();
+  // Amoblados publicados en grupos desde la linea del radar (Juan, 2026-10-19).
+  if (config.supabaseUrl) require("./scheduler/publicador-grupos").start();
   // Seguimiento por plantilla pasada la ventana de 24 h, 48 h y 7 dias (Juan, 2026-10-17).
   if (config.supabaseUrl) require("./scheduler/seguimiento-plantilla").start();
   // Inbox de la linea: dice al arrancar si el clasificador esta prendido, como
