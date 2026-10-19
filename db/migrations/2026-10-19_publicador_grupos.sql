@@ -42,3 +42,21 @@ where org_id = (select id from organizations where name = 'Diamond')
     '573003371490-1504025666@g.us', -- FINCAS 2 7:00AM-8PM
     '573003371490-1535817776@g.us'  -- FINCAS NORTE ANT 7AM 8PM
   );
+
+-- 4. Los 7 posts publicados a mano el 2026-10-19 (Claude outputs/
+-- publicaciones-grupos-2026-10-19.json), para que el candado de 7 dias y el
+-- "un post por grupo por dia" los cuenten. Idempotente por wamid.
+insert into grupo_publicaciones (org_id, group_id, group_jid, property_ref, estado, wamid, created_at)
+select g.org_id, g.id, v.jid, v.ref, 'enviado', v.wamid, v.at::timestamptz
+from (values
+  ('573122385336-1535385747@g.us', '10383517', '3EB0FA76315AA2BC4F61AB', '2026-10-19T17:06:05Z'),
+  ('573003371490-1530756015@g.us', '10383636', '3EB0C8A33079A37BFA9B09', '2026-10-19T17:28:24Z'),
+  ('573003371490-1496864741@g.us', '10459832', '3EB05D62A03BC6B60098BE', '2026-10-19T17:52:35Z'),
+  ('573003371490-1503058650@g.us', '10440972', '3EB02B1B9E08F1592029DC', '2026-10-19T18:32:37Z'),
+  ('573192987173-1525116262@g.us', '10319436', '3EB077B5B3FFD503B63FBF', '2026-10-19T19:09:06Z'),
+  ('573006167957-1494531534@g.us', '10488342', '3EB0638F59EAA97D8B9224', '2026-10-19T19:48:34Z'),
+  ('573003371490-1503059132@g.us', '10383577', '3EB08CD72CE821192DB4B6', '2026-10-19T20:22:05Z')
+) as v(jid, ref, wamid, at)
+join whatsapp_groups g
+  on g.jid = v.jid and g.org_id = (select id from organizations where name = 'Diamond')
+where not exists (select 1 from grupo_publicaciones p where p.wamid = v.wamid);
