@@ -8,7 +8,7 @@ import type { CanonicalProperty } from "./wasi-source.js";
  * dispara eventos ni regeneracion de contenido.
  *
  * Garaje, estrato (2026-09-02), caracteristicas (2026-09-05) y administracion
- * (2026-09-13) ya seguian esta regla.
+ * (2026-09-13) ya seguian esta regla. Periodo del canon (2026-10-19), igual.
  *
  * Zona, ciudad, tipo, operacion, area, habitaciones y banos (2026-10-07): el
  * diff solo convierte en patch los cambios de precio, disponibilidad, texto y
@@ -34,7 +34,8 @@ export function camposQueSeRefrescan(data: CanonicalProperty): Record<string, un
     "garaje",
     "estrato",
     "caracteristicas",
-    "administracion"
+    "administracion",
+    "periodo_precio"
   ] as const;
   for (const campo of campos) {
     const valor = (data as Record<string, unknown>)[campo];

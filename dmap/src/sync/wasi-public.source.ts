@@ -124,6 +124,7 @@ function toCanonicalProperty(property: PropertyRow, fetched: WasiPublicFetchResu
     // que la API oficial (o el import viejo) ya habia dejado en la fila.
     caracteristicas: property.caracteristicas,
     administracion: property.administracion,
+    periodo_precio: property.periodo_precio ?? null,
     zona: property.zona,
     ciudad: property.ciudad,
     link: property.link,

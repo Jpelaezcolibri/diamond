@@ -33,6 +33,11 @@ export const canonicalPropertySchema = z.object({
   // administracion de la opcion 2, cual es?": es dato de decision, no un
   // adorno. Texto ya formateado ("$280.000"), el mismo formato de precio.
   administracion: z.string().nullable().default(null),
+  // Periodo del canon de arriendo (2026-10-19): Wasi lo manda en
+  // `rents_type_label` ("Monthly", "Daily") / `id_rents_type` ("4", "1").
+  // Sin el, el publicador de grupos adivinaba por el texto si el precio era
+  // por noche o por mes. null en venta o si Wasi no lo trae.
+  periodo_precio: z.enum(["mensual", "diario", "semanal"]).nullable().default(null),
   zona: z.string().nullable().default(null),
   ciudad: z.string().nullable().default(null),
   link: z.string().nullable().default(null),

@@ -44,3 +44,10 @@ describe("camposQueSeRefrescan", () => {
     }
   });
 });
+
+describe("camposQueSeRefrescan: periodo del canon", () => {
+  it("el periodo que trae Wasi se refresca y un null no borra lo guardado", () => {
+    expect(camposQueSeRefrescan({ ...base, periodo_precio: "diario" } as CanonicalProperty).periodo_precio).toBe("diario");
+    expect(camposQueSeRefrescan({ ...base, periodo_precio: null } as CanonicalProperty)).not.toHaveProperty("periodo_precio");
+  });
+});

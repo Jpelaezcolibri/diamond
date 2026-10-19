@@ -90,6 +90,7 @@ async function processCandidate(orgId: string, syncRunId: string, candidate: Syn
       garaje: data.garaje,
       estrato: data.estrato,
       administracion: data.administracion,
+      periodo_precio: data.periodo_precio,
       zona: data.zona,
       ciudad: data.ciudad,
       descripcion: data.descripcion,

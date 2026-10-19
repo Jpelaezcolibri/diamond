@@ -224,3 +224,21 @@ test("tras un reinicio espera 20 min desde el ultimo post registrado", async () 
   assert.equal(r.resultado, "espaciado");
   assert.equal(log.enviados.length, 0);
 });
+
+// --- periodo que marca Wasi (properties.periodo_precio, 2026-10-19) ---
+
+test("el periodo de Wasi manda sobre el texto en amoblados", () => {
+  const nochesYMes = amoblado("10403022", { descripcion: "Se renta por noches y mes" });
+  assert.equal(publicador.aptaPara(nochesYMes, "amoblados"), false); // sin dato: adivina por el texto
+  assert.equal(publicador.aptaPara({ ...nochesYMes, periodo_precio: "mensual" }, "amoblados"), true);
+  assert.equal(publicador.aptaPara(amoblado("1", { periodo_precio: "diario" }), "amoblados"), false);
+});
+
+test("una finca con periodo de Wasi se publica aunque el texto no lo diga", () => {
+  const guatape = amoblado("10389800", { tipo: "Finca", titulo: "Renta de finca - Guatapé", descripcion: "" });
+  assert.equal(publicador.aptaPara(guatape, "fincas"), false);
+  assert.equal(publicador.aptaPara({ ...guatape, periodo_precio: "diario" }, "fincas"), true);
+  assert.match(publicador.textoPost(GF, { ...guatape, periodo_precio: "diario" }, "C", LUNES_10AM), /\(precio por noche\)/);
+  assert.match(publicador.textoPost(GF, { ...guatape, periodo_precio: "mensual" }, "C", LUNES_10AM), /\(precio mensual\)/);
+  assert.equal(publicador.aptaPara({ ...guatape, periodo_precio: "semanal" }, "fincas"), false);
+});

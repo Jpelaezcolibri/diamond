@@ -455,3 +455,29 @@ describe("normalizeAdministracion", () => {
     expect(canonical.administracion).toBe("$190.000");
   });
 });
+
+/**
+ * Periodo del canon (2026-10-19). Forma real verificada contra produccion con
+ * dmap/scripts/wasi-periodo-crudo.ts: 10389800 (finca Guatape) trae
+ * id_rents_type "1" / rents_type_label "Daily"; los apartamentos, "4" / "Monthly".
+ */
+describe("normalizePeriodoPrecio", () => {
+  it("lee Monthly y Daily de la etiqueta", async () => {
+    const { normalizePeriodoPrecio } = await import("../../src/sync/wasi-api.source.js");
+    expect(normalizePeriodoPrecio(wasiApiPropertySchema.parse({ id_property: 1, for_rent: "true", id_rents_type: "4", rents_type_label: "Monthly" }))).toBe("mensual");
+    expect(normalizePeriodoPrecio(wasiApiPropertySchema.parse({ id_property: 2, for_rent: "true", id_rents_type: "1", rents_type_label: "Daily" }))).toBe("diario");
+  });
+
+  it("sin etiqueta usa el id; venta o sin dato dan null", async () => {
+    const { normalizePeriodoPrecio } = await import("../../src/sync/wasi-api.source.js");
+    expect(normalizePeriodoPrecio(wasiApiPropertySchema.parse({ id_property: 3, for_rent: "true", id_rents_type: 1 }))).toBe("diario");
+    expect(normalizePeriodoPrecio(wasiApiPropertySchema.parse({ id_property: 4, for_sale: "true", for_rent: "false", id_rents_type: "4", rents_type_label: "Monthly" }))).toBeNull();
+    expect(normalizePeriodoPrecio(wasiApiPropertySchema.parse({ id_property: 5, for_rent: "true" }))).toBeNull();
+    expect(normalizePeriodoPrecio(wasiApiPropertySchema.parse({ id_property: 6, for_rent: "true", id_rents_type: "9", rents_type_label: "Otro" }))).toBeNull();
+  });
+
+  it("toCanonicalProperty lleva el periodo", () => {
+    const canonical = toCanonicalProperty(wasiApiPropertySchema.parse({ id_property: 7, for_rent: "true", rents_type_label: "Daily" }));
+    expect(canonical.periodo_precio).toBe("diario");
+  });
+});

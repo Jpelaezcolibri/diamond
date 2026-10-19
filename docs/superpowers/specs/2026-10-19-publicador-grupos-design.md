@@ -35,6 +35,12 @@ Compuertas, todas obligatorias (`src/groups/publicador.js`):
   - `fincas`: tipo o título finca y el texto dice UNO solo de "mes/mensual" o
     "noche"; el período sale en el encabezado del post.
 
+**Período del canon (2026-10-19, después):** si `properties.periodo_precio`
+viene (el sync de DMAP lo lee de `rents_type_label` de Wasi: Monthly/Daily),
+manda sobre el texto: amoblados solo con `mensual`; fincas con `mensual`
+("precio mensual") o `diario` ("precio por noche"). Sin el dato, la heurística
+de texto de arriba. Migración `2026-10-19_periodo_precio.sql`.
+
 Lo que falla una compuerta no sale y entra solo el día que Wasi lo corrija. Al
 19-oct pasan 9 amoblados y 0 fincas.
 

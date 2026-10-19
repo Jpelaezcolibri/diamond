@@ -37,14 +37,27 @@ function esFinca(p) {
   return /finca/i.test(String(p.tipo || "")) || /finca/i.test(String(p.titulo || ""));
 }
 
+// El periodo que marca Wasi (properties.periodo_precio, sync de DMAP desde
+// 2026-10-19) manda sobre el texto. Sin el dato se adivina por el texto.
+function periodoWasi(p) {
+  const v = String(p.periodo_precio || "").toLowerCase();
+  return ["mensual", "diario", "semanal"].includes(v) ? v : null;
+}
+
 // Un amoblado cuyo texto habla de noches o dias puede tener el precio por
 // noche: publicarlo como mensual seria mentirle al colega.
 function periodoDudoso(p) {
+  const wasi = periodoWasi(p);
+  if (wasi) return wasi !== "mensual";
   return /noche|por\s+d[ií]a|diari[oa]/.test(textoDe(p));
 }
 
-// La finca se publica solo si el texto dice UN periodo: "mes" o "noche".
+// La finca se publica solo si el periodo es UNO: "mes" o "noche".
 function periodoFinca(p) {
+  const wasi = periodoWasi(p);
+  if (wasi === "mensual") return "mes";
+  if (wasi === "diario") return "noche";
+  if (wasi) return null;
   const t = textoDe(p);
   const mes = /mensual|al mes|por mes|\/mes/.test(t);
   const noche = /noche/.test(t);

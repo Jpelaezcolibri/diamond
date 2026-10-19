@@ -77,7 +77,11 @@ export const wasiApiPropertySchema = z
     // `maintenance_fee` es el numero ("280000", "0" si no esta cargada) y
     // `maintenance_fee_label` el texto ("$280.000 COP", "$0 COP").
     maintenance_fee: z.union([z.string(), z.number()]).nullable().optional(),
-    maintenance_fee_label: z.string().nullable().optional()
+    maintenance_fee_label: z.string().nullable().optional(),
+    // Periodo del canon (verificado contra produccion el 2026-10-19 con
+    // dmap/scripts/wasi-periodo-crudo.ts): "4"/"Monthly" y "1"/"Daily".
+    id_rents_type: z.union([z.string(), z.number()]).nullable().optional(),
+    rents_type_label: z.string().nullable().optional()
   })
   .passthrough();
 
@@ -354,6 +358,23 @@ export function normalizeAdministracion(p: WasiApiProperty): string | null {
   return `$${Math.round(valor).toLocaleString("es-CO")}`;
 }
 
+/**
+ * El periodo del canon de arriendo, o null en venta / si Wasi no lo trae. Se
+ * lee la etiqueta (en ingles en esta cuenta) y, si no se reconoce, el id: los
+ * dos unicos vistos en produccion son 1 (Daily) y 4 (Monthly).
+ */
+export function normalizePeriodoPrecio(p: WasiApiProperty): "mensual" | "diario" | "semanal" | null {
+  if (!isTrue(p.for_rent)) return null;
+  const etiqueta = String(p.rents_type_label ?? "").toLowerCase();
+  if (/month|mensual|mes/.test(etiqueta)) return "mensual";
+  if (/dai|day|diari|noche|night/.test(etiqueta)) return "diario";
+  if (/week|seman/.test(etiqueta)) return "semanal";
+  const id = String(p.id_rents_type ?? "").trim();
+  if (id === "4") return "mensual";
+  if (id === "1") return "diario";
+  return null;
+}
+
 export function toCanonicalProperty(raw: WasiApiProperty, propertyTypes: PropertyTypeMap = new Map()): CanonicalProperty {
   const { operacion, precio } = normalizeOperacionYPrecio(raw);
   const { imageKeys, imageUrls } = extractImages(raw);
@@ -373,6 +394,7 @@ export function toCanonicalProperty(raw: WasiApiProperty, propertyTypes: Propert
     estrato: toNumberOrNull(raw.stratum),
     caracteristicas: extractFeatures(raw),
     administracion: normalizeAdministracion(raw),
+    periodo_precio: normalizePeriodoPrecio(raw),
     zona: raw.zone_label ?? null,
     ciudad: raw.city_label ?? null,
     link: raw.link ?? null,
