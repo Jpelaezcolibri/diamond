@@ -2,9 +2,9 @@
 -- docs/superpowers/specs/2026-10-19-publicador-grupos-design.md). Solo agrega.
 
 -- 1. Que se publica en cada grupo: amoblados | fincas | null (nada).
-alter table whatsapp_groups add column if not exists publica text;
-alter table whatsapp_groups drop constraint if exists whatsapp_groups_publica_check;
-alter table whatsapp_groups add constraint whatsapp_groups_publica_check
+-- El check va en la misma columna: se crea una sola vez con ella y la
+-- migracion se puede correr dos veces sin borrar nada.
+alter table whatsapp_groups add column if not exists publica text
   check (publica is null or publica in ('amoblados', 'fincas'));
 
 -- 2. Cada post enviado (o fallido). Sin esta tabla el publicador no arranca.

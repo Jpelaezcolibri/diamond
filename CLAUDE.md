@@ -28,7 +28,27 @@ Equipo: 1 dev (Juan) + Claude Code. Idioma de la app: español (Colombia).
 Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
 `docs:`, `config:`).
 
-## 2. Estado actual (2026-10-16)
+## 2. Estado actual (2026-10-19)
+
+- **Publicador automático de amoblados en grupos (desplegado 2026-10-19,
+  commits `5c0f9f1`, `6de864c`).** Spec
+  `docs/superpowers/specs/2026-10-19-publicador-grupos-design.md`.
+  - **La decisión de Juan:** publicar por WAHA desde la línea de Daiana
+    "asumiendo el riesgo de baneo" (opción A, sin día en sombra).
+  - `src/groups/publicador.js` (compuertas: amoblado confirmado, zona, sin
+    precio por noche; fincas con período explícito) y
+    `src/scheduler/publicador-grupos.js` (L-S 8 a. m.-6 p. m., 1 post por
+    grupo por día, máx. `RADAR_PUBLICAR_MAX_DIA`=8, 20-40 min entre posts,
+    7 días sin repetir ref en un grupo; un fallo pausa el día y avisa a
+    `ALERTA_TECNICA_TO`). `RADAR_PUBLICAR_ACTIVO=true` en Railway.
+  - **El 19-oct salieron 7 posts a mano** (7/7 OK, registro en
+    `Claude outputs/publicaciones-grupos-2026-10-19.json`).
+  - **Migraciones pendientes (Juan, SQL Editor):**
+    `2026-10-16_kit_publicacion.sql` y `2026-10-19_publicador_grupos.sql`
+    (juntas en `Claude outputs/migraciones-pendientes-2026-10-19.sql`). Sin la
+    segunda el publicador no publica (falla cerrado); sin la primera no se
+    atribuye `leads.kit_ref`.
+  - WAHA es CORE: solo texto; la foto llega por la vista previa del link.
 
 - **Kit de publicación + dueños para arriendo (rama `kit-y-duenos-arriendo`,
   2026-10-16, SIN desplegar).** Spec
