@@ -20,6 +20,7 @@ const ESPACIO_MIN = 20;
 const ESPACIO_MAX = 40;
 const TICK_MS = 5 * 60 * 1000;
 const DIA_MS = 86400000;
+const LINK_ROTO_ASESOR_MIN = 60;
 
 const estado = { noAntesDe: null, pausadoDia: null, avisoSesionDia: null, linkRoto: new Map() };
 
@@ -102,7 +103,7 @@ function depsPorDefecto() {
       if (!propiedad.captador_id) return;
       const advisor = await require("../data/advisors").findById(org.id, propiedad.captador_id).catch(() => null);
       if (!advisor || !advisor.phone) return;
-      const texto = `📣 Tu ${propiedad.ref} salió en ${grupo.nombre}. Sigue rotando en los demás grupos; si un colega pregunta, te aviso.`;
+      const texto = `📣 Tu ${propiedad.ref} salió en ${grupo.nombre}. Sigue rotando en los demás grupos.`;
       const r = await require("../lib/mensaje-asesor").enviarYRegistrar(org, advisor.phone, texto).catch((e) => ({ ok: false, error: e.message }));
       if (!r || !r.ok) console.warn(`[publicador] No se pudo avisar a ${advisor.name} de la ${propiedad.ref}: ${r && r.error}`);
     },
@@ -125,7 +126,12 @@ async function runParaOrg(org, d, ahora) {
     noAntesDe = new Date(ultimo + ESPACIO_MIN * 60000);
   }
 
-  const excluirRefs = new Set([...estado.linkRoto].filter(([, dia]) => dia === hoy).map(([ref]) => ref));
+  // Una ficha recien creada de un asesor puede estar fria en la landing: se reintenta a la hora.
+  const excluirRefs = new Set(
+    [...estado.linkRoto]
+      .filter(([, v]) => (v.asesor ? ahora.getTime() - v.ts < LINK_ROTO_ASESOR_MIN * 60000 : v.dia === hoy))
+      .map(([ref]) => ref)
+  );
   const [grupos, propiedades] = await Promise.all([d.grupos(org), d.propiedades(org)]);
   const eleccion = publicador.elegir({ grupos, propiedades, historial, ahora, maxDia: maxDia(), noAntesDe, excluirRefs });
   if (!eleccion.grupo) return { resultado: eleccion.motivo };
@@ -142,7 +148,7 @@ async function runParaOrg(org, d, ahora) {
 
   const post = await d.post(org, propiedad.ref);
   if (!post || !post.linkOk) {
-    estado.linkRoto.set(String(propiedad.ref), hoy);
+    estado.linkRoto.set(String(propiedad.ref), { dia: hoy, ts: ahora.getTime(), asesor: publicador.esDeAsesor(propiedad) });
     console.warn(`[publicador] Ref ${propiedad.ref} sin post o con link que no abre; se salta hoy`);
     return { resultado: "link_roto", ref: propiedad.ref };
   }

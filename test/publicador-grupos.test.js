@@ -323,3 +323,26 @@ test("un arriendo de asesor sin periodo_precio mensual o diario no es apto", () 
   assert.equal(publicador.aptaPara(deAsesor("D1008", { operacion: "Arriendo", periodo_precio: "mensual" }), "ofertas"), true);
   assert.equal(publicador.aptaPara(deAsesor("D1009"), "ofertas"), true);
 });
+
+test("I5: el link roto de una propiedad de asesor se reintenta a la hora, no al dia siguiente", async () => {
+  scheduler._reset();
+  let abre = false;
+  const { d, log } = deps({
+    grupos: async () => [GO],
+    propiedades: async () => [deAsesor("D1001")],
+    post: async () => ({ texto: "x", linkOk: abre }),
+  });
+  assert.equal((await scheduler.runOnce({ ahora: LUNES_10AM, deps: d }))[0].resultado, "link_roto");
+  const t30 = new Date(LUNES_10AM.getTime() + 30 * MIN);
+  assert.equal((await scheduler.runOnce({ ahora: t30, deps: d }))[0].resultado, "nada_que_publicar");
+  abre = true;
+  const t61 = new Date(LUNES_10AM.getTime() + 61 * MIN);
+  assert.equal((await scheduler.runOnce({ ahora: t61, deps: d }))[0].resultado, "enviado");
+  assert.equal(log.enviados.length, 1);
+});
+
+test("M3: el aviso al captador no promete avisar", () => {
+  const fuente = require("fs").readFileSync(require("path").join(__dirname, "../src/scheduler/publicador-grupos.js"), "utf8");
+  assert.doesNotMatch(fuente, /te aviso/);
+  assert.match(fuente, /Sigue rotando en los demás grupos\./);
+});

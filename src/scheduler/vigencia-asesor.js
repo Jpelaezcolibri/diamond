@@ -33,6 +33,24 @@ function depsPorDefecto() {
   };
 }
 
+let avisoMigracionDia = null;
+
+function esColumnaFaltante(e) {
+  return Boolean(e) && (e.code === "42703" || e.code === "PGRST204" || /origen|vence_at|vigencia_preguntada_at/.test(String(e.message || "")));
+}
+
+// Aviso best-effort al captador cuando su propiedad sale por vencimiento.
+async function avisarVencida(org, p, d) {
+  try {
+    const advisor = p.captador_id ? await d.advisor(org, p.captador_id) : null;
+    if (!advisor || !advisor.phone || advisor.activo === false) return;
+    const r = await d.enviarTexto(org, advisor.phone, `Tu ${p.ref} salió del inventario: venció a los 30 días. Si sigue disponible, pedime publicarla de nuevo.`);
+    if (r && r.ok === false) console.warn(`[vigencia-asesor] No salio el aviso de vencimiento de la ${p.ref}: ${r.error}`);
+  } catch (e) {
+    console.warn(`[vigencia-asesor] No salio el aviso de vencimiento de la ${p.ref}: ${e.message}`);
+  }
+}
+
 async function preguntar(org, p, d, ahora) {
   const advisor = p.captador_id ? await d.advisor(org, p.captador_id).catch(() => null) : null;
   if (advisor && advisor.phone && advisor.activo !== false) {
@@ -41,7 +59,7 @@ async function preguntar(org, p, d, ahora) {
     const r = await d.enviarTexto(org, advisor.phone, texto, { botones }).catch((e) => ({ ok: false, error: e.message }));
     if (!r.ok && VENTANA_CERRADA.test(String(r.error || ""))) {
       const t = await d.enviarPlantilla(org, advisor.phone, {
-        name: "vigencia_propiedad", bodyParams: [p.ref, p.titulo || "tu propiedad"], buttonPayloads: botones.map((b) => b.id),
+        name: "vigencia_propiedad", bodyParams: [p.ref, String(p.titulo || "tu propiedad").replace(/\s+/g, " ").trim().slice(0, 60)], buttonPayloads: botones.map((b) => b.id),
       }).catch((e) => ({ ok: false, error: e.message }));
       if (!t || !t.ok) console.warn(`[vigencia-asesor] No salio la plantilla para la ${p.ref}: ${t && t.error}`);
     } else if (!r.ok) {
@@ -60,11 +78,20 @@ async function runOnce({ ahora = new Date(), deps = null } = {}) {
       for (const p of await d.vencidas(org, ahora)) {
         await d.darDeBaja(p.id);
         console.log(`[vigencia-asesor] ${p.ref} vencio: sale del inventario`);
+        await avisarVencida(org, p, d);
       }
       const h = horaBogota(ahora);
       if (!preguntaActiva() || h < HORA_INICIO || h >= HORA_FIN) continue;
       for (const p of await d.porPreguntar(org, ahora)) await preguntar(org, p, d, ahora);
     } catch (e) {
+      if (esColumnaFaltante(e)) {
+        const dia = new Date(ahora.getTime() - BOGOTA_UTC * 3600e3).toISOString().slice(0, 10);
+        if (avisoMigracionDia !== dia) {
+          avisoMigracionDia = dia;
+          console.warn("[vigencia-asesor] Falta correr 2026-10-19_propiedades_asesor.sql: no hay vigencia todavia.");
+        }
+        continue;
+      }
       console.error("[vigencia-asesor] error en", org.name, e.message);
     }
   }
@@ -77,4 +104,8 @@ function start() {
   console.log(`[vigencia-asesor] activo — pregunta ${preguntaActiva() ? "prendida" : "apagada"} (SOFI_VIGENCIA_ASESOR)`);
 }
 
-module.exports = { runOnce, start };
+function _reset() {
+  avisoMigracionDia = null;
+}
+
+module.exports = { runOnce, start, _reset };

@@ -76,3 +76,47 @@ test("boton vig:no da de baja la del asesor y le confirma", async (t) => {
   assert.deepEqual(aplicar.mock.calls[0].arguments, ["org-1", "adv-1", "D1001", false]);
   assert.match(envios[0], /sale del inventario/);
 });
+
+test("I6: sin la migracion avisa una vez al dia con warn y nunca con error", async (t) => {
+  const warn = t.mock.method(console, "warn", () => {});
+  const err = t.mock.method(console, "error", () => {});
+  const falla = async () => { const e = new Error("column properties.vence_at does not exist"); e.code = "42703"; throw e; };
+  const { d } = deps({ vencidas: falla });
+  vigencia._reset();
+  await vigencia.runOnce({ ahora: LUNES_10AM, deps: d });
+  await vigencia.runOnce({ ahora: new Date(LUNES_10AM.getTime() + 3600e3), deps: d });
+  assert.equal(warn.mock.callCount(), 1);
+  assert.equal(err.mock.callCount(), 0);
+  await vigencia.runOnce({ ahora: new Date(LUNES_10AM.getTime() + 25 * 3600e3), deps: d });
+  assert.equal(warn.mock.callCount(), 2);
+  // Un error distinto sigue siendo error.
+  const { d: d2 } = deps({ vencidas: async () => { throw new Error("otro"); } });
+  await vigencia.runOnce({ ahora: LUNES_10AM, deps: d2 });
+  assert.equal(err.mock.callCount(), 1);
+});
+
+test("M1: el titulo de la plantilla va en una linea y corto", async () => {
+  const titulo = "Casa\ncon  mucho\n\n  espacio " + "x".repeat(100);
+  const { d, log } = deps({
+    porPreguntar: async () => [{ id: "p1", ref: "D1001", titulo, captador_id: "adv-1" }],
+    enviarTexto: async () => ({ ok: false, error: "Re-engagement message: more than 24 hours" }),
+  });
+  await vigencia.runOnce({ ahora: LUNES_10AM, deps: d });
+  const param = log.plantillas[0].bodyParams[1];
+  assert.ok(!/\s{2,}|\n/.test(param));
+  assert.ok(param.length <= 60);
+});
+
+test("M9: al vencer avisa al captador; si falla solo se registra", async (t) => {
+  t.mock.method(console, "warn", () => {});
+  const { d, log } = deps({ vencidas: async () => [{ id: "p2", ref: "D1002", captador_id: "adv-1" }] });
+  await vigencia.runOnce({ ahora: LUNES_10AM, deps: d });
+  assert.deepEqual(log.bajas, ["p2"]);
+  assert.match(log.textos[0].texto, /Tu D1002 salió del inventario: venció a los 30 días/);
+  const { d: d2, log: log2 } = deps({
+    vencidas: async () => [{ id: "p3", ref: "D1003", captador_id: "adv-1" }],
+    enviarTexto: async () => { throw new Error("caido"); },
+  });
+  await vigencia.runOnce({ ahora: LUNES_10AM, deps: d2 });
+  assert.deepEqual(log2.bajas, ["p3"]);
+});
