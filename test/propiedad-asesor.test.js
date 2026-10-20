@@ -69,7 +69,9 @@ test("siguienteRef arranca en D1001 y sigue el mayor", () => {
 const precioDe = (p) => pa.normalizar({ ...COMPLETO, precio: p });
 
 test("precios claros se leen exactos", () => {
-  assert.strictEqual(precioDe("1.200 millones").fila.precio, null); // ambiguo: 1,2 o 1200
+  assert.strictEqual(precioDe("1.200 millones").fila.precio, "$1.200.000.000");
+  assert.strictEqual(precioDe("1.200millones").fila.precio, "$1.200.000.000");
+  assert.strictEqual(precioDe("1.5 millones").fila.precio, "$1.500.000");
   assert.strictEqual(precioDe("4,5 millones").fila.precio, "$4.500.000");
   assert.strictEqual(precioDe("450 millones").fila.precio, "$450.000.000");
   assert.strictEqual(precioDe("850 mil").fila.precio, "$850.000");

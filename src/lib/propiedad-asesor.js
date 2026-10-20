@@ -28,8 +28,10 @@ function parsePrecio(v, minimo = 100000) {
   let m;
   if (/^\d+$/.test(s) || /^\d{1,3}([.,]\d{3})+$/.test(s)) {
     n = Number(s.replace(/[.,]/g, ""));
-  } else if ((m = /^(\d{1,4}(?:[.,]\d{1,2})?)(millones|millon|millón|mill|m)$/.exec(s))) {
-    n = Math.round(parseFloat(m[1].replace(",", ".")) * 1e6);
+  } else if ((m = /^(\d{1,3}\.\d{3}|\d{1,4}(?:[.,]\d{1,2})?)(millones|millon|millón|mill|m)$/.exec(s))) {
+    // "1.200 millones": el punto con 3 digitos es de miles; si no, es decimal.
+    const mant = /^\d{1,3}\.\d{3}$/.test(m[1]) ? Number(m[1].replace(".", "")) : parseFloat(m[1].replace(",", "."));
+    n = Math.round(mant * 1e6);
   } else if ((m = /^(\d{1,3})mil$/.exec(s))) {
     n = Number(m[1]) * 1000;
   }
