@@ -2,10 +2,10 @@
 // 2026-10-19-sofi-publica-propiedad-asesor §6). Cada hora:
 // - las vencidas salen del inventario (siempre);
 // - de 9 a. m. a 6 p. m., a las que les quedan 5 dias se le pregunta al
-//   captador UNA vez si siguen disponibles. Excepcion explicita a
-//   ASESORA_SOLO_VISITAS (Juan, 2026-10-19); SOFI_VIGENCIA_ASESOR=false la
-//   apaga y la propiedad vence igual a los 30 dias.
-const { VENTANA_CERRADA } = require("../lib/mensaje-asesor");
+//   captador UNA vez si siguen disponibles. Todo aviso va a la campana del
+//   CRM (tabla notificaciones), no por WhatsApp (Juan, 2026-10-20); la
+//   respuesta se da en "Para atender". SOFI_VIGENCIA_ASESOR=false apaga la
+//   pregunta y la propiedad vence igual a los 30 dias.
 
 const BOGOTA_UTC = 5;
 const HORA_INICIO = 9;
@@ -26,8 +26,7 @@ function depsPorDefecto() {
     porPreguntar: (org, ahora) => datos.porPreguntar(org.id, ahora),
     vencidas: (org, ahora) => datos.vencidas(org.id, ahora),
     advisor: (org, id) => require("../data/advisors").findById(org.id, id),
-    enviarTexto: (org, tel, texto, opts) => require("../lib/mensaje-asesor").enviarYRegistrar(org, tel, texto, opts),
-    enviarPlantilla: (org, tel, p) => require("../channels/whatsapp").sendWhatsAppTemplate(org, tel, p),
+    notificar: (n) => require("../notifications/notificar").notificar(n),
     marcarPreguntada: (id, ahora) => datos.marcarPreguntada(id, ahora),
     darDeBaja: (id) => datos.darDeBaja(id),
   };
@@ -43,31 +42,30 @@ function esColumnaFaltante(e) {
 async function avisarVencida(org, p, d) {
   try {
     const advisor = p.captador_id ? await d.advisor(org, p.captador_id) : null;
-    if (!advisor || !advisor.phone || advisor.activo === false) return;
-    const r = await d.enviarTexto(org, advisor.phone, `Tu ${p.ref} salió del inventario: venció a los 30 días. Si sigue disponible, pedime publicarla de nuevo.`);
-    if (r && r.ok === false) console.warn(`[vigencia-asesor] No salio el aviso de vencimiento de la ${p.ref}: ${r.error}`);
+    if (!advisor || advisor.activo === false) return;
+    await d.notificar({
+      orgId: org.id, advisor, tipo: "vigencia_vencida", titulo: `${p.ref} salió del inventario`,
+      cuerpo: "Venció a los 30 días. Si sigue disponible, pedile a Sofi que la publique de nuevo.", link: "/pendientes",
+    });
   } catch (e) {
     console.warn(`[vigencia-asesor] No salio el aviso de vencimiento de la ${p.ref}: ${e.message}`);
   }
 }
 
 async function preguntar(org, p, d, ahora) {
-  const advisor = p.captador_id ? await d.advisor(org, p.captador_id).catch(() => null) : null;
-  if (advisor && advisor.phone && advisor.activo !== false) {
-    const texto = `Hola ${String(advisor.name || "").split(" ")[0]}, tu ${p.ref} (${p.titulo || "propiedad"}) vence en 5 días en nuestro inventario. ¿Sigue disponible?`;
-    const botones = [{ id: `vig:si:${p.ref}`, title: "Sigue disponible" }, { id: `vig:no:${p.ref}`, title: "Ya no está" }];
-    const r = await d.enviarTexto(org, advisor.phone, texto, { botones }).catch((e) => ({ ok: false, error: e.message }));
-    if (!r.ok && VENTANA_CERRADA.test(String(r.error || ""))) {
-      const t = await d.enviarPlantilla(org, advisor.phone, {
-        name: "vigencia_propiedad", bodyParams: [p.ref, String(p.titulo || "tu propiedad").replace(/\s+/g, " ").trim().slice(0, 60)], buttonPayloads: botones.map((b) => b.id),
-      }).catch((e) => ({ ok: false, error: e.message }));
-      if (!t || !t.ok) console.warn(`[vigencia-asesor] No salio la plantilla para la ${p.ref}: ${t && t.error}`);
-    } else if (!r.ok) {
-      console.warn(`[vigencia-asesor] No salio la pregunta para la ${p.ref}: ${r.error}`);
+  try {
+    const advisor = p.captador_id ? await d.advisor(org, p.captador_id).catch(() => null) : null;
+    if (advisor && advisor.activo !== false) {
+      await d.notificar({
+        orgId: org.id, advisor, tipo: "vigencia_propiedad", titulo: `${p.ref} vence en 5 días`,
+        cuerpo: "¿Sigue disponible? Respondé en Para atender.", link: "/pendientes",
+      });
     }
+  } catch (e) {
+    console.warn(`[vigencia-asesor] No salio la pregunta para la ${p.ref}: ${e.message}`);
   }
   // Se marca aunque no haya salido: la propiedad vence igual (spec §6) y no
-  // se reintenta cada hora contra una plantilla sin aprobar.
+  // se reintenta cada hora.
   await d.marcarPreguntada(p.id, ahora);
 }
 

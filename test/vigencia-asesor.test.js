@@ -11,7 +11,7 @@ const ADV = { id: "adv-1", name: "Daiana", phone: "573011880668" };
 const LUNES_10AM = new Date("2026-10-19T15:00:00Z");
 
 function deps(over = {}) {
-  const log = { textos: [], plantillas: [], preguntadas: [], bajas: [] };
+  const log = { notis: [], preguntadas: [], bajas: [] };
   return {
     log,
     d: {
@@ -19,8 +19,7 @@ function deps(over = {}) {
       porPreguntar: async () => [],
       vencidas: async () => [],
       advisor: async () => ADV,
-      enviarTexto: async (org, tel, texto, opts) => { log.textos.push({ tel, texto, opts }); return { ok: true }; },
-      enviarPlantilla: async (org, tel, p) => { log.plantillas.push(p); return { ok: true }; },
+      notificar: async (n) => { log.notis.push(n); return { ok: true, push: 0 }; },
       marcarPreguntada: async (id) => log.preguntadas.push(id),
       darDeBaja: async (id) => log.bajas.push(id),
       ...over,
@@ -30,23 +29,23 @@ function deps(over = {}) {
 
 beforeEach(() => { delete process.env.SOFI_VIGENCIA_ASESOR; });
 
-test("pregunta una vez con botones vig: si la ventana esta abierta", async () => {
+test("la pregunta va por la campana del CRM, sin WhatsApp ni plantilla", async () => {
   const { d, log } = deps({ porPreguntar: async () => [{ id: "p1", ref: "D1001", titulo: "Casa en venta en Belén", captador_id: "adv-1" }] });
   await vigencia.runOnce({ ahora: LUNES_10AM, deps: d });
-  assert.equal(log.textos.length, 1);
-  assert.match(log.textos[0].texto, /D1001/);
-  assert.deepEqual(log.textos[0].opts.botones.map((b) => b.id), ["vig:si:D1001", "vig:no:D1001"]);
+  assert.deepEqual(log.notis, [{
+    orgId: "org-1", advisor: ADV, tipo: "vigencia_propiedad", titulo: "D1001 vence en 5 días",
+    cuerpo: "¿Sigue disponible? Respondé en Para atender.", link: "/pendientes",
+  }]);
   assert.deepEqual(log.preguntadas, ["p1"]);
 });
 
-test("ventana cerrada: usa la plantilla vigencia_propiedad", async () => {
+test("si notificar falla igual se marca preguntada", async (t) => {
+  t.mock.method(console, "warn", () => {});
   const { d, log } = deps({
-    porPreguntar: async () => [{ id: "p1", ref: "D1001", titulo: "Casa", captador_id: "adv-1" }],
-    enviarTexto: async () => ({ ok: false, error: "Re-engagement message: more than 24 hours" }),
+    porPreguntar: async () => [{ id: "p1", ref: "D1001", captador_id: "adv-1" }],
+    notificar: async () => { throw new Error("caido"); },
   });
   await vigencia.runOnce({ ahora: LUNES_10AM, deps: d });
-  assert.equal(log.plantillas[0].name, "vigencia_propiedad");
-  assert.deepEqual(log.plantillas[0].buttonPayloads, ["vig:si:D1001", "vig:no:D1001"]);
   assert.deepEqual(log.preguntadas, ["p1"]);
 });
 
@@ -64,7 +63,7 @@ test("vencida: sale del inventario aunque la pregunta este apagada", async () =>
 test("fuera de 9 a. m. a 6 p. m. no pregunta", async () => {
   const { d, log } = deps({ porPreguntar: async () => [{ id: "p1", ref: "D1001", captador_id: "adv-1" }] });
   await vigencia.runOnce({ ahora: new Date("2026-10-19T12:00:00Z"), deps: d }); // 7 a. m.
-  assert.equal(log.textos.length, 0);
+  assert.equal(log.notis.length, 0);
 });
 
 test("boton vig:no da de baja la del asesor y le confirma", async (t) => {
@@ -95,27 +94,18 @@ test("I6: sin la migracion avisa una vez al dia con warn y nunca con error", asy
   assert.equal(err.mock.callCount(), 1);
 });
 
-test("M1: el titulo de la plantilla va en una linea y corto", async () => {
-  const titulo = "Casa\ncon  mucho\n\n  espacio " + "x".repeat(100);
-  const { d, log } = deps({
-    porPreguntar: async () => [{ id: "p1", ref: "D1001", titulo, captador_id: "adv-1" }],
-    enviarTexto: async () => ({ ok: false, error: "Re-engagement message: more than 24 hours" }),
-  });
-  await vigencia.runOnce({ ahora: LUNES_10AM, deps: d });
-  const param = log.plantillas[0].bodyParams[1];
-  assert.ok(!/\s{2,}|\n/.test(param));
-  assert.ok(param.length <= 60);
-});
-
 test("M9: al vencer avisa al captador; si falla solo se registra", async (t) => {
   t.mock.method(console, "warn", () => {});
   const { d, log } = deps({ vencidas: async () => [{ id: "p2", ref: "D1002", captador_id: "adv-1" }] });
   await vigencia.runOnce({ ahora: LUNES_10AM, deps: d });
   assert.deepEqual(log.bajas, ["p2"]);
-  assert.match(log.textos[0].texto, /Tu D1002 salió del inventario: venció a los 30 días/);
+  assert.deepEqual(log.notis, [{
+    orgId: "org-1", advisor: ADV, tipo: "vigencia_vencida", titulo: "D1002 salió del inventario",
+    cuerpo: "Venció a los 30 días. Si sigue disponible, pedile a Sofi que la publique de nuevo.", link: "/pendientes",
+  }]);
   const { d: d2, log: log2 } = deps({
     vencidas: async () => [{ id: "p3", ref: "D1003", captador_id: "adv-1" }],
-    enviarTexto: async () => { throw new Error("caido"); },
+    notificar: async () => { throw new Error("caido"); },
   });
   await vigencia.runOnce({ ahora: LUNES_10AM, deps: d2 });
   assert.deepEqual(log2.bajas, ["p3"]);
@@ -126,5 +116,5 @@ test("el aviso de vencimiento solo sale de 9 a. m. a 6 p. m.; la baja siempre", 
   const { d, log } = deps({ vencidas: async () => [{ id: "p2", ref: "D1002", captador_id: "adv-1" }] });
   await vigencia.runOnce({ ahora: noche, deps: d });
   assert.deepEqual(log.bajas, ["p2"]);
-  assert.equal(log.textos.length, 0);
+  assert.equal(log.notis.length, 0);
 });

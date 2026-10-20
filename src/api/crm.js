@@ -1075,4 +1075,22 @@ router.post("/api/citas/accion", async (req, res) => {
   }
 });
 
+// Boton "Sigue disponible" / "Ya no está" de "Para atender" en el CRM (Juan,
+// 2026-10-20). El CRM manda el auth del usuario; solo el captador de la
+// propiedad puede renovarla o darla de baja (aplicarVigencia lo filtra).
+router.post("/api/propiedades/vigencia", async (req, res) => {
+  try {
+    const { authUserId, ref, sigue } = req.body || {};
+    if (!authUserId || !ref) return res.status(400).json({ ok: false, error: "faltan ref o authUserId" });
+    const org = await organizations.getDefault();
+    const advisor = await require("../data/advisors").findByAuthUserId(org.id, authUserId);
+    if (!advisor || advisor.activo === false) return res.status(403).json({ ok: false, error: "no_es_asesor" });
+    const r = await require("../data/propiedades-asesor").aplicarVigencia(org.id, advisor.id, ref, Boolean(sigue));
+    res.json({ ok: true, estado: r.estado, ref: r.ref });
+  } catch (e) {
+    console.error("[api] Error en propiedades/vigencia:", e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 module.exports = router;

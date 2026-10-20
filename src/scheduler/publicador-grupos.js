@@ -96,16 +96,18 @@ function depsPorDefecto() {
       }
       return count;
     },
-    // Excepcion aprobada por Juan: "el aviso de que se publico le llega al asesor". Sale
-    // una sola vez por propiedad y responde a lo que el propio asesor pidio, asi que no
-    // pasa por ritmo ni por ASESORA_SOLO_VISITAS.
+    // El aviso de que se publico le llega al asesor por la campana del CRM, no por
+    // WhatsApp (Juan, 2026-10-20). Sale una sola vez por propiedad y responde a lo
+    // que el propio asesor pidio, asi que no pasa por ritmo ni por ASESORA_SOLO_VISITAS.
     avisarCaptador: async (org, propiedad, grupo) => {
       if (!propiedad.captador_id) return;
       const advisor = await require("../data/advisors").findById(org.id, propiedad.captador_id).catch(() => null);
-      if (!advisor || !advisor.phone) return;
-      const texto = `📣 Tu ${propiedad.ref} salió en ${grupo.nombre}. Sigue rotando en los demás grupos.`;
-      const r = await require("../lib/mensaje-asesor").enviarYRegistrar(org, advisor.phone, texto).catch((e) => ({ ok: false, error: e.message }));
-      if (!r || !r.ok) console.warn(`[publicador] No se pudo avisar a ${advisor.name} de la ${propiedad.ref}: ${r && r.error}`);
+      if (!advisor || advisor.activo === false) return;
+      const r = await require("../notifications/notificar").notificar({
+        orgId: org.id, advisor, tipo: "propiedad_publicada", titulo: `Tu ${propiedad.ref} salió en ${grupo.nombre}`,
+        cuerpo: "Sigue rotando en los demás grupos.", link: "/pendientes",
+      });
+      if (!r || !r.ok) console.warn(`[publicador] No se pudo avisar a ${advisor.name} de la ${propiedad.ref}`);
     },
   };
 }
@@ -221,4 +223,4 @@ function _reset() {
   estado.linkRoto.clear();
 }
 
-module.exports = { start, runOnce, activo, _reset };
+module.exports = { start, runOnce, activo, _reset, _depsPorDefecto: depsPorDefecto };

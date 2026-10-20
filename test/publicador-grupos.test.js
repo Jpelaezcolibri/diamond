@@ -354,3 +354,21 @@ test("el log del link roto de un asesor dice que se reintenta en 60 min", async 
   await scheduler.runOnce({ ahora: LUNES_10AM, deps: d });
   assert.match(warn.mock.calls.map((c) => c.arguments.join(" ")).join(" | "), /se reintenta en 60 min/);
 });
+
+// --- el aviso al captador va por la campana del CRM (Juan, 2026-10-20) ---
+test("avisarCaptador por defecto notifica en la campana, sin WhatsApp", async (t) => {
+  const notificar = require("../src/notifications/notificar");
+  const advisors = require("../src/data/advisors");
+  const mensajeAsesor = require("../src/lib/mensaje-asesor");
+  const adv = { id: "adv-1", name: "Daiana", phone: "573011880668" };
+  t.mock.method(advisors, "findById", async () => adv);
+  const wa = t.mock.method(mensajeAsesor, "enviarYRegistrar", async () => ({ ok: true }));
+  const nt = t.mock.method(notificar, "notificar", async () => ({ ok: true, push: 0 }));
+  const d = scheduler._depsPorDefecto();
+  await d.avisarCaptador({ id: "org-1" }, { ref: "D1001", captador_id: "adv-1" }, { nombre: "Ofertas" });
+  assert.deepEqual(nt.mock.calls[0].arguments[0], {
+    orgId: "org-1", advisor: adv, tipo: "propiedad_publicada", titulo: "Tu D1001 salió en Ofertas",
+    cuerpo: "Sigue rotando en los demás grupos.", link: "/pendientes",
+  });
+  assert.equal(wa.mock.callCount(), 0);
+});
