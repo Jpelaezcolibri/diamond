@@ -1,7 +1,7 @@
 const { test } = require("node:test");
 const assert = require("node:assert");
 const { _setClientForTests } = require("../src/lib/anthropic");
-const { classify, armarLotes, formatearLote, costoDe, esReintentable, TAMANO_LOTE } = require("../src/groups/classify");
+const { classify, armarLotes, formatearLote, costoDe, esReintentable, sinThinking, TAMANO_LOTE } = require("../src/groups/classify");
 
 const msg = (n) => ({ id: `g#${n}`, grupo: "g", autor: "Colega", texto: `mensaje ${n}` });
 
@@ -65,12 +65,18 @@ test("classify pide salida estructurada — el esquema lo fuerza la API, no el p
   _setClientForTests(null);
 });
 
-test("classify NO manda 'effort' — Haiku 4.5 no acepta ese parámetro y devolvería error", async () => {
+test("classify apaga el thinking de Haiku 5.5 y no manda 'effort'", async () => {
   const llamadas = mockClient();
   await classify([msg(0)]);
+  assert.strictEqual(llamadas[0].model, "claude-haiku-5-5");
   assert.strictEqual(llamadas[0].output_config.effort, undefined);
-  assert.strictEqual(llamadas[0].thinking, undefined);
+  assert.deepStrictEqual(llamadas[0].thinking, { type: "disabled" });
   _setClientForTests(null);
+});
+
+test("volver a Haiku 4.5 no manda thinking (Haiku 4.5 no lo acepta)", () => {
+  assert.deepStrictEqual(sinThinking("claude-haiku-4-5"), {});
+  assert.deepStrictEqual(sinThinking("claude-haiku-5-5"), { thinking: { type: "disabled" } });
 });
 
 test("classify acumula los tokens de cada lote — el costo se mide, no se estima", async () => {
@@ -116,9 +122,9 @@ test("una respuesta con un id que no pedimos se descarta", async () => {
   _setClientForTests(null);
 });
 
-test("el costo usa los precios de Haiku 4.5: 1 USD y 5 USD por millón", () => {
-  // 1M de entrada + 1M de salida = 1 + 5 = 6 USD
-  assert.strictEqual(costoDe({ input_tokens: 1e6, output_tokens: 1e6 }), 6);
+test("el costo usa los precios del modelo: Haiku 5.5 0,10/0,50 y Haiku 4.5 1/5 USD por millón", () => {
+  assert.ok(Math.abs(costoDe({ input_tokens: 1e6, output_tokens: 1e6 }) - 0.6) < 1e-9);
+  assert.strictEqual(costoDe({ input_tokens: 1e6, output_tokens: 1e6 }, "claude-haiku-4-5"), 6);
   assert.strictEqual(costoDe({}), 0);
 });
 
@@ -230,8 +236,8 @@ test("el costo de un import cuenta lo leido y lo escrito en el cache", async () 
   mockClient({ usage: { input_tokens: 100, cache_read_input_tokens: 4000, cache_creation_input_tokens: 0, output_tokens: 50 } });
   const { uso } = await classify([msg(0)]);
   assert.strictEqual(uso.cache_read_input_tokens, 4000);
-  // 100 frescos a 1 USD + 4000 leidos a 0,1 USD + 50 de salida a 5 USD, por millon
-  assert.ok(Math.abs(uso.costoUsd - (100 * 1 + 4000 * 0.1 + 50 * 5) / 1e6) < 1e-12);
+  // Haiku 5.5: 100 frescos a 0,10 USD + 4000 leidos a 0,01 USD + 50 de salida a 0,50 USD, por millon
+  assert.ok(Math.abs(uso.costoUsd - (100 * 0.1 + 4000 * 0.01 + 50 * 0.5) / 1e6) < 1e-12);
   _setClientForTests(null);
 });
 

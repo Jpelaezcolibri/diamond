@@ -1,0 +1,719 @@
+{
+ "congelado": "2026-10-20T16:12:05.105Z",
+ "casos": [
+  {
+   "id": "d1",
+   "texto": "Apartamento o Casa\nPresupuesto 1500 mill\nSector tomatera, Calera, Balsos, Tesoro, Chocho, Santa, Drivein\nÁrea superior a 160 m2 a 220 m2(no duplex)\n*3 habitaciones mas estudio o 4 habitaciones* requiere Habitación de servicio\nApartamento piso alto con vista.\nUnidad completa (con piscina, familia con niños)\nModerno\nMarcela/Diego",
+   "esperado": {
+    "clase": "demanda",
+    "operacion": "venta",
+    "tipo": "apartamento",
+    "precio_max": 1500000000,
+    "zonas": [
+     "Tomatera",
+     "Calera",
+     "Balsos",
+     "Tesoro",
+     "Chocho",
+     "Santa",
+     "Drive-In"
+    ]
+   }
+  },
+  {
+   "id": "d2",
+   "texto": "URGENCIA DE COMPRA 🚨 🚨 🚨 \nCasa en Envigado o Pobaldo moderna, 3 habitaciones, no requiere habitación de servicio \nUnidad cerrada, ideal que sea completa y muy familiar (pareja con hijos)\nPresupuesto 1900 mill\n\n* Casa con salida fácil a la regional\n* Forma de pago leasing habitacional: 80% 20%\n* Escrituración con precio full de negociación y área 100% legalizada en escrituras\nMarcela/Andrea",
+   "esperado": {
+    "clase": "demanda",
+    "operacion": "venta",
+    "tipo": "casa",
+    "precio_max": 1900000000,
+    "zonas": [
+     "Envigado",
+     "El Poblado"
+    ]
+   }
+  },
+  {
+   "id": "d3",
+   "texto": "URGENCIA DE COMPRA 🚨\n\nBusca Casa desde Balsos hasta Palmas \nModerna \nHasta 300mll a 3400 paga de contado \n\nEdi",
+   "esperado": {
+    "clase": "demanda",
+    "operacion": "venta",
+    "tipo": "casa",
+    "precio_max": 300000000,
+    "zonas": [
+     "Balsos",
+     "Palmas"
+    ]
+   }
+  },
+  {
+   "id": "d4",
+   "texto": "URGENTE 🚨 \nYA TIENE CRÉDITO APROBADO 🚨🚨 \n\nCliente Sara\nBusca casa en envigado\nmáximo dos plantas\n3 alcobas\nMUY IMPORTANTE PRINCIPAL CON VESTIER GRANDE \nzonas comunes \njardín\npresupuesto 1.800\nparte recursos y parte crédito",
+   "esperado": {
+    "clase": "demanda",
+    "operacion": "venta",
+    "tipo": "casa",
+    "precio_max": 1800000000,
+    "zonas": [
+     "Envigado"
+    ]
+   }
+  },
+  {
+   "id": "d5",
+   "texto": "Busco Casa Lote\nManrique, Villahermosa o Aranjuez \nPresupuesto $1.000 millones \nCon Colega",
+   "esperado": {
+    "clase": "demanda",
+    "operacion": "venta",
+    "tipo": "casa",
+    "precio_max": 1000000000,
+    "zonas": [
+     "Manrique",
+     "Villahermosa",
+     "Aranjuez"
+    ]
+   }
+  },
+  {
+   "id": "d6",
+   "texto": "Busco Casa Lote \nSolo Villa Hermosa \nPresupuesto abierto \nCliente Directo",
+   "esperado": {
+    "clase": "demanda",
+    "operacion": "venta",
+    "tipo": "casa",
+    "precio_max": 0,
+    "zonas": [
+     "Villa Hermosa"
+    ]
+   }
+  },
+  {
+   "id": "d7",
+   "texto": "Hola, busco apto en La Almería, Simón Bolivar, Castellana, 2 o 3 alcobas, moderno, parqueadero, 600'000.000",
+   "esperado": {
+    "clase": "demanda",
+    "operacion": "venta",
+    "tipo": "apartamento",
+    "precio_max": 600000000,
+    "zonas": [
+     "La Almería",
+     "Simón Bolívar",
+     "Castellana"
+    ]
+   }
+  },
+  {
+   "id": "d8",
+   "texto": "🔎Se solicita\nCASA PRIMER PISO\n3 o 4 alcobas\nGaraje\nEstrato 3 o 4\nSector Occidente\n💰600 millones",
+   "esperado": {
+    "clase": "demanda",
+    "operacion": "venta",
+    "tipo": "casa",
+    "precio_max": 600000000,
+    "zonas": [
+     "Occidente"
+    ]
+   }
+  },
+  {
+   "id": "d9",
+   "texto": "Busco Casa Lote \nSolo Manrique \nPresupuesto abierto \nCliente Directo",
+   "esperado": {
+    "clase": "demanda",
+    "operacion": "venta",
+    "tipo": "lote",
+    "precio_max": 0,
+    "zonas": [
+     "Manrique"
+    ]
+   }
+  },
+  {
+   "id": "d10",
+   "texto": "🎯🎯🎯🎯🎯🎯🎯🎯🎯\nPEDIDO\nAPARTAMENTO \nMUY LINDO\nLES GUSTA MUCHO *CIUDAD DEL RIO*\n*SABANETA*\nHASTA $1.100.000.000\nAREA MAS DE 130 M2 OJALÁ MAS\nBALCON GRANDE\nALCOBA PRINCIPAL QUE QUEPA CAMA DE 2  POR  2\n3 ALCOBAS CON BAÑO\nDEBE TENER CORREDORES AMPLIOS PARA SILLA RUEDAS\nPARQUEADEROS 2\nUNIDAD MUY COMPLETA \nLinda vista\nYA VENDIO\n\n🎯🎯🎯🎯🎯🎯",
+   "esperado": {
+    "clase": "demanda",
+    "operacion": "venta",
+    "tipo": "apartamento",
+    "precio_max": 1100000000,
+    "zonas": [
+     "Ciudad del Río",
+     "Sabaneta"
+    ]
+   }
+  },
+  {
+   "id": "d11",
+   "texto": "*Pedido C097*\n*SM REAL ESTATE busca LOTE en ALTO DE PALMAS*\n*DESDE EL MALL INDIANA HASTA ANTES DEL PEAJE*\n*NO EL SECTOR DE MERCAAJUSTE*\n*Mínimo 1000M2*\n*Presupuesto $1.300.000.000*\nRecursos propios Y crédito",
+   "esperado": {
+    "clase": "demanda",
+    "operacion": "venta",
+    "tipo": "lote",
+    "precio_max": 1300000000,
+    "zonas": [
+     "Alto de Palmas"
+    ]
+   }
+  },
+  {
+   "id": "d12",
+   "texto": "*Pedido C097*\n*SM REAL ESTATE busca LOTE en ALTO DE PALMAS*\n*DESDE EL MALL INDIANA HASTA ANTES DEL PEAJE*\n*NO EL SECTOR DE MERCAAJUSTE*\n*Mínimo 1000M2*\n*Presupuesto $1.300.000.000*\nRecursos propios Y crédito",
+   "esperado": {
+    "clase": "demanda",
+    "operacion": "venta",
+    "tipo": "lote",
+    "precio_max": 1300000000,
+    "zonas": [
+     "Alto de Palmas"
+    ]
+   }
+  },
+  {
+   "id": "d13",
+   "texto": "🚨🚨🚨\nInfo SOLO a: \n👩🏻‍💼 Johana Escudero \n📞3000000000\n\n 🍃*ROMERO & CIA BUSCA* 🍃\n\n‼️APARTAMENTO EN SABANETA ‼️\n\n✔️Presupuesto:\n💲600 millones \n\n✅ 3 alcobas\n✅ 80 m2 en adelante\n✅ Parqueadero y útil \n✅ Hasta piso 9\n\n\n📍ZONA: \nSabaneta  \n‼️Sin loma! \n\n✅Unidad Cerrada",
+   "esperado": {
+    "clase": "demanda",
+    "operacion": "venta",
+    "tipo": "apartamento",
+    "precio_max": 600000000,
+    "zonas": [
+     "Sabaneta"
+    ]
+   }
+  },
+  {
+   "id": "d14",
+   "texto": "*🏨 🗣️ PEDIDO:*\n\n*APARTAMENTO*\n2 a 3 habitaciones (2 si tiene área de estudio)\nÁrea mínimo 100 m2\nBalcón\nParqueadero y útil\nAscensor \n\náreas comunes \n\n*Sectores:*\nLaureles, Conquistadores o El Poblado en Castropol, Patio bonito o Ciudad del Río o cercanos a estos \n\nPresupuesto:\n*850.000.000 maximo*",
+   "esperado": {
+    "clase": "demanda",
+    "operacion": "venta",
+    "tipo": "apartamento",
+    "precio_max": 850000000,
+    "zonas": [
+     "Laureles",
+     "Conquistadores",
+     "El Poblado",
+     "Castropol",
+     "Patio Bonito",
+     "Ciudad del Río"
+    ]
+   }
+  },
+  {
+   "id": "d15",
+   "texto": "*Pedido C090*\n*SM REAL ESTATE busca APARTAMENTO en Envigado ZONA PLANA (Dorado, La Paz)*\n*3 alcobas*\n*Presupuesto $620.000.000*\nRecursos propios",
+   "esperado": {
+    "clase": "demanda",
+    "operacion": "venta",
+    "tipo": "apartamento",
+    "precio_max": 620000000,
+    "zonas": [
+     "Dorado",
+     "La Paz"
+    ]
+   }
+  },
+  {
+   "id": "d16",
+   "texto": "🏡 _BUSCO APARTAMENTO_\n\n📍 _Sector occidente, \nRobledo, Pilarica etc._\n\n💰 Presupuesto _$240 máximo_\n\n✅ _Compra inmediata_\n\n📲 _Contacto: 3000000000_",
+   "esperado": {
+    "clase": "demanda",
+    "operacion": "venta",
+    "tipo": "apartamento",
+    "precio_max": 240000000,
+    "zonas": [
+     "Robledo",
+     "Pilarica"
+    ]
+   }
+  },
+  {
+   "id": "d17",
+   "texto": "Buenos dias\n\nAlguien con casa en *Hacienda Aviñon*\n\nTengo cliente interesada en ese tipo de unidad\n\n1.200 a 1.600 millones",
+   "esperado": {
+    "clase": "demanda",
+    "operacion": "venta",
+    "tipo": "casa",
+    "precio_max": 1600000000,
+    "zonas": [
+     "Hacienda Aviñón"
+    ]
+   }
+  },
+  {
+   "id": "d18",
+   "texto": "*PEDIDO*\nApartamento entre 600-750millones\nSin ascensor hasta 2 piso después con ascensor \nAdministración máx 400\n3 alcobas\nParqueadero \nCuarto util\nBalcón grande\nSector floresta Calasanz laureles Simón Bolívar\n\nPAGO DE CONTADO",
+   "esperado": {
+    "clase": "demanda",
+    "operacion": "venta",
+    "tipo": "apartamento",
+    "precio_max": 750000000,
+    "zonas": [
+     "Floresta",
+     "Calasanz",
+     "Laureles",
+     "Simón Bolívar"
+    ]
+   }
+  },
+  {
+   "id": "d19",
+   "texto": "⚒️BUSCO LOTE PARA CONSTRUCTOR EN MEDELLIN RIONEGRO LA CEJA ENVIGADO CALDAS ITAGUI BELLO PARA NO VIS PRESUPUESTO ABIERTO🪚",
+   "esperado": {
+    "clase": "demanda",
+    "operacion": "venta",
+    "tipo": "lote",
+    "precio_max": 0,
+    "zonas": [
+     "Medellín",
+     "Rionegro",
+     "La Ceja",
+     "Envigado",
+     "Caldas",
+     "Itagüí",
+     "Bello"
+    ]
+   }
+  },
+  {
+   "id": "d20",
+   "texto": "⚒️BUSCO LOTE PARA CONSTRUCTOR EN MEDELLIN RIONEGRO LA CEJA ENVIGADO CALDAS ITAGUI BELLO PARA NO VIS PRESUPUESTO ABIERTO🪚",
+   "esperado": {
+    "clase": "demanda",
+    "operacion": "venta",
+    "tipo": "lote",
+    "precio_max": 0,
+    "zonas": [
+     "Medellín",
+     "Rionegro",
+     "La Ceja",
+     "Envigado",
+     "Caldas",
+     "Itagüí",
+     "Bello"
+    ]
+   }
+  },
+  {
+   "id": "d21",
+   "texto": "Busco casa en el poblado con baño en cada habitaciones, 3 habitaciones parqueadero y útil, le gusta por patio bonito, balsos, tomatera, los Parra sector clínica Medellín hasta.\n\nPresupuesto. $1.400MM\nComisión: 50-50 (no enviar habi) \n\nEmanuel Yarce M.\n3000000000",
+   "esperado": {
+    "clase": "demanda",
+    "operacion": "venta",
+    "tipo": "casa",
+    "precio_max": 1400000000,
+    "zonas": [
+     "El Poblado",
+     "Balsos",
+     "Tomatera",
+     "Los Parra"
+    ]
+   }
+  },
+  {
+   "id": "d22",
+   "texto": "busco casa en loma de los bernal, la mota, San Germán, colores o poblado. \n\nCaracterísticas: Importante que la unidad tenga piscina y/o gym y que la casa tenga jardín con zona verde. \n\nPresupuesto: $1.000MM contado\nComisión: 50-50 (no enviar habi) \n\nEmanuel Yarce M.\n3000000000",
+   "esperado": {
+    "clase": "demanda",
+    "operacion": "venta",
+    "tipo": "casa",
+    "precio_max": 1000000000,
+    "zonas": [
+     "Loma de los Bernal",
+     "La Mota",
+     "San Germán",
+     "Colores",
+     "El Poblado"
+    ]
+   }
+  },
+  {
+   "id": "d23",
+   "texto": "Busco apto en loma de los bernal, belen (partes buenas), la América, la castellana, laureles, estadio, colores.\n\nCaracterísticas: 2 habitaciones, parqueadero. \n\nPresupuesto: 450MM hipotecario Bancolombia \nComisión: 50-50 (no enviar habi) \n\nEmanuel Yarce M.\n3000000000",
+   "esperado": {
+    "clase": "demanda",
+    "operacion": "venta",
+    "tipo": "apartamento",
+    "precio_max": 450000000,
+    "zonas": [
+     "Loma de los Bernal",
+     "Belén",
+     "La América",
+     "La Castellana",
+     "Laureles",
+     "Estadio",
+     "Colores"
+    ]
+   }
+  },
+  {
+   "id": "d24",
+   "texto": "⭐️PEDIDO NUEVO !!\n\nPoblado desde el Inter hasta san Lucas.\n\n95 mts \n\nViejito para remodelar  \nPiso bajo o medio \nQue tenga balcón, sin ruido. \n2 habitaciones \n\n$800 para remodelar \n$1000 si está remoldeado. \n\nLuisa Morales \n3000000000",
+   "esperado": {
+    "clase": "demanda",
+    "operacion": "venta",
+    "tipo": "apartamento",
+    "precio_max": 1000000000,
+    "zonas": [
+     "El Poblado",
+     "San Lucas"
+    ]
+   }
+  },
+  {
+   "id": "d25",
+   "texto": "Busco CASA 🏠 con jardín o APTO 🏢 con terraza obligatorio.\n\nPoblado / tesoro hasta san Lucas . \nTrasversal inferior para arriba. \n\n2 o 3 habitaciones \n2 parqueaderos \n\nEn el mejor estado posible o remodelado.\n\nPresupuesto máximo : $1.550.000.000 millones. \n\nLuisa Morales \n3000000000",
+   "esperado": {
+    "clase": "demanda",
+    "operacion": "venta",
+    "tipo": "casa",
+    "precio_max": 1550000000,
+    "zonas": [
+     "El Poblado",
+     "Tesoro",
+     "San Lucas"
+    ]
+   }
+  },
+  {
+   "id": "d26",
+   "texto": "🏢 *BUSCO URGENTE APARTAMENTO EN ENVIGADO*\n🛏️ 3 habitaciones \n🌇 Preferiblemente con balcón o ventanal\n🚗 Parqueadero privado indispensable\n⬆️ ascensor obligatorio si es alto \n✅mínimo 80 metros \n✅Si es en escalas máximo piso 2 tienen una persona de edad \n\n🚫 No: Barrios Sebastiana o Las flores \n\n💰 Presupuesto máximo: $620’000.000\n💳 Forma de pago: recursos propios - contado\n\n*Pedido urgente de colega, 1.25 puntas* 🪻",
+   "esperado": {
+    "clase": "demanda",
+    "operacion": "venta",
+    "tipo": "apartamento",
+    "precio_max": 620000000,
+    "zonas": [
+     "Envigado"
+    ]
+   }
+  },
+  {
+   "id": "d27",
+   "texto": "🎯🎯🎯🎯🎯🎯🎯🎯🎯\nPEDIDO\nAPARTAMENTO \nMUY LINDO\nHASTA $1.100.000.000\nAREA MAS DE 130 M2 OJALÁ MAS\nBALCON GRANDE\nALCOBA PRINCIPAL QUE QUEPA CAMA DE 2  POR  2\nDEBE TENER CORREDORES AMPLIOS PARA SILLA RUEDAS\nPARQUEADEROS 2\nUNIDAD MUY COMPLETA \nLinda vista\nYA VENDIO\n\n🎯🎯🎯🎯🎯🎯",
+   "esperado": {
+    "clase": "demanda",
+    "operacion": "venta",
+    "tipo": "apartamento",
+    "precio_max": 1100000000,
+    "zonas": []
+   }
+  },
+  {
+   "id": "d28",
+   "texto": "BUSCO APARTAMENTO  O APARTA ESTUDIO en Envígado , lindo acabado buena vista, es para una persona sola joven, no quiere 3 alcobas , máximo 2 alcobas, parqueadero importante que puede poner punto eléctrico para el carro en la unidad presupuesto 500 millones recursos mixtos",
+   "esperado": {
+    "clase": "demanda",
+    "operacion": "venta",
+    "tipo": "apartamento",
+    "precio_max": 500000000,
+    "zonas": [
+     "Envigado"
+    ]
+   }
+  },
+  {
+   "id": "d29",
+   "texto": "*Buscamos Apartamento en Coltejer en Itaguí para Arriendo*\nEntre 2 y 3 Habitaciones\nParqueadero de Carro\nNo poniente\nPresupuesto: 3.000.000",
+   "esperado": {
+    "clase": "demanda",
+    "operacion": "arriendo",
+    "tipo": "apartamento",
+    "precio_max": 3000000,
+    "zonas": [
+     "Itagüí"
+    ]
+   }
+  },
+  {
+   "id": "d30",
+   "texto": "💥💥Busco casa para arriendo \n\nAlto de palmas maximo antes del peaje de la variante\n\nMin 3 habitaciones\nUnidad cerrada\n\nIdeal cerca al colegio Montemayor\n\nPpto maximo $23.000.000",
+   "esperado": {
+    "clase": "demanda",
+    "operacion": "arriendo",
+    "tipo": "casa",
+    "precio_max": 23000000,
+    "zonas": [
+     "Alto de Palmas"
+    ]
+   }
+  },
+  {
+   "id": "d31",
+   "texto": "Busco casa en Lagogrande para alquilar!!!!",
+   "esperado": {
+    "clase": "demanda",
+    "operacion": "arriendo",
+    "tipo": "casa",
+    "precio_max": 0,
+    "zonas": [
+     "Lagogrande"
+    ]
+   }
+  },
+  {
+   "id": "d32",
+   "texto": "Buenos días ,\n\nSe busca oficina o bodega de 800-1000 mts para arriendo en el sur",
+   "esperado": {
+    "clase": "demanda",
+    "operacion": "arriendo",
+    "tipo": "oficina",
+    "precio_max": 0,
+    "zonas": []
+   }
+  },
+  {
+   "id": "d33",
+   "texto": "Busco \nApartamento en arriendo\n3 hab ideal con hab servicio \nMin 150 mt2 -180 mt\nEntre Viscaya y los Balsos\nSolo Pisos bajos máximo 6tp ojalá terraza\n$8-$10 millones",
+   "esperado": {
+    "clase": "demanda",
+    "operacion": "arriendo",
+    "tipo": "apartamento",
+    "precio_max": 10000000,
+    "zonas": [
+     "Viscaya",
+     "Los Balsos"
+    ]
+   }
+  },
+  {
+   "id": "d34",
+   "texto": "🕵️‍♀️ BUSCO\nAPARTAMENTO EN ARRIENDO \n\n📍 Envigado SOLO parte plana y de fácil acceso\n🏘️ Unidad cerrada\n🛏️ 1 alcoba min.\n*Ideal PRIMER PISO* \n\n💰 PRESUPUESTO: \nAcorde al pedido\n\n🔗 Por favor enviar link\n🏘️ Nombre de la unidad\n🚫 No fotos sueltas\nGRACIAS 🙏",
+   "esperado": {
+    "clase": "demanda",
+    "operacion": "arriendo",
+    "tipo": "apartamento",
+    "precio_max": 0,
+    "zonas": [
+     "Envigado"
+    ]
+   }
+  },
+  {
+   "id": "d35",
+   "texto": "🕵️‍♀️ BUSCO\nAPARTAMENTO EN ARRIENDO \n\n📍 Envigado SOLO parte plana y de fácil acceso\n🏘️ Unidad cerrada\n🛏️ 1 alcoba min.\n*Ideal PRIMER PISO* \n\n💰 PRESUPUESTO: \nAcorde al pedido\n\n🔗 Por favor enviar link\n🏘️ Nombre de la unidad\n🚫 No fotos sueltas\nGRACIAS 🙏",
+   "esperado": {
+    "clase": "demanda",
+    "operacion": "arriendo",
+    "tipo": "apartamento",
+    "precio_max": 0,
+    "zonas": [
+     "Envigado"
+    ]
+   }
+  },
+  {
+   "id": "d36",
+   "texto": "🚨BUSCO CASA DE 1 solo nivel \nPoblado o envigado (parte baja) \n$12.000.000",
+   "esperado": {
+    "clase": "demanda",
+    "operacion": "arriendo",
+    "tipo": "casa",
+    "precio_max": 12000000,
+    "zonas": [
+     "El Poblado",
+     "Envigado"
+    ]
+   }
+  },
+  {
+   "id": "d37",
+   "texto": "🕵️‍♀️ BUSCO\nAPARTAMENTO EN ARRIENDO \n\n📍 Envigado o sabaneta  \n🏘️ Unidad cerrada\n🛏️ 2 o 3 alcoba min.\n*Ideal con vista * \n\n💰 PRESUPUESTO: \n2.500.000",
+   "esperado": {
+    "clase": "demanda",
+    "operacion": "arriendo",
+    "tipo": "apartamento",
+    "precio_max": 2500000,
+    "zonas": [
+     "Envigado",
+     "Sabaneta"
+    ]
+   }
+  },
+  {
+   "id": "d38",
+   "texto": "Busco ‼️\nApartamento en arriendo en el poblado \n💰 15.000.000 \nAsesor Sebastián Monsalve \n📞 3000000000",
+   "esperado": {
+    "clase": "demanda",
+    "operacion": "arriendo",
+    "tipo": "apartamento",
+    "precio_max": 15000000,
+    "zonas": [
+     "El Poblado"
+    ]
+   }
+  },
+  {
+   "id": "d39",
+   "texto": "Buenas noches, solicito PARA ARRIENDO, con urgencia apto. de 1 o 2 alcobas con o sin parqueadero. \nNecesario ascensor \nSectores:\nLaureles\nSimón Bolívar \nAlmería \nSanta Monica \nBarrio Cristóbal\nPresupuesto: $2.500.000\n\nCliente directo",
+   "esperado": {
+    "clase": "demanda",
+    "operacion": "arriendo",
+    "tipo": "apartamento",
+    "precio_max": 2500000,
+    "zonas": [
+     "Laureles",
+     "Simón Bolívar",
+     "Almería",
+     "Santa Mónica",
+     "Barrio Cristóbal"
+    ]
+   }
+  },
+  {
+   "id": "d40",
+   "texto": "🕵️‍♀️ BUSCO\nAPARTAMENTO EN ARRIENDO \n\n📍 Envigado SOLO parte plana y de fácil acceso\n🏘️ Unidad cerrada\n🛏️ 1 alcoba min.\n*Ideal PRIMER PISO* \n\n💰 PRESUPUESTO: \nAcorde al pedido\n\n🔗 Por favor enviar link\n🏘️ Nombre de la unidad\n🚫 No fotos sueltas\nGRACIAS 🙏",
+   "esperado": {
+    "clase": "demanda",
+    "operacion": "arriendo",
+    "tipo": "apartamento",
+    "precio_max": 0,
+    "zonas": [
+     "Envigado"
+    ]
+   }
+  },
+  {
+   "id": "o1",
+   "texto": "Venta casa campestre Envigado, Loma Benedictinos:\n- Precio de venta: $2.⁠200.⁠000.⁠000\n- 217 M2\n- 3 Alcobas\n- 4 Baños\n- 4 Garajes\n- Estrato: 5\n- Más información y fotos:\nhttps://info.wasi.co/casa-campestre-venta-colegio-benedictinos-envigado/10017800?shared=whatsapp",
+   "esperado": {
+    "clase": "oferta"
+   }
+  },
+  {
+   "id": "o2",
+   "texto": "Te ofrezco Apartamento en San lucas, Medellin:\n• Precio venta: COP 1.800.000.000\n• 160 m2\n• 2 Habitaciones\n• 3 Baños\n• 2 Parqueaderos\n• Valor Administración: COP 1.000.000\nApartamento con vista garantizada, ubicado en San Lucas, en un entorno verde y tranquilo\n\n160 m² \nZona social amplia con un gran balcon\nCocina abierta\n2 alcobas amplias con baño y vestier\nAlcoba de servicio\n2 parqueaderos paralelos\nCuarto util\n\nUnidad con juegos infantiles y zonas verdes.\n\nValor: 1.800 millones\nOfrece: Carolina Fleisman - 3000000000 https://app.lobbieapp.com/inmueble/1iMb?a=0&s=0&u=e4011caa-7424-4a69-b17e-8c08035c5810",
+   "esperado": {
+    "clase": "oferta"
+   }
+  },
+  {
+   "id": "o3",
+   "texto": "VENTA CASA SECTOR ALTO DEL ESCOBERO ENVIGADO:\n- Precio de venta: $3.⁠500.⁠000.⁠000\n- 5868 M2\n- 4 Alcobas\n- 5 Baños\n- 2 Garajes\n- Estrato: 6\n- Más información y fotos:\nhttps://info.wasi.co/casa-venta-el-escobero-envigado/9704725?shared=whatsapp",
+   "esperado": {
+    "clase": "oferta"
+   }
+  },
+  {
+   "id": "o4",
+   "texto": "EDIFICIO EN VENTA ENVIGADO SECTOR ALCALÁ:\n- Precio de venta: $3.⁠500.⁠000.⁠000\n- 840 M2\n- Estrato: 5\n- Más información y fotos:\nhttps://info.wasi.co/edificio-venta-alto-de-palmas-envigado/9906669?shared=whatsapp",
+   "esperado": {
+    "clase": "oferta"
+   }
+  },
+  {
+   "id": "o5",
+   "texto": "🏠 APARTAMENTO EN VENTA – PARTE BAJA CASTROPOL / EL POBLADO\n\n📍 Medellín\n💰 $510.000.000\n📐 53 m² | 🛏️ 3 hab. | 🚿 2 baños | 🚗 1 parqueadero\n\n✨ Remodelado · Balcón · Unidad completa · Piscina · Gimnasio · Turco\n📈 Valor muy comercial\n💵 Arrendamiento estimado: $3.200.000 aprox.\n\n👤 John Duque\n🏢 Área Vital Inmobiliaria\n📱 3000000000\n\nhttps://info.wasi.co/apartamento-venta-el-poblado-medellin/10316326",
+   "esperado": {
+    "clase": "oferta"
+   }
+  },
+  {
+   "id": "o6",
+   "texto": "VENTA APARTAMENTO – RODEO ALTO \n•\tPrecio de Venta: $ 395 millones (Negociables)\n•\tÁrea 65 m2\n•\t2 alcobas – 2 baños\n•\t1 parqueadero\n•\tMas Información y fotos:https://info.wasi.co/apartamento-venta-rodeo-alto-medellin/10374527",
+   "esperado": {
+    "clase": "oferta"
+   }
+  },
+  {
+   "id": "o7",
+   "texto": "Apartamento\n💰 $ 1.000.000.000\n🛏 4 | 🛁 4 | 🚗 2 | 📐 156 m²\n\nVer más información y fotos:\nhttps://crmred.co/ficha-mls-view/apartamento-en-la-loma-el-tesoro-67533/FICHA_WEB_NOCONTACTO/2822",
+   "esperado": {
+    "clase": "oferta"
+   }
+  },
+  {
+   "id": "o8",
+   "texto": "Apartamento\n💰 $ 1.050.000.000\n🛏 3 | 🛁 2 | 🚗 2 | 📐 117 m²\n\nVer más información y fotos:\nhttps://crmred.co/ficha-mls-view/venta-apartamento-castropol-72875/FICHA_WEB_NOCONTACTO/2822",
+   "esperado": {
+    "clase": "oferta"
+   }
+  },
+  {
+   "id": "o9",
+   "texto": "Apartamento\n💰 $ 800.000.000\n🛏 3 | 🛁 2 | 🚗 2 | 📐 98 m²\n\nVer más información y fotos:\nhttps://crmred.co/ficha-mls-view/venta-apartamento-castropol-76309/FICHA_WEB_NOCONTACTO/2822",
+   "esperado": {
+    "clase": "oferta"
+   }
+  },
+  {
+   "id": "o10",
+   "texto": "Te ofrezco Apartamento en la tomatera, Medellin:\n• Precio venta: COP 1.700.000.000\n• 192 m2\n• 3 Habitaciones\n• 3 Baños\n• 2 Parqueaderos\n• Valor Administración: COP 1.400.000\nApartamento Ubicado en el Sector de la Tomatera.\nArea: 192 mtrs\nCompletamente remodelado para estrenar\nCocina Abierta\n2 Salones grandes\n3 Habitaciones, 2 de ellas con baño y vestier.\nAlcoba de Servicio Completa\nPatio de Ropa.\n3 baños, el social completo.\n\nLa unidad cuenta con un pequeño gimnasio, sendero para caminar y pisicina, juegos infantiles.\n\n2 Parqueaderos Paralelos y Cuarto Util.\n\nPrecio de Venta: $1.700.000.000\nAdministración: $ 1.400.000/ mensual\nPredial: $ 7.000.000/ Anual.\n\n!!Contactanos para mas Información y Agenda tu Visita!! https://app.lobbieapp.com/inmueble/1iGM?a=1&s=0&u=e944f387-e9ac-4ac0-b121-39eae55030cb",
+   "esperado": {
+    "clase": "oferta"
+   }
+  },
+  {
+   "id": "o11",
+   "texto": "Apartamento\n💰 $ 1.800.000.000\n🛏 4 | 🛁 4 | 🚗 2 | 📐 226 m²\n\nVer más información y fotos:\nhttps://crmred.co/ficha-mls-view/_76568/FICHA_WEB_NOCONTACTO/2822",
+   "esperado": {
+    "clase": "oferta"
+   }
+  },
+  {
+   "id": "o12",
+   "texto": "Venta Apartamento de lujo. Los Balsos. El Poblado 295 m2: \n- Precio de venta: $3.⁠300.⁠000.⁠000 \n- 295 M2 \n- 4 Alcobas \n- 4 Baños \n- 3 Parqueaderos \n- Estrato: 6 \n- Más información y fotos: \nhttps://info.wasi.co/apartamento-venta-poblado-los-balsos-medellín/9768691?shared=whatsapp",
+   "esperado": {
+    "clase": "oferta"
+   }
+  },
+  {
+   "id": "r1",
+   "texto": "Buenos días colegas, bendiciones para todos 🙏",
+   "esperado": {
+    "clase": "ruido"
+   }
+  },
+  {
+   "id": "r2",
+   "texto": "Recuerden que mañana es la reunión de la lonja a las 9 am",
+   "esperado": {
+    "clase": "ruido"
+   }
+  },
+  {
+   "id": "r3",
+   "texto": "¿Alguien sabe si la notaría 15 abre los sábados?",
+   "esperado": {
+    "clase": "ruido"
+   }
+  },
+  {
+   "id": "r4",
+   "texto": "Feliz cumpleaños Marta!! 🎂🎉",
+   "esperado": {
+    "clase": "ruido"
+   }
+  },
+  {
+   "id": "r5",
+   "texto": "Este grupo es solo para pedidos, favor no publicar ofertas",
+   "esperado": {
+    "clase": "ruido"
+   }
+  },
+  {
+   "id": "r6",
+   "texto": "Jajaja qué buena esa",
+   "esperado": {
+    "clase": "ruido"
+   }
+  },
+  {
+   "id": "r7",
+   "texto": "Quién tiene el contacto del avaluador que recomendaron la semana pasada?",
+   "esperado": {
+    "clase": "ruido"
+   }
+  },
+  {
+   "id": "r8",
+   "texto": "Se cayó el sistema de la oficina de registro, paciencia",
+   "esperado": {
+    "clase": "ruido"
+   }
+  }
+ ]
+}

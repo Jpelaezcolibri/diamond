@@ -32,7 +32,10 @@
 
 const { getClient, CACHE_ESTABLE, registrarUso } = require("../lib/anthropic");
 
-const MODELO = process.env.CLAUDE_MODEL_GRUPOS || "claude-haiku-4-5";
+// Haiku 5.5 desde 2026-10-20 (Juan): $0,10 / $0,50 por MTok contra $1 / $5
+// de Haiku 4.5, validado sobre los 60 mensajes congelados de
+// test/fixtures/classify-congelados.json (scripts/validar-clasificador.js).
+const MODELO = process.env.CLAUDE_MODEL_GRUPOS || "claude-haiku-5-5";
 const TAMANO_LOTE = 20;
 const CONCURRENCIA = Number(process.env.GROUPS_CLASSIFY_CONCURRENCIA || 4);
 
@@ -44,10 +47,17 @@ const CONCURRENCIA = Number(process.env.GROUPS_CLASSIFY_CONCURRENCIA || 4);
 // el reporte se ve igual que "no habia nada", el peor modo de fallo posible.
 const REINTENTOS = [2000, 8000, 30000];
 
-// USD por millon de tokens (Haiku 4.5). Solo se usan para proyectar el costo
-// en el reporte; si se cambia de modelo hay que actualizarlos.
-const USD_POR_MTOK_ENTRADA = 1.0;
-const USD_POR_MTOK_SALIDA = 5.0;
+function sinThinking(modelo) {
+  return /^claude-haiku-4/.test(modelo) ? {} : { thinking: { type: "disabled" } };
+}
+
+// USD por millon de tokens [entrada, salida] por modelo. Solo se usan para
+// proyectar el costo en el reporte. Haiku 5.5: tarifa de prompts <= 100K
+// tokens (los lotes de 20 rondan los 10K).
+const PRECIOS_USD_MTOK = {
+  "claude-haiku-4-5": [1.0, 5.0],
+  "claude-haiku-5-5": [0.1, 0.5],
+};
 
 // Los campos opcionales NO son nullables: el string vacio y el 0 significan
 // "no especificado". Evita depender de uniones de tipos en el esquema y deja
@@ -321,6 +331,11 @@ async function pedirLote(lote) {
     // Cacheado (nota 4 arriba). Lo que cambia es el lote, que va en messages
     // y no toca el prefijo.
     system: [{ type: "text", text: SISTEMA, cache_control: CACHE_ESTABLE }],
+    // Haiku 5.5 piensa por defecto y esos tokens se cobran: para clasificar
+    // no hace falta (se acepta "disabled" con el effort por defecto, medium).
+    // Haiku 4.5 no lleva el parametro, para que volver a el por
+    // CLAUDE_MODEL_GRUPOS siga funcionando.
+    ...sinThinking(MODELO),
     output_config: { format: { type: "json_schema", schema: ESQUEMA } },
     messages: [{ role: "user", content: `Clasificá estos ${lote.length} mensajes:\n\n${formatearLote(lote)}` }],
   });
@@ -405,12 +420,13 @@ async function classify(mensajes, { onProgreso = () => {}, reintentos = REINTENT
 // reporte de un import mostraria un costo menor al real.
 const FACTOR_ESCRITURA = CACHE_ESTABLE.ttl === "1h" ? 2 : 1.25;
 
-function costoDe({ input_tokens = 0, output_tokens = 0, cache_read_input_tokens = 0, cache_creation_input_tokens = 0 }) {
+function costoDe({ input_tokens = 0, output_tokens = 0, cache_read_input_tokens = 0, cache_creation_input_tokens = 0 } = {}, modelo = MODELO) {
+  const [usdEntrada, usdSalida] = PRECIOS_USD_MTOK[modelo] || PRECIOS_USD_MTOK["claude-haiku-4-5"];
   const entrada = input_tokens + cache_read_input_tokens * 0.1 + cache_creation_input_tokens * FACTOR_ESCRITURA;
-  return (entrada / 1e6) * USD_POR_MTOK_ENTRADA + (output_tokens / 1e6) * USD_POR_MTOK_SALIDA;
+  return (entrada / 1e6) * usdEntrada + (output_tokens / 1e6) * usdSalida;
 }
 
 module.exports = {
-  classify, armarLotes, formatearLote, costoDe, esReintentable, ESQUEMA, SISTEMA, CHARS_POR_TOKEN,
+  classify, armarLotes, formatearLote, costoDe, esReintentable, sinThinking, ESQUEMA, SISTEMA, CHARS_POR_TOKEN,
   MODELO, TAMANO_LOTE, CONCURRENCIA, REINTENTOS,
 };

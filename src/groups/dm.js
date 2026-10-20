@@ -30,7 +30,8 @@ const whatsappGroups = require("../data/whatsapp-groups");
 const advisors = require("../data/advisors");
 const { getClient } = require("../lib/anthropic");
 
-const MODELO = process.env.CLAUDE_MODEL_GRUPOS || "claude-haiku-4-5";
+const { sinThinking } = require("./classify");
+const MODELO = process.env.CLAUDE_MODEL_GRUPOS || "claude-haiku-5-5";
 const VISITAS_ALERTA_TO = process.env.RADAR_VISITAS_ALERTA_TO || "";
 
 // INTERRUPTOR del clasificador (Juan, 2026-09-08: "por ahora solo leer,
@@ -96,6 +97,9 @@ async function clasificarAvance(mensajes, ahora) {
     const res = await getClient().messages.create({
       model: MODELO,
       max_tokens: 400,
+      // Igual que classify.js: sin thinking en Haiku 5.5 (con 400 tokens de
+      // tope se comeria la respuesta).
+      ...sinThinking(MODELO),
       system: `${SISTEMA}\n\nHOY: ${ahora.toISOString()}`,
       output_config: { format: { type: "json_schema", schema: ESQUEMA } },
       messages: [{ role: "user", content: `Hilo del remitente:\n${hilo}` }],
