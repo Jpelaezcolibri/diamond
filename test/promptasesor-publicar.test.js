@@ -16,6 +16,7 @@ test("encendido: explica el flujo de publicar", () => {
   assert.match(t, /confirmar_publicacion/);
   assert.match(t, /actualizar_vigencia/);
   assert.match(t, /sí explícito/);
+  assert.match(t, /Esto NO es calificarlo/);
 });
 
 test("apagado: no ofrece publicar", () => {
@@ -25,6 +26,7 @@ test("apagado: no ofrece publicar", () => {
 
 test("sigue sin publicar respuestas a pedidos del radar en grupos", () => {
   process.env.SOFI_PUBLICA_ASESOR = "true";
-  assert.match(texto(), /pedidos? del radar/i);
+  assert.match(texto(), /NUNCA respondes un pedido del radar dentro de un grupo/);
+  assert.doesNotMatch(texto(), /NUNCA publicas nada en ningun grupo/);
   assert.match(texto(), /confirmar_cita/);
 });
