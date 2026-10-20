@@ -372,3 +372,47 @@ test("avisarCaptador por defecto notifica en la campana, sin WhatsApp", async (t
   });
   assert.equal(wa.mock.callCount(), 0);
 });
+
+// --- venta de Wasi en grupos OFERTAS (Juan, 2026-10-20) ---
+
+function ventaWasi(ref, zona, extra = {}) {
+  return amoblado(ref, { operacion: "Venta", titulo: `Apartamento en venta en ${zona}`, zona, area: "90m2", precio: "$650.000.000", ...extra });
+}
+
+test("la venta de Wasi entra a OFERTAS con zona, area y precio reales, y nunca a amoblados", () => {
+  assert.equal(publicador.aptaPara(ventaWasi("V1", "Envigado"), "ofertas"), true);
+  assert.equal(publicador.aptaPara(ventaWasi("V1", "Envigado"), "amoblados"), false);
+  assert.equal(publicador.aptaPara(ventaWasi("V2", ""), "ofertas"), false);
+  assert.equal(publicador.aptaPara(ventaWasi("V3", "Envigado", { area: null }), "ofertas"), false);
+  assert.equal(publicador.aptaPara(ventaWasi("V4", "Envigado", { precio: "$0" }), "ofertas"), false);
+  assert.equal(publicador.aptaPara(ventaWasi("V5", "Envigado", { link: "" }), "ofertas"), false);
+});
+
+test("en OFERTAS sale primero la venta de la zona mas pedida, despues los amoblados", () => {
+  const demanda = new Map([["envigado", 111], ["el poblado", 98], ["laureles", 49]]);
+  const props = [amoblado("A1"), ventaWasi("V-LAU", "Laureles"), ventaWasi("V-ENV", "Envigado"), ventaWasi("V-BEL", "Belén")];
+  const r = publicador.elegir({ grupos: [GO], propiedades: props, historial: [], ahora: LUNES_10AM, maxDia: 10, demanda });
+  assert.equal(r.propiedad.ref, "V-ENV");
+  // En un grupo de amoblados la venta no aparece.
+  const r2 = publicador.elegir({ grupos: [G1], propiedades: props, historial: [], ahora: LUNES_10AM, maxDia: 10, demanda });
+  assert.equal(r2.propiedad.ref, "A1");
+});
+
+test("una ref que ya salio hoy en otro grupo cede el turno", () => {
+  const demanda = new Map([["envigado", 111], ["laureles", 49]]);
+  const historial = [{ group_id: "otro", property_ref: "V-ENV", estado: "enviado", created_at: hace(60) }];
+  const r = publicador.elegir({
+    grupos: [GO], propiedades: [ventaWasi("V-ENV", "Envigado"), ventaWasi("V-LAU", "Laureles")], historial, ahora: LUNES_10AM, maxDia: 10, demanda,
+  });
+  assert.equal(r.propiedad.ref, "V-LAU");
+});
+
+test("demandaPorZona cuenta cada zona una vez por pedido, sin tildes", () => {
+  const m = scheduler.demandaPorZona([
+    { zonas: ["Envigado", "El Poblado"] }, { zonas: ["envigado", "Envigado"] }, { zonas: [], zona: "Belén" }, { zonas: null, zona: null },
+  ]);
+  assert.equal(m.get("envigado"), 2);
+  assert.equal(m.get("el poblado"), 1);
+  assert.equal(m.get("belen"), 1);
+  assert.equal(publicador.demandaDe({ zona: "Poblado" }, m), 1);
+});

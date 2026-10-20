@@ -81,9 +81,31 @@ function periodoFinca(p) {
   return mes ? "mes" : "noche";
 }
 
+function esVenta(p) {
+  return /venta/i.test(String(p.operacion || ""));
+}
+
+// Precio en pesos desde el texto de la ficha ("$450.000.000" -> 450000000).
+function precioNumerico(p) {
+  const n = Number(String(p.precio || "").replace(/[^\d]/g, ""));
+  return Number.isFinite(n) ? n : 0;
+}
+
+const VENTA_MINIMA = 20000000; // por debajo es un precio mal cargado (o $0)
+
+// La venta de Wasi en los grupos OFERTAS (Juan, 2026-10-20: "que el
+// publicador saque tambien la venta de Wasi en los grupos de OFERTAS,
+// priorizando las zonas mas pedidas"). Con zona, area y precio reales: una
+// ficha sin zona no se puede ofrecer con honestidad en un grupo de colegas.
+function aptaVentaWasi(p) {
+  if (esDeAsesor(p) || !esVenta(p) || !aptaParaKit(p)) return false;
+  if (!String(p.zona || "").trim() || parsearArea(p.area) === null) return false;
+  return precioNumerico(p) >= VENTA_MINIMA;
+}
+
 function aptaPara(p, categoria) {
-  // La venta de un asesor no es arriendo: se decide antes de la compuerta de arriendo.
-  if (categoria === "ofertas") return aptaDeAsesor(p) || aptaPara(p, "amoblados");
+  // La venta (de un asesor o de Wasi) no es arriendo: se decide antes de la compuerta de arriendo.
+  if (categoria === "ofertas") return aptaDeAsesor(p) || aptaVentaWasi(p) || aptaPara(p, "amoblados");
   if (!aptaParaKit(p) || !esArriendo(p)) return false;
   if (categoria === "amoblados") {
     if (esFinca(p) || esAmoblada(p) !== true) return false;
@@ -111,7 +133,20 @@ function diaBogota(fecha) {
 // historial: [{ group_id, property_ref, estado, created_at }] de los ultimos
 // DIAS_SIN_REPETIR dias como minimo. Devuelve { grupo, propiedad } o
 // { motivo } si no toca nada.
-function elegir({ grupos, propiedades, historial, ahora = new Date(), maxDia, noAntesDe = null, excluirRefs = new Set() }) {
+const normZona = (s) => String(s || "").normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().trim();
+
+// Cuantos pedidos de colegas nombran la zona de la propiedad. `demanda` es un
+// Map zona normalizada -> pedidos (ultimos 30 dias, ver el scheduler). Cuenta
+// tambien "poblado" para "el poblado" y viceversa.
+function demandaDe(p, demanda) {
+  const z = normZona(p.zona);
+  if (!z || !demanda || demanda.size === 0) return 0;
+  let total = 0;
+  for (const [clave, n] of demanda) if (clave === z || clave.includes(z) || z.includes(clave)) total += n;
+  return total;
+}
+
+function elegir({ grupos, propiedades, historial, ahora = new Date(), maxDia, noAntesDe = null, excluirRefs = new Set(), demanda = new Map() }) {
   if (!enHorario(ahora)) return { motivo: "fuera_de_horario" };
   const hoy = diaBogota(ahora);
   const deHoy = historial.filter((h) => diaBogota(h.created_at) === hoy);
@@ -135,10 +170,26 @@ function elegir({ grupos, propiedades, historial, ahora = new Date(), maxDia, no
     );
     const prioridad = (p) =>
       esDeAsesor(p) && ahora.getTime() - new Date(p.created_at).getTime() < PRIORIDAD_ASESOR_DIAS * DIA_MS ? 0 : 1;
+    // Una ref que ya salio hoy en otro grupo va al final: asi rotan mas fichas.
+    const salioHoy = (p) => (deHoy.some((h) => h.estado === "enviado" && String(h.property_ref) === String(p.ref)) ? 1 : 0);
+    // En OFERTAS la venta va antes que los amoblados (87 % de los pedidos de
+    // colegas son de venta; los amoblados tienen sus grupos propios) y, entre
+    // ventas, primero las zonas mas pedidas.
+    const enOfertas = grupo.publica === "ofertas";
+    const clase = (p) => (enOfertas && esVenta(p) ? 0 : 1);
+    const pedidos = (p) => (enOfertas && esVenta(p) ? demandaDe(p, demanda) : 0);
     const opciones = propiedades
       .filter((p) => !excluirRefs.has(String(p.ref)) && !recientes.has(String(p.ref)) && aptaPara(p, grupo.publica))
       .filter((p) => !esDeAsesor(p) || ahora.getTime() - new Date(p.created_at).getTime() >= ESPERA_ASESOR_MS)
-      .sort((a, b) => prioridad(a) - prioridad(b) || ultimoDeRef(a.ref) - ultimoDeRef(b.ref) || String(a.ref).localeCompare(String(b.ref)));
+      .sort(
+        (a, b) =>
+          prioridad(a) - prioridad(b) ||
+          salioHoy(a) - salioHoy(b) ||
+          clase(a) - clase(b) ||
+          pedidos(b) - pedidos(a) ||
+          ultimoDeRef(a.ref) - ultimoDeRef(b.ref) ||
+          String(a.ref).localeCompare(String(b.ref))
+      );
     if (opciones.length) return { grupo, propiedad: opciones[0] };
   }
   return { motivo: "nada_que_publicar" };
@@ -176,6 +227,6 @@ function textoPost(grupo, propiedad, cuerpo, ahora = new Date()) {
 }
 
 module.exports = {
-  aptaPara, esDeAsesor, encabezado, periodoDudoso, periodoFinca, enHorario, elegir, textoPost, diaBogota,
+  aptaPara, aptaVentaWasi, demandaDe, esDeAsesor, encabezado, periodoDudoso, periodoFinca, enHorario, elegir, textoPost, diaBogota,
   APERTURAS, DIAS_SIN_REPETIR,
 };

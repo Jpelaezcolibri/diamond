@@ -33,6 +33,17 @@ function maxDia() {
   return Number.isFinite(n) && n > 0 ? n : 8;
 }
 
+// zona normalizada -> pedidos que la nombran (una vez por pedido).
+function demandaPorZona(senales) {
+  const norm = (z) => String(z || "").normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().trim();
+  const mapa = new Map();
+  for (const s of senales) {
+    const zonas = new Set((Array.isArray(s.zonas) && s.zonas.length ? s.zonas : s.zona ? [s.zona] : []).map(norm).filter(Boolean));
+    for (const z of zonas) mapa.set(z, (mapa.get(z) || 0) + 1);
+  }
+  return mapa;
+}
+
 function depsPorDefecto() {
   const supabase = require("../data/supabase");
   const whatsappGroups = require("../data/whatsapp-groups");
@@ -61,6 +72,21 @@ function depsPorDefecto() {
         return null;
       }
       return data || [];
+    },
+    // Pedidos de VENTA de colegas por zona, ultimos 30 dias: ordena la venta
+    // en los grupos OFERTAS. Falla abierta: sin el dato, orden por rotacion.
+    demanda: async (org) => {
+      const desde = new Date(Date.now() - 30 * DIA_MS).toISOString();
+      const { data, error } = await supabase
+        .from("group_signals")
+        .select("zonas, zona")
+        .eq("org_id", org.id)
+        .eq("clase", "demanda")
+        .eq("operacion", "venta")
+        .gte("created_at", desde)
+        .limit(5000);
+      if (error) throw error;
+      return demandaPorZona(data || []);
     },
     propiedades: async (org) => {
       const { data, error } = await supabase.from("properties").select("*").eq("org_id", org.id).eq("disponible", true);
@@ -135,7 +161,8 @@ async function runParaOrg(org, d, ahora) {
       .map(([ref]) => ref)
   );
   const [grupos, propiedades] = await Promise.all([d.grupos(org), d.propiedades(org)]);
-  const eleccion = publicador.elegir({ grupos, propiedades, historial, ahora, maxDia: maxDia(), noAntesDe, excluirRefs });
+  const demanda = d.demanda ? await d.demanda(org).catch(() => new Map()) : new Map();
+  const eleccion = publicador.elegir({ grupos, propiedades, historial, ahora, maxDia: maxDia(), noAntesDe, excluirRefs, demanda });
   if (!eleccion.grupo) return { resultado: eleccion.motivo };
   const { grupo, propiedad } = eleccion;
 
@@ -223,4 +250,4 @@ function _reset() {
   estado.linkRoto.clear();
 }
 
-module.exports = { start, runOnce, activo, _reset, _depsPorDefecto: depsPorDefecto };
+module.exports = { demandaPorZona, start, runOnce, activo, _reset, _depsPorDefecto: depsPorDefecto };
