@@ -10,7 +10,7 @@ async function main() {
     const u = new URL(`https://api.wasi.co/v1/property/get/${ref}`);
     u.searchParams.set("id_company", idCompany); u.searchParams.set("wasi_token", token);
     const p = (await (await fetch(u)).json()) as Record<string, unknown>;
-    const k = ["for_sale", "for_rent", "for_temporary_rent", "sale_price", "sale_price_label", "rent_price", "rent_price_label", "rents_type_label", "zone_label", "city_label"];
+    const k = ["title", "built_area", "area", "private_area", "for_sale", "for_rent", "for_temporary_rent", "sale_price", "sale_price_label", "rent_price", "rent_price_label", "rents_type_label", "zone_label", "city_label"];
     console.log(ref, k.map((x) => `${x}=${JSON.stringify(p[x])}`).join(" "));
   }
 }
