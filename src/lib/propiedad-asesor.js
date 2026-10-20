@@ -48,7 +48,7 @@ function parseArea(v) {
 
 function parseEntero(v) {
   if (typeof v === "number") return Number.isInteger(v) && v >= 0 ? v : null;
-  if (typeof v === "string" && /^d+$/.test(v.trim())) return Number(v.trim());
+  if (typeof v === "string" && /^\d+$/.test(v.trim())) return Number(v.trim());
   return null;
 }
 

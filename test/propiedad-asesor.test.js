@@ -99,3 +99,9 @@ test("alcobas booleano, operacion y periodo ambiguos son faltantes", () => {
   assert.ok(pa.normalizar({ ...COMPLETO, operacion: "se vende o arrienda" }).faltantes.includes("operación (venta o arriendo)"));
   assert.ok(pa.normalizar({ ...COMPLETO, periodo: "mensual o diario" }).faltantes.includes("si el canon es mensual o por noche"));
 });
+
+test("enteros dichos como texto se leen", () => {
+  const { fila, faltantes } = pa.normalizar({ ...COMPLETO, alcobas: "2", banos: "1", parqueaderos: "1", estrato: "4" });
+  assert.deepStrictEqual(faltantes, []);
+  assert.deepStrictEqual([fila.habitaciones, fila.banos, fila.garaje, fila.estrato], [2, 1, 1, 4]);
+});
