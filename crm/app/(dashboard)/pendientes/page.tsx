@@ -1,6 +1,7 @@
 // "Para atender" — inicio del asesor (App de asesores F1, 2026-10-07; idea
 // tomada de Innoarte: los pendientes se calculan de los datos y desaparecen
-// solos cuando se resuelven). Tres listas:
+// solos cuando se resuelven). Cuatro listas:
+//   0. Sus propiedades por renovar (vencen en 5 dias o menos; Juan, 2026-10-20).
 //   1. Visitas por confirmar que hoy son suyas (rotacion), con el corte.
 //   2. Pedidos de contacto (notificaciones asesor_solicitado sin leer).
 //   3. Sus leads en conversacion sin movimiento hace mas de 2 h.
@@ -10,6 +11,8 @@ import { createClient } from "@/lib/supabase/server";
 import { isAdmin } from "@/lib/auth";
 import { miAsesor, filtroMisLeads } from "@/lib/mi-asesor";
 import ActivarNotificaciones from "@/components/activar-notificaciones";
+import RenovarPropiedad, { type PropiedadPorRenovar } from "@/components/renovar-propiedad";
+import { formatearPrecio } from "@/lib/formato";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +26,44 @@ const fmt = (iso?: string) =>
     ? new Intl.DateTimeFormat("es-CO", { timeZone: "America/Bogota", weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }).format(new Date(iso))
     : "sin fecha";
 
+type PropRow = { ref: string; titulo: string | null; precio: string | null; images: string[] | null; link: string | null; vence_at: string; periodo_precio?: string | null };
+
+const fechaLarga = (iso: string) =>
+  new Intl.DateTimeFormat("es-CO", { timeZone: "America/Bogota", weekday: "short", day: "numeric", month: "long" }).format(new Date(iso));
+
+const PERIODO: Record<string, string> = { mensual: "mensual", diario: "por noche", semanal: "por semana" };
+
+// Solo las del propio captador. Si falla (p. ej. antes de la migracion de
+// origen/vence_at) la lista queda vacia y la pagina sigue.
+async function propiedadesPorRenovar(supabase: Awaited<ReturnType<typeof createClient>>, asesorId: string): Promise<PropiedadPorRenovar[]> {
+  const limite = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString();
+  const consulta = (cols: string) =>
+    supabase
+      .from("properties")
+      .select(cols)
+      .eq("origen", "asesor")
+      .eq("captador_id", asesorId)
+      .eq("disponible", true)
+      .lte("vence_at", limite)
+      .order("vence_at", { ascending: true })
+      .limit(50);
+  let res = await consulta("ref, titulo, precio, images, link, vence_at, periodo_precio");
+  // periodo_precio viene de otra migracion: sin ella se muestra sin periodo.
+  if (res.error) res = await consulta("ref, titulo, precio, images, link, vence_at");
+  if (res.error || !res.data) return [];
+  const nueva = fechaLarga(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString());
+  return (res.data as unknown as PropRow[]).map((r) => ({
+    ref: r.ref,
+    titulo: r.titulo,
+    precio: formatearPrecio(r.precio),
+    periodo: r.periodo_precio ? PERIODO[r.periodo_precio] || null : null,
+    foto: r.images && r.images.length > 0 ? r.images[0] : null,
+    link: r.link,
+    venceTexto: fechaLarga(r.vence_at),
+    nuevaVigenciaTexto: nueva,
+  }));
+}
+
 export default async function PendientesPage() {
   const supabase = await createClient();
   const {
@@ -30,6 +71,8 @@ export default async function PendientesPage() {
   } = await supabase.auth.getUser();
   const admin = isAdmin(user);
   const asesor = await miAsesor(supabase, user);
+
+  const porRenovar = asesor ? await propiedadesPorRenovar(supabase, asesor.id) : [];
 
   const { data: conCita } = await supabase
     .from("leads")
@@ -65,7 +108,7 @@ export default async function PendientesPage() {
     quietos = (data as LeadQuieto[]) || [];
   }
 
-  const vacio = porConfirmar.length === 0 && (notas || []).length === 0 && quietos.length === 0;
+  const vacio = porRenovar.length === 0 && porConfirmar.length === 0 && (notas || []).length === 0 && quietos.length === 0;
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-4 sm:p-6">
@@ -77,6 +120,17 @@ export default async function PendientesPage() {
       </div>
 
       {vacio && <p className="rounded-xl border border-slate-200 bg-white p-6 text-center text-slate-500">No tenés nada pendiente. 🎉</p>}
+
+      {porRenovar.length > 0 && (
+        <section>
+          <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">Tus propiedades por renovar ({porRenovar.length})</h2>
+          <ul className="space-y-2">
+            {porRenovar.map((p) => (
+              <RenovarPropiedad key={p.ref} p={p} />
+            ))}
+          </ul>
+        </section>
+      )}
 
       {porConfirmar.length > 0 && (
         <section>

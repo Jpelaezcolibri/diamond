@@ -25,6 +25,9 @@ const ICONO: Record<string, string> = {
   cita_confirmada: "✅",
   cita_cancelada: "❌",
   asesor_solicitado: "🙋",
+  vigencia_propiedad: "🏷️",
+  vigencia_vencida: "📦",
+  propiedad_publicada: "📣",
 };
 
 function hace(iso: string) {
