@@ -481,3 +481,28 @@ describe("normalizePeriodoPrecio", () => {
     expect(canonical.periodo_precio).toBe("diario");
   });
 });
+
+/**
+ * Arriendo mal marcado como venta en Wasi (2026-10-20, refs 10505542,
+ * 10505566, 10505524): for_sale=true con sale_price 0 y canon cargado.
+ */
+describe("venta en $0 con canon cargado", () => {
+  const crudo = { id_property: 10505542, for_sale: "true", for_rent: "false", sale_price: "0", sale_price_label: "$0", rent_price: "3800000", rent_price_label: "$3.800.000", id_rents_type: "4", rents_type_label: "Monthly" };
+
+  it("se guarda como arriendo con el canon y su periodo", async () => {
+    const { normalizePeriodoPrecio } = await import("../../src/sync/wasi-api.source.js");
+    const p = wasiApiPropertySchema.parse(crudo);
+    expect(normalizeOperacionYPrecio(p)).toEqual({ operacion: "Arriendo", precio: "$3.800.000" });
+    expect(normalizePeriodoPrecio(p)).toBe("mensual");
+  });
+
+  it("una venta con precio real sigue siendo venta", () => {
+    const p = wasiApiPropertySchema.parse({ ...crudo, sale_price: "450000000", sale_price_label: "$450.000.000" });
+    expect(normalizeOperacionYPrecio(p)).toEqual({ operacion: "Venta", precio: "$450.000.000" });
+  });
+
+  it("una venta en $0 sin canon no se inventa un arriendo", () => {
+    const p = wasiApiPropertySchema.parse({ ...crudo, rent_price: "0", rent_price_label: "$0" });
+    expect(normalizeOperacionYPrecio(p).operacion).toBe("Venta");
+  });
+});

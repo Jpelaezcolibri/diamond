@@ -231,7 +231,22 @@ function isTrue(value: string | boolean | undefined): boolean {
   return value === true || value === "true";
 }
 
+/**
+ * Una "venta" con precio de venta 0 y canon de arriendo cargado es un arriendo
+ * mal marcado en Wasi (2026-10-20: 10505542, 10505566 y 10505524 llegaron
+ * for_sale=true, sale_price=0, rent_price 3,8 M / 7,9 M Monthly, y sus titulos
+ * dicen "renta"). Guardarla como venta a $0 haria que Sofi la ofreciera asi.
+ */
+function ventaEnCeroConCanon(p: WasiApiProperty): boolean {
+  const venta = toNumberOrNull(p.sale_price ?? null);
+  const canon = toNumberOrNull(p.rent_price ?? null);
+  return isTrue(p.for_sale) && (venta === null || venta <= 0) && canon !== null && canon > 0;
+}
+
 export function normalizeOperacionYPrecio(p: WasiApiProperty): { operacion: "Venta" | "Arriendo" | null; precio: string | null } {
+  if (ventaEnCeroConCanon(p)) {
+    return { operacion: "Arriendo", precio: p.rent_price_label ?? String(p.rent_price) };
+  }
   if (isTrue(p.for_sale)) {
     return { operacion: "Venta", precio: p.sale_price_label ?? (p.sale_price != null ? String(p.sale_price) : null) };
   }
@@ -364,7 +379,7 @@ export function normalizeAdministracion(p: WasiApiProperty): string | null {
  * dos unicos vistos en produccion son 1 (Daily) y 4 (Monthly).
  */
 export function normalizePeriodoPrecio(p: WasiApiProperty): "mensual" | "diario" | "semanal" | null {
-  if (!isTrue(p.for_rent)) return null;
+  if (!isTrue(p.for_rent) && !ventaEnCeroConCanon(p)) return null;
   const etiqueta = String(p.rents_type_label ?? "").toLowerCase();
   if (/month|mensual|mes/.test(etiqueta)) return "mensual";
   if (/dai|day|diari|noche|night/.test(etiqueta)) return "diario";
