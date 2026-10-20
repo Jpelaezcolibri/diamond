@@ -139,7 +139,9 @@ async function listConCitasPropuestasVencidas(silenceMin) {
 // escalera horaria (src/scheduler/citas-escalera.js).
 async function listCitasPropuestasEnRotacion() {
   const citasData = require("./citas");
-  const filtro = (l) => l.cita && l.cita.asesor_id && citasData.estadoDe(l.cita) === "propuesta";
+  // Las visitas de la linea del radar (origen linea_dm) no rotan: las coordina
+  // la asesora duena de la linea (src/groups/visita-linea.js).
+  const filtro = (l) => l.cita && l.cita.asesor_id && l.cita.origen !== "linea_dm" && citasData.estadoDe(l.cita) === "propuesta";
   if (!supabase) return memory.leads.filter(filtro);
   const { data, error } = await supabase
     .from("leads")

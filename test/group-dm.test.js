@@ -14,10 +14,8 @@ const { test } = require("node:test");
 const assert = require("node:assert");
 const { _setClientForTests } = require("../src/lib/anthropic");
 
-// RADAR_VISITAS_ALERTA_TO se lee UNA vez al cargar el modulo (mismo patron
-// que RADAR_REVISOR_PHONE en src/groups/vivo.js): tiene que estar puesta
-// ANTES del require, no en un beforeEach.
-process.env.RADAR_VISITAS_ALERTA_TO = "573000000000";
+// El aviso va por la campana del CRM (src/groups/visita-linea.js, 2026-10-20);
+// aca se mockea ese modulo y se prueba aparte en test/visita-linea.test.js.
 
 // El clasificador arranca APAGADO por defecto (fase 1 = leer, Juan
 // 2026-09-08). Los tests de clasificacion/alerta lo prenden explicitamente;
@@ -28,7 +26,7 @@ process.env.RADAR_DM_CLASIFICAR = "true";
 const dm = require("../src/groups/dm");
 const groupSignals = require("../src/data/group-signals");
 const lineaDm = require("../src/data/linea-dm");
-const mensajeAsesor = require("../src/lib/mensaje-asesor");
+const visitaLinea = require("../src/groups/visita-linea");
 const whatsappGroups = require("../src/data/whatsapp-groups");
 const advisors = require("../src/data/advisors");
 
@@ -79,7 +77,7 @@ test("sin la migracion corrida, se degrada sin reventar", async (t) => {
 test("un 'gracias' sin mas contexto NO genera alerta", async (t) => {
   mockVeredicto(t, veredicto({ hay_avance: false, tipo: "ninguno" }));
   let seEnvio = false;
-  t.mock.method(mensajeAsesor, "enviarYRegistrar", async () => { seEnvio = true; return { ok: true }; });
+  t.mock.method(visitaLinea, "avisar", async () => { seEnvio = true; return { ok: true }; });
 
   const r = await dm.procesarMensaje(ORG, mensaje({ texto: "gracias" }));
 
@@ -93,14 +91,15 @@ test("una cita CONFIRMADA con fecha y hora SI alerta", async (t) => {
     resumen: "Quedaron el lunes a las 3pm",
   }));
   let recibido = null;
-  t.mock.method(mensajeAsesor, "enviarYRegistrar", async (org, telefono, texto) => { recibido = { telefono, texto }; return { ok: true }; });
+  t.mock.method(visitaLinea, "avisar", async (org, datos) => { recibido = datos; return { ok: true, leadId: "lead-col" }; });
 
   const r = await dm.procesarMensaje(ORG, mensaje());
 
   assert.strictEqual(r.resultado, "alertado");
-  assert.strictEqual(recibido.telefono, "573000000000");
-  assert.match(recibido.texto, /Cita confirmada/);
-  assert.match(recibido.texto, /Felipe Velez/);
+  assert.strictEqual(r.citaLeadId, "lead-col");
+  assert.strictEqual(recibido.veredicto.tipo, "cita_confirmada");
+  assert.strictEqual(recibido.mensaje.remitenteNombre, "Felipe Velez");
+  assert.deepStrictEqual(recibido.identidad, { telefono: "573001112222", lid: null });
 });
 
 // "solo quiero que me alerte... de todo lo que de a entender que hay una
@@ -109,7 +108,7 @@ test("una cita CONFIRMADA con fecha y hora SI alerta", async (t) => {
 test("'agendando' sin fecha exacta TAMBIEN alerta — no hace falta una cita cerrada", async (t) => {
   mockVeredicto(t, veredicto({ hay_avance: true, tipo: "agendando", resumen: "Esta coordinando dia con su cliente" }));
   let seEnvio = false;
-  t.mock.method(mensajeAsesor, "enviarYRegistrar", async () => { seEnvio = true; return { ok: true }; });
+  t.mock.method(visitaLinea, "avisar", async () => { seEnvio = true; return { ok: true }; });
 
   const r = await dm.procesarMensaje(ORG, mensaje());
 
@@ -120,40 +119,24 @@ test("'agendando' sin fecha exacta TAMBIEN alerta — no hace falta una cita cer
 test("'interes_avanzado' (posible venta sin agenda) TAMBIEN alerta", async (t) => {
   mockVeredicto(t, veredicto({ hay_avance: true, tipo: "interes_avanzado", resumen: "A su cliente le encanto" }));
   let seEnvio = false;
-  t.mock.method(mensajeAsesor, "enviarYRegistrar", async () => { seEnvio = true; return { ok: true }; });
+  t.mock.method(visitaLinea, "avisar", async () => { seEnvio = true; return { ok: true }; });
 
   const r = await dm.procesarMensaje(ORG, mensaje());
   assert.strictEqual(seEnvio, true);
 });
 
-test("sin RADAR_VISITAS_ALERTA_TO configurado, se clasifica pero no se avisa a nadie", async (t) => {
-  // El const se lee al cargar el modulo: para probar "sin variable" hay que
-  // recargarlo en frio, sin la variable, y despues restaurar todo.
-  const ruta = require.resolve("../src/groups/dm");
-  const previo = process.env.RADAR_VISITAS_ALERTA_TO;
-  delete process.env.RADAR_VISITAS_ALERTA_TO;
-  delete require.cache[ruta];
-  const dmSinDestinatario = require("../src/groups/dm");
-
+test("sin asesora a quien avisar, se clasifica pero no se avisa", async (t) => {
   mockVeredicto(t, veredicto({ hay_avance: true, tipo: "cita_confirmada", fecha_hora_iso: "2026-08-25T15:00:00-05:00" }));
-  let seEnvio = false;
-  t.mock.method(mensajeAsesor, "enviarYRegistrar", async () => { seEnvio = true; return { ok: true }; });
-
-  const r = await dmSinDestinatario.procesarMensaje(ORG, mensaje());
-
-  process.env.RADAR_VISITAS_ALERTA_TO = previo;
-  delete require.cache[ruta];
-  require("../src/groups/dm"); // vuelve a dejar el modulo cacheado con la variable puesta
-
+  t.mock.method(visitaLinea, "avisar", async () => ({ ok: false, motivo: "sin_asesora" }));
+  const r = await dm.procesarMensaje(ORG, mensaje());
   assert.strictEqual(r.resultado, "sin_destinatario");
-  assert.strictEqual(seEnvio, false);
 });
 
 test("el MISMO avance no se re-alerta en cada mensaje siguiente del hilo", async (t) => {
   mockVeredicto(t, veredicto({ hay_avance: true, tipo: "cita_confirmada", fecha_hora_iso: "2026-08-25T15:00:00-05:00" }));
   t.mock.method(lineaDm, "ultimaCitaAlertada", async () => "2026-08-25T15:00:00-05:00");
   let seEnvio = false;
-  t.mock.method(mensajeAsesor, "enviarYRegistrar", async () => { seEnvio = true; return { ok: true }; });
+  t.mock.method(visitaLinea, "avisar", async () => { seEnvio = true; return { ok: true }; });
 
   const r = await dm.procesarMensaje(ORG, mensaje());
 
@@ -165,7 +148,7 @@ test("una REAGENDA (fecha distinta a la ya alertada) SI vuelve a avisar", async 
   mockVeredicto(t, veredicto({ hay_avance: true, tipo: "cita_confirmada", fecha_hora_iso: "2026-08-26T10:00:00-05:00" }));
   t.mock.method(lineaDm, "ultimaCitaAlertada", async () => "2026-08-25T15:00:00-05:00"); // fecha anterior, distinta
   let seEnvio = false;
-  t.mock.method(mensajeAsesor, "enviarYRegistrar", async () => { seEnvio = true; return { ok: true }; });
+  t.mock.method(visitaLinea, "avisar", async () => { seEnvio = true; return { ok: true }; });
 
   const r = await dm.procesarMensaje(ORG, mensaje());
 
@@ -176,7 +159,7 @@ test("una REAGENDA (fecha distinta a la ya alertada) SI vuelve a avisar", async 
 test("si el envio de la alerta falla, no se marca como alertado", async (t) => {
   mockVeredicto(t, veredicto({ hay_avance: true, tipo: "cita_confirmada", fecha_hora_iso: "2026-08-25T15:00:00-05:00" }));
   let seMarco = false;
-  t.mock.method(mensajeAsesor, "enviarYRegistrar", async () => ({ ok: false, error: "timeout" }));
+  t.mock.method(visitaLinea, "avisar", async () => ({ ok: false, error: "timeout" }));
   t.mock.method(lineaDm, "marcarAlertado", async () => { seMarco = true; return true; });
 
   const r = await dm.procesarMensaje(ORG, mensaje());
@@ -189,7 +172,7 @@ test("si el clasificador falla, se guarda el mensaje pero no se alerta nada", as
   _setClientForTests({ messages: { create: async () => { throw new Error("caido"); } } });
   t.after(() => _setClientForTests(null));
   let seEnvio = false;
-  t.mock.method(mensajeAsesor, "enviarYRegistrar", async () => { seEnvio = true; return { ok: true }; });
+  t.mock.method(visitaLinea, "avisar", async () => { seEnvio = true; return { ok: true }; });
 
   const r = await dm.procesarMensaje(ORG, mensaje());
 
@@ -201,12 +184,11 @@ test("el pedido de grupo del mismo telefono viaja en la alerta cuando se resuelv
   t.mock.method(groupSignals, "buscarPorTelefono", async () => ({ id: "sig-1", texto_original: "Busco apto en Llanogrande" }));
   mockVeredicto(t, veredicto({ hay_avance: true, tipo: "cita_confirmada", fecha_hora_iso: "2026-08-25T15:00:00-05:00" }));
   let recibido = null;
-  t.mock.method(mensajeAsesor, "enviarYRegistrar", async (org, telefono, texto) => { recibido = texto; return { ok: true }; });
+  t.mock.method(visitaLinea, "avisar", async (org, datos) => { recibido = datos; return { ok: true }; });
 
   await dm.procesarMensaje(ORG, mensaje());
 
-  assert.match(recibido, /Pedido original/);
-  assert.match(recibido, /Llanogrande/);
+  assert.strictEqual(recibido.señal.id, "sig-1");
 });
 
 test("clasificarAvance sin mensajes no llama a la IA", async () => {
@@ -248,38 +230,6 @@ test("el titulo de FALLBACK (tipo sin match en TITULOS) tambien usa el nombre de
   assert.match(texto, /Avance en la línea de Daiana Zea/);
 });
 
-test("procesarMensaje resuelve el nombre de la asesora de la sesion y lo pasa a la alerta", async (t) => {
-  mockVeredicto(t, veredicto({ hay_avance: true, tipo: "cita_confirmada", fecha_hora_iso: "2026-08-25T15:00:00-05:00" }));
-  t.mock.method(whatsappGroups, "sesionPorNombre", async (orgId, nombre) => {
-    assert.strictEqual(orgId, ORG.id);
-    assert.strictEqual(nombre, "RADA-NATALIA");
-    return { id: "sess-1", nombre: "RADA-NATALIA", advisor_id: "adv-daiana" };
-  });
-  t.mock.method(advisors, "findById", async (orgId, id) => {
-    assert.strictEqual(orgId, ORG.id);
-    assert.strictEqual(id, "adv-daiana");
-    return { id: "adv-daiana", name: "Daiana Zea" };
-  });
-  let recibido = null;
-  t.mock.method(mensajeAsesor, "enviarYRegistrar", async (org, telefono, texto) => { recibido = texto; return { ok: true }; });
-
-  await dm.procesarMensaje(ORG, mensaje());
-
-  assert.match(recibido, /la línea de Daiana Zea/);
-});
-
-test("si no se puede resolver la sesion o el asesor, la alerta sigue saliendo (con 'la línea del radar')", async (t) => {
-  mockVeredicto(t, veredicto({ hay_avance: true, tipo: "cita_confirmada", fecha_hora_iso: "2026-08-25T15:00:00-05:00" }));
-  t.mock.method(whatsappGroups, "sesionPorNombre", async () => { throw new Error("caido"); });
-  let recibido = null;
-  t.mock.method(mensajeAsesor, "enviarYRegistrar", async (org, telefono, texto) => { recibido = texto; return { ok: true }; });
-
-  const r = await dm.procesarMensaje(ORG, mensaje());
-
-  assert.strictEqual(r.resultado, "alertado");
-  assert.match(recibido, /la línea del radar/);
-});
-
 // ── Fase 1: leer, no interpretar (Juan, 2026-09-08) ──────────────────────
 
 test("con RADAR_DM_CLASIFICAR apagado se guarda el mensaje y NO se llama a la IA ni se alerta", async (t) => {
@@ -288,7 +238,7 @@ test("con RADAR_DM_CLASIFICAR apagado se guarda el mensaje y NO se llama a la IA
   _setClientForTests({ messages: { create: async () => { iaLlamada = true; throw new Error("no debia llamarse"); } } });
   t.after(() => _setClientForTests(null));
   let seEnvio = false;
-  t.mock.method(mensajeAsesor, "enviarYRegistrar", async () => { seEnvio = true; return { ok: true }; });
+  t.mock.method(visitaLinea, "avisar", async () => { seEnvio = true; return { ok: true }; });
   const guardarClasif = t.mock.method(lineaDm, "guardarClasificacion", async () => true);
 
   const r = await dm.procesarMensaje(ORG, mensaje());
@@ -349,7 +299,7 @@ test("con la columna lid faltante, el clasificador NUNCA se llama y no sale ning
   _setClientForTests({ messages: { create: async () => { iaLlamada = true; throw new Error("no debia llamarse"); } } });
   t.after(() => _setClientForTests(null));
   let seEnvio = false;
-  t.mock.method(mensajeAsesor, "enviarYRegistrar", async () => { seEnvio = true; return { ok: true }; });
+  t.mock.method(visitaLinea, "avisar", async () => { seEnvio = true; return { ok: true }; });
   const historial = t.mock.method(lineaDm, "historialDe", async () => []);
 
   const r = await dm.procesarMensaje(ORG, mensaje());
@@ -372,7 +322,7 @@ test("con la columna lid presente, el clasificador prendido sigue funcionando no
   t.mock.method(lineaDm, "faltaColumnaLid", () => false);
   mockVeredicto(t, veredicto({ hay_avance: true, tipo: "agendando", resumen: "coordinando" }));
   let seEnvio = false;
-  t.mock.method(mensajeAsesor, "enviarYRegistrar", async () => { seEnvio = true; return { ok: true }; });
+  t.mock.method(visitaLinea, "avisar", async () => { seEnvio = true; return { ok: true }; });
 
   const r = await dm.procesarMensaje(ORG, mensaje());
 
@@ -383,7 +333,7 @@ test("con la columna lid presente, el clasificador prendido sigue funcionando no
 test("con el clasificador prendido, el hilo y el dedup se consultan por la identidad (lid), no por telefono", async (t) => {
   process.env.RADAR_DM_CLASIFICAR = "true";
   mockVeredicto(t, veredicto({ hay_avance: true, tipo: "agendando", resumen: "coordinando" }));
-  t.mock.method(mensajeAsesor, "enviarYRegistrar", async () => ({ ok: true }));
+  t.mock.method(visitaLinea, "avisar", async () => ({ ok: true }));
   let identidadHilo = null;
   let identidadDedup = null;
   t.mock.method(lineaDm, "historialDe", async (org, identidad) => { identidadHilo = identidad; return []; });

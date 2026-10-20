@@ -28,6 +28,8 @@ const ICONO: Record<string, string> = {
   vigencia_propiedad: "🏷️",
   vigencia_vencida: "📦",
   propiedad_publicada: "📣",
+  visita_colega: "🗓️",
+  interes_colega: "🔥",
 };
 
 function hace(iso: string) {

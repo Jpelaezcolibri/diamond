@@ -25,14 +25,10 @@
 
 const groupSignals = require("../data/group-signals");
 const lineaDm = require("../data/linea-dm");
-const mensajeAsesor = require("../lib/mensaje-asesor");
-const whatsappGroups = require("../data/whatsapp-groups");
-const advisors = require("../data/advisors");
 const { getClient } = require("../lib/anthropic");
 
 const { sinThinking } = require("./classify");
 const MODELO = process.env.CLAUDE_MODEL_GRUPOS || "claude-haiku-5-5";
-const VISITAS_ALERTA_TO = process.env.RADAR_VISITAS_ALERTA_TO || "";
 
 // INTERRUPTOR del clasificador (Juan, 2026-09-08: "por ahora solo leer,
 // luego las citas"). Apagado por defecto: en fase 1 el mensaje se guarda y se
@@ -135,21 +131,6 @@ function construirAlerta(mensaje, veredicto, señal, nombreLinea = null) {
   return partes.filter(Boolean).join("\n");
 }
 
-// Nombre de la asesora dueña de la línea que recibió el mensaje (Juan,
-// 2026-09-10: la línea del radar pasó a otra asesora; el nombre sale del
-// dato, no del código). Cualquier falla o ausencia devuelve null — un
-// nombre que no se pudo resolver no puede bloquear la alerta.
-async function nombreLineaDe(orgId, nombreSesion) {
-  try {
-    const sesion = await whatsappGroups.sesionPorNombre(orgId, nombreSesion);
-    if (!sesion || !sesion.advisor_id) return null;
-    const advisor = await advisors.findById(orgId, sesion.advisor_id);
-    return (advisor && advisor.name) || null;
-  } catch (e) {
-    return null;
-  }
-}
-
 /**
  * @param org      organizacion resuelta
  * @param mensaje  { waMessageId, sesion, remitenteId, remitenteTelefono, remitenteLid, remitenteNombre, texto, fechaMensaje }
@@ -233,14 +214,16 @@ async function procesarMensaje(org, mensaje, { ahora = new Date() } = {}) {
   const ultima = await lineaDm.ultimaCitaAlertada(org.id, identidad).catch(() => null);
   if (ultima && ultima === clave) return { resultado: "avance_ya_alertado", dmId: guardado.id };
 
-  if (!VISITAS_ALERTA_TO) return { resultado: "sin_destinatario", dmId: guardado.id };
+  // Aviso por la campana del CRM a la duena de la linea y, si es visita, la
+  // cita queda en el sistema (Juan, 2026-10-20; ver ./visita-linea.js). Ya no
+  // sale por WhatsApp a RADAR_VISITAS_ALERTA_TO.
+  const aviso = await require("./visita-linea")
+    .avisar(org, { mensaje, veredicto, señal, identidad })
+    .catch((e) => ({ ok: false, error: e.message }));
+  if (aviso && aviso.motivo === "sin_asesora") return { resultado: "sin_destinatario", dmId: guardado.id };
+  if (aviso && aviso.ok) await lineaDm.marcarAlertado(org.id, guardado.id).catch(() => {});
 
-  const nombreLinea = await nombreLineaDe(org.id, mensaje.sesion);
-  const texto = construirAlerta(mensaje, veredicto, señal, nombreLinea);
-  const envio = await mensajeAsesor.enviarYRegistrar(org, VISITAS_ALERTA_TO, texto).catch((e) => ({ ok: false, error: e.message }));
-  if (envio && envio.ok) await lineaDm.marcarAlertado(org.id, guardado.id).catch(() => {});
-
-  return { resultado: envio && envio.ok ? "alertado" : "error_envio", dmId: guardado.id, error: envio && envio.error };
+  return { resultado: aviso && aviso.ok ? "alertado" : "error_envio", dmId: guardado.id, error: aviso && aviso.error, citaLeadId: aviso && aviso.leadId };
 }
 
 module.exports = { procesarMensaje, clasificarAvance, construirAlerta, clasificadorActivo, ESQUEMA, MODELO };

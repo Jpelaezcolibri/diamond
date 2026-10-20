@@ -46,6 +46,12 @@ async function confirmar({ org, lead, advisor, deps = {} }) {
   // Un colega "solo llamada" no recibe nada por escrito (2026-09-10); si la
   // consulta falla (null) tampoco se le escribe: se le pide al asesor llamar.
   const solo = lead.source === "colega" ? await c.soloLlamada(org.id, lead.phone).catch(() => null) : false;
+  // Una visita que salio de la linea del radar (src/groups/visita-linea.js)
+  // la coordina la asesora con el colega en esa misma linea: no se le escribe
+  // por la de Sofi.
+  if (cita.origen === "linea_dm") {
+    return { ok: true, texto: `Confirmada en el sistema la visita con ${quien}${refLinea} para ${cuando}. El colega está en tu línea: confírmale por ahí.` };
+  }
   let avisado = false;
   if (solo === false) {
     const r = await c
