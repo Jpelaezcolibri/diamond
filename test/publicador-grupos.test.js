@@ -13,7 +13,7 @@ const MIN = 60000;
 function amoblado(ref, extra = {}) {
   return {
     ref, disponible: true, link: `https://info.wasi.co/x/${ref}`, images: ["a.jpg"], operacion: "Arriendo",
-    tipo: "Apartamento", zona: "El Poblado", titulo: "Apartamento Amoblado en El Poblado", descripcion: "", caracteristicas: "",
+    tipo: "Apartamento", zona: "El Poblado", titulo: "Apartamento Amoblado en El Poblado", descripcion: "", caracteristicas: "", precio: "$4.500.000",
     ...extra,
   };
 }
@@ -415,4 +415,12 @@ test("demandaPorZona cuenta cada zona una vez por pedido, sin tildes", () => {
   assert.equal(m.get("el poblado"), 1);
   assert.equal(m.get("belen"), 1);
   assert.equal(publicador.demandaDe({ zona: "Poblado" }, m), 1);
+});
+
+test("un arriendo con precio imposible no se publica (ref 10488266, $550 M mensuales)", () => {
+  const finca = amoblado("10488266", { tipo: "Finca", titulo: "Finca en Santa Bárbara", precio: "$550.000.000", periodo_precio: "mensual" });
+  assert.equal(publicador.aptaPara(finca, "fincas"), false);
+  assert.equal(publicador.aptaPara({ ...finca, precio: "$35.000.000" }, "fincas"), true);
+  assert.equal(publicador.aptaPara(amoblado("1", { precio: "$18.900.000.000" }), "amoblados"), false);
+  assert.equal(publicador.aptaPara({ ...finca, precio: "$25.000.000", periodo_precio: "diario" }, "fincas"), false);
 });

@@ -501,6 +501,13 @@ describe("venta en $0 con canon cargado", () => {
     expect(normalizeOperacionYPrecio(p)).toEqual({ operacion: "Venta", precio: "$450.000.000" });
   });
 
+  it("titulo de venta o canon de mas de $100 M: sigue siendo venta (ref 10488266)", () => {
+    const finca = wasiApiPropertySchema.parse({ ...crudo, title: "FINCA EN VENTA EN SANATA BARBARA", rent_price: "550000000", rent_price_label: "$550.000.000" });
+    expect(normalizeOperacionYPrecio(finca).operacion).toBe("Venta");
+    const sinTitulo = wasiApiPropertySchema.parse({ ...crudo, title: "FINCA SANTA BARBARA", rent_price: "550000000", rent_price_label: "$550.000.000" });
+    expect(normalizeOperacionYPrecio(sinTitulo).operacion).toBe("Venta");
+  });
+
   it("una venta en $0 sin canon no se inventa un arriendo", () => {
     const p = wasiApiPropertySchema.parse({ ...crudo, rent_price: "0", rent_price_label: "$0" });
     expect(normalizeOperacionYPrecio(p).operacion).toBe("Venta");

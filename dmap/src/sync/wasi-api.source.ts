@@ -237,10 +237,17 @@ function isTrue(value: string | boolean | undefined): boolean {
  * for_sale=true, sale_price=0, rent_price 3,8 M / 7,9 M Monthly, y sus titulos
  * dicen "renta"). Guardarla como venta a $0 haria que Sofi la ofreciera asi.
  */
+// Freno (2026-10-20, ref 10488266 "FINCA EN VENTA EN SANTA BARBARA"): Wasi la
+// trajo en venta a $0 con $550 M en el campo de arriendo, y salia como finca
+// en renta a $550 M mensuales. Un titulo que dice venta, o un "canon" de mas
+// de $100 M, es un precio de venta mal cargado: se deja como venta.
+const CANON_MAXIMO = 100_000_000;
+
 function ventaEnCeroConCanon(p: WasiApiProperty): boolean {
   const venta = toNumberOrNull(p.sale_price ?? null);
   const canon = toNumberOrNull(p.rent_price ?? null);
-  return isTrue(p.for_sale) && (venta === null || venta <= 0) && canon !== null && canon > 0;
+  if (/(venta|vendo|vende)/i.test(String(p.title ?? ""))) return false;
+  return isTrue(p.for_sale) && (venta === null || venta <= 0) && canon !== null && canon > 0 && canon <= CANON_MAXIMO;
 }
 
 export function normalizeOperacionYPrecio(p: WasiApiProperty): { operacion: "Venta" | "Arriendo" | null; precio: string | null } {

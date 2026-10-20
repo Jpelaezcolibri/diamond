@@ -103,10 +103,19 @@ function aptaVentaWasi(p) {
   return precioNumerico(p) >= VENTA_MINIMA;
 }
 
+// Un arriendo con precio imposible es un dato mal cargado (ej. un precio de
+// venta en el campo del canon): no se publica.
+const CANON_MAXIMO = { mensual: 100000000, diario: 20000000 };
+function precioArriendoCreible(p) {
+  const n = precioNumerico(p);
+  const tope = periodoWasi(p) === "diario" || periodoFinca(p) === "noche" ? CANON_MAXIMO.diario : CANON_MAXIMO.mensual;
+  return n > 0 && n <= tope;
+}
+
 function aptaPara(p, categoria) {
   // La venta (de un asesor o de Wasi) no es arriendo: se decide antes de la compuerta de arriendo.
   if (categoria === "ofertas") return aptaDeAsesor(p) || aptaVentaWasi(p) || aptaPara(p, "amoblados");
-  if (!aptaParaKit(p) || !esArriendo(p)) return false;
+  if (!aptaParaKit(p) || !esArriendo(p) || !precioArriendoCreible(p)) return false;
   if (categoria === "amoblados") {
     if (esFinca(p) || esAmoblada(p) !== true) return false;
     if (!String(p.zona || "").trim()) return false;
