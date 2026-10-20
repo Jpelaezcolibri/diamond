@@ -272,24 +272,22 @@ test("una propiedad de asesor recien creada espera 15 minutos", () => {
   assert.equal(r.motivo, "nada_que_publicar");
 });
 
-test("el captador recibe un solo aviso, la primera vez que sale", async () => {
-  process.env.RADAR_PUBLICAR_ACTIVO = "true";
-  const avisos = [];
-  const { d } = deps({
-    grupos: async () => [GO],
-    propiedades: async () => [deAsesor("D1001")],
-    avisarCaptador: async (org, p, g) => avisos.push([p.ref, g.nombre]),
-  });
-  await scheduler.runOnce({ ahora: LUNES_10AM, deps: d });
-  assert.deepEqual(avisos, [["D1001", "Ofertas"]]);
-
-  scheduler._reset();
-  const { d: d2 } = deps({
-    grupos: async () => [GO, { ...G1, publica: "ofertas" }],
-    propiedades: async () => [deAsesor("D1001")],
-    historial: async () => [{ group_id: "go", property_ref: "D1001", estado: "enviado", created_at: hace(60) }],
-    avisarCaptador: async (org, p, g) => avisos.push([p.ref, g.nombre]),
-  });
-  await scheduler.runOnce({ ahora: LUNES_10AM, deps: d2 });
-  assert.equal(avisos.length, 1);
+test("el captador recibe un solo aviso, solo cuando este envio es el primero de la propiedad", async () => {
+  const correr = async (veces) => {
+    scheduler._reset();
+    const avisos = [];
+    const { d } = deps({
+      grupos: async () => [GO],
+      propiedades: async () => [deAsesor("D1001")],
+      vecesPublicada: async () => veces,
+      avisarCaptador: async (org, p, g) => avisos.push([p.ref, g.nombre]),
+    });
+    await scheduler.runOnce({ ahora: LUNES_10AM, deps: d });
+    return avisos;
+  };
+  assert.deepEqual(await correr(1), [["D1001", "Ofertas"]]);
+  // Historial de 8 dias vacio, pero ya habia salido antes: no avisa.
+  assert.deepEqual(await correr(2), []);
+  // Si no se pudo contar, calla.
+  assert.deepEqual(await correr(null), []);
 });

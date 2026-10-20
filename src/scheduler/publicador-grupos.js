@@ -81,6 +81,23 @@ function depsPorDefecto() {
     },
     alertar: (resumen, detalle) => enviarAlertaTecnica(resumen, detalle).catch(() => false),
     azar: Math.random,
+    // Cuenta TODAS las publicaciones enviadas de la ref, sin ventana de fechas. null = error.
+    vecesPublicada: async (org, ref) => {
+      const { count, error } = await supabase
+        .from("grupo_publicaciones")
+        .select("id", { count: "exact", head: true })
+        .eq("org_id", org.id)
+        .eq("property_ref", String(ref))
+        .eq("estado", "enviado");
+      if (error) {
+        console.warn("[publicador] No se pudo contar las publicaciones de", ref, error.message);
+        return null;
+      }
+      return count;
+    },
+    // Excepcion aprobada por Juan: "el aviso de que se publico le llega al asesor". Sale
+    // una sola vez por propiedad y responde a lo que el propio asesor pidio, asi que no
+    // pasa por ritmo ni por ASESORA_SOLO_VISITAS.
     avisarCaptador: async (org, propiedad, grupo) => {
       if (!propiedad.captador_id) return;
       const advisor = await require("../data/advisors").findById(org.id, propiedad.captador_id).catch(() => null);
@@ -156,9 +173,11 @@ async function runParaOrg(org, d, ahora) {
   estado.noAntesDe = new Date(ahora.getTime() + espacio * 60000);
   console.log(`[publicador] Ref ${propiedad.ref} -> ${grupo.nombre} (${fila.wamid})`);
 
-  const yaSalio = historial.some((h) => h.estado === "enviado" && String(h.property_ref) === String(propiedad.ref));
-  if (publicador.esDeAsesor(propiedad) && !yaSalio && d.avisarCaptador) {
-    await d.avisarCaptador(org, propiedad, grupo).catch((e) => console.warn("[publicador] avisarCaptador:", e.message));
+  // El envio ya quedo registrado: es el primero de la propiedad si la cuenta total es 1.
+  // Sin cuenta confiable (null) no se avisa.
+  if (publicador.esDeAsesor(propiedad) && d.avisarCaptador && d.vecesPublicada) {
+    const veces = await d.vecesPublicada(org, propiedad.ref).catch(() => null);
+    if (veces === 1) await d.avisarCaptador(org, propiedad, grupo).catch((e) => console.warn("[publicador] avisarCaptador:", e.message));
   }
   return { resultado: "enviado", ref: propiedad.ref, grupo: grupo.nombre };
 }
