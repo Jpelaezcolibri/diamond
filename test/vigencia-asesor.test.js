@@ -120,3 +120,11 @@ test("M9: al vencer avisa al captador; si falla solo se registra", async (t) => 
   await vigencia.runOnce({ ahora: LUNES_10AM, deps: d2 });
   assert.deepEqual(log2.bajas, ["p3"]);
 });
+
+test("el aviso de vencimiento solo sale de 9 a. m. a 6 p. m.; la baja siempre", async () => {
+  const noche = new Date("2026-10-20T03:00:00Z"); // 10 p. m. en Bogota
+  const { d, log } = deps({ vencidas: async () => [{ id: "p2", ref: "D1002", captador_id: "adv-1" }] });
+  await vigencia.runOnce({ ahora: noche, deps: d });
+  assert.deepEqual(log.bajas, ["p2"]);
+  assert.equal(log.textos.length, 0);
+});

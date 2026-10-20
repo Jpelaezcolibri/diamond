@@ -144,3 +144,26 @@ test("M5: el post muestra los parqueaderos de la fila de asesor (campo garaje)",
   const r = await executeTool("preparar_publicacion", { ...DATOS, parqueaderos: 2 }, ctx());
   assert.match(r, /2 garajes/);
 });
+
+test("I3: preparar -> confirmar -> confirmar no crea dos refs aunque ya no queden fotos", async (t) => {
+  const fotos = t.mock.method(datos, "fotosRecientes", async () => ["a.jpg"]);
+  t.mock.method(datos, "ultimaCreadaPor", async () => null);
+  let creada = null;
+  t.mock.method(datos, "existenteReciente", async () => creada);
+  const crear = t.mock.method(datos, "crear", async () => { creada = { ref: "D1001", link: "https://x/d1001" }; return creada; });
+  const prev = await executeTool("preparar_publicacion", DATOS, ctx());
+  const token = /token=(\w+)/.exec(prev)[1];
+  assert.match(await executeTool("confirmar_publicacion", { ...DATOS, token }, ctx()), /^CREADA: ref D1001/);
+  // La ventana de fotos ahora arranca en la propiedad recien creada: no hay fotos.
+  fotos.mock.mockImplementation(async () => []);
+  const r2 = await executeTool("confirmar_publicacion", { ...DATOS, token }, ctx());
+  assert.match(r2, /YA ESTABA CREADA: ref D1001/);
+  assert.match(r2, /No la vuelvas a crear/);
+  assert.strictEqual(crear.mock.callCount(), 1);
+});
+
+test("la vista previa avisa que la primera linea cambia segun el grupo", async (t) => {
+  t.mock.method(datos, "fotosRecientes", async () => ["a.jpg"]);
+  t.mock.method(datos, "ultimaCreadaPor", async () => null);
+  assert.match(await executeTool("preparar_publicacion", DATOS, ctx()), /La primera línea cambia según el grupo/);
+});

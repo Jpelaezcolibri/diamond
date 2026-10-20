@@ -8,7 +8,7 @@ const { siguienteRef } = require("../lib/propiedad-asesor");
 const DIA_MS = 86400000;
 const VIGENCIA_DIAS = 30;
 const AVISO_DIAS = 5;
-const COLUMNA_FALTANTE = /origen|vence_at|vigencia_preguntada_at/;
+const COLUMNA_FALTANTE = /origen|vence_at|vigencia_preguntada_at|periodo_precio/;
 
 const self = {
   // Indireccion para que los tests cambien el cliente sin tocar el require.
@@ -51,6 +51,29 @@ self.ultimaCreadaPor = async function ultimaCreadaPor(orgId, advisorId) {
   }
 };
 
+// Una propiedad que este captador ya creo en las ultimas 6 h con el mismo
+// titulo, precio y (si hay) area. Es la guarda principal contra confirmar dos
+// veces: no depende de las fotos, que tras crear ya no aparecen en la ventana.
+self.existenteReciente = async function existenteReciente(orgId, advisorId, fila) {
+  try {
+    if (!fila || !fila.titulo || !fila.precio) return null;
+    let q = self._supabase()
+      .from("properties")
+      .select("*")
+      .eq("org_id", orgId)
+      .eq("origen", "asesor")
+      .eq("captador_id", advisorId)
+      .gte("created_at", new Date(Date.now() - 6 * 3600e3).toISOString())
+      .eq("titulo", fila.titulo)
+      .eq("precio", fila.precio);
+    if (fila.area) q = q.eq("area", fila.area);
+    const { data, error } = await q.limit(1);
+    return !error && data && data.length ? data[0] : null;
+  } catch {
+    return null;
+  }
+};
+
 self.crear = async function crear(org, advisor, fila, fotos) {
   const base = String(org.landing_base_url || config.landingBaseUrl).replace(/\/+$/, "");
   // Confirmar dos veces (reintento del modelo o doble toque) no crea dos refs:
@@ -64,7 +87,7 @@ self.crear = async function crear(org, advisor, fila, fotos) {
       .eq("origen", "asesor")
       .eq("captador_id", advisor.id)
       .gte("created_at", desde)
-      .contains("images", [fotos[0]])
+      .contains("images", JSON.stringify([fotos[0]]))
       .limit(1);
     if (!eDup && previas && previas.length) return { ...previas[0], ya_existia: true };
   }

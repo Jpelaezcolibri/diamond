@@ -42,12 +42,16 @@ async function preparar(input, ctx) {
   const cuerpo = postGrupo({ ...fila, ref: "nueva", linkWasi: "(link de la ficha, se crea al confirmar)" }, { org: ctx.org });
   const post = textoPost({ id: "preview", publica: "ofertas" }, fila, cuerpo);
   const lista = fotos.map((_, i) => `Foto ${i + 1}`).join(", ");
-  return `VISTA PREVIA (muéstrasela tal cual y pide un sí explícito antes de confirmar). Fotos recibidas: ${fotos.length} (${lista}); si alguna no es de esta propiedad, que te diga el número y vuelve a llamar preparar_publicacion con excluir_fotos. token=${tokenDe(fila, fotos)}\n\n${post}`;
+  return `VISTA PREVIA (muéstrasela tal cual y pide un sí explícito antes de confirmar). Fotos recibidas: ${fotos.length} (${lista}). La primera línea cambia según el grupo en el que salga. Si alguna foto no es de esta propiedad, que te diga el número y vuelve a llamar preparar_publicacion con excluir_fotos. token=${tokenDe(fila, fotos)}\n\n${post}`;
 }
 
 async function confirmar(input, ctx) {
   if (noEsAsesor(ctx)) return SOLO_ASESOR;
   if (!activo()) return APAGADO;
+  // Confirmar dos veces: la segunda ya no ve fotos (la ventana arranca en la propiedad recien creada).
+  const { token: _t, excluir_fotos: _e, ...datosInput } = input || {};
+  const previa = await datos.existenteReciente(ctx.org.id, ctx.advisor.id, normalizar(datosInput).fila).catch(() => null);
+  if (previa) return `YA ESTABA CREADA: ref ${previa.ref}, ficha ${previa.link}. No la vuelvas a crear.`;
   const { token, fila, fotos, faltantes } = await revisar(input, ctx);
   if (faltantes.length) return mensajeFaltantes(faltantes, fotos);
   if (tokenDe(fila, fotos) !== token) {

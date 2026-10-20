@@ -78,7 +78,8 @@ async function runOnce({ ahora = new Date(), deps = null } = {}) {
       for (const p of await d.vencidas(org, ahora)) {
         await d.darDeBaja(p.id);
         console.log(`[vigencia-asesor] ${p.ref} vencio: sale del inventario`);
-        await avisarVencida(org, p, d);
+        const hv = horaBogota(ahora);
+        if (hv >= HORA_INICIO && hv < HORA_FIN) await avisarVencida(org, p, d);
       }
       const h = horaBogota(ahora);
       if (!preguntaActiva() || h < HORA_INICIO || h >= HORA_FIN) continue;

@@ -149,7 +149,7 @@ async function runParaOrg(org, d, ahora) {
   const post = await d.post(org, propiedad.ref);
   if (!post || !post.linkOk) {
     estado.linkRoto.set(String(propiedad.ref), { dia: hoy, ts: ahora.getTime(), asesor: publicador.esDeAsesor(propiedad) });
-    console.warn(`[publicador] Ref ${propiedad.ref} sin post o con link que no abre; se salta hoy`);
+    console.warn(`[publicador] Ref ${propiedad.ref} sin post o con link que no abre; ${publicador.esDeAsesor(propiedad) ? "se reintenta en 60 min" : "se salta hoy"}`);
     return { resultado: "link_roto", ref: propiedad.ref };
   }
 

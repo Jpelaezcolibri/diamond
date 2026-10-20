@@ -346,3 +346,11 @@ test("M3: el aviso al captador no promete avisar", () => {
   assert.doesNotMatch(fuente, /te aviso/);
   assert.match(fuente, /Sigue rotando en los demás grupos\./);
 });
+
+test("el log del link roto de un asesor dice que se reintenta en 60 min", async (t) => {
+  scheduler._reset();
+  const warn = t.mock.method(console, "warn", () => {});
+  const { d } = deps({ grupos: async () => [GO], propiedades: async () => [deAsesor("D1001")], post: async () => ({ texto: "x", linkOk: false }) });
+  await scheduler.runOnce({ ahora: LUNES_10AM, deps: d });
+  assert.match(warn.mock.calls.map((c) => c.arguments.join(" ")).join(" | "), /se reintenta en 60 min/);
+});

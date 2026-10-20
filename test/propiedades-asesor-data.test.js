@@ -166,7 +166,29 @@ test("crear: una confirmacion repetida devuelve la misma propiedad sin insertar"
   assert.strictEqual(r.ya_existia, true);
   assert.strictEqual(sb.llamadas.length, 1);
   const ops = sb.llamadas[0].ops;
-  assert.ok(ops.some((o) => o[0] === "contains" && o[1] === "images" && JSON.stringify(o[2]) === '["a.jpg"]'));
+  assert.ok(ops.some((o) => o[0] === "contains" && o[1] === "images" && o[2] === '["a.jpg"]'));
   assert.ok(ops.some((o) => o[0] === "eq" && o[1] === "captador_id" && o[2] === "adv-1"));
   assert.ok(ops.some((o) => o[0] === "gte" && o[1] === "created_at"));
+});
+
+test("existenteReciente: filtra por org, captador, 6 h, titulo, precio y area; error es null", async (t) => {
+  let sb = falso([{ data: [{ id: "p1", ref: "D1004", link: "l" }], error: null }]);
+  t.mock.method(datos, "_supabase", () => sb);
+  const r = await datos.existenteReciente("org-1", "adv-1", { titulo: "T", precio: "$1", area: "60m2" });
+  assert.strictEqual(r.ref, "D1004");
+  const ops = sb.llamadas[0].ops;
+  for (const [c, v] of [["org_id", "org-1"], ["origen", "asesor"], ["captador_id", "adv-1"], ["titulo", "T"], ["precio", "$1"], ["area", "60m2"]]) {
+    assert.ok(ops.some((o) => o[0] === "eq" && o[1] === c && o[2] === v), c);
+  }
+  assert.ok(ops.some((o) => o[0] === "gte" && o[1] === "created_at"));
+  sb = falso([{ data: null, error: { message: "x" } }]);
+  assert.strictEqual(await datos.existenteReciente("o", "a", { titulo: "T", precio: "$1" }), null);
+  sb = falso([{ data: [], error: null }]);
+  assert.strictEqual(await datos.existenteReciente("o", "a", { titulo: "T", precio: "$1" }), null);
+});
+
+test("crear: periodo_precio faltante tambien es SIN_MIGRACION", async (t) => {
+  const sb = falso([{ data: [], error: null }, { data: [], error: null }, { data: null, error: { code: "PGRST204", message: "Could not find the 'periodo_precio' column" } }]);
+  t.mock.method(datos, "_supabase", () => sb);
+  await assert.rejects(datos.crear({ id: "o" }, { id: "a" }, { titulo: "x" }, ["f"]), (e) => e.code === "SIN_MIGRACION");
 });
