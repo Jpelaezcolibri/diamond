@@ -111,35 +111,38 @@ Sin código nuevo de búsqueda: la fila es una propiedad disponible más.
   min después de `created_at`, para que la caché de la landing ya la sirva y
   la verificación del link (`kit.post` → `linkOk`) no la marque rota todo el
   día.
-- **Aviso al asesor:** la primera vez que sale en un grupo, el publicador le
-  escribe al captador por `mensaje-asesor` ("Tu D1004 salió en OFERTAS SUR
-  POB ENV SAB; sigue rotando en los demás grupos"). Una vez por propiedad. Si
-  la ventana está cerrada, no insiste (queda en el log).
+- **Aviso al asesor (Juan, 2026-10-20):** la primera vez que sale en un grupo,
+  el publicador le avisa al captador por la campana del CRM (`notificaciones`,
+  tipo `propiedad_publicada`, "Tu D1004 salió en OFERTAS SUR POB ENV SAB";
+  push si lo activó), no por WhatsApp. Una vez por propiedad.
 - La venta de Wasi sigue sin publicarse: solo sale la venta que pide un
   asesor.
 
 ## 6. Vigencia
 
-- Scheduler diario (`src/scheduler/vigencia-asesor.js`, 9 a. m. Bogotá):
-  - `vence_at - 5 días <= ahora` y `vigencia_preguntada_at` null → le
-    pregunta al captador por la plantilla nueva `vigencia_propiedad` (botones
-    "Sigue disponible" / "Ya no está"), porque a los 25 días la ventana de 24 h
-    casi seguro está cerrada; marca `vigencia_preguntada_at`.
+Todo aviso sobre las propiedades que el asesor le pidió publicar a Sofi va por
+la campana del CRM, no por WhatsApp (Juan, 2026-10-20). No hay plantilla de
+Meta. Mockup: `docs/superpowers/mockups/2026-10-20-vigencia-crm.html`.
+
+- Scheduler horario (`src/scheduler/vigencia-asesor.js`, 9 a. m. a 6 p. m.
+  Bogotá):
+  - `vence_at - 5 días <= ahora` y `vigencia_preguntada_at` null → notificación
+    `vigencia_propiedad` ("D1004 vence en 5 días", link `/pendientes`); marca
+    `vigencia_preguntada_at`. El asesor responde en "Para atender" del CRM,
+    sección "Tus propiedades por renovar", con dos botones (Sigue disponible /
+    Ya no está) que llaman `POST /api/propiedades/vigencia`.
   - `vence_at <= ahora` → `disponible = false` (sale del inventario y de la
-    rotación) y se lo dice al captador si la ventana está abierta.
+    rotación; la baja corre siempre) y notificación `vigencia_vencida`.
 - Herramienta `actualizar_vigencia` (solo asesor): "sigue disponible" →
   `vence_at` = ahora + 30 días y `vigencia_preguntada_at` = null; "se arrendó /
   se vendió / ya no" → `disponible = false` de inmediato. El asesor la puede
-  usar en cualquier momento, no solo al responder la plantilla.
+  usar en cualquier momento por WhatsApp; es el camino de Claudia, que no
+  tiene usuario del CRM. Los botones `vig:` por WhatsApp se conservan por si
+  algún mensaje viejo los trae.
 - Solo sobre `origen = 'asesor'` y solo propiedades de las que el asesor es
   captador.
 - Excepción explícita a `ASESORA_SOLO_VISITAS`, con su propio interruptor
-  (`SOFI_VIGENCIA_ASESOR=false` la apaga; sin pregunta, igual vence a los 30
-  días).
-- Plantilla: script `scripts/create-vigencia-propiedad-template.mjs`, como
-  `create-retomar-cliente-template.mjs`. Hasta que Meta la apruebe, la
-  pregunta solo sale si la ventana está abierta; si no, se registra en el log
-  y la propiedad vence igual.
+  (`SOFI_VIGENCIA_ASESOR=false` apaga la pregunta; igual vence a los 30 días).
 
 ## 7. Sofi (prompt y herramientas)
 

@@ -37,10 +37,12 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
   (`preparar_publicacion` / `confirmar_publicacion`), crea la ref `D1001…`
   con ficha en la landing (`origen='asesor'`, captador = el asesor) y el
   publicador la saca primero (categoría `ofertas`). Vence a los 30 días;
-  a los 25 se le pregunta (`vig:si|no:<ref>`, plantilla `vigencia_propiedad`).
+  a los 25 se le pregunta en "Para atender" del CRM (dos botones).
+  La pregunta, el aviso de vencimiento y el de "salió en tal grupo" van por
+  la campana del CRM, no por WhatsApp (Juan, 2026-10-20); sin plantilla de
+  Meta. Claudia (sin usuario del CRM) responde a Sofi con `actualizar_vigencia`.
   Interruptores `SOFI_PUBLICA_ASESOR` y `SOFI_VIGENCIA_ASESOR`.
-  **Pendiente:** migración `2026-10-19_propiedades_asesor.sql` (Juan) y crear
-  la plantilla con `scripts/create-vigencia-propiedad-template.mjs`.
+  **Pendiente:** migración `2026-10-19_propiedades_asesor.sql` (Juan).
 
 - **Publicador automático de amoblados en grupos (desplegado 2026-10-19,
   commits `5c0f9f1`, `6de864c`).** Spec
