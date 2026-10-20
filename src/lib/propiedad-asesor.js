@@ -21,7 +21,7 @@ function pesos(n) {
 
 // Estricto: o se entiende todo el texto o es faltante.
 // "4.500.000", "$4500000", "4,5 millones", "450 millones", "850 mil".
-function parsePrecio(v, minimo = 100000) {
+function parsePrecio(v, minimo = 30000) {
   const s = texto(v).toLowerCase().replace(/[\s$]/g, "").replace(/(cop|pesos)$/, "");
   if (!s) return null;
   let n = null;

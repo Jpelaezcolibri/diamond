@@ -15,22 +15,59 @@ const self = {
   _supabase: () => require("./supabase"),
 };
 
-self.fotosRecientes = async function fotosRecientes(conversationId, { horas = 6, max = 10 } = {}) {
-  const desde = new Date(Date.now() - horas * 3600e3).toISOString();
+// `desde`: ISO opcional (creacion de la ultima propiedad del captador). La
+// ventana empieza en el mayor entre ahora - horas y `desde`, para no arrastrar
+// las fotos de la propiedad anterior. Si hay mas de `max`, quedan las mas nuevas.
+self.fotosRecientes = async function fotosRecientes(conversationId, { horas = 6, max = 10, desde = null } = {}) {
+  const porHoras = Date.now() - horas * 3600e3;
+  const inicio = new Date(Math.max(porHoras, desde ? new Date(desde).getTime() || 0 : 0)).toISOString();
   const { data, error } = await self._supabase()
     .from("messages")
     .select("media_url, media_mime, created_at")
     .eq("conversation_id", conversationId)
     .eq("role", "user")
     .not("media_url", "is", null)
-    .gte("created_at", desde)
+    .gte("created_at", inicio)
     .order("created_at", { ascending: true });
   if (error) throw error;
-  return (data || []).filter((m) => /^image\//.test(String(m.media_mime || ""))).map((m) => m.media_url).slice(0, max);
+  return (data || []).filter((m) => /^image\//.test(String(m.media_mime || ""))).map((m) => m.media_url).slice(-max);
+};
+
+// created_at de la ultima propiedad que este captador publico con Sofi. Error -> null.
+self.ultimaCreadaPor = async function ultimaCreadaPor(orgId, advisorId) {
+  try {
+    const { data, error } = await self._supabase()
+      .from("properties")
+      .select("created_at")
+      .eq("org_id", orgId)
+      .eq("origen", "asesor")
+      .eq("captador_id", advisorId)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    if (error || !data || !data.length) return null;
+    return data[0].created_at || null;
+  } catch {
+    return null;
+  }
 };
 
 self.crear = async function crear(org, advisor, fila, fotos) {
   const base = String(org.landing_base_url || config.landingBaseUrl).replace(/\/+$/, "");
+  // Confirmar dos veces (reintento del modelo o doble toque) no crea dos refs:
+  // misma propiedad del mismo captador en las ultimas 6 h con la misma primera foto.
+  if (fotos && fotos.length) {
+    const desde = new Date(Date.now() - 6 * 3600e3).toISOString();
+    const { data: previas, error: eDup } = await self._supabase()
+      .from("properties")
+      .select("*")
+      .eq("org_id", org.id)
+      .eq("origen", "asesor")
+      .eq("captador_id", advisor.id)
+      .gte("created_at", desde)
+      .contains("images", [fotos[0]])
+      .limit(1);
+    if (!eDup && previas && previas.length) return { ...previas[0], ya_existia: true };
+  }
   for (let intento = 0; intento < 3; intento++) {
     const { data: refs, error } = await self._supabase().from("properties").select("ref").eq("org_id", org.id).ilike("ref", "D%");
     if (error) throw error;

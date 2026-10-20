@@ -105,3 +105,12 @@ test("enteros dichos como texto se leen", () => {
   assert.deepStrictEqual(faltantes, []);
   assert.deepStrictEqual([fila.habitaciones, fila.banos, fila.garaje, fila.estrato], [2, 1, 1, 4]);
 });
+
+test("M7: un precio por noche como '90 mil' es valido con periodo diario", () => {
+  const { fila, faltantes } = pa.normalizar({
+    operacion: "arriendo", tipo: "apartamento", barrio: "Laureles", municipio: "Medellín", precio: "90 mil",
+    periodo: "por noche", amoblado: true, area: "50", alcobas: 1, banos: 1,
+  });
+  assert.ok(!faltantes.includes("precio (en números)"));
+  assert.equal(fila.periodo_precio, "diario");
+});

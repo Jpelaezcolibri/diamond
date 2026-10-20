@@ -17,6 +17,7 @@ test("encendido: explica el flujo de publicar", () => {
   assert.match(t, /actualizar_vigencia/);
   assert.match(t, /sí explícito/);
   assert.match(t, /Esto NO es calificarlo/);
+  assert.match(t, /excluir_fotos/);
 });
 
 test("apagado: no ofrece publicar", () => {

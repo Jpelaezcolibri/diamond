@@ -291,3 +291,35 @@ test("el captador recibe un solo aviso, solo cuando este envio es el primero de 
   // Si no se pudo contar, calla.
   assert.deepEqual(await correr(null), []);
 });
+
+// --- encabezado por propiedad en grupos "ofertas" (revision final C1) ---
+
+test("ofertas: la venta sale como venta, no como amoblado en arriendo", () => {
+  const t = publicador.textoPost(GO, deAsesor("D1001", { tipo: "Casa" }), "C", LUNES_10AM);
+  assert.match(t, /^🏠 Casa en venta\n\nC$/);
+});
+
+test("ofertas: arriendo no amoblado y amoblado mensual", () => {
+  const noAmoblado = deAsesor("D1002", { operacion: "Arriendo", periodo_precio: "mensual", titulo: "Apartamento en arriendo en Laureles" });
+  assert.match(publicador.textoPost(GO, noAmoblado, "C", LUNES_10AM), /^🔑 Apartamento en arriendo\n/);
+  const amob = deAsesor("D1003", { operacion: "Arriendo", periodo_precio: "mensual", titulo: "Apartamento amoblado en arriendo en Laureles" });
+  const t = publicador.textoPost(GO, amob, "C", LUNES_10AM);
+  assert.ok(publicador.APERTURAS.amoblados.some((a) => t.startsWith(a)), t);
+  assert.doesNotMatch(t, /precio por noche/);
+});
+
+test("ofertas: arriendo por noche lo dice; finca usa el encabezado de fincas", () => {
+  const noche = deAsesor("D1004", { operacion: "Arriendo", periodo_precio: "diario", titulo: "Apartamento amoblado en arriendo en Laureles" });
+  assert.match(publicador.textoPost(GO, noche, "C", LUNES_10AM), /\(precio por noche\)/);
+  const finca = deAsesor("D1005", { operacion: "Arriendo", tipo: "Finca", periodo_precio: "diario", titulo: "Finca en arriendo en Guatapé" });
+  assert.match(publicador.textoPost(GO, finca, "C", LUNES_10AM), /^🌳 Finca en renta \(precio por noche\)/);
+  const fincaMes = deAsesor("D1006", { operacion: "Arriendo", tipo: "Finca", periodo_precio: "mensual", titulo: "Finca en arriendo en Guatapé" });
+  assert.match(publicador.textoPost(GO, fincaMes, "C", LUNES_10AM), /^🌳 Finca en renta \(precio mensual\)/);
+});
+
+test("un arriendo de asesor sin periodo_precio mensual o diario no es apto", () => {
+  const sinPeriodo = deAsesor("D1007", { operacion: "Arriendo", periodo_precio: null });
+  assert.equal(publicador.aptaPara(sinPeriodo, "ofertas"), false);
+  assert.equal(publicador.aptaPara(deAsesor("D1008", { operacion: "Arriendo", periodo_precio: "mensual" }), "ofertas"), true);
+  assert.equal(publicador.aptaPara(deAsesor("D1009"), "ofertas"), true);
+});

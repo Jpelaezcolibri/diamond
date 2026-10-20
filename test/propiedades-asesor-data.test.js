@@ -24,13 +24,13 @@ function falso(respuestas) {
 }
 
 test("crear: ref D siguiente, link de la landing, captador y vigencia", async (t) => {
-  const sb = falso([{ data: [{ ref: "D1003" }], error: null }, { data: { id: "p1", ref: "D1004" }, error: null }]);
+  const sb = falso([{ data: [], error: null }, { data: [{ ref: "D1003" }], error: null }, { data: { id: "p1", ref: "D1004" }, error: null }]);
   t.mock.method(datos, "_supabase", () => sb);
   const org = { id: "org-1", landing_base_url: "https://diamondinmobiliaria.com" };
   const fila = { titulo: "Apartamento amoblado en arriendo en Laureles", zona: "Laureles" };
   const r = await datos.crear(org, { id: "adv-1" }, fila, ["https://x.supabase.co/a.jpg"]);
   assert.strictEqual(r.ref, "D1004");
-  const insert = sb.llamadas[1].ops.find(([op]) => op === "insert")[1];
+  const insert = sb.llamadas[2].ops.find(([op]) => op === "insert")[1];
   assert.strictEqual(insert.ref, "D1004");
   assert.strictEqual(insert.origen, "asesor");
   assert.strictEqual(insert.captador_id, "adv-1");
@@ -42,13 +42,14 @@ test("crear: ref D siguiente, link de la landing, captador y vigencia", async (t
 });
 
 test("crear: sin la migracion avisa con SIN_MIGRACION", async (t) => {
-  const sb = falso([{ data: [], error: null }, { data: null, error: { code: "PGRST204", message: "Could not find the 'origen' column of 'properties'" } }]);
+  const sb = falso([{ data: [], error: null }, { data: [], error: null }, { data: null, error: { code: "PGRST204", message: "Could not find the 'origen' column of 'properties'" } }]);
   t.mock.method(datos, "_supabase", () => sb);
   await assert.rejects(datos.crear({ id: "o" }, { id: "a" }, { titulo: "x" }, ["f"]), (e) => e.code === "SIN_MIGRACION");
 });
 
 test("crear: si la ref choca (23505) reintenta con la siguiente", async (t) => {
   const sb = falso([
+    { data: [], error: null },
     { data: [{ ref: "D1001" }], error: null }, { data: null, error: { code: "23505", message: "duplicate" } },
     { data: [{ ref: "D1001" }, { ref: "D1002" }], error: null }, { data: { id: "p", ref: "D1003" }, error: null },
   ]);
@@ -110,7 +111,9 @@ test("fotosRecientes: solo imagenes en orden, tope 10, filtra conversacion y rol
   sb = falso([{ data: doce, error: null }]);
   const r = await datos.fotosRecientes("conv-1");
   assert.strictEqual(r.length, 10);
-  assert.strictEqual(r[9], "f9.jpg");
+  // Se quedan las 10 MAS NUEVAS (cambio de la revision final).
+  assert.strictEqual(r[0], "f2.jpg");
+  assert.strictEqual(r[9], "f11.jpg");
 });
 
 test("porPreguntar y vencidas: filtros de org, origen y disponibilidad", async (t) => {
@@ -128,4 +131,42 @@ test("porPreguntar y vencidas: filtros de org, origen y disponibilidad", async (
   ops = sb.llamadas[0].ops;
   assert.ok(has("eq", "org_id", "org-1") && has("eq", "origen", "asesor") && has("eq", "disponible", true));
   assert.ok(has("lte", "vence_at", ahora.toISOString()));
+});
+
+test("fotosRecientes: la ventana empieza en el maximo entre las horas y `desde`", async (t) => {
+  const sb = falso([{ data: [], error: null }, { data: [], error: null }]);
+  t.mock.method(datos, "_supabase", () => sb);
+  const reciente = new Date(Date.now() - 3600e3).toISOString();
+  await datos.fotosRecientes("c", { desde: reciente });
+  const gte = (q) => q.ops.find((o) => o[0] === "gte" && o[1] === "created_at")[2];
+  assert.strictEqual(gte(sb.llamadas[0]), reciente);
+  await datos.fotosRecientes("c", { desde: new Date(Date.now() - 30 * 3600e3).toISOString() });
+  assert.ok(new Date(gte(sb.llamadas[1])) > new Date(Date.now() - 7 * 3600e3));
+});
+
+test("ultimaCreadaPor: created_at de la ultima del captador; error o vacio es null", async (t) => {
+  let sb = falso([{ data: [{ created_at: "2026-10-19T10:00:00Z" }], error: null }]);
+  t.mock.method(datos, "_supabase", () => sb);
+  assert.strictEqual(await datos.ultimaCreadaPor("org-1", "adv-1"), "2026-10-19T10:00:00Z");
+  const ops = sb.llamadas[0].ops;
+  assert.ok(ops.some((o) => o[0] === "eq" && o[1] === "org_id" && o[2] === "org-1"));
+  assert.ok(ops.some((o) => o[0] === "eq" && o[1] === "origen" && o[2] === "asesor"));
+  assert.ok(ops.some((o) => o[0] === "eq" && o[1] === "captador_id" && o[2] === "adv-1"));
+  sb = falso([{ data: null, error: { message: "boom" } }]);
+  assert.strictEqual(await datos.ultimaCreadaPor("org-1", "adv-1"), null);
+  sb = falso([{ data: [], error: null }]);
+  assert.strictEqual(await datos.ultimaCreadaPor("org-1", "adv-1"), null);
+});
+
+test("crear: una confirmacion repetida devuelve la misma propiedad sin insertar", async (t) => {
+  const sb = falso([{ data: [{ id: "p1", ref: "D1004", link: "l" }], error: null }]);
+  t.mock.method(datos, "_supabase", () => sb);
+  const r = await datos.crear({ id: "org-1" }, { id: "adv-1" }, { titulo: "x" }, ["a.jpg", "b.jpg"]);
+  assert.strictEqual(r.ref, "D1004");
+  assert.strictEqual(r.ya_existia, true);
+  assert.strictEqual(sb.llamadas.length, 1);
+  const ops = sb.llamadas[0].ops;
+  assert.ok(ops.some((o) => o[0] === "contains" && o[1] === "images" && JSON.stringify(o[2]) === '["a.jpg"]'));
+  assert.ok(ops.some((o) => o[0] === "eq" && o[1] === "captador_id" && o[2] === "adv-1"));
+  assert.ok(ops.some((o) => o[0] === "gte" && o[1] === "created_at"));
 });

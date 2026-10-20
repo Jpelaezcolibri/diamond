@@ -19,7 +19,10 @@ function esDeAsesor(p) {
 
 // Lo que un asesor pidio publicar (venta o arriendo) con los datos minimos.
 function aptaDeAsesor(p) {
-  return esDeAsesor(p) && aptaParaKit(p) && Boolean(String(p.zona || "").trim()) && parsearArea(p.area) !== null;
+  if (!esDeAsesor(p) || !aptaParaKit(p) || !String(p.zona || "").trim() || parsearArea(p.area) === null) return false;
+  // Un arriendo sin periodo claro (mensual o por noche) se publicaria con el precio ambiguo.
+  if (esArriendo(p) && !["mensual", "diario"].includes(periodoWasi(p))) return false;
+  return true;
 }
 
 const DIA_MS = 86400000;
@@ -141,20 +144,38 @@ function elegir({ grupos, propiedades, historial, ahora = new Date(), maxDia, no
   return { motivo: "nada_que_publicar" };
 }
 
-function apertura(grupo, propiedad, ahora = new Date()) {
-  const lista = APERTURAS[grupo.publica] || APERTURAS.amoblados;
+function rotacion(lista, grupo, ahora) {
   const dia = Math.floor(ahora.getTime() / DIA_MS);
   const semilla = [...String(grupo.id)].reduce((s, c) => s + c.charCodeAt(0), dia);
-  let linea = lista[semilla % lista.length];
-  if (grupo.publica === "fincas") linea += periodoFinca(propiedad) === "noche" ? " (precio por noche)" : " (precio mensual)";
+  return lista[semilla % lista.length];
+}
+
+// Encabezado del post. En un grupo "ofertas" entran ventas, arriendos y
+// fincas: el encabezado lo decide la PROPIEDAD, no el grupo.
+function encabezado(grupo, propiedad, ahora = new Date()) {
+  let categoria = grupo.publica;
+  let linea;
+  if (categoria === "ofertas") {
+    const tipo = String(propiedad.tipo || "").trim() || "Inmueble";
+    if (!esArriendo(propiedad)) linea = `🏠 ${tipo} en venta`;
+    else if (esFinca(propiedad)) categoria = "fincas";
+    else if (esAmoblada(propiedad) === true) categoria = "amoblados";
+    else linea = `🔑 ${tipo} en arriendo`;
+  }
+  if (!linea) linea = rotacion(APERTURAS[categoria] || APERTURAS.amoblados, grupo, ahora);
+  if (categoria === "fincas") return linea + (periodoFinca(propiedad) === "noche" ? " (precio por noche)" : " (precio mensual)");
+  const porNoche = String(propiedad.periodo_precio || "").toLowerCase() === "diario" || (esFinca(propiedad) && periodoFinca(propiedad) === "noche");
+  if (esArriendo(propiedad) && porNoche && !/por noche/.test(linea)) linea += " (precio por noche)";
   return linea;
 }
+
+const apertura = encabezado;
 
 function textoPost(grupo, propiedad, cuerpo, ahora = new Date()) {
   return `${apertura(grupo, propiedad, ahora)}\n\n${cuerpo}`;
 }
 
 module.exports = {
-  aptaPara, esDeAsesor, periodoDudoso, periodoFinca, enHorario, elegir, textoPost, diaBogota,
+  aptaPara, esDeAsesor, encabezado, periodoDudoso, periodoFinca, enHorario, elegir, textoPost, diaBogota,
   APERTURAS, DIAS_SIN_REPETIR,
 };

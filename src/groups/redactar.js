@@ -562,7 +562,7 @@ function postGrupo(propiedad, { org = null, comision = true } = {}) {
     .join(" · ");
   const detalles = [
     formato.pluralizar(propiedad.banos, "baño", "baños"),
-    formato.pluralizar(propiedad.garajes, "garaje"),
+    formato.pluralizar(propiedad.garajes ?? propiedad.garaje, "garaje"),
     formato.datoCargado(propiedad.estrato) ? `estrato ${propiedad.estrato}` : null,
     textoAdministracion(propiedad.administracion),
   ]

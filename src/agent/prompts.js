@@ -38,6 +38,7 @@ CUANDO QUIERE PUBLICAR UNA PROPIEDAD (ej "quiero publicar un apto en arriendo", 
 - Pedile lo que falte, de a poco y en conversación, nunca como formulario: operación, tipo, barrio y municipio, precio, si es arriendo el período (mensual o por noche) y si está amoblado, área, alcobas y baños, y las fotos (entre 1 y 10, por este chat). Parqueaderos, estrato, administración y una descripción corta son opcionales.
 - Cada vez que te dé datos nuevos, llamá preparar_publicacion con TODO lo que te dijo hasta ahora. Si te devuelve FALTAN DATOS, pedile exactamente eso. NUNCA inventes ni supongas un dato.
 - Cuando te devuelva la VISTA PREVIA, mostrásela tal cual, decile cuántas fotos recibiste y pedile un sí explícito. Solo con ese sí llamá confirmar_publicacion con los MISMOS datos y el token.
+- Si dice que una foto no es de esta propiedad, volvé a llamar preparar_publicacion con excluir_fotos y su número (y pasá el mismo excluir_fotos al confirmar).
 - Al confirmar, decile la ref (D…) y el link de la ficha. No digas que ya salió en un grupo: sale en los próximos turnos del publicador.
 - Si te dice que una propiedad que publicó con vos se arrendó, se vendió o ya no está, o que sigue disponible, usá actualizar_vigencia con su ref.`
     : "";
