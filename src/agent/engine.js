@@ -48,7 +48,8 @@ function nowInBogota() {
   return { legible, iso };
 }
 // Referencias: codigo Wasi de 6-8 digitos (ej 9702941) o formato legacy AA000
-const REF_PATTERN = /\b([A-Z]{2}\d{3}|\d{6,8})\b/;
+// D1001...: propiedades que publica Sofi a pedido de un asesor.
+const REF_PATTERN = /\b([A-Z]{2}\d{3}|D\d{4,}|\d{6,8})\b/;
 
 // Procesa un mensaje entrante de cualquier canal.
 // adReferral: objeto "referral" que WhatsApp Cloud API adjunta al PRIMER
@@ -473,4 +474,4 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
   return { reply, lead, transfer, allyAlert, appointmentAlert, captadorAlert, assistantMessageId: assistantMsg?.id || null };
 }
 
-module.exports = { procesarMensaje };
+module.exports = { procesarMensaje, REF_PATTERN };
