@@ -30,6 +30,18 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
 
 ## 2. Estado actual (2026-10-19)
 
+- **Sofi publica la propiedad de un asesor (rama `sofi-publica-asesor`,
+  2026-10-19, SIN desplegar).** Spec
+  `docs/superpowers/specs/2026-10-19-sofi-publica-propiedad-asesor-design.md`.
+  El asesor le pide a Sofi publicar; ella pide los datos y fotos
+  (`preparar_publicacion` / `confirmar_publicacion`), crea la ref `D1001…`
+  con ficha en la landing (`origen='asesor'`, captador = el asesor) y el
+  publicador la saca primero (categoría `ofertas`). Vence a los 30 días;
+  a los 25 se le pregunta (`vig:si|no:<ref>`, plantilla `vigencia_propiedad`).
+  Interruptores `SOFI_PUBLICA_ASESOR` y `SOFI_VIGENCIA_ASESOR`.
+  **Pendiente:** migración `2026-10-19_propiedades_asesor.sql` (Juan) y crear
+  la plantilla con `scripts/create-vigencia-propiedad-template.mjs`.
+
 - **Publicador automático de amoblados en grupos (desplegado 2026-10-19,
   commits `5c0f9f1`, `6de864c`).** Spec
   `docs/superpowers/specs/2026-10-19-publicador-grupos-design.md`.
