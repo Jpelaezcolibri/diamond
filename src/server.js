@@ -167,6 +167,8 @@ app.listen(config.port, () => {
   if (config.supabaseUrl) require("./scheduler/alerta-sync").start();
   // Amoblados publicados en grupos desde la linea del radar (Juan, 2026-10-19).
   if (config.supabaseUrl) require("./scheduler/publicador-grupos").start();
+  // Vigencia de las propiedades que publico un asesor con Sofi (Juan, 2026-10-19).
+  if (config.supabaseUrl) require("./scheduler/vigencia-asesor").start();
   // Seguimiento por plantilla pasada la ventana de 24 h, 48 h y 7 dias (Juan, 2026-10-17).
   if (config.supabaseUrl) require("./scheduler/seguimiento-plantilla").start();
   // Inbox de la linea: dice al arrancar si el clasificador esta prendido, como
