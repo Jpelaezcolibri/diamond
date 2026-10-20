@@ -334,6 +334,56 @@ const TOOL_DEFINITIONS = [
       "SOLO para un asesor de la casa (ctx.advisor) confirmando SU PROPIA cita PROPUESTA. Usala cuando el asesor responda algo como 'OK CONFIRMADA', 'confirmado', 'dale, confirmada' a un aviso de cita, o cuando proponga otra hora tras ver el aviso. Busca sus citas propuestas mas proximas: si hay una sola, la confirma y avisa al cliente/colega; si hay varias, te devuelve la lista para que le preguntes cual.",
     input_schema: { type: "object", properties: {} },
   },
+  {
+    name: "preparar_publicacion",
+    description:
+      "SOLO para un asesor de la casa que te pide publicar una propiedad (venta o arriendo) en los grupos. Con lo que el asesor te haya dicho, valida los datos, cuenta las fotos que te mandó en las últimas 6 h y devuelve lo que FALTA o la VISTA PREVIA del post con un token. Llámala cada vez que el asesor te dé datos nuevos. Nunca inventes un dato que el asesor no dijo.",
+    input_schema: {
+      type: "object",
+      properties: {
+        operacion: { type: "string", description: "venta o arriendo" },
+        tipo: { type: "string", description: "apartamento, apartaestudio, casa, finca, local, oficina o lote" },
+        barrio: { type: "string", description: "Barrio o sector, tal como lo dijo el asesor" },
+        municipio: { type: "string" },
+        precio: { type: "string", description: "Precio tal como lo dijo, con números (ej '4.500.000', '450 millones')" },
+        periodo: { type: "string", description: "Solo arriendo: mensual o por noche" },
+        amoblado: { type: "boolean", description: "Solo arriendo" },
+        area: { type: "string", description: "Área en m²" },
+        alcobas: { type: "integer" },
+        banos: { type: "integer" },
+        parqueaderos: { type: "integer" },
+        estrato: { type: "integer" },
+        administracion: { type: "string" },
+        descripcion: { type: "string", description: "Una o dos líneas, solo con lo que dijo el asesor" },
+      },
+    },
+  },
+  {
+    name: "confirmar_publicacion",
+    description:
+      "SOLO para un asesor, y SOLO después de mostrarle la vista previa de preparar_publicacion y de que diga un sí explícito. Pasa EXACTAMENTE los mismos datos y el token de la vista previa. Crea la propiedad (ref D…), su ficha en la landing y la deja en la fila del publicador de grupos. NO publica en el grupo en este momento.",
+    input_schema: {
+      type: "object",
+      properties: {
+        token: { type: "string" },
+        operacion: { type: "string" }, tipo: { type: "string" }, barrio: { type: "string" }, municipio: { type: "string" },
+        precio: { type: "string" }, periodo: { type: "string" }, amoblado: { type: "boolean" }, area: { type: "string" },
+        alcobas: { type: "integer" }, banos: { type: "integer" }, parqueaderos: { type: "integer" }, estrato: { type: "integer" },
+        administracion: { type: "string" }, descripcion: { type: "string" },
+      },
+      required: ["token"],
+    },
+  },
+  {
+    name: "actualizar_vigencia",
+    description:
+      "SOLO para un asesor, sobre una propiedad que publicó con Sofi (ref D…). sigue=true si dice que sigue disponible (renueva 30 días); sigue=false si dice que se arrendó, se vendió o ya no está (sale del inventario y de los grupos).",
+    input_schema: {
+      type: "object",
+      properties: { ref: { type: "string" }, sigue: { type: "boolean" } },
+      required: ["ref", "sigue"],
+    },
+  },
 ];
 
 // Si la propiedad de interes tiene captador, arma el aviso inmediato para su
@@ -596,6 +646,9 @@ const NO_AL_MODELO = new Set(["images", "id", "org_id", "created_at", "captador_
 // Ejecuta una tool. ctx: { org, lead, propertyInteres, transfer } — el engine lee
 // ctx.lead (actualizado) y ctx.transfer despues del loop.
 async function executeTool(name, input, ctx) {
+  if (name === "preparar_publicacion") return require("./publicar-asesor").preparar(input, ctx);
+  if (name === "confirmar_publicacion") return require("./publicar-asesor").confirmar(input, ctx);
+  if (name === "actualizar_vigencia") return require("./publicar-asesor").actualizarVigencia(input, ctx);
   if (name === "buscar_propiedades") {
     let results;
     if (input.ref) {

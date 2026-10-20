@@ -245,6 +245,9 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
     // "cliente interesado" cuando en realidad es un colega buscando para el
     // suyo (Juan, 2026-08-24 — ver el comentario de esa funcion).
     colega,
+    // Para las herramientas que leen lo que el asesor mando en este chat (las
+    // fotos de la propiedad a publicar, src/agent/publicar-asesor.js).
+    conversationId: conv.id,
     propertyInteres: null, transfer: null, cita: null, allyMatch: null, allyAlert: null,
     appointmentAlert: null, captadorAlert: null, lastUserMessage: text,
     // Solo tiene sentido con un asesor citando el aviso de un pedido del
