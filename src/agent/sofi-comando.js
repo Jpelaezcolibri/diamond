@@ -16,7 +16,7 @@ const { executeCommandTool, toolsForScope, MUTATING_TOOLS } = require("./sofi-co
 // docs/superpowers/specs/2026-09-01-sofi-comando-auditoria-honestidad-design.md#5.
 const { auditar } = require("./sofi-comando-auditoria");
 const { notificarFalloComando } = require("./notificar-fallo-comando");
-const { getClient, registrarUso } = require("../lib/anthropic");
+const { getClient, registrarUso, paramsDeModelo } = require("../lib/anthropic");
 
 // 8, no 5: encontrado en produccion 2026-08-18 — Juan le pidio a Sofi mandarle
 // un WhatsApp a Catherine por cada uno de 6 pedidos pendientes (una tool por
@@ -240,8 +240,7 @@ async function processMessage(scope, sessionId, text, { userName } = {}) {
     r.content.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
 
   let response = await client.messages.create({
-    model: config.claudeModel,
-    max_tokens: 1024,
+    ...paramsDeModelo(config.claudeModel, { maxTokens: 1024 }),
     system,
     messages,
     tools: toolsForScope(scope),
@@ -279,8 +278,7 @@ async function processMessage(scope, sessionId, text, { userName } = {}) {
     messages.push({ role: "user", content: toolResults });
 
     response = await client.messages.create({
-      model: config.claudeModel,
-      max_tokens: 1024,
+      ...paramsDeModelo(config.claudeModel, { maxTokens: 1024 }),
       system,
       messages,
       tools: toolsForScope(scope),

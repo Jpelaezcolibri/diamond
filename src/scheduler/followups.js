@@ -22,7 +22,7 @@ const organizations = require("../data/organizations");
 const leads = require("../data/leads");
 const conversations = require("../data/conversations");
 const { sendWhatsApp } = require("../channels/whatsapp");
-const { getClient } = require("../lib/anthropic");
+const { getClient, paramsDeModelo } = require("../lib/anthropic");
 const colegas = require("../data/colegas");
 
 // Backstop en memoria contra dobles envios dentro del mismo proceso (si el
@@ -99,8 +99,8 @@ async function buildFollowupMessage(conversationId, org, lead = null) {
   const history = await conversations.getRecentMessages(conversationId, 12);
   if (!history.length) return null;
   const response = await getClient().messages.create({
-    model: config.claudeModel,
-    max_tokens: 300,
+    // Texto corto con tope bajo: sin thinking en Sonnet 5.5 (ver paramsDeModelo).
+    ...paramsDeModelo(config.claudeModel, { maxTokens: 300, sinThinking: true }),
     system: buildFollowupSystemPrompt(org, lead),
     messages: [
       ...history.map((m) => ({ role: m.role, content: m.content })),

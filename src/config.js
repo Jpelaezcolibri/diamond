@@ -19,7 +19,7 @@ require("dotenv").config({ override: !bajoRailway });
 const config = {
   port: process.env.PORT || 3000,
   anthropicApiKey: process.env.ANTHROPIC_API_KEY,
-  claudeModel: process.env.CLAUDE_MODEL || "claude-sonnet-4-5",
+  claudeModel: process.env.CLAUDE_MODEL || "claude-sonnet-5-5",
 
   // Supabase — si faltan, la capa de datos corre en modo demo (memoria)
   supabaseUrl: process.env.SUPABASE_URL || "",

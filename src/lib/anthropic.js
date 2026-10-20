@@ -43,6 +43,29 @@ function getClient() {
   return client;
 }
 
+// Parametros que dependen del modelo (2026-10-20, Sofi a Sonnet 5.5).
+//
+// Sonnet 5.5 piensa por defecto y ese pensamiento cuenta dentro de
+// max_tokens: con effort "low" (lo que recomienda Anthropic para chat) piensa
+// poco y casi nunca en mensajes simples, y el tope sube a 4.096 para que no
+// se coma la respuesta. `sinThinking` apaga el pensamiento (between_tools,
+// el unico "apagado" que acepta Sonnet 5.5) para textos cortos con tope bajo.
+//
+// Sonnet 4.x no acepta `effort` ni between_tools: va igual que siempre, asi
+// que volver por CLAUDE_MODEL=claude-sonnet-4-5 no necesita codigo.
+function paramsDeModelo(modelo, { maxTokens, sinThinking = false, outputConfig = null } = {}) {
+  const viejo = /^claude-(sonnet|haiku|opus)-4/.test(String(modelo));
+  if (viejo) {
+    return { model: modelo, max_tokens: maxTokens, ...(outputConfig ? { output_config: outputConfig } : {}) };
+  }
+  return {
+    model: modelo,
+    max_tokens: sinThinking ? maxTokens : Math.max(maxTokens, 4096),
+    ...(sinThinking ? { thinking: { type: "between_tools" } } : {}),
+    output_config: { ...(outputConfig || {}), effort: "low" },
+  };
+}
+
 // Solo para tests: inyecta un cliente mock (objeto con messages.create).
 // Llamar con null/undefined para volver al cliente real.
 function _setClientForTests(mock) {
@@ -111,5 +134,5 @@ function registrarUso(ruta, usage) {
 }
 
 
-module.exports = { getClient, _setClientForTests, CACHE_ESTABLE, registrarUso };
+module.exports = { paramsDeModelo, getClient, _setClientForTests, CACHE_ESTABLE, registrarUso };
 

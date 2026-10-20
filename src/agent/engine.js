@@ -11,7 +11,7 @@ const { isQualified } = require("./qualification");
 const { buildAdvisorAlert, formatCitaFechaHora } = require("../notifications/advisor");
 const { detectSellerIntent, intencionDeDuenoEnTurno, detectClientLanguage } = require("./intent");
 const { refDeKit } = require("./kit-origen");
-const { getClient, registrarUso } = require("../lib/anthropic");
+const { getClient, registrarUso, paramsDeModelo } = require("../lib/anthropic");
 const { aliasPublico } = require("../lib/identidad-publica");
 const codigoColega = require("../groups/codigo-colega");
 
@@ -321,8 +321,7 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
     r.content.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
 
   let response = await client.messages.create({
-    model: config.claudeModel,
-    max_tokens: 2048,
+    ...paramsDeModelo(config.claudeModel, { maxTokens: 2048 }),
     system,
     messages,
     tools: TOOL_DEFINITIONS,
@@ -358,8 +357,7 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
     messages.push({ role: "user", content: toolResults });
 
     response = await client.messages.create({
-      model: config.claudeModel,
-      max_tokens: 2048,
+      ...paramsDeModelo(config.claudeModel, { maxTokens: 2048 }),
       system,
       messages,
       tools: TOOL_DEFINITIONS,
@@ -380,7 +378,7 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
   // se cierra la promesa con una salida honesta.
   if (!finalText && iterations > 0 && response.stop_reason !== "tool_use") {
     console.warn("[engine] Sin respuesta final despues de usar herramientas — reintentando");
-    response = await client.messages.create({ model: config.claudeModel, max_tokens: 2048, system, messages, tools: TOOL_DEFINITIONS });
+    response = await client.messages.create({ ...paramsDeModelo(config.claudeModel, { maxTokens: 2048 }), system, messages, tools: TOOL_DEFINITIONS });
     registrarUso("engine:reintento_final", response.usage);
     const reintento = extractText(response);
     textParts.push(
@@ -395,8 +393,7 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
     // vez antes de rendirse.
     console.warn("[engine] Respuesta vacia del modelo — reintentando");
     response = await client.messages.create({
-      model: config.claudeModel,
-      max_tokens: 2048,
+      ...paramsDeModelo(config.claudeModel, { maxTokens: 2048 }),
       system,
       messages,
       tools: TOOL_DEFINITIONS,

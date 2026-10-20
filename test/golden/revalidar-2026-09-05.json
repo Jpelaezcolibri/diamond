@@ -8,7 +8,7 @@
       "cubre": ["H1 unidad cerrada", "H2 margen de precio", "H3 caso mixto"],
       "utiles_esperadas": ["10077063"],
       "nunca_en_dudosas": ["10077063"],
-      "sin_confirmar_menciona": ["garaje", "unidad cerrada"]
+      "sin_confirmar_menciona": ["garaje|parqueadero", "unidad cerrada"]
     },
     {
       "id": "4a2ef536-f67b-4e9a-b67f-570ec548adfd",

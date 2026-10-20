@@ -49,7 +49,7 @@ const config = require("../config");
 const formato = require("../lib/formato");
 // Que se exige y con que nombre llega de cada lado: ./exigencias.js (auditoria 2026-09-05, H6).
 const exigencias = require("./exigencias");
-const { getClient, CACHE_ESTABLE, registrarUso } = require("../lib/anthropic");
+const { getClient, CACHE_ESTABLE, registrarUso, paramsDeModelo } = require("../lib/anthropic");
 // Los margenes del motor se interpolan en el prompt desde su unica fuente
 // (auditoria 2026-09-05, H2): el motor aceptaba +10 % de precio y -10 % de
 // area desde el 20-ago y se lo decia a Sofi solo en las razones ("7 % sobre
@@ -557,13 +557,11 @@ async function revalidar(clasificado, matches) {
 
   try {
     const res = await getClient().messages.create({
-      model: MODELO,
-      max_tokens: 1000,
+      ...paramsDeModelo(MODELO, { maxTokens: 1000, outputConfig: { format: { type: "json_schema", schema: ESQUEMA } } }),
       // Cacheado: SISTEMA son ~2.250 tokens identicos en cada pedido, muy por
       // encima del minimo cacheable de Sonnet (1.024). Lo que cambia es el
       // `pedido` de abajo, que va en messages y no toca este prefijo.
       system: [{ type: "text", text: SISTEMA, cache_control: CACHE_ESTABLE }],
-      output_config: { format: { type: "json_schema", schema: ESQUEMA } },
       messages: [{ role: "user", content: pedido }],
     });
     registrarUso("revalidar", res.usage);
