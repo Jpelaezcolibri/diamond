@@ -64,3 +64,36 @@ test("siguienteRef arranca en D1001 y sigue el mayor", () => {
   assert.strictEqual(pa.siguienteRef([]), "D1001");
   assert.strictEqual(pa.siguienteRef(["D1001", "d1007", "10383517", "D10x"]), "D1008");
 });
+
+// --- Fix round 1: lo ambiguo es faltante, nunca un valor equivocado ---
+const precioDe = (p) => pa.normalizar({ ...COMPLETO, precio: p });
+
+test("precios claros se leen exactos", () => {
+  assert.strictEqual(precioDe("1.200 millones").fila.precio, null); // ambiguo: 1,2 o 1200
+  assert.strictEqual(precioDe("4,5 millones").fila.precio, "$4.500.000");
+  assert.strictEqual(precioDe("450 millones").fila.precio, "$450.000.000");
+  assert.strictEqual(precioDe("850 mil").fila.precio, "$850.000");
+  assert.strictEqual(precioDe("$ 4500000").fila.precio, "$4.500.000");
+});
+
+test("precios ambiguos cuentan como faltante", () => {
+  for (const p of ["4.500.000 + admin 350.000", "4.500.000,50", "2mm", "dos millones"]) {
+    const { fila, faltantes } = precioDe(p);
+    assert.strictEqual(fila.precio, null, p);
+    assert.ok(faltantes.includes("precio (en números)"), p);
+  }
+});
+
+test("area: miles, unidad y rangos", () => {
+  assert.strictEqual(pa.normalizar({ ...COMPLETO, area: "1.200" }).fila.area, "1200m2");
+  assert.strictEqual(pa.normalizar({ ...COMPLETO, area: "85 m2" }).fila.area, "85m2");
+  const r = pa.normalizar({ ...COMPLETO, area: "60-80" });
+  assert.strictEqual(r.fila.area, null);
+  assert.ok(r.faltantes.includes("área en m²"));
+});
+
+test("alcobas booleano, operacion y periodo ambiguos son faltantes", () => {
+  assert.ok(pa.normalizar({ ...COMPLETO, alcobas: true }).faltantes.includes("alcobas"));
+  assert.ok(pa.normalizar({ ...COMPLETO, operacion: "se vende o arrienda" }).faltantes.includes("operación (venta o arriendo)"));
+  assert.ok(pa.normalizar({ ...COMPLETO, periodo: "mensual o diario" }).faltantes.includes("si el canon es mensual o por noche"));
+});

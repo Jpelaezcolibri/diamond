@@ -19,38 +19,54 @@ function pesos(n) {
   return `$${Math.round(n).toLocaleString("es-CO")}`;
 }
 
-// "4.500.000", "$4500000", "4,5 millones", "450 millones", "4.5M".
+// Estricto: o se entiende todo el texto o es faltante.
+// "4.500.000", "$4500000", "4,5 millones", "450 millones", "850 mil".
 function parsePrecio(v, minimo = 100000) {
-  const s = texto(v).toLowerCase().replace(/\s+/g, "");
+  const s = texto(v).toLowerCase().replace(/[\s$]/g, "").replace(/(cop|pesos)$/, "");
   if (!s) return null;
-  const num = s.replace(/[^\d.,]/g, "");
-  if (!num) return null;
-  const n = /mill|m$/.test(s) ? parseFloat(num.replace(",", ".")) * 1e6 : Number(num.replace(/[.,]/g, ""));
-  return Number.isFinite(n) && n >= minimo ? n : null;
+  let n = null;
+  let m;
+  if (/^\d+$/.test(s) || /^\d{1,3}([.,]\d{3})+$/.test(s)) {
+    n = Number(s.replace(/[.,]/g, ""));
+  } else if ((m = /^(\d{1,4}(?:[.,]\d{1,2})?)(millones|millon|millón|mill|m)$/.exec(s))) {
+    n = Math.round(parseFloat(m[1].replace(",", ".")) * 1e6);
+  } else if ((m = /^(\d{1,3})mil$/.exec(s))) {
+    n = Number(m[1]) * 1000;
+  }
+  return n !== null && Number.isFinite(n) && n >= minimo ? n : null;
 }
 
 function parseArea(v) {
-  const n = parseFloat(texto(v).replace(",", "."));
-  return Number.isFinite(n) && n > 0 && n <= 100000 ? n : null;
+  const s = texto(v).toLowerCase().replace(/\s+/g, "").replace(/(m2|m²|mts2|mt2|mts|mt|metros|m)$/, "");
+  let n = null;
+  if (/^\d{1,3}\.\d{3}$/.test(s)) n = Number(s.replace(".", ""));
+  else if (/^\d+([.,]\d{1,2})?$/.test(s)) n = parseFloat(s.replace(",", "."));
+  return n !== null && Number.isFinite(n) && n > 0 && n <= 100000 ? n : null;
 }
 
 function parseEntero(v) {
-  if (v === null || v === undefined || texto(v) === "") return null;
-  const n = Number(v);
-  return Number.isInteger(n) && n >= 0 ? n : null;
+  if (typeof v === "number") return Number.isInteger(v) && v >= 0 ? v : null;
+  if (typeof v === "string" && /^d+$/.test(v.trim())) return Number(v.trim());
+  return null;
 }
 
 function operacionDe(v) {
   const t = texto(v);
-  if (/arriend|renta|alquil/i.test(t)) return "Arriendo";
-  if (/vent/i.test(t)) return "Venta";
+  const arr = /arriend|renta|alquil/i.test(t);
+  const ven = /vent|vend/i.test(t);
+  if (arr && ven) return null;
+  if (arr) return "Arriendo";
+  if (ven) return "Venta";
   return null;
 }
 
 function periodoDe(v) {
   const t = texto(v);
-  if (/mes|mensual/i.test(t)) return "mensual";
-  if (/d[ií]a|noche|diari/i.test(t)) return "diario";
+  const mes = /mes|mensual/i.test(t);
+  const dia = /d[ií]a|noche|diari/i.test(t);
+  if (mes && dia) return null;
+  if (mes) return "mensual";
+  if (dia) return "diario";
   return null;
 }
 
