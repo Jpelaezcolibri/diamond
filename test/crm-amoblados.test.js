@@ -61,6 +61,12 @@ test("periodoDePropiedad: si dice mes Y noche, gana noche (hay que revisarla)", 
   assert.strictEqual(lib.periodoDePropiedad({ descripcion: "Por mes $7.000.000 o por noche $400.000" }), "noche");
 });
 
+test("periodoDePropiedad: el periodo que marca Wasi manda sobre el texto", () => {
+  assert.strictEqual(lib.periodoDePropiedad({ periodo_precio: "mensual", descripcion: "Se renta por noches y mes" }), "mensual");
+  assert.strictEqual(lib.periodoDePropiedad({ periodo_precio: "diario", descripcion: "" }), "noche");
+  assert.strictEqual(lib.periodoDePropiedad({ periodo_precio: null, descripcion: "Valor por noche" }), "noche");
+});
+
 test("pedidosPorRef cuenta cada ref una vez por pedido", () => {
   const m = lib.pedidosPorRef([
     { matches: [{ ref: "10383636" }, { ref: "10319552" }, { ref: "10383636" }] },

@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vigencia en el CRM</title>
+<style>
+  :root {
+    --navy: #0b1526; --gold: #c9a24b; --bg: #eef1f5; --card: #fff; --ink: #0f172a;
+    --muted: #64748b; --line: #e2e8f0; --teal: #0d9488; --amber: #d97706; --red: #dc2626;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--ink); }
+  header.top { background: var(--navy); color: #fff; padding: 20px 24px; }
+  header.top h1 { margin: 0; font-size: 20px; } header.top h1 span { color: var(--gold); }
+  header.top p { margin: 6px 0 0; color: #cbd5e1; font-size: 14px; max-width: 900px; }
+  .stage { display: flex; gap: 28px; padding: 28px 24px 48px; overflow-x: auto; align-items: flex-start; }
+  .col { flex: 0 0 auto; }
+  .col h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 10px 4px; }
+  .col p.note { width: 360px; font-size: 12.5px; color: var(--muted); margin: 10px 4px 0; line-height: 1.45; }
+  .phone { width: 360px; height: 740px; background: var(--card); border: 10px solid #111; border-radius: 38px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 20px 40px rgba(15,23,42,.18); }
+  .bar { background: var(--navy); color: #fff; padding: 14px 16px 12px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid rgba(201,162,75,.3); }
+  .bar b { font-size: 16px; } .bell { margin-left: auto; position: relative; font-size: 18px; }
+  .bell i { position: absolute; top: -4px; right: -8px; background: var(--red); color: #fff; font-style: normal; font-size: 10px; font-weight: 700; border-radius: 999px; padding: 1px 5px; }
+  .nav { display: flex; gap: 14px; background: var(--navy); padding: 0 16px 10px; font-size: 12px; color: #94a3b8; overflow-x: auto; }
+  .nav .on { color: var(--gold); font-weight: 600; }
+  .scroll { flex: 1; overflow-y: auto; padding: 14px; background: #f8fafc; }
+  h3.title { font-size: 20px; margin: 0 0 14px; } h3.title small { font-size: 13px; color: var(--muted); font-weight: 400; }
+  .sec { font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 14px 2px 8px; }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-bottom: 8px; }
+  .card.warn { background: #fffbeb; border-color: #fde68a; }
+  .prop { display: flex; gap: 10px; }
+  .thumb { width: 64px; height: 64px; border-radius: 10px; flex: 0 0 auto; background: linear-gradient(135deg,#94a3b8,#cbd5e1 60%,#e2e8f0); }
+  .t { font-size: 14px; font-weight: 600; } .m { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .due { font-size: 12px; color: #92400e; margin-top: 4px; font-weight: 600; }
+  .row { display: flex; gap: 8px; margin-top: 10px; }
+  .btn { flex: 1; text-align: center; border-radius: 10px; padding: 10px 8px; font-size: 13.5px; font-weight: 600; border: 1px solid var(--line); background: #fff; }
+  .btn.ok { background: var(--teal); border-color: var(--teal); color: #fff; }
+  .link { font-size: 12px; color: #0369a1; margin-top: 8px; display: inline-block; }
+  .done { background: #f0fdfa; border: 1px solid #99f6e4; color: #115e59; border-radius: 12px; padding: 12px; font-size: 13px; }
+  .gone { background: #f1f5f9; border: 1px solid var(--line); color: #475569; border-radius: 12px; padding: 12px; font-size: 13px; }
+  .muted { font-size: 12px; color: var(--muted); }
+  .notif { background: #fff; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .notif div { padding: 11px 12px; border-bottom: 1px solid var(--line); font-size: 13px; }
+  .notif div.new { background: #fffbeb; }
+  .notif small { display: block; color: var(--muted); font-size: 11.5px; margin-top: 2px; }
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>Vigencia de las propiedades del asesor <span>· en el CRM</span></h1>
+  <p>A los 25 días Sofi ya no pregunta por WhatsApp: la propiedad aparece en "Para atender" del asesor que la captó, con dos botones. Sin respuesta, a los 30 días sale sola del inventario y de los grupos. El asesor también puede decírselo a Sofi por WhatsApp cuando quiera.</p>
+</header>
+<div class="stage">
+
+  <div class="col">
+    <h2>1 · Campana: llega el aviso</h2>
+    <div class="phone">
+      <div class="bar"><b>Diamond</b><span class="bell">🔔<i>1</i></span></div>
+      <div class="nav"><span class="on">Para atender</span><span>Inbox</span><span>Leads</span><span>Kit</span><span>Grupos</span></div>
+      <div class="scroll">
+        <div class="notif">
+          <div class="new">🏷️ <b>D1004 vence en 5 días</b><small>¿Sigue disponible? Respondé en Para atender · hace 2 min</small></div>
+          <div>📅 Visita por confirmar · Sebastián<small>ayer, 4:10 p. m.</small></div>
+          <div>🙋 Te pidieron hablar con un asesor<small>ayer, 11:02 a. m.</small></div>
+        </div>
+      </div>
+    </div>
+    <p class="note">Notificación nueva tipo <b>vigencia_propiedad</b> en la campana (y push si el asesor la activó). Solo para el captador.</p>
+  </div>
+
+  <div class="col">
+    <h2>2 · Para atender: la pregunta</h2>
+    <div class="phone">
+      <div class="bar"><b>Diamond</b><span class="bell">🔔</span></div>
+      <div class="nav"><span class="on">Para atender</span><span>Inbox</span><span>Leads</span><span>Kit</span><span>Grupos</span></div>
+      <div class="scroll">
+        <h3 class="title">Para atender <small>· Asesor 1</small></h3>
+        <div class="sec">Tus propiedades por renovar (1)</div>
+        <div class="card warn">
+          <div class="prop">
+            <div class="thumb"></div>
+            <div>
+              <div class="t">Apartamento amoblado en arriendo en Laureles</div>
+              <div class="m">Ref D1004 · $4.500.000 mensual</div>
+              <div class="due">Vence el sáb. 14 de nov. · sale de los grupos</div>
+            </div>
+          </div>
+          <div class="row">
+            <span class="btn ok">✓ Sigue disponible</span>
+            <span class="btn">Ya no está</span>
+          </div>
+          <span class="link">Ver ficha ↗</span>
+        </div>
+        <div class="sec">Visitas por confirmar (1)</div>
+        <div class="card warn">
+          <div class="t">Sebastián Velásquez</div>
+          <div class="m">jue. 22 de oct., 3:00 p. m. · ref 10383517</div>
+        </div>
+      </div>
+    </div>
+    <p class="note">Sección nueva arriba de "Visitas por confirmar". Aparece cuando faltan 5 días o menos. "Ya no está" pide una confirmación corta antes de bajarla.</p>
+  </div>
+
+  <div class="col">
+    <h2>3 · Después de responder</h2>
+    <div class="phone">
+      <div class="bar"><b>Diamond</b><span class="bell">🔔</span></div>
+      <div class="nav"><span class="on">Para atender</span><span>Inbox</span><span>Leads</span><span>Kit</span><span>Grupos</span></div>
+      <div class="scroll">
+        <h3 class="title">Para atender <small>· Asesor 1</small></h3>
+        <div class="sec">Tus propiedades por renovar</div>
+        <div class="done">✓ <b>D1004</b> sigue publicada 30 días más (hasta el lun. 14 de dic.).</div>
+        <div style="height:10px"></div>
+        <div class="gone"><b>D1002</b> salió del inventario y de los grupos. <span class="muted">Si vuelve a estar disponible, pedile a Sofi que la publique de nuevo.</span></div>
+      </div>
+    </div>
+    <p class="note">El resultado queda en la misma tarjeta hasta recargar. Claudia no tiene usuario del CRM: sus propiedades vencen a los 30 días salvo que le diga a Sofi "sigue disponible".</p>
+  </div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,6 @@
+Claude outputs/
+node_modules/
+crm/node_modules/
+web/node_modules/
+dmap/node_modules/
+.superpowers/

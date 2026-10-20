@@ -50,7 +50,11 @@ export type Periodo = "mensual" | "noche" | "sin_periodo";
 const NOCHE = /\bnoches?\b|\bpor\s+d[ií]as?\b|\bdiari[oa]\b/i;
 const MES = /\bmes(es)?\b|\bmensual\b|\bcanon\b/i;
 
-export function periodoDePropiedad(p: { titulo?: string | null; descripcion?: string | null }): Periodo {
+export function periodoDePropiedad(p: { titulo?: string | null; descripcion?: string | null; periodo_precio?: string | null }): Periodo {
+  // El periodo que marca Wasi (Monthly / Daily, guardado por el sync de DMAP
+  // desde 2026-10-19) manda sobre el texto; sin el dato, se lee del texto.
+  if (p.periodo_precio === "mensual") return "mensual";
+  if (p.periodo_precio === "diario") return "noche";
   const texto = [p.titulo, p.descripcion]
     .filter(Boolean)
     .join(" ")

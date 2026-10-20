@@ -28,6 +28,7 @@ type Propiedad = {
   precio: string | null;
   caracteristicas: string | null;
   descripcion: string | null;
+  periodo_precio?: string | null;
 };
 
 export default async function AmobladosPage() {
@@ -72,7 +73,10 @@ export default async function AmobladosPage() {
     fetchSafe<Propiedad>(
       supabase
         .from("properties")
-        .select("ref, titulo, zona, precio, caracteristicas, descripcion")
+        // "*" y no la lista: trae periodo_precio (el periodo que marca Wasi)
+        // cuando la migracion 2026-10-19_periodo_precio.sql ya corrio, y no
+        // rompe la consulta mientras no exista.
+        .select("*")
         .eq("operacion", "Arriendo")
         .eq("disponible", true),
       "amoblados:inventario"
