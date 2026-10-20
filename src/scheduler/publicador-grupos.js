@@ -81,6 +81,14 @@ function depsPorDefecto() {
     },
     alertar: (resumen, detalle) => enviarAlertaTecnica(resumen, detalle).catch(() => false),
     azar: Math.random,
+    avisarCaptador: async (org, propiedad, grupo) => {
+      if (!propiedad.captador_id) return;
+      const advisor = await require("../data/advisors").findById(org.id, propiedad.captador_id).catch(() => null);
+      if (!advisor || !advisor.phone) return;
+      const texto = `📣 Tu ${propiedad.ref} salió en ${grupo.nombre}. Sigue rotando en los demás grupos; si un colega pregunta, te aviso.`;
+      const r = await require("../lib/mensaje-asesor").enviarYRegistrar(org, advisor.phone, texto).catch((e) => ({ ok: false, error: e.message }));
+      if (!r || !r.ok) console.warn(`[publicador] No se pudo avisar a ${advisor.name} de la ${propiedad.ref}: ${r && r.error}`);
+    },
   };
 }
 
@@ -147,6 +155,11 @@ async function runParaOrg(org, d, ahora) {
   const espacio = ESPACIO_MIN + d.azar() * (ESPACIO_MAX - ESPACIO_MIN);
   estado.noAntesDe = new Date(ahora.getTime() + espacio * 60000);
   console.log(`[publicador] Ref ${propiedad.ref} -> ${grupo.nombre} (${fila.wamid})`);
+
+  const yaSalio = historial.some((h) => h.estado === "enviado" && String(h.property_ref) === String(propiedad.ref));
+  if (publicador.esDeAsesor(propiedad) && !yaSalio && d.avisarCaptador) {
+    await d.avisarCaptador(org, propiedad, grupo).catch((e) => console.warn("[publicador] avisarCaptador:", e.message));
+  }
   return { resultado: "enviado", ref: propiedad.ref, grupo: grupo.nombre };
 }
 

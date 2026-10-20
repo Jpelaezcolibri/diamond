@@ -8,6 +8,19 @@
 // grupo sin categoria no recibe nada.
 const { aptaParaKit } = require("./kit");
 const { esAmoblada } = require("./amoblado");
+const { parsearArea } = require("../lib/formato");
+
+const ESPERA_ASESOR_MS = 15 * 60000;
+const PRIORIDAD_ASESOR_DIAS = 7;
+
+function esDeAsesor(p) {
+  return Boolean(p) && p.origen === "asesor";
+}
+
+// Lo que un asesor pidio publicar (venta o arriendo) con los datos minimos.
+function aptaDeAsesor(p) {
+  return esDeAsesor(p) && aptaParaKit(p) && Boolean(String(p.zona || "").trim()) && parsearArea(p.area) !== null;
+}
 
 const DIA_MS = 86400000;
 const DIAS_SIN_REPETIR = 7;
@@ -66,6 +79,8 @@ function periodoFinca(p) {
 }
 
 function aptaPara(p, categoria) {
+  // La venta de un asesor no es arriendo: se decide antes de la compuerta de arriendo.
+  if (categoria === "ofertas") return aptaDeAsesor(p) || aptaPara(p, "amoblados");
   if (!aptaParaKit(p) || !esArriendo(p)) return false;
   if (categoria === "amoblados") {
     if (esFinca(p) || esAmoblada(p) !== true) return false;
@@ -115,9 +130,12 @@ function elegir({ grupos, propiedades, historial, ahora = new Date(), maxDia, no
         .filter((h) => h.group_id === grupo.id && h.estado === "enviado" && new Date(h.created_at).getTime() >= corte)
         .map((h) => String(h.property_ref))
     );
+    const prioridad = (p) =>
+      esDeAsesor(p) && ahora.getTime() - new Date(p.created_at).getTime() < PRIORIDAD_ASESOR_DIAS * DIA_MS ? 0 : 1;
     const opciones = propiedades
       .filter((p) => !excluirRefs.has(String(p.ref)) && !recientes.has(String(p.ref)) && aptaPara(p, grupo.publica))
-      .sort((a, b) => ultimoDeRef(a.ref) - ultimoDeRef(b.ref) || String(a.ref).localeCompare(String(b.ref)));
+      .filter((p) => !esDeAsesor(p) || ahora.getTime() - new Date(p.created_at).getTime() >= ESPERA_ASESOR_MS)
+      .sort((a, b) => prioridad(a) - prioridad(b) || ultimoDeRef(a.ref) - ultimoDeRef(b.ref) || String(a.ref).localeCompare(String(b.ref)));
     if (opciones.length) return { grupo, propiedad: opciones[0] };
   }
   return { motivo: "nada_que_publicar" };
@@ -137,6 +155,6 @@ function textoPost(grupo, propiedad, cuerpo, ahora = new Date()) {
 }
 
 module.exports = {
-  aptaPara, periodoDudoso, periodoFinca, enHorario, elegir, textoPost, diaBogota,
+  aptaPara, esDeAsesor, periodoDudoso, periodoFinca, enHorario, elegir, textoPost, diaBogota,
   APERTURAS, DIAS_SIN_REPETIR,
 };

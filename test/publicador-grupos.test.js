@@ -242,3 +242,54 @@ test("una finca con periodo de Wasi se publica aunque el texto no lo diga", () =
   assert.match(publicador.textoPost(GF, { ...guatape, periodo_precio: "mensual" }, "C", LUNES_10AM), /\(precio mensual\)/);
   assert.equal(publicador.aptaPara({ ...guatape, periodo_precio: "semanal" }, "fincas"), false);
 });
+
+// --- propiedades de asesor (spec 2026-10-19-sofi-publica-propiedad-asesor) ---
+
+const GO = { id: "go", jid: "o@g.us", nombre: "Ofertas", publica: "ofertas" };
+function deAsesor(ref, extra = {}) {
+  return amoblado(ref, {
+    origen: "asesor", operacion: "Venta", titulo: "Casa en venta en Belén", area: "120m2",
+    captador_id: "adv-1", created_at: new Date(LUNES_10AM.getTime() - 60 * MIN).toISOString(), ...extra,
+  });
+}
+
+test("ofertas recibe la venta de un asesor y los amoblados, no la venta de Wasi", () => {
+  assert.equal(publicador.aptaPara(deAsesor("D1001"), "ofertas"), true);
+  assert.equal(publicador.aptaPara(amoblado("1"), "ofertas"), true);
+  assert.equal(publicador.aptaPara(amoblado("2", { operacion: "Venta", titulo: "Casa en venta" }), "ofertas"), false);
+  assert.equal(publicador.aptaPara(deAsesor("D1002", { zona: "" }), "ofertas"), false);
+  assert.equal(publicador.aptaPara(deAsesor("D1003", { area: null }), "ofertas"), false);
+});
+
+test("la propiedad nueva de un asesor sale primero", () => {
+  const r = publicador.elegir({ grupos: [GO], propiedades: [amoblado("1"), deAsesor("D1001")], historial: [], ahora: LUNES_10AM, maxDia: 8 });
+  assert.equal(r.propiedad.ref, "D1001");
+});
+
+test("una propiedad de asesor recien creada espera 15 minutos", () => {
+  const recien = deAsesor("D1001", { created_at: new Date(LUNES_10AM.getTime() - 5 * MIN).toISOString() });
+  const r = publicador.elegir({ grupos: [GO], propiedades: [recien], historial: [], ahora: LUNES_10AM, maxDia: 8 });
+  assert.equal(r.motivo, "nada_que_publicar");
+});
+
+test("el captador recibe un solo aviso, la primera vez que sale", async () => {
+  process.env.RADAR_PUBLICAR_ACTIVO = "true";
+  const avisos = [];
+  const { d } = deps({
+    grupos: async () => [GO],
+    propiedades: async () => [deAsesor("D1001")],
+    avisarCaptador: async (org, p, g) => avisos.push([p.ref, g.nombre]),
+  });
+  await scheduler.runOnce({ ahora: LUNES_10AM, deps: d });
+  assert.deepEqual(avisos, [["D1001", "Ofertas"]]);
+
+  scheduler._reset();
+  const { d: d2 } = deps({
+    grupos: async () => [GO, { ...G1, publica: "ofertas" }],
+    propiedades: async () => [deAsesor("D1001")],
+    historial: async () => [{ group_id: "go", property_ref: "D1001", estado: "enviado", created_at: hace(60) }],
+    avisarCaptador: async (org, p, g) => avisos.push([p.ref, g.nombre]),
+  });
+  await scheduler.runOnce({ ahora: LUNES_10AM, deps: d2 });
+  assert.equal(avisos.length, 1);
+});
