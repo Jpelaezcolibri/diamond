@@ -425,7 +425,8 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
   `2026-10-07_asesor_alias_y_citas.sql` (alias público, rotación de citas,
   código del DM al colega) corrida por Juan y **verificada por REST** el
   2026-10-07: las 7 columnas responden y el filtro por `codigo_colega` también.
-  **No hay migraciones pendientes.**
+  **Pendientes (verificado por REST 2026-10-19: las columnas no existen):**
+  `2026-10-19_propiedades_asesor.sql` y `2026-10-19_periodo_precio.sql`.
   Regla: antes de declarar una migración "pendiente" acá, verificarla con un
   `select` por REST — esta lista estuvo desactualizada del 2026-08-18 al
   2026-09-03.

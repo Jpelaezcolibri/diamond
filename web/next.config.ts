@@ -37,7 +37,6 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "statics.wasi.co" },
       { protocol: "https", hostname: "**.wasi.co" },
       { protocol: "https", hostname: "images.unsplash.com" },
-      { protocol: "https", hostname: "**.supabase.co" },
     ],
     formats: ["image/avif", "image/webp"],
   },
