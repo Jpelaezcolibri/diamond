@@ -168,7 +168,7 @@ test("proximo_disponible ya no existe: no busca espacio, no agenda y le pide a S
   assert.strictEqual(updateCalls.length, 0, "no se persiste nada");
   assert.strictEqual(ctx.cita, null);
   assert.strictEqual(ctx.appointmentAlert, null);
-  assert.match(out, /pregunt/i, "Sofi le pregunta al cliente que dia y hora le sirven");
+  assert.match(out, /horarios_disponibles/i, "Sofi le pregunta al cliente que dia y hora le sirven");
 });
 
 test("la tool agendar_cita ya no ofrece proximo_disponible ni le pide a Sofi confirmar", () => {

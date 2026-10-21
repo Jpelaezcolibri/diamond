@@ -439,3 +439,12 @@ test("colega solo llamada: la cita se cancela, no se le escribe y el equipo reci
     memory.colegasGrupos.length = 0;
   }
 });
+
+// T3b (revision final 2026-10-21): la hora nueva debe recibir su propio
+// recordatorio y postvisita al cliente.
+test("reprogramar limpia las marcas de recordatorio y postvisita del cliente", async () => {
+  const mod = instalar({ ...CITA, recordatorio_cliente_at: "2026-09-10T10:00:00Z", postvisita_at: "2026-09-10T20:00:00Z" });
+  await mod.reprogramar(ORG, "lead-1", { nuevaFechaHora: "2026-09-11T10:00:00-05:00" });
+  assert.strictEqual(leadGuardado.cita.recordatorio_cliente_at, null);
+  assert.strictEqual(leadGuardado.cita.postvisita_at, null);
+});

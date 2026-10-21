@@ -31,6 +31,9 @@ async function confirmar({ org, lead, advisor, deps = {} }) {
   const cita = {
     ...lead.cita,
     estado: "confirmada",
+    // Si venia reprogramada, la hora nueva debe recibir su recordatorio.
+    recordatorio_cliente_at: null,
+    postvisita_at: null,
     confirmada_at: new Date().toISOString(),
     confirmada_por: advisor.name,
     asesor_id: advisor.id,

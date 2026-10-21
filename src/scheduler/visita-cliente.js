@@ -72,7 +72,12 @@ function depsPorDefecto() {
       if (!sb) return [];
       const { data, error } = await sb
         .from("leads").select("id, org_id, nombre, phone, source, cita")
-        .eq("org_id", org.id).not("cita", "is", null).limit(500);
+        .eq("org_id", org.id)
+        .eq("cita->>estado", "confirmada")
+        // Ventana ancha en texto (los offsets de fecha_hora varian); pasoPendiente afina.
+        .gte("cita->>fecha_hora", new Date(Date.now() - 48 * 3600e3).toISOString())
+        .lte("cita->>fecha_hora", new Date(Date.now() + 48 * 3600e3).toISOString())
+        .order("cita->>fecha_hora", { ascending: true }).limit(1000);
       if (error) throw error;
       return data || [];
     },

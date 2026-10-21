@@ -50,7 +50,7 @@ test("el prompt no manda un SI pelado a transferir antes de ofrecer horarios", (
 
 test("el prompt trae el cierre de visita y ya no el Responde SI", () => {
   const p = JSON.stringify(buildSystemPrompt({ org: { name: "Diamond" }, lead: {} }));
-  assert.match(p, /¿Te la muestro esta semana\? Te propongo dos horarios\./);
+  assert.match(p, /¿Te la muestro\? Te propongo dos horarios\./);
   assert.match(p, /precio_m2/);
   assert.doesNotMatch(p, /Responde SI/);
 });

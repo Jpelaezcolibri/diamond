@@ -83,7 +83,7 @@ const TOOL_DEFINITIONS = [
   {
     name: "agendar_cita",
     description:
-      "Registra la SOLICITUD de cita del cliente (el dia y la hora que el pidio). Usala cuando el cliente diga cuando quiere que lo contacten, cuando quiere visitar un inmueble, o cuando agenda una asesoria (ej para vender). La cita queda SOLICITADA, no confirmada: le llega a quien coordina las visitas, que valida la disponibilidad y la confirma por WhatsApp. Si el resultado dice que NO se pudo agendar (fuera de horario o choque), pidele al cliente otro dia u hora y vuelve a intentar — no insistas con el mismo horario ni inventes horas libres. Llamala ANTES de transferir_a_asesor cuando el cliente ya dio dia/hora, para que el asesor reciba todo junto. Si el cliente pregunta cuando se puede ver sin proponer nada, primero usa horarios_disponibles y ofrecele dos de esos horarios; registra la cita con el que elija o con el que proponga.",
+      "Registra la SOLICITUD de cita del cliente (el dia y la hora que el pidio). Usala cuando el cliente diga cuando quiere que lo contacten, cuando quiere visitar un inmueble, o cuando agenda una asesoria (ej para vender). La cita queda SOLICITADA, no confirmada: le llega a quien coordina las visitas, que valida la disponibilidad y la confirma por WhatsApp. Si el resultado dice que NO se pudo agendar (fuera de horario o choque), pidele al cliente otro dia u hora y vuelve a intentar — no insistas con el mismo horario ni inventes horas libres. Llamala ANTES de transferir_a_asesor cuando el cliente ya dio dia/hora, para que el asesor reciba todo junto. Si el cliente pregunta cuando se puede ver sin proponer nada, primero usa horarios_disponibles y ofrécele dos de esos horarios; registra la cita con el que elija o con el que proponga.",
     input_schema: {
       type: "object",
       properties: {
@@ -945,7 +945,7 @@ async function executeTool(name, input, ctx) {
     // agenda y Sofi se lo confirmaba al cliente: se quito de la tool. Si un
     // historial viejo la sigue mandando, no se agenda nada.
     if (input.proximo_disponible) {
-      return "No escojas un espacio de la agenda por tu cuenta. Preguntale al cliente que dia y a que hora le sirve, y registra la cita con fecha_hora_iso cuando te lo diga: la asesora valida la disponibilidad y le confirma.";
+      return "No escojas un espacio de la agenda por tu cuenta. Llama horarios_disponibles, ofrécele al cliente dos de esos horarios (o toma la hora que él proponga) y registra la cita con fecha_hora_iso: la asesora valida la disponibilidad y le confirma.";
     }
 
     const cita = {

@@ -219,6 +219,9 @@ async function reprogramar(org, leadId, { nuevaFechaHora, motivo = null, sesion 
     // nunca recibia el de la hora nueva (isReminderDue lo descarta). Es el
     // mismo campo que src/scheduler/reminders.js resetea cuando el envio falla.
     recordatorio_enviado: false,
+    // La hora nueva merece su propio recordatorio y postvisita al cliente.
+    recordatorio_cliente_at: null,
+    postvisita_at: null,
     reprogramada_desde: lead.cita.fecha_hora || null,
     reprogramada_at: new Date().toISOString(),
     reprogramada_motivo: motivo,

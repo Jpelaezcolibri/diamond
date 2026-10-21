@@ -105,6 +105,7 @@ async function cargarCandidatos(org, ahora) {
     .eq("org_id", org.id)
     .eq("estado", "activa")
     .gte("last_activity_at", desde)
+    .order("last_activity_at", { ascending: false })
     .limit(300);
   if (error) throw error;
   if (!convs || !convs.length) return [];

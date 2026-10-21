@@ -71,3 +71,11 @@ test("un número que no es asesor activo no puede tocar la cita", async () => {
   await cc.procesarBotonCita(ORG, "573129999999", "cita:l1:confirmar", { deps: deps() });
   assert.strictEqual(memory.leads[0].cita.estado, "propuesta");
 });
+
+test("confirmar limpia las marcas de recordatorio/postvisita de una hora anterior", async () => {
+  memory.leads[0].cita.recordatorio_cliente_at = "2026-10-08T10:00:00Z";
+  memory.leads[0].cita.postvisita_at = "2026-10-08T20:00:00Z";
+  await cc.confirmar({ org: ORG, lead: memory.leads[0], advisor: A1, deps: deps() });
+  assert.strictEqual(memory.leads[0].cita.recordatorio_cliente_at, null);
+  assert.strictEqual(memory.leads[0].cita.postvisita_at, null);
+});
