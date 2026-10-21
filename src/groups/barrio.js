@@ -106,4 +106,35 @@ function otrosBarrios(p, sectoresPedidos = []) {
   return hijas.filter((h) => !pedidos.has(h) && aparece(texto, patronDe([h])));
 }
 
-module.exports = { nombra, otrosBarrios, normalizar };
+// ¿LA FICHA DICE DONDE QUEDA? (revision final del rescate, 2026-10-20).
+// otrosBarrios es angosto a proposito porque DESCARTA: exige que un INTRO
+// presente el nombre y no cuenta "via las Antillas". Esta otra pregunta es la
+// de publicable.js para decidir si `sector_sin_confirmar` es un dato que de
+// verdad no tenemos: si el titulo o la descripcion nombran un barrio conocido
+// del municipio que el pedido NO pidio, el barrio no es "desconocido" y la
+// ficha no puede salir con "el barrio exacto no lo tengo registrado".
+// Casos: 10031500 "Sector Campestre Via las Antillas Envigado" para un pedido
+// de Dorado o La Paz; 8989725 "Apartamento Moderno Poblado Palmas" para un
+// pedido de San Lucas o Zuniga. Aca no importa la cercania (si la ficha se
+// ubica por otro barrio, ya no es un dato que falta) y solo las palabras de
+// todos los dias siguen pidiendo un INTRO ("barrio La Paz", no "paz").
+const PALABRAS_COMUNES = new Set([
+  "paz", "dorado", "mesa", "oasis", "brujas", "atravesado", "cuenca", "portal", "salado", "magnolia",
+  "tesoro", "bonito", "linde", "lucas", "indio", "parra", "carlota", "lorena", "castellana", "milan",
+  "abadia", "marcos", "cumbres", "rodeo",
+]);
+
+function mencionaOtroBarrio(p, sectoresPedidos = []) {
+  const ubic = String(p.zona || "").trim() || String(p.ciudad || "").trim();
+  const hijas = zonas.hijasDe(zonas.zonaTokens(ubic));
+  if (!hijas.length) return [];
+  const pedidos = new Set(sectoresPedidos.flatMap(claves));
+  const texto = textoDe(p);
+  return hijas.filter((h) => {
+    if (pedidos.has(h)) return false;
+    const patron = PALABRAS_COMUNES.has(h) ? ` ${INTRO} ${h}\\b` : ` ${h}\\b`;
+    return new RegExp(patron).test(texto);
+  });
+}
+
+module.exports = { nombra, otrosBarrios, mencionaOtroBarrio, normalizar };

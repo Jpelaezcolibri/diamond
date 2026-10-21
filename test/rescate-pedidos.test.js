@@ -154,7 +154,7 @@ test("planificar: lo que Sofi descarto (sin decir aliado) no sale; lo que nunca 
 test("planificar: descarte de Sofi por 'aliado' no vale para una propia", async () => {
   const { d } = deps({ cruzar: async () => [ficha({ ref: "A1", puntaje: 100 })] });
   const s = senal({
-    matches: [{ ref: "A1" }],
+    matches: [{ ref: "A1", puntaje: 100, fuente: "diamond" }],
     revalidacion: { es_pedido_real: true, sirve_alguna: false, refs_utiles: [], refs_dudosas: [], por_que: "Las tres son de aliados" },
   });
   const p = await rescate.planificar({ id: "org1" }, s, d, { ahora: AHORA });
@@ -336,4 +336,87 @@ test("arranque: imprime los frenos efectivos", async () => {
   const { d } = deps({ log: (...a) => lineas.push(a.join(" ")), frenosEfectivos: () => ({ cuota_max: 0.8, horario: "L-S" }) });
   await rescate.ejecutar({ horas: 24, aplicar: false, solo: null, salida: os.tmpdir() }, d);
   assert.ok(lineas.some((l) => /Frenos efectivos: cuota_max=0.8 · horario=L-S/.test(l)));
+});
+
+// ── Revision final (2026-10-20) ──
+
+test("87203925: 'Las dos de aliados no se ofrecen' con Sofi aprobando otra: la propia descartada NO vuelve", async () => {
+  const { d } = deps({
+    cruzar: async () => [ficha({ ref: "A1", puntaje: 90 }), ficha({ ref: "P2", puntaje: 100 })],
+  });
+  const s = senal({
+    matches: [{ ref: "A1", puntaje: 90 }, { ref: "P2", puntaje: 100, fuente: "diamond" }, { ref: null, fuente: "aliado" }],
+    revalidacion: {
+      es_pedido_real: true, sirve_alguna: true, refs_utiles: ["A1"], refs_dudosas: [],
+      por_que: "La A1 cumple. La P2 tiene 2 baños y pidió 3. Las dos de aliados no se ofrecen.", le_falta: [], sin_confirmar: [],
+    },
+  });
+  const p = await rescate.planificar({ id: "org1" }, s, d, { ahora: AHORA });
+  assert.deepStrictEqual(p.fichas.map((f) => f.ref), ["A1"]);
+  assert.deepStrictEqual(p.excluidasPorSofi, [{ ref: "P2", motivo: "sofi_descarto" }]);
+});
+
+test("el radar y el lote usan la misma regla de 'aliado': solo sin aprobadas, solo propias >= 95", () => {
+  const { rescatarDescartesFalsos } = require("../src/groups/vivo");
+  const matches = [{ ref: "P1", puntaje: 100, fuente: "diamond" }, { ref: "P2", puntaje: 80 }, { ref: "AL", puntaje: 100, fuente: "aliado" }];
+  const sinAprobar = { es_pedido_real: true, sirve_alguna: false, refs_utiles: [], refs_dudosas: [], por_que: "Son de aliados" };
+  assert.deepStrictEqual(rescatarDescartesFalsos(sinAprobar, matches).refs_utiles, ["P1"]);
+  const conAprobada = { ...sinAprobar, sirve_alguna: true, refs_utiles: ["P2"], por_que: "Las dos de aliados no se ofrecen" };
+  assert.strictEqual(rescatarDescartesFalsos(conAprobada, matches), conAprobada);
+  const sinAliado = { ...sinAprobar, por_que: "Tiene 2 baños" };
+  assert.strictEqual(rescatarDescartesFalsos(sinAliado, matches), sinAliado);
+});
+
+test("los matches de aliado sin ref no se imprimen como 'excluida por Sofi: null'", async () => {
+  const lineas = [];
+  const { d } = deps({
+    log: (...a) => lineas.push(a.join(" ")),
+    leerSenales: async () => [senal({
+      matches: [{ ref: "A1", puntaje: 90 }, { ref: null, fuente: "aliado" }],
+      revalidacion: { es_pedido_real: true, sirve_alguna: true, refs_utiles: ["A1"], refs_dudosas: [], por_que: "ok", le_falta: [], sin_confirmar: [] },
+    })],
+  });
+  await rescate.ejecutar({ horas: 24, aplicar: false, solo: null, salida: os.tmpdir() }, d);
+  assert.ok(!lineas.some((l) => /excluida por Sofi: null/.test(l)));
+});
+
+test("un telefono de 12 digitos no es un lid (los lids tienen 14-17)", async () => {
+  const { d } = deps({ telefonoDe: async () => "573001234567" });
+  const p = await rescate.planificar({ id: "org1" }, senal({ autor_telefono: "573001234567" }), d, { ahora: AHORA });
+  assert.strictEqual(p.via, "telefono");
+  assert.strictEqual(p.lid, null);
+  const conLid = await rescate.planificar({ id: "org1" }, senal({ autor_telefono: LID }), d, { ahora: AHORA });
+  assert.strictEqual(conLid.via, "lid");
+});
+
+test("mascararTexto tapa celulares y UUIDs (la linea de frenos imprime el entorno RADAR_)", () => {
+  const t = rescate.mascararTexto("RADAR_REVISOR_PHONE=573011880668,RADAR_ADMIN=3f1a2b3c-1234-4abc-9def-0123456789ab");
+  assert.ok(!t.includes("573011880668"));
+  assert.ok(!t.includes("3f1a2b3c-1234-4abc-9def-0123456789ab"));
+  assert.match(t, /RADAR_REVISOR_PHONE=…0668/);
+});
+
+test("2e6fea9a: las fichas que Sofi no vio llevan sus notas desde el dato y la salvedad habla solo de lo que ella vio", async () => {
+  const { d } = deps({
+    cruzar: async () => [
+      ficha({ ref: "10013189", puntaje: 93, administracion: "No aplica" }),
+      ficha({ ref: "10113016", puntaje: 92, administracion: "$180.000", caracteristicas: "balcon, cuarto util", razones: ["Zona: Laureles", "$820M — 9% sobre $750M, dentro del margen"] }),
+    ],
+  });
+  const s = senal({
+    matches: [{ ref: "10013189", puntaje: 93 }],
+    revalidacion: {
+      es_pedido_real: true, sirve_alguna: true, refs_utiles: ["10013189"], refs_dudosas: [], por_que: "cumple",
+      sin_confirmar: ["cuarto útil", "para estrenar", "administración"],
+      le_falta: [{ ref: "10013189", detalle: "cuesta $820M y pediste hasta $750M" }, { ref: "10113016", detalle: "nota que no aplica" }],
+    },
+  });
+  const p = await rescate.planificar({ id: "org1" }, s, d, { ahora: AHORA });
+  assert.strictEqual(p.sale, true);
+  const [presentacion, f1, f2] = p.mensajes.map((m) => m.texto);
+  assert.match(presentacion, /No tengo confirmado si tienen cuarto útil \(en 10013189\) ni para estrenar \(en 10013189\) —/);
+  assert.doesNotMatch(presentacion, /administración/);
+  assert.match(f1, /cuesta \$820M y pediste hasta \$750M/);
+  assert.match(f2, /Aclaración: cuesta \$820M y pediste hasta \$750M/);
+  assert.doesNotMatch(f2, /nota que no aplica/);
 });

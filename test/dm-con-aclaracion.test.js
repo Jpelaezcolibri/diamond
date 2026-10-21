@@ -228,3 +228,105 @@ test("precio: sin presupuesto en el pedido: bloqueada", () => {
   const r = publicable.filtrar([m], { umbral: 0, conAclaracion: true });
   assert.deepStrictEqual(r.publicables, []);
 });
+
+// ── Revision final del rescate (2026-10-20) ────────────────────────────────
+
+function pedidoBarrio(zonas, extra = {}) {
+  return {
+    operacion: "venta", tipo: "apartamento", zona: zonas[0], zonas, zonas_excluidas: [],
+    ciudad: "", precio_max: 1000000000, precio_min: 0, habitaciones: 2, area_min: 0, banos: 0, garajes: 0,
+    estrato: 0, amoblado: "", periodo: "", piso_max: 0, piso_min: 0, ...extra,
+  };
+}
+
+function aptoBarrio(extra = {}) {
+  return {
+    ref: "X1", titulo: "Apartamento en Venta Envigado", tipo: "Apartamento", operacion: "Venta",
+    precio: "$490.000.000", area: "70m2", habitaciones: 3, zona: "Envigado", ciudad: "Envigado",
+    descripcion: "", caracteristicas: "", link: "https://diamondinmobiliaria.com/p/x1",
+    linkWasi: "https://info.wasi.co/apartamento-venta-envigado/10031500", ...extra,
+  };
+}
+
+test("8149db34: pedido Dorado/La Paz y la ficha dice 'Sector Campestre Via las Antillas': barrio conocido, bloqueada", () => {
+  const m = evaluarCandidata(
+    aptoBarrio({ ref: "10031500", titulo: "Vendo Apartamento Sector Campestre Via las Antillas Envigado" }),
+    pedidoBarrio(["Dorado", "La Paz"], { precio_max: 620000000 }),
+    "diamond"
+  );
+  assert.ok(m, "el motor la sigue trayendo (la asesora la puede ver)");
+  assert.strictEqual(m.ubicacion, "zona_general");
+  assert.deepStrictEqual(m.barrio_en_ficha, ["antillas"]);
+  const r = publicable.filtrar([m], ON);
+  assert.deepStrictEqual(r.publicables, []);
+  assert.deepStrictEqual(r.aclaraciones, []);
+  assert.ok(r.descartados[0].motivos.includes("sector_sin_confirmar"));
+});
+
+test("4015a81c: pedido San Lucas/Calle 10/Zúñiga y la ficha dice 'Poblado Palmas': barrio conocido, bloqueada", () => {
+  const m = evaluarCandidata(
+    aptoBarrio({ ref: "8989725", titulo: "Apartamento Moderno Poblado Palmas", zona: "El Poblado", ciudad: "Medellín", precio: "$940.000.000" }),
+    pedidoBarrio(["Calle 10", "San Lucas", "Zúñiga"]),
+    "diamond"
+  );
+  assert.ok(m);
+  assert.strictEqual(m.ubicacion, "zona_general");
+  assert.deepStrictEqual(m.barrio_en_ficha, ["palmas"]);
+  const r = publicable.filtrar([m], ON);
+  assert.deepStrictEqual(r.publicables, []);
+  assert.ok(r.descartados[0].motivos.includes("sector_sin_confirmar"));
+});
+
+test("ficha sin barrio en el titulo: el barrio sigue siendo desconocido y sale con aclaracion", () => {
+  const m = evaluarCandidata(aptoBarrio({ titulo: "Apartamento en Venta Envigado", descripcion: "Cocina integral, mesa de comedor y zona de paz." }), pedidoBarrio(["Dorado", "La Paz"], { precio_max: 620000000 }), "diamond");
+  assert.strictEqual(m.ubicacion, "zona_general");
+  assert.strictEqual(m.barrio_en_ficha, undefined, "palabras comunes sin 'barrio'/'sector' no cuentan");
+  const r = publicable.filtrar([m], ON);
+  assert.strictEqual(r.publicables.length, 1);
+  assert.deepStrictEqual(r.aclaraciones[0].motivos, ["sector_sin_confirmar"]);
+});
+
+test("3ee69b01: la salvedad no nombra una ref que no va en el DM", () => {
+  const props = [ficha({ ref: "9944723", caracteristicas: "Balcón, Vista panorámica" })];
+  const aclaraciones = [{ ref: "9944723", motivos: ["precio_sin_confirmar"], detalle: "te confirmo el precio final" }];
+  const notas = publicable.notasParaDm({ sinConfirmar: ["cuarto útil (en 9944723 y 10129664)"], leFalta: [] }, aclaraciones, props);
+  assert.deepStrictEqual(notas.sinConfirmar, ["cuarto útil"]);
+  assert.ok(!notas.sinConfirmar.join(" ").includes("10129664"));
+  // Sin aclaraciones (interruptor apagado) tampoco nombra la que no va.
+  const apagado = publicable.notasParaDm({ sinConfirmar: ["cuarto útil (en 9944723 y 10129664)"], leFalta: [] }, [], props);
+  assert.deepStrictEqual(apagado.sinConfirmar, ["cuarto útil"]);
+  // Si solo nombra refs que no van, la nota se va.
+  const fuera = publicable.notasParaDm({ sinConfirmar: ["terraza (en 10129664)"], leFalta: [] }, [], props);
+  assert.deepStrictEqual(fuera.sinConfirmar, []);
+});
+
+test("2e6fea9a: 'administración' sin confirmar solo para la ficha que no la muestra", () => {
+  const props = [
+    ficha({ ref: "10013189", administracion: "No aplica", caracteristicas: "balcon, piso 5" }),
+    ficha({ ref: "9944723" }),
+    ficha({ ref: "10113016", administracion: "$180.000" }),
+  ];
+  const aclaraciones = [{ ref: "10113016", motivos: ["piso_sin_confirmar"], detalle: "no tengo registrado en qué piso está" }];
+  const notas = publicable.notasParaDm({ sinConfirmar: ["cuarto útil", "piso exacto", "administración"], leFalta: [] }, aclaraciones, props);
+  assert.deepStrictEqual(notas.sinConfirmar, ["cuarto útil", "administración (en 9944723)"]);
+  // Si todas la muestran, no se menciona.
+  const todas = publicable.notasParaDm({ sinConfirmar: ["administración"], leFalta: [] }, [], [props[0], props[2]]);
+  assert.deepStrictEqual(todas.sinConfirmar, []);
+  // El cuarto útil registrado en la ficha tampoco se da por desconocido.
+  const conCuarto = publicable.notasParaDm({ sinConfirmar: ["cuarto útil"], leFalta: [] }, [], [ficha({ ref: "A", caracteristicas: "piso 9, cuarto util" }), ficha({ ref: "B" })]);
+  assert.deepStrictEqual(conCuarto.sinConfirmar, ["cuarto útil (en B)"]);
+});
+
+test("revisadas: una nota de Sofi sin refs habla solo de las fichas que ella vio", () => {
+  const props = [ficha({ ref: "A" }), ficha({ ref: "B" })];
+  const n = publicable.notasParaDm({ sinConfirmar: ["para estrenar"], leFalta: [] }, [], props, { revisadas: new Set(["A"]) });
+  assert.deepStrictEqual(n.sinConfirmar, ["para estrenar (en A)"]);
+  const nadie = publicable.notasParaDm({ sinConfirmar: ["para estrenar"], leFalta: [] }, [], props, { revisadas: new Set() });
+  assert.deepStrictEqual(nadie.sinConfirmar, []);
+});
+
+test("prompt de Sofi, regla 43: la frase que se le dice al cliente va en tuteo", () => {
+  const fuente = require("node:fs").readFileSync(require.resolve("../src/agent/prompts.js"), "utf8");
+  assert.match(fuente, /¿la consultas para ti o para un cliente tuyo de otra inmobiliaria\?/);
+  assert.doesNotMatch(fuente, /para vos o para/);
+});

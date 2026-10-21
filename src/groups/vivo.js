@@ -423,11 +423,14 @@ async function quitarYaEnviadas(org, { lid = null, telefono = null } = {}, propi
 // Las notas de Sofi (salvedad y le_falta) con las aclaraciones de las fichas
 // que salen con un dato por confirmar (ver publicable.js#notasParaDm). Sin
 // aclaraciones son las notas de Sofi tal cual.
-function notasDelVeredicto(rev, aclaraciones, props) {
+// `revisadas` (opcional, lo usa el script de rescate): las refs que Sofi vio
+// al escribir esas notas; ver publicable.js#salvedadDeLasFichas.
+function notasDelVeredicto(rev, aclaraciones, props, { revisadas = null } = {}) {
   return publicable.notasParaDm(
     { sinConfirmar: (rev && rev.sin_confirmar) || [], leFalta: (rev && rev.le_falta) || [] },
     aclaraciones || [],
-    props
+    props,
+    { revisadas }
   );
 }
 
@@ -458,11 +461,16 @@ async function guardarMotivoSalida(org, signal, motivo, trazaPrevia = []) {
 // Un descarte de Sofi que contradice el dato no vale: una ref PROPIA (no de
 // aliado) con puntaje >= 95 que Sofi saca diciendo que "es de aliados" vuelve a
 // refs_utiles (caso ccdc2404: la 10013037, puntaje 100, "las tres son de
-// aliados"). Angosto a proposito: solo propias, solo >= 95, solo si el texto
-// de Sofi menciona "aliad", y solo si no la marco ni util ni dudosa.
+// aliados"). Angosto a proposito: solo si Sofi no aprobo NINGUNA (si aprobo
+// otras, "las dos de aliados no se ofrecen" habla de las de aliado y la propia
+// que dejo afuera la descarto por otra razon -- caso 87203925), solo propias,
+// solo >= 95, solo si el texto de Sofi menciona "aliad", y solo si no la marco
+// ni util ni dudosa. scripts/rescate-pedidos.js usa esta misma funcion: el
+// radar y el lote tienen que decidir igual.
 function rescatarDescartesFalsos(veredicto, matches) {
   if (!veredicto || !veredicto.es_pedido_real || !/aliad/i.test(String(veredicto.por_que || ""))) return veredicto;
   const utiles = Array.isArray(veredicto.refs_utiles) ? veredicto.refs_utiles.map(String) : [];
+  if (utiles.length > 0) return veredicto;
   const dudosas = Array.isArray(veredicto.refs_dudosas) ? veredicto.refs_dudosas.map(String) : [];
   const rescatadas = (matches || [])
     .filter((m) => m && m.ref !== null && m.ref !== undefined && m.fuente !== "aliado" && Number(m.puntaje) >= 95)
@@ -1863,5 +1871,5 @@ module.exports = {
   procesarMensaje, idEnVivo, asistir, destinatarios, aprobarManual, responderPorDmManual, prepararAviso,
   manejarOferta, VENTANA_LIMITE_HORAS,
   // Para scripts/rescate-pedidos.js: el lote arma el DM con las mismas piezas.
-  quitarYaEnviadas, pedidoDe, notasDelVeredicto, refsConAclaracion,
+  quitarYaEnviadas, pedidoDe, notasDelVeredicto, refsConAclaracion, rescatarDescartesFalsos,
 };

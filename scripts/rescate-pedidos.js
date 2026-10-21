@@ -18,7 +18,8 @@
 //   3. Vuelve a cruzar el pedido contra el inventario con el motor ACTUAL
 //      (match.cruzar, el mismo del radar): los matches guardados son de antes
 //      de los arreglos y no traen precio_texto_en_margen.
-//   4. Lo que Sofi ya descarto (por algo que no sea "es de aliado") no sale; su
+//   4. Lo que Sofi ya descarto no sale (el descarte "es de aliado" falso se
+//      corrige con vivo.js#rescatarDescartesFalsos, igual que en el radar); su
 //      veredicto guardado se imprime al lado para que Juan lo vea. No se le
 //      vuelve a preguntar a Sofi: el lote es determinista.
 //   5. Compuerta de calidad con aclaracion (publicable.filtrar, conAclaracion,
@@ -65,7 +66,9 @@ function enmascarar(v) {
 
 // Los errores de WAHA pueden traer el destino ("Destino invalido: 57300...").
 function mascararTexto(v) {
-  return String(v == null ? "" : v).replace(/\d{10,}/g, (m) => `…${m.slice(-4)}`);
+  return String(v == null ? "" : v)
+    .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, (m) => `…${m.slice(-4)}`)
+    .replace(/\d{10,}/g, (m) => `…${m.slice(-4)}`);
 }
 
 const normTexto = (t) =>
@@ -105,17 +108,25 @@ function claveCampos(s) {
   return [s.operacion, s.tipo, s.zona, s.precio_max, s.habitaciones].map((v) => String(v ?? "").trim().toLowerCase()).join("|");
 }
 
+// Las refs que Sofi VIO (las de signal.matches), sin los matches de aliado
+// guardados sin ref.
+function refsVistas(matchesVistos) {
+  return new Set((matchesVistos || []).filter((m) => m && m.ref !== null && m.ref !== undefined).map((m) => String(m.ref)));
+}
+
 // Lo que Sofi ya descarto, con su veredicto guardado. Solo cuenta para las refs
-// que Sofi VIO (las de signal.matches): una que el motor encuentra hoy y antes
-// no, Sofi nunca la juzgo. Un descarte que dice "aliado" no vale: el lote solo
-// cruza inventario propio (caso ccdc2404, "las tres son de aliados").
-function excluirPorSofi(rev, matchesVistos, candidatas) {
-  if (!rev) return { quedan: candidatas, excluidas: [] };
-  const vistas = new Set((matchesVistos || []).map((m) => String(m && m.ref)));
+// que Sofi VIO: una que el motor encuentra hoy y antes no, Sofi nunca la juzgo.
+// El descarte "de aliado" que no vale se decide con la MISMA funcion del radar
+// (vivo.js#rescatarDescartesFalsos: solo si Sofi no aprobo ninguna, solo
+// propias de puntaje >= 95), para que el lote y el radar dejen salir lo mismo.
+function excluirPorSofi(rev0, matchesVistos, candidatas) {
+  if (!rev0) return { quedan: candidatas, excluidas: [] };
+  const { rescatarDescartesFalsos } = require("../src/groups/vivo");
+  const rev = rescatarDescartesFalsos(rev0, matchesVistos) || rev0;
+  const vistas = refsVistas(matchesVistos);
   const utiles = new Set((rev.refs_utiles || []).map(String));
   const dudosas = new Set((rev.refs_dudosas || []).map(String));
   const motivoDudosa = new Map((rev.dudosas_motivo || []).map((d) => [String(d.ref), d.motivo]));
-  const diceAliado = /aliad/i.test(String(rev.por_que || ""));
   const quedan = [];
   const excluidas = [];
   for (const m of candidatas) {
@@ -126,13 +137,40 @@ function excluirPorSofi(rev, matchesVistos, candidatas) {
       const motivo = motivoDudosa.get(ref) || "sin_motivo";
       if (motivo === "aliado" || motivo === "dato_que_no_registramos") quedan.push(m);
       else excluidas.push({ ref, motivo: `sofi_dudosa:${motivo}` });
-    } else if (diceAliado) {
-      quedan.push(m);
     } else {
       excluidas.push({ ref, motivo: "sofi_descarto" });
     }
   }
   return { quedan, excluidas };
+}
+
+// Las fichas que Sofi no vio no tienen su le_falta: lo que se sabe que no
+// alcanza (cortos del motor: "(pediste N)", precio dentro del margen) se
+// escribe desde el dato, igual que revalidar.js#aplicarCuenta. Caso 2e6fea9a:
+// la 10113016 ($820M contra $750M) salia sin decirlo.
+function leFaltaCalculado(m) {
+  const { cortosDe } = require("../src/groups/revalidar");
+  return cortosDe(m).map((r) => {
+    const precio = String(r).match(/^(\S+) — \d+% sobre (\S+), dentro del margen/);
+    if (precio) return `cuesta ${precio[1]} y pediste hasta ${precio[2]}`;
+    return String(r).replace(/\s*\(pediste (\d+)\)/, " y pediste $1").replace(/ — /, ": ");
+  });
+}
+
+// Las notas del DM del lote: las de Sofi solo para las fichas que ella vio
+// (la salvedad sin refs habla solo de esas; ver
+// publicable.js#salvedadDeLasFichas) y, para las demas, lo que dice el dato.
+function notasDelLote(rev, aclaraciones, props, vistas) {
+  const { notasDelVeredicto } = require("../src/groups/vivo");
+  const leFaltaSofi = ((rev && rev.le_falta) || []).filter((f) => f && f.ref != null && vistas.has(String(f.ref)));
+  const calculado = [];
+  for (const m of props) {
+    const ref = String(m.ref);
+    if (vistas.has(ref)) continue;
+    for (const detalle of leFaltaCalculado(m)) calculado.push({ ref, detalle });
+  }
+  const revLote = { ...(rev || {}), le_falta: [...leFaltaSofi, ...calculado] };
+  return notasDelVeredicto(revLote, aclaraciones, props, { revisadas: vistas });
 }
 
 // ── Dependencias reales (se cargan solo al correr el script) ──
@@ -205,7 +243,8 @@ function depsReales() {
         amoblado_activo: carril.carrilActivo(),
         amoblado_umbral: carril.umbralDm ? carril.umbralDm() : process.env.RADAR_AMOBLADO_UMBRAL_DM || "(default)",
         sesion: "unica activa en la base",
-        env_RADAR: Object.keys(process.env).filter((k) => k.startsWith("RADAR_")).map((k) => `${k}=${process.env[k]}`).join(",") || "(ninguna)",
+        // Enmascarado: aca van los celulares de las asesoras y el UUID del admin.
+        env_RADAR: mascararTexto(Object.keys(process.env).filter((k) => k.startsWith("RADAR_")).map((k) => `${k}=${process.env[k]}`).join(",")) || "(ninguna)",
       };
     },
     dormir: (ms) => new Promise((r) => setTimeout(r, ms)),
@@ -226,7 +265,7 @@ async function planificar(org, s, deps, { ahora, aplicar = false, yaPlaneadas = 
   const redactar = require("../src/groups/redactar");
   const carrilArriendo = require("../src/groups/carril-arriendo");
   const codigoColega = require("../src/groups/codigo-colega");
-  const { pedidoDe, notasDelVeredicto, refsConAclaracion } = require("../src/groups/vivo");
+  const { pedidoDe, refsConAclaracion } = require("../src/groups/vivo");
 
   const rev = s.revalidacion || null;
   const base = {
@@ -244,7 +283,8 @@ async function planificar(org, s, deps, { ahora, aplicar = false, yaPlaneadas = 
   // no es un pedido nuevo.
   if (codigoColega.leerCodigo(s.texto_original)) return no("pedido_a_sofi");
 
-  const lid = digitos(s.autor_telefono).length >= 10 ? digitos(s.autor_telefono) : null;
+  // Un lid tiene 14-17 digitos (directorio.js); un telefono de 12 no es lid.
+  const lid = digitos(s.autor_telefono).length >= 13 ? digitos(s.autor_telefono) : null;
   const telefono = s.autor_telefono ? await Promise.resolve(deps.telefonoDe(org.id, s.autor_telefono)).catch(() => null) : null;
   if (!lid && !telefono) return no("sin_destino");
   const via = lid ? "lid" : "telefono";
@@ -294,7 +334,7 @@ async function planificar(org, s, deps, { ahora, aplicar = false, yaPlaneadas = 
   if (!aEnviar.length) return no("ya_se_le_mando", { ...extra, repetidas });
 
   const props = aEnviar.slice(0, redactar.MAX_POR_DM);
-  const notas = notasDelVeredicto(rev, aclaraciones, props);
+  const notas = notasDelLote(rev, aclaraciones, props, refsVistas(s.matches));
   const codigo = (await deps.codigo(org, s, { aplicar })) || (aplicar ? null : CODIGO_PROVISIONAL);
   const armado = redactar.mensajesAlColega({ autor_nombre: s.autor_nombre }, aEnviar, {
     org,
@@ -355,7 +395,7 @@ function imprimirPedido(p, log) {
   } else {
     log("  Sofi: sin veredicto guardado");
   }
-  for (const e of p.excluidasPorSofi || []) log(`  excluida por Sofi: ${e.ref} (${e.motivo})`);
+  for (const e of (p.excluidasPorSofi || []).filter((x) => x.ref != null && x.ref !== "null")) log(`  excluida por Sofi: ${e.ref} (${e.motivo})`);
   for (const d of p.descartadas || []) log(`  descartada: ${d.ref} (${(d.motivos || []).join(", ")})`);
   if (!p.sale) {
     log(`  motivo: ${p.motivo}`);
@@ -517,7 +557,7 @@ function diaBogota(fecha) {
 }
 
 module.exports = {
-  parsearArgs, enmascarar, mascararTexto, seleccionar, agruparDuplicados, excluirPorSofi, planificar, ejecutar, frenoDeLinea,
+  parsearArgs, enmascarar, mascararTexto, seleccionar, agruparDuplicados, excluirPorSofi, leFaltaCalculado, planificar, ejecutar, frenoDeLinea,
 };
 
 if (require.main === module) {

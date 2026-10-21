@@ -728,6 +728,10 @@ function evaluarCandidata(p, c, fuente) {
     // Como calzo la ubicacion: exacta | vecina | otra_zona | ciudad. Sofi lo
     // usa para razonar y publicable.js para decidir si puede salir al grupo.
     ubicacion: ubicacion.grado,
+    // Barrios conocidos que la ficha nombra y el pedido no (solo con
+    // zona_general): con esto el barrio no es "desconocido" y publicable.js no
+    // deja salir la ficha con aclaracion. Ver barrio.js#mencionaOtroBarrio.
+    ...(ubicacion.otrosEnFicha ? { barrio_en_ficha: ubicacion.otrosEnFicha } : {}),
     razones,
     ...(fuente === "aliado" ? { inmobiliaria: p.inmobiliaria_origen || null } : {}),
   };

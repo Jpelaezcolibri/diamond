@@ -238,6 +238,12 @@ function soloAclarables(motivos, match) {
   if (!Array.isArray(motivos) || motivos.length === 0) return false;
   if (!motivos.every((m) => MOTIVOS_ACLARABLES.has(m))) return false;
   if (motivos.includes("precio_sin_confirmar") && !(match && match.precio_texto_en_margen === true)) return false;
+  // El barrio solo es aclarable si de verdad no se sabe: si la ficha nombra
+  // otro barrio conocido del municipio (match.js#barrio_en_ficha), decirle al
+  // colega "el barrio exacto no lo tengo registrado" seria falso. Revision
+  // final del rescate (2026-10-20): 10031500 "Via las Antillas" para un pedido
+  // de Dorado/La Paz, 8989725 "Poblado Palmas" para San Lucas/Zuniga.
+  if (motivos.includes("sector_sin_confirmar") && match && Array.isArray(match.barrio_en_ficha) && match.barrio_en_ficha.length) return false;
   return true;
 }
 
@@ -491,8 +497,9 @@ function aclaracionParaColega(motivos) {
 //   · sinConfirmar: la salvedad del primer mensaje deja de nombrar lo que ya
 //     va aclarado en la ficha (piso, parqueadero, precio, barrio).
 // `props` son las fichas que de verdad van en el mensaje: una aclaracion de
-// una ref que no sale no puede tocar la salvedad. Sin aclaraciones devuelve
-// las notas tal cual: con el interruptor apagado nada cambia.
+// una ref que no sale no puede tocar la salvedad. Sin aclaraciones las notas
+// de Sofi no se combinan con nada; con `props`, la salvedad igual se recorta a
+// las fichas que van (salvedadDeLasFichas), tambien con el interruptor apagado.
 const TEMA_DEL_MOTIVO = {
   sector_sin_confirmar: /barrio|sector/i,
   piso_sin_confirmar: /\bpisos?\b/i,
@@ -500,10 +507,10 @@ const TEMA_DEL_MOTIVO = {
   precio_sin_confirmar: /\bprecio/i,
 };
 
-function notasParaDm({ sinConfirmar = [], leFalta = [] } = {}, aclaraciones = [], props = null) {
+function notasParaDm({ sinConfirmar = [], leFalta = [] } = {}, aclaraciones = [], props = null, { revisadas = null } = {}) {
   const refsQueSalen = props ? new Set(props.map((m) => String(m && m.ref))) : null;
   const vigentes = (aclaraciones || []).filter((a) => a && (!refsQueSalen || refsQueSalen.has(String(a.ref))));
-  if (!vigentes.length) return { sinConfirmar, leFalta };
+  if (!vigentes.length) return { sinConfirmar: props ? salvedadDeLasFichas(sinConfirmar, props, revisadas) : sinConfirmar, leFalta };
 
   const notas = Array.isArray(leFalta) ? leFalta : [];
   const refsAclaradas = new Set(vigentes.map((a) => String(a.ref)));
@@ -519,7 +526,79 @@ function notasParaDm({ sinConfirmar = [], leFalta = [] } = {}, aclaraciones = []
 
   const temas = [...new Set(vigentes.flatMap((a) => a.motivos))].map((m) => TEMA_DEL_MOTIVO[m]).filter(Boolean);
   const salvedad = (Array.isArray(sinConfirmar) ? sinConfirmar : []).filter((item) => !temas.some((re) => re.test(String(item || ""))));
-  return { sinConfirmar: salvedad, leFalta: [...otras, ...combinadas] };
+  return { sinConfirmar: props ? salvedadDeLasFichas(salvedad, props, revisadas) : salvedad, leFalta: [...otras, ...combinadas] };
+}
+
+// LA SALVEDAD HABLA SOLO DE LAS FICHAS QUE VAN (revision final del rescate,
+// 2026-10-20). Dos casos reales de la prueba en seco:
+//   · 3ee69b01: salia UNA ficha (9944723) y el primer mensaje decia "No tengo
+//     confirmado si tiene cuarto útil (en 9944723 y 10129664)". La 10129664 no
+//     se le mandaba.
+//   · 2e6fea9a: "No tengo confirmado si tienen ... administración", con 2 de
+//     las 3 fichas mostrando la administración.
+// Por cada nota: las refs que nombra se recortan a las del DM (si no queda
+// ninguna, la nota se va); lo que se puede leer del dato (administración,
+// cuarto útil) se mira ficha por ficha y solo se nombran las que de verdad no
+// lo tienen. `revisadas` (opcional): las refs que Sofi vio cuando escribio la
+// nota; una nota sin refs habla solo de esas (el script de rescate cruza de
+// nuevo y puede traer fichas que Sofi nunca vio).
+const TEMAS_DE_DATO = [
+  { re: /administraci/i, tiene: (m) => Boolean(String((m && m.administracion) || "").trim()) },
+  {
+    re: /cuarto\s+[uú]til/i,
+    tiene: (m) => /cuarto\s+util/.test(normalizarTexto(`${(m && m.caracteristicas) || ""} ${(m && m.titulo) || ""}`)),
+  },
+];
+
+function normalizarTexto(t) {
+  return String(t || "").normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+}
+
+function unirConY(items) {
+  if (items.length <= 1) return items.join("");
+  return `${items.slice(0, -1).join(", ")} y ${items[items.length - 1]}`;
+}
+
+function escaparRe(t) {
+  return String(t).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function salvedadDeLasFichas(items, props, revisadas = null) {
+  const porRef = new Map((props || []).map((m) => [String(m && m.ref), m]));
+  const refsDm = [...porRef.keys()];
+  const vistas = revisadas ? new Set([...revisadas].map(String)) : null;
+  const salida = [];
+  for (const item0 of Array.isArray(items) ? items : []) {
+    const texto = String(item0 || "").trim();
+    if (!texto) continue;
+    const nombradas = new Set(texto.match(/\b\d{5,}\b/g) || []);
+    for (const r of refsDm) if (new RegExp(`(^|[^A-Za-z0-9])${escaparRe(r)}([^A-Za-z0-9]|$)`).test(texto)) nombradas.add(r);
+    let base = texto;
+    if (nombradas.size) {
+      const patron = [...nombradas].map(escaparRe).join("|");
+      const nombraRef = new RegExp(patron);
+      base = texto
+        .replace(/\s*\([^)]*\)/g, (par) => (nombraRef.test(par) ? "" : par))
+        .replace(new RegExp(patron, "g"), "")
+        .replace(/\s{2,}/g, " ")
+        .trim();
+      for (let previo = null; previo !== base; ) {
+        previo = base;
+        base = base.replace(/(?:\s+(?:en|de|la|las|el|los|y|e)|\s*[,;:(])\s*$/i, "").trim();
+      }
+      if (!base) continue;
+    }
+    const tema = TEMAS_DE_DATO.find((t) => t.re.test(base));
+    let alcance;
+    if (nombradas.size) alcance = refsDm.filter((r) => nombradas.has(r));
+    else if (vistas && !tema) alcance = refsDm.filter((r) => vistas.has(r));
+    else alcance = refsDm;
+    if (tema) alcance = alcance.filter((r) => !tema.tiene(porRef.get(r)));
+    if (!alcance.length) continue;
+    if (alcance.length === refsDm.length) salida.push(nombradas.size ? base : texto);
+    else salida.push(`${base} (en ${unirConY(alcance)})`);
+  }
+  return salida;
 }
 
 module.exports = {
@@ -539,4 +618,5 @@ module.exports = {
   MOTIVOS_ACLARABLES,
   dmConAclaracionActivo,
   notasParaDm,
+  salvedadDeLasFichas,
 };
