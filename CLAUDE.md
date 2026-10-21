@@ -53,6 +53,17 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
   - **Cliente esperando:** `src/scheduler/lead-esperando.js` (15 min; modo bot
     → alerta a Juan; modo humano → campana de la asesora; `SOFI_ALERTA_ESPERA`).
   - El área no registrada también sale con aclaración.
+  - **Mapa de demanda (CRM `/demanda`):** cruza los pedidos de colegas
+    (`group_signals`) con el inventario por macrozona × tipo × banda de
+    precio. Muestra dónde captar, qué piden y el argumento para el
+    propietario. Módulo `src/groups/mapa-demanda.js`, endpoint
+    `POST /api/demanda`. Mockup aprobado en `docs/superpowers/mockups/`.
+  - **Plantillas de Meta para visitas** (`docs/plantillas-meta-2026-10-21.md`):
+    `recordatorio_visita`, `postvisita` y `cita_confirmada`. **Pendiente:**
+    Juan las crea en Meta; al aprobarse, poner `SOFI_RECORDATORIO_PLANTILLA`,
+    `SOFI_POSTVISITA_PLANTILLA` y `SOFI_CITA_CONFIRMADA_PLANTILLA` en Railway.
+  - **Pendiente encender** (Juan, en Railway): `SOFI_RECORDATORIO_VISITA`,
+    `SOFI_POSTVISITA` y `RADAR_SEGUIMIENTO_CON_OPCION`.
 
 - **Rescate de pedidos y DM con aclaración (desplegado 2026-10-21, merge de
   `rescate-pedidos`).** Plan
