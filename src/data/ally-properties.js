@@ -28,6 +28,8 @@ function vigente(p) {
   return p.visto_en_grupo_at >= cortePorVencimiento();
 }
 
+const { tipoCalzaEnMemoria, tipoOr } = require("../lib/tipos-filtro");
+
 function matchesFilters(p, f) {
   // `origen` separa dos cosas que NO valen lo mismo:
   //   'asesor' — la registro una persona de Diamond, hablo con el colega y la
@@ -37,7 +39,7 @@ function matchesFilters(p, f) {
   // Quien consulta decide cual quiere; por defecto siguen viniendo las dos.
   if (f.origen && p.origen !== f.origen) return false;
   if (f.operacion && p.operacion && p.operacion !== f.operacion) return false;
-  if (f.tipo && p.tipo && !p.tipo.toLowerCase().includes(f.tipo.toLowerCase())) return false;
+  if (f.tipo && p.tipo && !tipoCalzaEnMemoria(p, f)) return false;
   if (f.zona) {
     const haystack = `${p.zona || ""} ${p.ciudad || ""}`.toLowerCase();
     const tokens = distinctiveTokens(zonaTokens(f.zona));
@@ -223,7 +225,10 @@ async function search(orgId, filters = {}, limit = 3) {
   query = query.or(`origen.neq.grupo,visto_en_grupo_at.gte.${cortePorVencimiento()}`);
   if (filters.origen) query = query.eq("origen", filters.origen);
   if (filters.operacion) query = query.eq("operacion", filters.operacion);
-  if (filters.tipo) query = query.ilike("tipo", `%${filters.tipo}%`);
+  if (Array.isArray(filters.tipo)) {
+    const filtroTipo = tipoOr(filters);
+    if (filtroTipo) query = query.or(filtroTipo);
+  } else if (filters.tipo) query = query.ilike("tipo", `%${filters.tipo}%`);
   if (filters.zona) {
     const tokens = distinctiveTokens(zonaTokens(filters.zona));
     if (tokens.length > 0) {

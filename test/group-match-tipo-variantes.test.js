@@ -35,7 +35,32 @@ test("pedido casa sigue igual con casa campestre", () => {
   assert.ok(evaluarCandidata(prop({ tipo: "Casa Campestre" }), pide({ tipo: "casa" }), "diamond"));
 });
 
-test("el prefiltro de la base no filtra por tipo cuando hay variantes", () => {
-  assert.equal(filtrosInventario(pide()).tipo, undefined);
+test("el prefiltro de la base manda la lista de tipos aceptados", () => {
+  const f = filtrosInventario(pide());
+  assert.deepEqual(f.tipo, ["apartamento", "duplex", "dúplex", "penthouse", "pent house", "loft"]);
+  assert.equal(f.tipoEnTitulo, undefined);
   assert.equal(filtrosInventario(pide({ tipo: "casa" })).tipo, "casa");
+});
+
+test("un pedido de penthouse tambien mira el titulo en el prefiltro", () => {
+  const f = filtrosInventario(pide({ tipo: "penthouse" }));
+  assert.deepEqual(f.tipo, ["penthouse"]);
+  assert.equal(f.tipoEnTitulo, true);
+  assert.deepEqual(filtrosInventario(pide({ tipo: "duplex" })).tipo, ["duplex", "dúplex"]);
+});
+
+test("el prefiltro en memoria deja pasar Dúplex y descarta casas", () => {
+  const { matchesFilters } = require("../src/data/properties");
+  const f = filtrosInventario(pide());
+  assert.ok(matchesFilters({ ref: "1", zona: "Laureles", ciudad: "Medellin", operacion: "venta", habitaciones: 3, tipo: "Dúplex", precio: "100" }, f));
+  assert.ok(matchesFilters({ ref: "2", zona: "Laureles", ciudad: "Medellin", operacion: "venta", habitaciones: 3, tipo: "Penthouse", precio: "100" }, f));
+  assert.ok(!matchesFilters({ ref: "3", zona: "Laureles", ciudad: "Medellin", operacion: "venta", habitaciones: 3, tipo: "Casa", precio: "100" }, f));
+  const fp = filtrosInventario(pide({ tipo: "penthouse" }));
+  assert.ok(matchesFilters({ ref: "4", zona: "Laureles", ciudad: "Medellin", operacion: "venta", habitaciones: 3, tipo: "Apartamento", titulo: "Penthouse vista", precio: "100" }, fp));
+});
+
+test("tipoOr arma solo terminos seguros", () => {
+  const { tipoOr } = require("../src/lib/tipos-filtro");
+  assert.equal(tipoOr({ tipo: ["duplex", "dúplex"] }), "tipo.ilike.%duplex%,tipo.ilike.%dúplex%");
+  assert.equal(tipoOr({ tipo: ["loft", "a,b)"], tipoEnTitulo: true }), "tipo.ilike.%loft%,titulo.ilike.%loft%");
 });

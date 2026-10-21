@@ -36,13 +36,29 @@ function tiposPedidos(c) {
     .filter(Boolean);
 }
 
-// Al prefiltro de la base (ilike) solo viaja un tipo unico. Con varios, la
-// consulta no filtra por tipo y la compuerta la aplica evaluarCandidata.
+// Al prefiltro de la base viaja un tipo unico (string) o, si el tipo tiene
+// variantes, la lista de tipos aceptados con las dos grafias (ilike no ignora
+// tildes). Con varios tipos pedidos no se filtra y la compuerta la aplica
+// evaluarCandidata.
+const GRAFIAS_SQL = { duplex: ["duplex", "dúplex"] };
 function tipoParaConsulta(c) {
   const tipos = tiposPedidos(c);
-  // Un tipo con variantes (apartamento -> duplex, penthouse, loft) tampoco
-  // viaja: el ilike por la palabra sola dejaria las variantes afuera.
-  return tipos.length === 1 && !VARIANTES_DE_TIPO[sinTildes(tipos[0])] ? tipos[0] : null;
+  if (tipos.length !== 1) return null;
+  const t = tipos[0];
+  const base = VARIANTES_DE_TIPO[sinTildes(t)];
+  const lista = base ? [t, ...base] : SOLO_TITULO.test(sinTildes(t)) ? [t] : null;
+  if (!lista) return t;
+  return [...new Set(lista.flatMap((x) => GRAFIAS_SQL[sinTildes(x)] || [x]))];
+}
+// Un pedido de duplex/penthouse/loft tambien acepta una ficha "Apartamento"
+// cuyo titulo lo diga (ver tipoCalza).
+const SOLO_TITULO = /^(duplex|penthouse|pent house|loft)$/;
+function aplicarTipo(f, c) {
+  const t = tipoParaConsulta(c);
+  if (!t) return;
+  f.tipo = t;
+  const pedido = tiposPedidos(c)[0];
+  if (Array.isArray(t) && SOLO_TITULO.test(sinTildes(pedido))) f.tipoEnTitulo = true;
 }
 
 // Tipos que Wasi registra con otro nombre pero que, para un pedido, son lo
@@ -63,7 +79,7 @@ function tipoCalza(p, t) {
 
 function filtrosInventario(c) {
   const f = {};
-  if (tipoParaConsulta(c)) f.tipo = tipoParaConsulta(c);
+  aplicarTipo(f, c);
   // Venta o arriendo viaja al prefiltro: sin esto la consulta traia las dos
   // mezcladas y, con el corte de filas, los arriendos quedaban afuera.
   const operacion = normOperacion(c.operacion);
@@ -129,7 +145,7 @@ function filtrosAliados(c) {
   // con informacion que no verificamos. Esas se usan solo hacia adentro, para
   // un cliente propio, en src/agent/tools.js.
   const f = { origen: "asesor" };
-  if (tipoParaConsulta(c)) f.tipo = tipoParaConsulta(c);
+  aplicarTipo(f, c);
   const zonasAliado = zonasPedidas(c);
   if (zonasAliado.length) f.zona = zonasAliado.join(" ");
   else if (c.ciudad) f.zona = c.ciudad;
