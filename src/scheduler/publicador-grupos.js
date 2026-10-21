@@ -203,6 +203,7 @@ async function runParaOrg(org, d, ahora) {
     group_jid: grupo.jid,
     property_ref: String(propiedad.ref),
     origen: "auto",
+    texto,
     estado: r && r.ok ? "enviado" : "fallo",
     wamid: (r && r.wamid) || null,
     error: r && r.ok ? null : String((r && r.error) || "sin detalle").slice(0, 500),
