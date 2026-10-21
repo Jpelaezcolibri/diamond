@@ -83,7 +83,11 @@ async function opcionNueva(org, senal, d, ahora) {
     if (esArriendo && !carril.carrilActivo()) return null;
 
     const yaEnLaSenal = new Set((s.respuesta_refs || []).map(String));
-    const frescas = ((await d.cruzar(org, s)) || []).filter((m) => m && m.ref != null && !yaEnLaSenal.has(String(m.ref)));
+    const delMotor = ((await d.cruzar(org, s)) || []).filter((m) => m && m.ref != null && !yaEnLaSenal.has(String(m.ref)));
+    if (!delMotor.length) return null;
+    // Lo que Sofi descarto en su veredicto guardado nunca sale (igual que el
+    // rescate en lote). Sin veredicto guardado: solo la compuerta y el puntaje.
+    const { quedan: frescas } = require("../groups/pedido-guardado").excluirPorSofi(s.revalidacion || null, s.matches, delMotor);
     if (!frescas.length) return null;
 
     const inventario = await d.estadoInventario(org, ahora);
@@ -102,6 +106,7 @@ async function opcionNueva(org, senal, d, ahora) {
       lid: String(s.respuesta_destino_lid || senal.respuesta_destino_lid || "").replace(/@.*$/, "") || null,
       telefono: s.respuesta_destino_telefono || senal.respuesta_destino_telefono || null,
     };
+    if (!destino.lid && !destino.telefono) return null;
     const ya = await d.refsYaEnviadas(org.id, destino, desdeIso);
     if (!(ya instanceof Set)) return null;
 
@@ -194,10 +199,7 @@ function depsPorDefecto() {
       if (error) throw error;
       return data || null;
     },
-    cruzar: async (org, s) => {
-      const r = await require("../groups/match").cruzarDemanda(org, { ...s, clase: "demanda", mensaje: {} });
-      return (r && r.matches) || [];
-    },
+    cruzar: (org, s) => require("../groups/pedido-guardado").cruzarPedidoGuardado(org, s),
     estadoInventario: (org, ahora) => require("../data/sync-estado").estadoDelInventario(org.id, { ahora }),
     verificarLinks: (ms) => require("../groups/verificar-link").verificar(ms),
     refsYaEnviadas: (orgId, destino, desdeIso) => require("../data/group-signals").refsYaEnviadas(orgId, destino, desdeIso),
@@ -209,7 +211,8 @@ function depsPorDefecto() {
     },
     marcar: async (id, canal) => {
       if (!supabase) return;
-      await supabase.from("group_signals").update({ seguimiento_dm_at: new Date().toISOString(), seguimiento_dm_canal: canal }).eq("id", id);
+      const { error } = await supabase.from("group_signals").update({ seguimiento_dm_at: new Date().toISOString(), seguimiento_dm_canal: canal }).eq("id", id);
+      if (error) throw error;
     },
     listarSofi24: async (ahora) => {
       if (!supabase) return [];
@@ -282,15 +285,19 @@ async function runOnce({ ahora = new Date(), deps = {} } = {}) {
               bodyParams: [primerNombre(senal.autor_nombre) || "colega", pedidoCorto(senal)],
             });
           } else if (canal === "linea_grupos") {
-            const opcion = conOpcionActivo() ? await opcionNueva(org, senal, d, ahora) : null;
+            let opcion = conOpcionActivo() ? await opcionNueva(org, senal, d, ahora) : null;
+            if (opcion) {
+              // Primero se reserva la ref: si no queda escrita, no se ofrece.
+              try {
+                await d.agregarRef(opcion.senal, opcion.match.ref);
+              } catch (e) {
+                console.error(`[seguimiento-colega] no se pudo reservar la Ref ${opcion.match.ref} en ${senal.id}; sale sin opcion: ${e.message}`);
+                opcion = null;
+              }
+            }
             r = await d.linea(sesion, null, textoLineaGrupos(senal, org, opcion), { lid: senal.respuesta_destino_lid, orgId: org.id });
             if (r && r.ok) {
               enviadosHoy++;
-              if (opcion) {
-                await d.agregarRef(opcion.senal, opcion.match.ref).catch((e) =>
-                  console.error(`[seguimiento-colega] salio la Ref ${opcion.match.ref} pero no quedo en respuesta_refs de ${senal.id}: ${e.message}`)
-                );
-              }
             }
           }
           // tope / cuota: no se marca, se reintenta en el proximo tick (dentro de las 24 h).

@@ -108,41 +108,7 @@ function claveCampos(s) {
   return [s.operacion, s.tipo, s.zona, s.precio_max, s.habitaciones].map((v) => String(v ?? "").trim().toLowerCase()).join("|");
 }
 
-// Las refs que Sofi VIO (las de signal.matches), sin los matches de aliado
-// guardados sin ref.
-function refsVistas(matchesVistos) {
-  return new Set((matchesVistos || []).filter((m) => m && m.ref !== null && m.ref !== undefined).map((m) => String(m.ref)));
-}
-
-// Lo que Sofi ya descarto, con su veredicto guardado. Solo cuenta para las refs
-// que Sofi VIO: una que el motor encuentra hoy y antes no, Sofi nunca la juzgo.
-// El descarte "de aliado" que no vale se decide con la MISMA funcion del radar
-// (vivo.js#rescatarDescartesFalsos: solo si Sofi no aprobo ninguna, solo
-// propias de puntaje >= 95), para que el lote y el radar dejen salir lo mismo.
-function excluirPorSofi(rev0, matchesVistos, candidatas) {
-  if (!rev0) return { quedan: candidatas, excluidas: [] };
-  const { rescatarDescartesFalsos } = require("../src/groups/vivo");
-  const rev = rescatarDescartesFalsos(rev0, matchesVistos) || rev0;
-  const vistas = refsVistas(matchesVistos);
-  const utiles = new Set((rev.refs_utiles || []).map(String));
-  const dudosas = new Set((rev.refs_dudosas || []).map(String));
-  const motivoDudosa = new Map((rev.dudosas_motivo || []).map((d) => [String(d.ref), d.motivo]));
-  const quedan = [];
-  const excluidas = [];
-  for (const m of candidatas) {
-    const ref = String(m.ref);
-    if (!vistas.has(ref) || utiles.has(ref)) {
-      quedan.push(m);
-    } else if (dudosas.has(ref)) {
-      const motivo = motivoDudosa.get(ref) || "sin_motivo";
-      if (motivo === "aliado" || motivo === "dato_que_no_registramos") quedan.push(m);
-      else excluidas.push({ ref, motivo: `sofi_dudosa:${motivo}` });
-    } else {
-      excluidas.push({ ref, motivo: "sofi_descarto" });
-    }
-  }
-  return { quedan, excluidas };
-}
+const { refsVistas, excluirPorSofi, cruzarPedidoGuardado } = require("../src/groups/pedido-guardado");
 
 // Las fichas que Sofi no vio no tienen su le_falta: lo que se sabe que no
 // alcanza (cortos del motor: "(pediste N)", precio dentro del margen) se
@@ -178,7 +144,6 @@ function notasDelLote(rev, aclaraciones, props, vistas) {
 function depsReales() {
   const organizations = require("../src/data/organizations");
   const supabase = require("../src/data/supabase");
-  const { cruzar } = require("../src/groups/match");
   const syncEstado = require("../src/data/sync-estado");
   const verificarLink = require("../src/groups/verificar-link");
   const directorio = require("../src/groups/directorio");
@@ -199,10 +164,7 @@ function depsReales() {
       if (error) throw error;
       return data || [];
     },
-    cruzar: async (org, s) => {
-      const r = await cruzar([{ ...s, clase: "demanda", mensaje: {} }], { org });
-      return (r.demandas[0] && r.demandas[0].matches) || [];
-    },
+    cruzar: (org, s) => cruzarPedidoGuardado(org, s),
     estadoInventario: (org, ahora) => syncEstado.estadoDelInventario(org.id, { ahora }),
     verificarLinks: (ms) => verificarLink.verificar(ms),
     // Fail-CLOSED (a diferencia de vivo.quitarYaEnviadas, que sigue sin filtrar

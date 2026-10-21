@@ -135,12 +135,60 @@ test("la compuerta manda: inventario viejo o link roto, sin opción", async () =
   }
 });
 
-test("si falla guardar la ref, el envío ya salió y se marca igual", async () => {
+test("la ref se reserva ANTES de enviar; si no se puede guardar, sale el texto de hoy", async () => {
+  const orden = [];
+  const base = deps({
+    agregarRef: async (_s, ref) => orden.push(`ref:${ref}`),
+    linea: async (_s, _t, texto) => { orden.push("envio"); return { ok: true }; },
+  });
+  await s.runOnce({ ahora: AHORA, deps: base.d });
+  assert.deepStrictEqual(orden, ["ref:9000002", "envio"]);
+
   const { d, enviados, marcas } = deps({ agregarRef: async () => { throw new Error("db"); } });
   const r = await s.runOnce({ ahora: AHORA, deps: d });
-  assert.match(enviados[0].texto, /Ref 9000002/);
+  assert.strictEqual(enviados[0].texto, s.textoLineaGrupos(SENAL, null));
   assert.deepStrictEqual(marcas, [{ id: "s2", canal: "linea_grupos" }]);
   assert.strictEqual(r.dm, 1);
+});
+
+test("lo que Sofi descartó en su veredicto no se ofrece; solo lo que aprobó o no vio", async () => {
+  const rev = { refs_utiles: ["9000002"], refs_dudosas: ["9000003"], dudosas_motivo: [{ ref: "9000003", motivo: "zona" }] };
+  const matches = [{ ref: "9000001" }, { ref: "9000002" }, { ref: "9000003" }, { ref: "9000004" }];
+  const mk = (cruzados) => deps({
+    senalCompleta: async () => ({ ...SENAL, operacion: "venta", respuesta_refs: ["9000001"], revalidacion: rev, matches }),
+    cruzar: async () => cruzados,
+  });
+  // dudosa (9000003) y descartada (9000004 vista y no aprobada): nada
+  let x = mk([prop("9000003", { puntaje: 95 }), prop("9000004", { puntaje: 95 })]);
+  await s.runOnce({ ahora: AHORA, deps: x.d });
+  assert.strictEqual(x.enviados[0].texto, s.textoLineaGrupos(SENAL, null));
+  assert.deepStrictEqual(x.refsAgregadas, []);
+  // la aprobada por Sofi sale aunque haya dudosas con mas puntaje
+  x = mk([prop("9000003", { puntaje: 99 }), prop("9000002", { puntaje: 85 })]);
+  await s.runOnce({ ahora: AHORA, deps: x.d });
+  assert.match(x.enviados[0].texto, /Ref 9000002/);
+  assert.doesNotMatch(x.enviados[0].texto, /Ref 9000003/);
+});
+
+test("cableado REAL: sin inyectar cruzar usa match.cruzar (un export faltante rompe el test)", async () => {
+  const match = require("../src/groups/match");
+  assert.strictEqual(typeof match.cruzar, "function");
+  const original = match.cruzar;
+  const llamadas = [];
+  match.cruzar = async (demandas, opts) => {
+    llamadas.push({ demandas, opts });
+    return { demandas: [{ matches: [prop("9000001"), prop("9000002")] }] };
+  };
+  try {
+    const { d, enviados } = deps();
+    delete d.cruzar;
+    await s.runOnce({ ahora: AHORA, deps: d });
+    assert.strictEqual(llamadas.length, 1);
+    assert.strictEqual(llamadas[0].demandas[0].clase, "demanda");
+    assert.match(enviados[0].texto, /Ref 9000002/);
+  } finally {
+    match.cruzar = original;
+  }
 });
 
 test("interruptor apagado: idéntico a hoy y no se corre el motor", async () => {
