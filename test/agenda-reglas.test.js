@@ -42,3 +42,23 @@ test("silencio de 20:00 a 08:00 en Bogotá", () => {
 test("el corte es 4 h antes de la visita", () => {
   assert.strictEqual(r.corteDe("2026-10-09T20:00:00Z"), "2026-10-09T16:00:00.000Z");
 });
+
+// --- espaciar: las opciones ofrecidas quedan en distinta franja o dia ---
+const slotsDia = (fecha, horas) => horas.map((h) => `${fecha}T${String(h + 5).padStart(2, "0")}:00:00Z`);
+
+test("espaciar: todo libre da manana, tarde y el dia siguiente", () => {
+  const libres = [...slotsDia("2026-10-08", [8, 9, 10, 11, 12, 13, 14]), ...slotsDia("2026-10-09", [8, 9, 10])];
+  assert.deepStrictEqual(r.espaciar(libres), ["2026-10-08T13:00:00Z", "2026-10-08T17:00:00Z", "2026-10-09T13:00:00Z"]);
+});
+
+test("espaciar: solo mananas libres da manana de hoy y manana de otro dia", () => {
+  const libres = [...slotsDia("2026-10-08", [8, 9, 10]), ...slotsDia("2026-10-09", [8, 9]), ...slotsDia("2026-10-10", [8])];
+  const out = r.espaciar(libres);
+  assert.deepStrictEqual(out.slice(0, 2), ["2026-10-08T13:00:00Z", "2026-10-09T13:00:00Z"]);
+  assert.strictEqual(out.length, 3);
+});
+
+test("espaciar: sin libres devuelve vacio, y con uno solo devuelve uno", () => {
+  assert.deepStrictEqual(r.espaciar([]), []);
+  assert.deepStrictEqual(r.espaciar(["2026-10-08T15:00:00.000Z"]), ["2026-10-08T15:00:00.000Z"]);
+});

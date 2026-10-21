@@ -505,16 +505,14 @@ async function operacionDeCita(ctx, { ref = null, operacion = null } = {}) {
   );
 }
 
-// Los proximos 3 espacios libres entre los asesores que pueden recibir la
+// Hasta 3 espacios libres bien separados (primero, otra media jornada, otro dia) entre los asesores que pueden recibir la
 // visita, con las mismas reglas que agendar_cita (agenda-reglas.alternativas).
 function proximosLibres({ asesores, citasOrg, ahora, operacion, excluirLeadId }) {
   const rotacion = require("../data/rotacion-citas");
   const reglas = require("../lib/agenda-reglas");
-  return asesores
-    .flatMap((a) => reglas.alternativas({ ahora, horario: a.horario, ocupadas: rotacion.ocupadasDe(citasOrg, a, { excluirLeadId }), operacion }))
-    .sort()
-    .filter((x, i, arr) => arr.indexOf(x) === i)
-    .slice(0, 3);
+  const todos = asesores
+    .flatMap((a) => reglas.alternativas({ ahora, horario: a.horario, ocupadas: rotacion.ocupadasDe(citasOrg, a, { excluirLeadId }), operacion, n: 1000 }));
+  return reglas.espaciar([...new Set(todos)]);
 }
 
 // "jueves 23 de octubre, 10:00 a. m." en hora de Bogota.

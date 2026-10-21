@@ -118,7 +118,7 @@ test("sin ciclo de rotación usa a quien coordina las visitas", async (t) => {
   t.mock.method(advisors, "findAsesorPrincipalRadar", async () => principal);
   const out = await horarios({ ref: "VEN1" });
   assert.strictEqual(out.horarios.length, 3);
-  assert.deepStrictEqual(out.horarios.map((h) => h.iso), r.alternativas({ ahora: new Date(), horario: principal.horario }));
+  assert.deepStrictEqual(out.horarios.map((h) => h.iso), r.espaciar(r.alternativas({ ahora: new Date(), horario: principal.horario, n: 1000 })));
 });
 
 test("sin espacios en 14 días: lista vacía y un motivo", async () => {

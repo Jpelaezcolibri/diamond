@@ -68,6 +68,28 @@ function alternativas({ ahora = new Date(), horario = null, ocupadas = [], n = 3
   return out;
 }
 
+// Elige hasta 3 horarios bien separados de una lista ordenada de libres, para
+// que la persona tenga una opcion real: 1) el primero; 2) el primero en otra
+// media jornada (manana < 12:00, tarde >= 12:00, hora de Bogota) que el 1, el
+// mismo dia si se puede y si no el siguiente; 3) el primero en un dia distinto
+// al de los dos anteriores.
+function espaciar(slots) {
+  const llave = (iso) => {
+    const l = new Date(new Date(iso).getTime() - 5 * 60 * MIN).toISOString(); // Bogota = UTC-5 fijo
+    return { dia: l.slice(0, 10), mitad: Number(l.slice(11, 13)) < 12 ? "m" : "t" };
+  };
+  const lista = (slots || []).filter((x) => !isNaN(new Date(x).getTime())).sort();
+  if (lista.length === 0) return [];
+  const out = [lista[0]];
+  const k1 = llave(lista[0]);
+  const s2 = lista.find((x) => { const k = llave(x); return k.dia !== k1.dia || k.mitad !== k1.mitad; });
+  if (s2) out.push(s2);
+  const dias = new Set(out.map((x) => llave(x).dia));
+  const s3 = lista.find((x) => !dias.has(llave(x).dia));
+  if (s3) out.push(s3);
+  return out.sort();
+}
+
 function enSilencio(fecha = new Date()) {
   const p = partesBogota(fecha.toISOString());
   return !p || p.minutos >= 20 * 60 || p.minutos < 8 * 60;
@@ -77,4 +99,4 @@ function corteDe(fechaHoraIso) {
   return new Date(new Date(fechaHoraIso).getTime() - 4 * 60 * MIN).toISOString();
 }
 
-module.exports = { ANTICIPACION_MIN, ANTICIPACION_ARRIENDO_MIN, anticipacionMin, normalizarOperacion, DURACION_MIN, TRASLADO_MIN, BLOQUE_MIN, validarHora, alternativas, enSilencio, corteDe, dentroDeHorario };
+module.exports = { ANTICIPACION_MIN, ANTICIPACION_ARRIENDO_MIN, anticipacionMin, normalizarOperacion, DURACION_MIN, TRASLADO_MIN, BLOQUE_MIN, validarHora, alternativas, espaciar, enSilencio, corteDe, dentroDeHorario };
