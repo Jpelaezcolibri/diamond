@@ -620,4 +620,20 @@ function postGrupo(propiedad, { org = null, comision = true } = {}) {
   return lineas.join("\n");
 }
 
-module.exports = { lineaComision, listaCaracteristicas, postGrupo, mensajeGrupo, mensajesAlColega, MAX_POR_DM, detallesPorFicha, lineasCierre, ficha, desvios, primerNombre, tituloUtil, lineaSalvedad, unirConNi, MAX_PROPIEDADES };
+// FICHA CORTA DEL SEGUIMIENTO (spec 2026-10-21 §2.5). Una sola opcion nueva
+// dentro del texto de +4 h: titulo, ref + zona + precio, la aclaracion si la
+// compuerta la dejo pasar con un dato por confirmar, y el link de Wasi. Lo no
+// cargado no aparece.
+function fichaCorta(match, { aclaracion = null } = {}) {
+  const titulo = tituloUtil(match) || `Propiedad Ref ${match.ref}`;
+  const identidad = [`Ref ${match.ref}`, String(match.zona || "").trim() || null, formato.formatearPrecio(match.precio) || null]
+    .filter(Boolean)
+    .join(" · ");
+  const lineas = [titulo, identidad];
+  const falta = String(aclaracion || "").trim();
+  if (falta) lineas.push(`Aclaración: ${falta}`);
+  lineas.push(match.linkWasi);
+  return lineas.join("\n");
+}
+
+module.exports = { fichaCorta, lineaComision, listaCaracteristicas, postGrupo, mensajeGrupo, mensajesAlColega, MAX_POR_DM, detallesPorFicha, lineasCierre, ficha, desvios, primerNombre, tituloUtil, lineaSalvedad, unirConNi, MAX_PROPIEDADES };

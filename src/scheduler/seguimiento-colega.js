@@ -16,6 +16,13 @@
 //
 // Nada de 20:00 a 08:00. Interruptores: RADAR_SEGUIMIENTO_DM y
 // SOFI_SEGUIMIENTO_COLEGA (default encendidos).
+//
+// OPCION NUEVA (spec 2026-10-21 §2.5, RADAR_SEGUIMIENTO_CON_OPCION, apagado
+// por defecto): el texto de +4 h por la linea vuelve a correr el motor para el
+// pedido y, si aparece una propiedad que pasa la compuerta y que el colega no
+// recibio (ni en esta señal ni en 7 dias), agrega UNA ficha corta. Si no se
+// puede saber que se le mando, no se agrega nada (falla cerrado). La plantilla
+// de +24 h no cambia.
 const supabase = require("../data/supabase");
 const reglas = require("../lib/agenda-reglas");
 const { linkContactoOficial } = require("../lib/contacto");
@@ -41,16 +48,71 @@ function decidirSeguimientoDm({ respondio, soloLlamada, telefono, topeOk, cuotaO
   return "linea_grupos";
 }
 
-function textoLineaGrupos(senal, org) {
+const conOpcionActivo = (env = process.env) => String(env.RADAR_SEGUIMIENTO_CON_OPCION || "").trim().toLowerCase() === "true";
+
+function textoLineaGrupos(senal, org, opcion = null) {
   const nombre = primerNombre(senal.autor_nombre);
   const link = senal.codigo_colega
     ? linkContactoOficial(org, `Hola Sofi, quiero más opciones para mi PEDIDO (cód. ${senal.codigo_colega})`)
     : linkContactoOficial(org);
+  const lineas = [`Hola${nombre ? ` ${nombre}` : ""}, ¿te sirvió alguna de las opciones que te mandé?`];
+  if (opcion && opcion.match) {
+    lineas.push(
+      "",
+      "Además encontré esta otra que se ajusta a tu pedido:",
+      require("../groups/redactar").fichaCorta(opcion.match, { aclaracion: opcion.aclaracion }),
+      ""
+    );
+  }
   return [
-    `Hola${nombre ? ` ${nombre}` : ""}, ¿te sirvió alguna de las opciones que te mandé?`,
+    ...lineas,
     link ? `Si quieres más opciones o tienes alguna duda, escríbele a Sofi 👉 ${link}` : "Si quieres más opciones o tienes alguna duda, cuéntame.",
     "— Sofi, asistente virtual",
   ].join("\n");
+}
+
+// Busca UNA propiedad nueva para el pedido de la señal. Nunca lanza: ante
+// cualquier duda devuelve null y el seguimiento sale como siempre.
+async function opcionNueva(org, senal, d, ahora) {
+  try {
+    const publicable = require("../groups/publicable");
+    const carril = require("../groups/carril-arriendo");
+    const s = await d.senalCompleta(senal.id);
+    if (!s) return null;
+    const esArriendo = carril.esDelCarril(s);
+    if (esArriendo && !carril.carrilActivo()) return null;
+
+    const yaEnLaSenal = new Set((s.respuesta_refs || []).map(String));
+    const frescas = ((await d.cruzar(org, s)) || []).filter((m) => m && m.ref != null && !yaEnLaSenal.has(String(m.ref)));
+    if (!frescas.length) return null;
+
+    const inventario = await d.estadoInventario(org, ahora);
+    const { publicables, aclaraciones = [] } = publicable.filtrar(frescas, {
+      syncFresco: Boolean(inventario && inventario.fresco),
+      conAclaracion: publicable.dmConAclaracionActivo(),
+    });
+    if (!publicables.length) return null;
+    const { verificadas } = (await d.verificarLinks(publicables)) || {};
+    if (!Array.isArray(verificadas) || !verificadas.length) return null;
+
+    // Falla CERRADO: sin saber que recibio en 7 dias, no se agrega nada.
+    const dias = Number(process.env.RADAR_DM_NO_REENVIAR_DIAS || 7);
+    const desdeIso = new Date(ahora.getTime() - dias * 24 * HORA).toISOString();
+    const destino = {
+      lid: String(s.respuesta_destino_lid || senal.respuesta_destino_lid || "").replace(/@.*$/, "") || null,
+      telefono: s.respuesta_destino_telefono || senal.respuesta_destino_telefono || null,
+    };
+    const ya = await d.refsYaEnviadas(org.id, destino, desdeIso);
+    if (!(ya instanceof Set)) return null;
+
+    const match = verificadas.find((m) => !ya.has(String(m.ref)) && (!esArriendo || carril.puedeSalirSolo([m])));
+    if (!match) return null;
+    const acl = aclaraciones.find((a) => String(a.ref) === String(match.ref));
+    return { match, aclaracion: (acl && acl.detalle) || null, senal: s };
+  } catch (e) {
+    console.warn(`[seguimiento-colega] sin opcion nueva para la señal ${senal.id}: ${e.message}`);
+    return null;
+  }
 }
 
 // ── Acceso a datos por defecto (los tests inyectan los suyos) ─────────────
@@ -126,6 +188,25 @@ function depsPorDefecto() {
     cuota: (sesion) => require("../lib/waha").cuotaDeLinea(sesion),
     plantilla: (...a) => require("../channels/whatsapp").sendWhatsAppTemplate(...a),
     linea: (...a) => require("../lib/waha").enviarDm(...a),
+    senalCompleta: async (id) => {
+      if (!supabase) return null;
+      const { data, error } = await supabase.from("group_signals").select("*").eq("id", id).maybeSingle();
+      if (error) throw error;
+      return data || null;
+    },
+    cruzar: async (org, s) => {
+      const r = await require("../groups/match").cruzarDemanda(org, { ...s, clase: "demanda", mensaje: {} });
+      return (r && r.matches) || [];
+    },
+    estadoInventario: (org, ahora) => require("../data/sync-estado").estadoDelInventario(org.id, { ahora }),
+    verificarLinks: (ms) => require("../groups/verificar-link").verificar(ms),
+    refsYaEnviadas: (orgId, destino, desdeIso) => require("../data/group-signals").refsYaEnviadas(orgId, destino, desdeIso),
+    agregarRef: async (senal, ref) => {
+      if (!supabase) return;
+      const refs = [...new Set([...(senal.respuesta_refs || []).map(String), String(ref)])];
+      const { error } = await supabase.from("group_signals").update({ respuesta_refs: refs }).eq("id", senal.id);
+      if (error) throw error;
+    },
     marcar: async (id, canal) => {
       if (!supabase) return;
       await supabase.from("group_signals").update({ seguimiento_dm_at: new Date().toISOString(), seguimiento_dm_canal: canal }).eq("id", id);
@@ -201,8 +282,16 @@ async function runOnce({ ahora = new Date(), deps = {} } = {}) {
               bodyParams: [primerNombre(senal.autor_nombre) || "colega", pedidoCorto(senal)],
             });
           } else if (canal === "linea_grupos") {
-            r = await d.linea(sesion, null, textoLineaGrupos(senal, org), { lid: senal.respuesta_destino_lid, orgId: org.id });
-            if (r && r.ok) enviadosHoy++;
+            const opcion = conOpcionActivo() ? await opcionNueva(org, senal, d, ahora) : null;
+            r = await d.linea(sesion, null, textoLineaGrupos(senal, org, opcion), { lid: senal.respuesta_destino_lid, orgId: org.id });
+            if (r && r.ok) {
+              enviadosHoy++;
+              if (opcion) {
+                await d.agregarRef(opcion.senal, opcion.match.ref).catch((e) =>
+                  console.error(`[seguimiento-colega] salio la Ref ${opcion.match.ref} pero no quedo en respuesta_refs de ${senal.id}: ${e.message}`)
+                );
+              }
+            }
           }
           // tope / cuota: no se marca, se reintenta en el proximo tick (dentro de las 24 h).
           if (canal === "tope" || canal === "cuota") continue;
@@ -253,4 +342,4 @@ function stop() {
   timer = null;
 }
 
-module.exports = { decidirSeguimientoDm, textoLineaGrupos, runOnce, start, stop };
+module.exports = { decidirSeguimientoDm, textoLineaGrupos, opcionNueva, conOpcionActivo, runOnce, start, stop };
