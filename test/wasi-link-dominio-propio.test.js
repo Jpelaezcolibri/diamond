@@ -69,3 +69,10 @@ test("el dominio de Wasi se puede cambiar sin tocar codigo", () => {
     else process.env.WASI_PUBLIC_HOST = antes;
   }
 });
+
+// Juan, 2026-10-21: la 10467594 viene de Wasi como http://diamondinmobiliaria.com/...
+// y al colega le salia "http://info.wasi.co/...". Siempre https.
+test("el link de Wasi sale siempre con https, aunque Wasi lo traiga con http", () => {
+  const url = enlazarWasiPublico("http://diamondinmobiliaria.com/apartamento-venta-envigado-medellin/10467594");
+  assert.strictEqual(url, "https://info.wasi.co/apartamento-venta-envigado-medellin/10467594?shared=whatsapp");
+});

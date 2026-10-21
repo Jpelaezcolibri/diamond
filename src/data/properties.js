@@ -50,6 +50,7 @@ function enlazarWasiPublico(link) {
   const esDominioWasi = url.hostname === "info.wasi.co" || url.hostname.endsWith(".inmo.co");
   const esRutaDeWasi = RUTA_DE_WASI.test(url.pathname);
   if (!esDominioWasi && !esRutaDeWasi) return link;
+  url.protocol = "https:";
   url.hostname = HOST_WASI_PUBLICO();
   url.searchParams.set("shared", "whatsapp");
   return url.toString();
