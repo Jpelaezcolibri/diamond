@@ -9,6 +9,7 @@
 // Interruptor: RADAR_CALLADO_ACTIVO (encendido salvo "false").
 
 const { enviarAlertaTecnica } = require("../lib/alerta-saldo");
+const { radarEncendido } = require("../data/organizations");
 
 const BOGOTA_UTC = 5; // Colombia no tiene horario de verano
 const HORA_INI = 8;
@@ -73,15 +74,20 @@ async function revisarCanal(d, org, canal, ultima, ahora, umbral, textos) {
   if (!ultima) return null;
   if (previo) {
     if (ultima.getTime() > previo.ultima) {
+      // El estado se suelta solo si el aviso salio; si no, se reintenta.
+      const salio = await d.enviar(textos.volvio, "").catch(() => false);
+      if (!salio) return null;
       estado.delete(clave);
-      await d.enviar(textos.volvio, "").catch(() => false);
       return "recuperado";
     }
     return null; // mismo episodio: ya se aviso
   }
   if (horasHabiles(ultima, ahora) <= umbral) return null;
+  // El estado se guarda solo si el aviso salio (enviar devuelve false sin
+  // lanzar cuando la ventana o la plantilla fallan): asi se reintenta.
+  const salio = await d.enviar(textos.alerta(fmt(ultima)), "").catch(() => false);
+  if (!salio) return null;
   estado.set(clave, { ultima: ultima.getTime() });
-  await d.enviar(textos.alerta(fmt(ultima)), "").catch(() => false);
   return "alertado";
 }
 
@@ -90,6 +96,9 @@ async function runOnce({ ahora = new Date(), deps = null } = {}) {
   const d = deps || depsPorDefecto();
   const out = [];
   for (const org of await d.orgs()) {
+    // Solo orgs con el radar encendido (la lista ya trae radar_activo; sin
+    // consulta extra por tick).
+    if (!radarEncendido(org)) continue;
     try {
       const r1 = await revisarCanal(d, org, "radar", await d.ultimaSenal(org), ahora, UMBRAL_RADAR_H, {
         alerta: (f) => `El radar no recibe pedidos desde ${f}: revisar WAHA/sesión, saldo de Anthropic y el sync.`,

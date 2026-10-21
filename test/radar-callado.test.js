@@ -66,3 +66,56 @@ test("linea_dm: alerta a las 24 h habiles", async () => {
   assert.deepEqual(r.map((x) => x.canal), ["linea"]);
   assert.match(f.enviados[0], /línea de DM/);
 });
+
+test("un error de consulta (ultima nula) nunca alerta", async () => {
+  const f = fabrica({ v: null }, { v: null });
+  const r = await rc.runOnce({ ahora: b("2026-10-20T15:00:00"), deps: f.deps });
+  assert.deepEqual(r, []);
+  assert.equal(f.enviados.length, 0);
+});
+
+test("dos orgs: solo alerta la que tiene el radar encendido", async () => {
+  const enviados = [];
+  const deps = {
+    orgs: async () => [{ id: "o1" }, { id: "o2", radar_activo: false }],
+    ultimaSenal: async () => b("2026-10-19T08:00:00"),
+    ultimaLinea: async () => null,
+    enviar: async (r) => { enviados.push(r); return true; },
+  };
+  const r = await rc.runOnce({ ahora: b("2026-10-20T15:00:00"), deps });
+  assert.deepEqual(r.map((x) => x.org), ["o1"]);
+  assert.equal(enviados.length, 1);
+});
+
+test("enviar devuelve false: se reintenta en el siguiente tick", async () => {
+  let ok = false;
+  const enviados = [];
+  const deps = {
+    orgs: async () => [{ id: "o1" }],
+    ultimaSenal: async () => b("2026-10-19T08:00:00"),
+    ultimaLinea: async () => null,
+    enviar: async (r) => { enviados.push(r); return ok; },
+  };
+  let r = await rc.runOnce({ ahora: b("2026-10-20T15:00:00"), deps });
+  assert.deepEqual(r, []);
+  ok = true;
+  r = await rc.runOnce({ ahora: b("2026-10-20T15:30:00"), deps });
+  assert.deepEqual(r.map((x) => x.accion), ["alertado"]);
+  assert.equal(enviados.length, 2);
+  r = await rc.runOnce({ ahora: b("2026-10-20T16:00:00"), deps });
+  assert.equal(enviados.length, 2);
+});
+
+test("enviar lanza: tambien se reintenta", async () => {
+  let falla = true;
+  const deps = {
+    orgs: async () => [{ id: "o1" }],
+    ultimaSenal: async () => b("2026-10-19T08:00:00"),
+    ultimaLinea: async () => null,
+    enviar: async () => { if (falla) throw new Error("x"); return true; },
+  };
+  assert.deepEqual(await rc.runOnce({ ahora: b("2026-10-20T15:00:00"), deps }), []);
+  falla = false;
+  const r = await rc.runOnce({ ahora: b("2026-10-20T15:30:00"), deps });
+  assert.deepEqual(r.map((x) => x.accion), ["alertado"]);
+});
