@@ -24,12 +24,18 @@ test("estadoDe: seguimiento > link_sofi > recordatorio > sin_atender", () => {
   assert.equal(lib.estadoDe(base, AHORA), "sin_atender");
 });
 
+test("estadoDe: exactamente 2 h sigue 'nueva'; pasadas las 2 h es 'sin_atender'; via sofi nunca", () => {
+  assert.equal(lib.estadoDe(resp("r1", "1", "linea", "a", 2), AHORA), "nueva");
+  assert.equal(lib.estadoDe(resp("r1", "1", "linea", "a", 2.01), AHORA), "sin_atender");
+  assert.equal(lib.estadoDe(resp("r1", "1", "sofi", "a", 9), AHORA), "nueva");
+});
+
 test("estadoDe: dentro de las 2 h es 'nueva'; con visita es 'visita'", () => {
   assert.equal(lib.estadoDe(resp("r1", "1", "grupo", "a", 1), AHORA), "nueva");
   assert.equal(lib.estadoDe(resp("r1", "1", "grupo", "a", 5, { puente_at: hace(1) }), AHORA, true), "visita");
 });
 
-test("resumen: posts enviados, respuestas, colegas distintos, % de refs con respuesta, por via", () => {
+test("resumen: posts enviados, respuestas, colegas distintos, % de posts con respuesta, por via", () => {
   const posts = [
     post("p1", "10505566", "g1", 6),
     post("p2", "10505566", "g2", 5),
@@ -39,8 +45,8 @@ test("resumen: posts enviados, respuestas, colegas distintos, % de refs con resp
   ];
   const respuestas = [
     resp("r1", "10505566", "sofi", "lidA", 3, { atendida_at: hace(3) }),
-    resp("r2", "10505566", "linea", "lidB", 3),
-    resp("r3", "10392197", "grupo", "lidA", 1),
+    resp("r2", "10505566", "linea", "lidB", 3, { publicacion_id: "p1" }),
+    resp("r3", "10392197", "grupo", "lidA", 1, { publicacion_id: "p3" }),
   ];
   const r = lib.resumen(posts, respuestas, [], { ahora: AHORA });
   assert.equal(r.posts, 4);
@@ -48,7 +54,8 @@ test("resumen: posts enviados, respuestas, colegas distintos, % de refs con resp
   assert.equal(r.fichas, 3);
   assert.equal(r.respuestas, 3);
   assert.equal(r.colegas, 2);
-  assert.equal(r.pctConRespuesta, 67); // 2 de 3 refs
+  assert.equal(r.postsConRespuesta, 2); // p1 y p3 tienen respuesta; p2 (misma ref que p1) no
+  assert.equal(r.pctConRespuesta, 50); // 2 de 4 posts
   assert.deepEqual(r.porVia, { sofi: 1, linea: 1, grupo: 1 });
   assert.equal(r.sinAtender, 1); // r2: linea, 3 h, sin atender. r3 tiene 1 h; r1 es Sofi y atendida.
 });
@@ -141,4 +148,19 @@ test("fotoDe: string o {url}, y nada si no hay", () => {
   assert.equal(lib.fotoDe({ ref: "1", images: [{ url: "https://b" }] }), "https://b");
   assert.equal(lib.fotoDe({ ref: "1", images: [] }), null);
   assert.equal(lib.fotoDe(undefined), null);
+});
+
+test("resumen: una respuesta a un post fuera del periodo o fallido no cuenta como post con respuesta", () => {
+  const posts = [post("p1", "1", "g1", 3), post("p2", "2", "g1", 3, { estado: "fallo" })];
+  const respuestas = [resp("r1", "1", "linea", "a", 1, { publicacion_id: "viejo" }), resp("r2", "2", "linea", "b", 1, { publicacion_id: "p2" })];
+  const r = lib.resumen(posts, respuestas, [], { ahora: AHORA });
+  assert.equal(r.postsConRespuesta, 0);
+  assert.equal(r.pctConRespuesta, 0);
+});
+
+test("agrupar: la ficha lleva el texto del post mas reciente; sin texto queda null", () => {
+  const posts = [post("p1", "1", "g1", 9, { texto: "viejo" }), post("p2", "1", "g2", 2, { texto: "Hola\nnuevo" }), post("p3", "2", "g1", 2)];
+  const f = lib.agrupar(posts, []);
+  assert.equal(f.find((x) => x.ref === "1").texto, "Hola\nnuevo");
+  assert.equal(f.find((x) => x.ref === "2").texto, null);
 });

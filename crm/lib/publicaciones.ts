@@ -12,6 +12,7 @@ export type Post = {
   group_jid?: string | null;
   estado?: string | null;
   origen?: string | null;
+  texto?: string | null;
   created_at: string;
 };
 
@@ -70,7 +71,8 @@ export function estadoDe(r: Respuesta, ahora: Date | number = Date.now(), conVis
   if (r.puente_at) return "link_sofi";
   if (r.recordatorio_at) return "recordatorio";
   const t = typeof ahora === "number" ? ahora : ahora.getTime();
-  if (t - ms(r.primer_at) > SIN_ATENDER_MS) return "sin_atender";
+  // Sofi siempre contesta: nunca es "sin_atender" (igual que sinAtender()).
+  if (r.via !== "sofi" && t - ms(r.primer_at) > SIN_ATENDER_MS) return "sin_atender";
   return "nueva";
 }
 
@@ -125,18 +127,20 @@ export function resumen(
 ) {
   const env = posts.filter(enviado);
   const refsPublicadas = new Set(env.map((p) => String(p.property_ref)));
-  const refsConRespuesta = new Set(respuestas.map((r) => String(r.property_ref)).filter((r) => refsPublicadas.has(r)));
+  // Un post cuenta como "con respuesta" si alguna respuesta lo cita (publicacion_id).
+  const idsEnviados = new Set(env.map((p) => p.id));
+  const postsConRespuesta = new Set(respuestas.map((r) => r.publicacion_id).filter((id): id is string => Boolean(id) && idsEnviados.has(id as string)));
   const porVia = { sofi: 0, linea: 0, grupo: 0 };
   for (const r of respuestas) if (r.via in porVia) porVia[r.via]++;
   return {
     posts: env.length,
     grupos: new Set(env.map((p) => p.group_id || p.group_jid).filter(Boolean)).size,
     fichas: refsPublicadas.size,
-    fichasConRespuesta: refsConRespuesta.size,
+    postsConRespuesta: postsConRespuesta.size,
     respuestas: respuestas.length,
     colegas: new Set(respuestas.map((r) => r.colega_clave)).size,
     visitas: citas.filter((l) => esVisitaDePublicacion(l, refsPublicadas, desde)).length,
-    pctConRespuesta: refsPublicadas.size ? Math.round((refsConRespuesta.size / refsPublicadas.size) * 100) : 0,
+    pctConRespuesta: env.length ? Math.round((postsConRespuesta.size / env.length) * 100) : 0,
     porVia,
     sinAtender: respuestas.filter((r) => sinAtender(r, ahora)).length,
   };
@@ -175,6 +179,8 @@ export type Ficha = {
   primera: string | null;
   ultima: string | null;
   origen: "auto" | "manual" | "mixto" | null;
+  /** Texto exacto del post mas reciente de esta ref (null si no se guardo). */
+  texto: string | null;
   respuestas: Respuesta[];
 };
 
@@ -205,6 +211,7 @@ export function agrupar(
         primera: null,
         ultima: null,
         origen: null,
+        texto: null,
         respuestas: [],
       };
       fichas.set(ref, f);
@@ -217,7 +224,10 @@ export function agrupar(
     const g = (p.group_id && nombreGrupo[p.group_id]) || p.group_jid || p.group_id || "Grupo sin nombre";
     if (!f.grupos.includes(g)) f.grupos.push(g);
     if (!f.primera || ms(p.created_at) < ms(f.primera)) f.primera = p.created_at;
-    if (!f.ultima || ms(p.created_at) > ms(f.ultima)) f.ultima = p.created_at;
+    if (!f.ultima || ms(p.created_at) > ms(f.ultima)) {
+      f.ultima = p.created_at;
+      f.texto = p.texto || null;
+    }
     const o = p.origen === "manual" ? "manual" : "auto";
     f.origen = f.origen === null ? o : f.origen === o ? o : "mixto";
   }

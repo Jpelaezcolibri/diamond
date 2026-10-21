@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { fetchSafe } from "@/lib/fetch-safe";
 import { diaEnBogota } from "@/lib/fecha";
+import { getDefaultOrgId } from "@/lib/marketing";
 import ErrorBanner from "@/components/error-banner";
 import { Kpi } from "@/components/dashboard-matches";
 import ListaPublicaciones, { type FichaVista } from "@/components/publicaciones/lista-publicaciones";
@@ -53,11 +54,20 @@ export default async function PublicacionesPage({ searchParams }: { searchParams
   const desde = desdeDe(dias);
   const ahora = Date.now();
 
+  // Multi-tenant: todas las consultas van con org_id (RLS es "using (true)").
+  const orgId = await getDefaultOrgId(supabase);
+  if (!orgId) {
+    return <p className="px-6 py-10 text-slate-500">No hay ninguna organización configurada todavía.</p>;
+  }
+
   const [postsRes, respRes, gruposRes, leadsRes] = await Promise.all([
+    // select("*") ya trae `texto` cuando la migracion 2026-10-20_publicacion_texto.sql
+    // corrio y no falla cuando aun no: la ficha solo oculta el cuadro.
     fetchSafe<Post>(
       supabase
         .from("grupo_publicaciones")
         .select("*")
+        .eq("org_id", orgId)
         .eq("estado", "enviado")
         .gte("created_at", desde.toISOString())
         .order("created_at", { ascending: false })
@@ -69,19 +79,29 @@ export default async function PublicacionesPage({ searchParams }: { searchParams
       supabase
         .from("respuestas_publicacion")
         .select("*")
+        .eq("org_id", orgId)
         .gte("ultimo_entrante_at", desde.toISOString())
         .order("primer_at", { ascending: false })
         .limit(1000),
       "publicaciones:respuestas"
     ),
     fetchSafe<{ id: string; nombre: string | null; jid: string | null }>(
-      supabase.from("whatsapp_groups").select("id, nombre, jid"),
+      supabase.from("whatsapp_groups").select("id, nombre, jid").eq("org_id", orgId),
       "publicaciones:grupos"
     ),
-    // Visitas: citas de colegas (las de la linea traen origen linea_dm). El
-    // filtro por ref publicada y por periodo lo hace lib/publicaciones.
+    // Visitas: citas de colegas (las de la linea traen origen linea_dm). Solo
+    // leads tocados desde el inicio del periodo (una cita creada en el periodo
+    // actualiza el lead), mas recientes primero; el filtro fino por ref y por
+    // creada_at lo hace lib/publicaciones.
     fetchSafe<LeadConCita>(
-      supabase.from("leads").select("id, phone, cita").not("cita", "is", null).limit(1000),
+      supabase
+        .from("leads")
+        .select("id, phone, cita")
+        .eq("org_id", orgId)
+        .not("cita", "is", null)
+        .gte("updated_at", desde.toISOString())
+        .order("updated_at", { ascending: false })
+        .limit(1000),
       "publicaciones:citas"
     ),
   ]);
@@ -91,7 +111,7 @@ export default async function PublicacionesPage({ searchParams }: { searchParams
   const refs = [...new Set([...posts, ...respuestas].map((x) => String(x.property_ref)))];
   const propsRes = refs.length
     ? await fetchSafe<Propiedad>(
-        supabase.from("properties").select("ref, titulo, tipo, operacion, precio, images, disponible").in("ref", refs),
+        supabase.from("properties").select("ref, titulo, tipo, operacion, precio, images, disponible").eq("org_id", orgId).in("ref", refs),
         "publicaciones:propiedades"
       )
     : null;
@@ -165,8 +185,8 @@ export default async function PublicacionesPage({ searchParams }: { searchParams
             <Kpi n={leadsRes.hasError ? "—" : r.visitas} titulo="Visitas" detalle="agendadas desde un post o la línea" tono="amber" />
             <Kpi
               n={postsRes.hasError || respRes.hasError ? "—" : `${r.pctConRespuesta}%`}
-              titulo="Fichas con respuesta"
-              detalle={`${r.fichasConRespuesta} de ${r.fichas} publicadas`}
+              titulo="Posts con respuesta"
+              detalle={`${r.postsConRespuesta} de ${r.posts} posts`}
               tono="slate"
             />
           </div>

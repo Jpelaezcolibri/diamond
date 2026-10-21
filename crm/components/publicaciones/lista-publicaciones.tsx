@@ -208,6 +208,15 @@ export default function ListaPublicaciones({ fichas, totalPosts }: { fichas: Fic
               </button>
             </div>
 
+            {f.texto && (
+              <details className="mt-2.5 sm:ml-[68px]">
+                <summary className="cursor-pointer text-xs text-slate-500 hover:text-slate-700">Así salió el post</summary>
+                <pre className="mt-1.5 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-slate-50 p-2.5 font-sans text-[12.5px] leading-relaxed text-slate-700">
+                  {f.texto}
+                </pre>
+              </details>
+            )}
+
             {abierta && n > 0 && (
               <ul className="mt-2.5 border-l-[3px] border-slate-200 pl-3 sm:ml-[68px]">
                 {f.respuestas.map((r) => (
