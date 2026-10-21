@@ -1011,6 +1011,13 @@ async function executeTool(name, input, ctx) {
           };
     }
 
+    // Mismo plazo que el camino con rotacion, para que Sofi diga lo mismo.
+    const reglas = require("../lib/agenda-reglas");
+    const ahoraCita = new Date();
+    cita.corte_at = reglas.corteDe(cita.fecha_hora, { ahora: ahoraCita });
+    const corteTxt = reglas.corteEnPalabras(cita.corte_at, { ahora: ahoraCita });
+    const plazoTxt = corteTxt ? ` Decile tambien que le confirmamos a mas tardar ${corteTxt}.` : "";
+
     // En memoria: la cita viaja al asesor en la alerta aunque la persistencia falle.
     ctx.cita = cita;
     ctx.lead.cita = cita;
@@ -1037,8 +1044,8 @@ async function executeTool(name, input, ctx) {
     const comoDecirlo = ctx.colega
       ? `Decile al colega que la visita quedo SOLICITADA${cita.fecha_hora ? ` para ${cita.fecha_hora}` : ""}, que ahora confirmamos la disponibilidad con el propietario y que ${
           aliasPublico(coordinador, ctx.org)
-        } le escribe para confirmarla. NO le des ningún número. Nunca digas "confirmada".`
-      : `Decile al cliente que la visita quedo SOLICITADA${cita.fecha_hora ? ` para ${cita.fecha_hora}` : ""}, que ahora confirmamos la disponibilidad con el propietario y que el asesor le escribe para confirmarla. Nunca digas que ya quedo en firme ni que "queda lista": todavia falta que el asesor la revise.`;
+        } le escribe para confirmarla. NO le des ningún número. Nunca digas "confirmada".${plazoTxt}`
+      : `Decile al cliente que la visita quedo SOLICITADA${cita.fecha_hora ? ` para ${cita.fecha_hora}` : ""}, que ahora confirmamos la disponibilidad con el propietario y que el asesor le escribe para confirmarla. Nunca digas que ya quedo en firme ni que "queda lista": todavia falta que el asesor la revise.${plazoTxt}`;
     return `Cita registrada: ${cita.descripcion}${cita.fecha_hora ? ` (${cita.fecha_hora})` : ""} — tipo ${cita.tipo}.${notificado} ${comoDecirlo}`;
   }
 

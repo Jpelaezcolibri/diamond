@@ -105,8 +105,10 @@ function enSilencio(fecha = new Date()) {
 // 2) si eso cae de noche en Bogota (despues de las 20:00 o antes de las 08:00),
 //    se adelanta a las 20:00 de esa noche (visita jueves 10:00 -> miercoles
 //    20:00; jueves 16:00 = 04:00 -> miercoles 20:00);
+// 2b) si el corte cae en domingo, pasa al sabado 20:00;
 // 3) nunca antes de 2 h despues del pedido; si ese minimo cae de noche, pasa a
-//    las 08:00 siguientes;
+//    las 08:00 siguientes (si ese minimo cae en domingo se respeta igual:
+//    el minimo de 2 h gana sobre la regla del domingo);
 // 4) y nunca a menos de 2 h de la visita.
 // Las citas viejas conservan el corte_at que ya tienen guardado.
 // Bogota no tiene horario de verano: UTC-5 fijo.
@@ -115,6 +117,11 @@ const DIA_MS = 24 * 60 * MIN;
 // Medianoche (en ms UTC) del dia de Bogota que contiene `ms`.
 const inicioDiaBogota = (ms) => Math.floor((ms - BOGOTA_MS) / DIA_MS) * DIA_MS + BOGOTA_MS;
 const minutosBogota = (ms) => (ms - inicioDiaBogota(ms)) / MIN;
+const esDomingoBogota = (ms) => new Date(inicioDiaBogota(ms) - BOGOTA_MS).getUTCDay() === 0;
+// Pausa de la escalera: noche o domingo (no se rota ni se reavisa).
+function enPausa(fecha = new Date()) {
+  return enSilencio(fecha) || esDomingoBogota(fecha.getTime());
+}
 function corteDe(fechaHoraIso, { ahora = new Date() } = {}) {
   const visita = new Date(fechaHoraIso).getTime();
   if (isNaN(visita)) return null;
@@ -122,6 +129,8 @@ function corteDe(fechaHoraIso, { ahora = new Date() } = {}) {
   const m = minutosBogota(corte);
   if (m > 20 * 60) corte = inicioDiaBogota(corte) + 20 * 60 * MIN;
   else if (m < 8 * 60) corte = inicioDiaBogota(corte) - DIA_MS + 20 * 60 * MIN;
+  // El domingo no es dia habil para confirmar: pasa al sabado 20:00.
+  if (esDomingoBogota(corte)) corte = inicioDiaBogota(corte) - DIA_MS + 20 * 60 * MIN;
   const minimo = ahora.getTime() + CORTE_MIN_DESDE_PEDIDO_H * 60 * MIN;
   if (corte < minimo) {
     corte = minimo;
@@ -147,4 +156,4 @@ function corteEnPalabras(corteIso, { ahora = new Date() } = {}) {
   return `el ${fh.fecha.replace(",", "")} a las ${fh.hora}`;
 }
 
-module.exports = { ANTICIPACION_MIN, CORTE_HORAS_ANTES, anticipacionMin, normalizarOperacion, DURACION_MIN, TRASLADO_MIN, BLOQUE_MIN, validarHora, alternativas, espaciar, enSilencio, corteDe, corteEnPalabras, dentroDeHorario };
+module.exports = { ANTICIPACION_MIN, CORTE_HORAS_ANTES, anticipacionMin, normalizarOperacion, DURACION_MIN, TRASLADO_MIN, BLOQUE_MIN, validarHora, alternativas, espaciar, enSilencio, enPausa, esDomingoBogota, corteDe, corteEnPalabras, dentroDeHorario };

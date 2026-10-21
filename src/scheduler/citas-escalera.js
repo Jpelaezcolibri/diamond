@@ -32,7 +32,7 @@ function pasoDeEscalera({ lead, ciclo, citasOrg, ahora = new Date() }) {
   const c = lead && lead.cita;
   if (!c) return { accion: "nada" };
   if (c.corte_at && ahora.getTime() >= new Date(c.corte_at).getTime()) return { accion: "cortar" };
-  if (reglas.enSilencio(ahora)) return { accion: "nada" };
+  if (reglas.enPausa(ahora)) return { accion: "nada" };
   const desde = new Date(c.asignada_at || c.creada_at || 0).getTime();
   if (isNaN(desde) || ahora.getTime() - desde < PASO_MIN * 60 * 1000) return { accion: "nada" };
   // La anticipacion de 24 h se midio al crearla: para elegir al siguiente solo
@@ -58,7 +58,7 @@ function tocaReaviso({ lead, ahora = new Date() }) {
   const c = lead && lead.cita;
   if (!c || !c.asesor_id || c.estado !== "propuesta") return false;
   if (c.corte_at && ahora.getTime() >= new Date(c.corte_at).getTime()) return false;
-  if (reglas.enSilencio(ahora)) return false;
+  if (reglas.enPausa(ahora)) return false;
   const desde = new Date(c.asignada_at || c.creada_at || 0).getTime();
   if (isNaN(desde) || desde <= 0) return false;
   if (ahora.getTime() - desde < REAVISO_MIN * 60 * 1000) return false;

@@ -103,3 +103,17 @@ test("espaciar: sin libres devuelve vacio, y con uno solo devuelve uno", () => {
   assert.deepStrictEqual(r.espaciar([]), []);
   assert.deepStrictEqual(r.espaciar(["2026-10-08T15:00:00.000Z"]), ["2026-10-08T15:00:00.000Z"]);
 });
+
+// Domingo no es dia habil para confirmar (revision final 2, 2026-10-21).
+test("corteDe: visita lunes 10:00 -> sabado 20:00", () => {
+  const lunes = new Date("2026-10-12T15:00:00Z");
+  assert.strictEqual(r.corteDe("2026-10-26T15:00:00Z", { ahora: lunes }), "2026-10-25T01:00:00.000Z");
+});
+test("corteDe: visita lunes 16:00 -> sabado 20:00", () => {
+  const lunes = new Date("2026-10-12T15:00:00Z");
+  assert.strictEqual(r.corteDe("2026-10-26T21:00:00Z", { ahora: lunes }), "2026-10-25T01:00:00.000Z");
+});
+test("enPausa: domingo de dia es pausa, lunes de dia no", () => {
+  assert.strictEqual(r.enPausa(new Date("2026-10-25T17:00:00Z")), true);
+  assert.strictEqual(r.enPausa(new Date("2026-10-26T17:00:00Z")), false);
+});

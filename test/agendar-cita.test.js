@@ -199,3 +199,11 @@ test("el prompt ya no le ordena a Sofi dar la cita por hecha ni escoger la hora 
     assert.doesNotMatch(p, /proximo_disponible/, quien);
   }
 });
+
+test("prompt: el plazo solo se promete si agendar_cita lo devolvio", () => {
+  const { buildSystemPrompt } = require("../src/agent/prompts");
+  const src = require("fs").readFileSync(require.resolve("../src/agent/prompts"), "utf8");
+  assert.match(src, /no inventes ninguna hora/);
+  assert.match(src, /lo antes posible/);
+  void buildSystemPrompt;
+});

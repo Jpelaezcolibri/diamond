@@ -97,3 +97,12 @@ test("el servidor arranca la escalera", () => {
   const fuente = require("node:fs").readFileSync(require("node:path").join(__dirname, "..", "src", "server.js"), "utf8");
   assert.match(fuente, /require\("\.\/scheduler\/citas-escalera"\)\.start\(\)/);
 });
+
+test("domingo: la escalera no rota ni reavisa, pero el corte sigue cortando", () => {
+  const dom = new Date("2026-10-25T17:00:00Z"); // domingo 12:00 Bogota
+  const l = lead({ asignada_at: "2026-10-25T10:00:00Z", corte_at: "2026-10-26T01:00:00Z", fecha_hora: "2026-10-26T20:00:00Z" });
+  assert.strictEqual(pasoDeEscalera({ lead: l, ciclo: CICLO, citasOrg: [], ahora: dom }).accion, "nada");
+  assert.strictEqual(escalera.tocaReaviso({ lead: l, ahora: dom }), false);
+  const vencido = lead({ asignada_at: "2026-10-25T10:00:00Z", corte_at: "2026-10-25T15:00:00Z", fecha_hora: "2026-10-26T20:00:00Z" });
+  assert.strictEqual(pasoDeEscalera({ lead: vencido, ciclo: CICLO, citasOrg: [], ahora: dom }).accion, "cortar");
+});
