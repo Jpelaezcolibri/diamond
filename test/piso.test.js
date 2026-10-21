@@ -105,3 +105,27 @@ test("'pisos en madera' y '3 pisos' no son un piso", () => {
   assert.strictEqual(pisoDe({ titulo: "Apto", descripcion: "Pisos en madera", caracteristicas: "Balcon" }), null);
   assert.strictEqual(pisoDe({ titulo: "Casa de 3 pisos", descripcion: "Casa con 3 pisos y terraza", caracteristicas: "3 pisos" }), null);
 });
+
+// ── Rescate de pedidos (2026-10-20): "Pisos" (plural, con dos puntos o tabla) es la cantidad de niveles ──
+
+test("'Pisos: 2' en caracteristicas es la cantidad de pisos del edificio, no el piso: null", () => {
+  assert.strictEqual(pisoDe({ titulo: "Apto", caracteristicas: "Pisos: 2" }), null);
+});
+
+test("'PISOS | 3' en la tabla de la descripcion no es el piso: null", () => {
+  assert.strictEqual(pisoDe({ titulo: "Casa", descripcion: "NIVELES | 2 PISOS | 3" }), null);
+  assert.strictEqual(pisoDe({ titulo: "Casa", descripcion: "PISOS | 3" }), null);
+});
+
+test("'Piso: 3' y 'PISO | 3' (singular, con separador) siguen leyendose como piso 3", () => {
+  assert.strictEqual(pisoDe({ titulo: "Apto", caracteristicas: "Piso: 3" }), 3);
+  assert.strictEqual(pisoDe({ titulo: "Apto", descripcion: "PISO | 3" }), 3);
+});
+
+// Zona: "Provenza" es parte de El Poblado; un pedido de El Poblado la gradua exacta.
+test("ficha en 'Provenza' contra pedido 'El Poblado' gradua exacta", () => {
+  const { ubicacionCoincide } = require("../src/groups/match");
+  const pedido = { operacion: "venta", tipo: "apartamento", zona: "El Poblado", zonas: ["El Poblado"], ciudad: "" };
+  const u = ubicacionCoincide({ ref: "x", zona: "Provenza", ciudad: "Medellín" }, pedido);
+  assert.strictEqual(u && u.grado, "exacta");
+});

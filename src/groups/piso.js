@@ -41,8 +41,12 @@ const PLANTAS = /\b(de|con)\s+(un|dos|tres|cuatro|\d)\s+pisos\b/i;
 const OTRO_SUJETO = /\b(restaurante|coworking|local(?:es)?|recepci[oó]n|porter[ií]a|gimnasio|sal[oó]n|lobby|comercio|caf[eé]|tienda|oficinas?|parqueaderos?|dep[oó]sito)\b[^.,;]{0,40}?\b(?:en\s+el\s+|del\s+)?(?:[uú]ltimo|primer(?:o|a)?|segundo|tercer(?:o|a)?|\d{1,2}[^\s]*)\s+pisos?\b/gi;
 
 // "Piso 19", "piso No 3", "piso #4", "3er piso", "3 piso", "Piso: 3", "PISO | 3" (tabla).
+// "Piso: 3" y "PISO | 3" (tabla) solo con el singular: "Pisos: 2" y "PISOS | 3"
+// cuentan los niveles del edificio, no el piso del apartamento (rescate
+// 2026-10-20: "NIVELES | 2 PISOS | 3" daba 3). El plural va sin separador.
 const NUMERO = [
-  /\bpisos?\s*(?:[:|]\s*)?(?:n[ou]\.?|n[uú]mero|#)?\s*(\d{1,2})\b/i,
+  /\bpiso\s*(?:[:|]\s*)?(?:n[ou]\.?|n[uú]mero|#)?\s*(\d{1,2})\b/i,
+  /\bpisos\s*(?:n[ou]\.?|n[uú]mero|#)?\s*(\d{1,2})\b/i,
   /\b(\d{1,2})\s*(?:er|do|to|mo|vo|no|°|º)?\s+piso\b/i,
 ];
 const ORDINALES = [
