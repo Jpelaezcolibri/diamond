@@ -110,7 +110,7 @@ test("un maxPropiedades explicito SI se respeta — el default es sin tope, no l
 test("no deriva a ninguna asesora — solo lleva el link de Sofi, no el de una persona", () => {
   const texto = redactar.mensajeGrupo({ autor_nombre: "Ana" }, [match()]);
   assert.ok(!texto.includes("Catherine"));
-  assert.ok(texto.includes("Comision compartida."));
+  assert.ok(texto.includes("Comisión compartida."));
 });
 
 // Firma con link (Juan, 2026-08-20, texto reescrito 2026-08-24): sin ?text=:
@@ -124,7 +124,7 @@ test("la firma invita a escribirle a la linea oficial de Sofi, limpio y sin mens
   const texto = redactar.mensajeGrupo({ autor_nombre: "Ana" }, [match()]);
   assert.match(
     texto,
-    /— Sofi, asistente virtual\n\nPara que la conversación quede en nuestro sistema, también podés escribirle directo a Sofi \(nuestra línea oficial\):\nhttps:\/\/wa\.me\/\d+$/m
+    /— Sofi, asistente virtual\n\nPara que la conversación quede en nuestro sistema, también puedes escribirle directo a Sofi \(nuestra línea oficial\):\nhttps:\/\/wa\.me\/\d+$/m
   );
 });
 
@@ -209,13 +209,13 @@ test("sin 'sinConfirmar', el mensaje sale exactamente igual que antes -- ni un r
 
 test("con un solo dato sin confirmar y una sola propiedad, la salvedad usa el singular", () => {
   const texto = redactar.mensajeGrupo({ autor_nombre: "Ana" }, [match()], { sinConfirmar: ["terraza"] });
-  assert.match(texto, /No tengo confirmado si tiene terraza — decime si querés que lo averigüe\./);
+  assert.match(texto, /No tengo confirmado si tiene terraza — dime si quieres que lo averigüe\./);
 });
 
 test("con varios datos sin confirmar y varias propiedades, la salvedad usa el plural y conecta con 'ni'", () => {
   const dos = [match({ ref: "A" }), match({ ref: "B" })];
   const texto = redactar.mensajeGrupo({ autor_nombre: "Ana" }, dos, { sinConfirmar: ["terraza", "antigüedad"] });
-  assert.match(texto, /No tengo confirmado si tienen terraza ni antigüedad — decime si querés que lo averigüe\./);
+  assert.match(texto, /No tengo confirmado si tienen terraza ni antigüedad — dime si quieres que lo averigüe\./);
 });
 
 test("la salvedad va pegada al encabezado, antes de las fichas de las propiedades", () => {

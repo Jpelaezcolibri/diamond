@@ -343,7 +343,7 @@ function lineaSalvedad(sinConfirmar, cantidadPropiedades) {
   const lista = unirConNi(sinConfirmar);
   if (!lista) return null;
   const verbo = cantidadPropiedades === 1 ? "tiene" : "tienen";
-  return `No tengo confirmado si ${verbo} ${lista} — decime si querés que lo averigüe.`;
+  return `No tengo confirmado si ${verbo} ${lista} — dime si quieres que lo averigüe.`;
 }
 
 // LAS ACLARACIONES DE CADA FICHA, compartidas por el mensaje unico
@@ -393,12 +393,12 @@ function detallesPorFicha(props, leFalta, pedido) {
 // conversacion no corre el riesgo de baneo de una linea personal y queda
 // registrada en el CRM.
 function lineasCierre(org) {
-  const cierre = ["Comision compartida.", "— Sofi, asistente virtual"];
+  const cierre = ["Comisión compartida.", "— Sofi, asistente virtual"];
   const linkSofi = linkContactoOficial(org);
   if (linkSofi) {
     cierre.push(
       "",
-      "Para que la conversación quede en nuestro sistema, también podés escribirle directo a Sofi (nuestra línea oficial):",
+      "Para que la conversación quede en nuestro sistema, también puedes escribirle directo a Sofi (nuestra línea oficial):",
       linkSofi
     );
   }
@@ -541,25 +541,25 @@ function mensajesAlColega(
   const linkMas = codigo ? linkContactoOficial(org, `Hola Sofi, quiero más opciones para mi PEDIDO (cód. ${codigo})`) : null;
   const cierre = linkAgendar && linkMas
     ? [
-        "Comision compartida.",
+        "Comisión compartida.",
         "— Sofi, asistente virtual",
         "",
-        "📅 ¿Agendamos una visita? Escribile a Sofi:",
+        "📅 ¿Agendamos una visita? Escríbele a Sofi:",
         linkAgendar,
         "",
         restantes > 0
-          ? `🔎 Tengo ${cuantasMas} para este pedido; ${restantes === 1 ? "pedísela" : "pedíselas"} a Sofi:`
+          ? `🔎 Tengo ${cuantasMas} para este pedido; ${restantes === 1 ? "pídesela" : "pídeselas"} a Sofi:`
           : "🔎 ¿Más opciones o alguna duda?",
         linkMas,
       ]
     : restantes > 0
       ? [
-          "Comision compartida.",
+          "Comisión compartida.",
           "— Sofi, asistente virtual",
           "",
           ...(linkSofi
-            ? [`Tengo ${cuantasMas} para este pedido; si querés verlas, escribile a Sofi (nuestra línea oficial):`, linkSofi]
-            : [`Tengo ${cuantasMas} para este pedido; si querés verlas, decime.`]),
+            ? [`Tengo ${cuantasMas} para este pedido; si quieres verlas, escríbele a Sofi (nuestra línea oficial):`, linkSofi]
+            : [`Tengo ${cuantasMas} para este pedido; si quieres verlas, dímelo.`]),
         ]
       : lineasCierre(org);
 

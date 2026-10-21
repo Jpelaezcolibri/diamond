@@ -420,6 +420,66 @@ async function quitarYaEnviadas(org, { lid = null, telefono = null } = {}, propi
   return { quedan: propiedades.filter((m) => !repetidas.includes(m)), repetidas: repetidas.map((m) => String(m.ref)) };
 }
 
+// Las notas de Sofi (salvedad y le_falta) con las aclaraciones de las fichas
+// que salen con un dato por confirmar (ver publicable.js#notasParaDm). Sin
+// aclaraciones son las notas de Sofi tal cual.
+// `revisadas` (opcional, lo usa el script de rescate): las refs que Sofi vio
+// al escribir esas notas; ver publicable.js#salvedadDeLasFichas.
+function notasDelVeredicto(rev, aclaraciones, props, { revisadas = null } = {}) {
+  return publicable.notasParaDm(
+    { sinConfirmar: (rev && rev.sin_confirmar) || [], leFalta: (rev && rev.le_falta) || [] },
+    aclaraciones || [],
+    props,
+    { revisadas }
+  );
+}
+
+// Las refs que de verdad salieron y que iban con aclaracion.
+function refsConAclaracion(aclaraciones, refsEnviadas) {
+  const aclaradas = new Set((aclaraciones || []).map((a) => String(a.ref)));
+  return (refsEnviadas || []).map(String).filter((r) => aclaradas.has(r));
+}
+
+// En los caminos manuales el motivo sigue diciendo QUIEN lo mando
+// (dm_manual / aprobacion_manual); que salio con aclaracion queda en la traza.
+function trazaConAclaracion(aclaraciones, refsEnviadas) {
+  const refs = refsConAclaracion(aclaraciones, refsEnviadas);
+  return refs.length ? [`con_aclaracion:${refs.join(",")}`] : [];
+}
+
+// Guarda en la señal por que el pedido no salio. Fail-open: un error de base de
+// datos no puede tumbar el camino del radar.
+async function guardarMotivoSalida(org, signal, motivo, trazaPrevia = []) {
+  if (!signal || !signal.id) return;
+  try {
+    await groupSignals.guardarPolitica(org.id, signal.id, { motivo, traza: [...trazaPrevia, `NO:${motivo}`] });
+  } catch (e) {
+    console.warn(`[radar] No se pudo guardar el motivo ${motivo}:`, e.message);
+  }
+}
+
+// Un descarte de Sofi que contradice el dato no vale: una ref PROPIA (no de
+// aliado) con puntaje >= 95 que Sofi saca diciendo que "es de aliados" vuelve a
+// refs_utiles (caso ccdc2404: la 10013037, puntaje 100, "las tres son de
+// aliados"). Angosto a proposito: solo si Sofi no aprobo NINGUNA (si aprobo
+// otras, "las dos de aliados no se ofrecen" habla de las de aliado y la propia
+// que dejo afuera la descarto por otra razon -- caso 87203925), solo propias,
+// solo >= 95, solo si el texto de Sofi menciona "aliad", y solo si no la marco
+// ni util ni dudosa. scripts/rescate-pedidos.js usa esta misma funcion: el
+// radar y el lote tienen que decidir igual.
+function rescatarDescartesFalsos(veredicto, matches) {
+  if (!veredicto || !veredicto.es_pedido_real || !/aliad/i.test(String(veredicto.por_que || ""))) return veredicto;
+  const utiles = Array.isArray(veredicto.refs_utiles) ? veredicto.refs_utiles.map(String) : [];
+  if (utiles.length > 0) return veredicto;
+  const dudosas = Array.isArray(veredicto.refs_dudosas) ? veredicto.refs_dudosas.map(String) : [];
+  const rescatadas = (matches || [])
+    .filter((m) => m && m.ref !== null && m.ref !== undefined && m.fuente !== "aliado" && Number(m.puntaje) >= 95)
+    .map((m) => String(m.ref))
+    .filter((r) => !utiles.includes(r) && !dudosas.includes(r));
+  if (rescatadas.length === 0) return veredicto;
+  return { ...veredicto, sirve_alguna: true, refs_utiles: [...utiles, ...rescatadas], refs_rescatadas: rescatadas };
+}
+
 // Sofi da su veredicto y, si aprueba, le avisa a la asesora.
 //
 // Sofi ve TODAS las candidatas, tambien las de puntaje bajo: es la unica forma
@@ -430,13 +490,18 @@ async function quitarYaEnviadas(org, { lid = null, telefono = null } = {}, propi
 // SIEMPRE —aunque diga que no sirve— porque el "no" tambien ensena.
 async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, sesion = null }) {
   const matches = señal.matches || [];
-  if (matches.length === 0) return { resultado: "sin_candidatas", signalId: signal && signal.id };
+  if (matches.length === 0) {
+    await guardarMotivoSalida(org, signal, "sin_candidatas");
+    return { resultado: "sin_candidatas", signalId: signal && signal.id };
+  }
 
-  const { veredicto } = await revalidar.revalidar(c, matches);
-  if (!veredicto) {
+  const { veredicto: veredictoSofi } = await revalidar.revalidar(c, matches);
+  if (!veredictoSofi) {
     // Falla cerrada: sin veredicto no se le escribe a nadie.
+    await guardarMotivoSalida(org, signal, "sin_veredicto");
     return { resultado: "sin_veredicto", signalId: signal && signal.id };
   }
+  const veredicto = rescatarDescartesFalsos(veredictoSofi, matches);
   await groupSignals.guardarRevalidacion(org.id, signal.id, veredicto);
 
   const señalParaFeed = { grupo_nombre: grupo.nombre || grupo.jid, autor_nombre: mensaje.autor, texto_original: mensaje.texto };
@@ -447,6 +512,7 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
     await feedComando.registrar(org, señalParaFeed, veredicto, matches).catch((e) =>
       console.warn("[radar] No se pudo escribir en el feed del admin:", e.message)
     );
+    await guardarMotivoSalida(org, signal, "descartada_por_sofi");
     return { resultado: "descartada_por_sofi", veredicto, signalId: signal.id };
   }
 
@@ -495,9 +561,15 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
   // que el DM manual); las barreras de dato y de seguridad siguen duras. Lo
   // que no pasa NO se pierde: cae al aviso a la asesora de siempre.
   const inventarioDm = await syncEstado.estadoDelInventario(org.id, { ahora: ahora || new Date() });
-  const { publicables: utilesLimpias, descartados: descartadosDm } = publicable.filtrar(utilesSegunSofi, {
+  // CON ACLARACION (Juan, 2026-10-20; RADAR_DM_CON_ACLARACION): una ficha a
+  // la que solo le falta un dato aclarable (barrio, piso, parqueadero,
+  // precio) sale despues de las exactas, con la aclaracion en la ficha. Ver
+  // publicable.js#MOTIVOS_ACLARABLES. Apagado, `aclaracionesDm` sale vacio y
+  // todo lo de abajo queda como antes.
+  const { publicables: utilesLimpias, descartados: descartadosDm, aclaraciones: aclaracionesDm = [] } = publicable.filtrar(utilesSegunSofi, {
     syncFresco: inventarioDm.fresco,
     umbral: 0,
+    conAclaracion: publicable.dmConAclaracionActivo(),
   });
   const { verificadas: utiles, rotas: rotasDm } = await verificarLink.verificar(utilesLimpias);
   for (const r of rotasDm) descartadosDm.push({ ref: r.ref, motivos: ["link_no_abre"] });
@@ -587,6 +659,14 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
     }
   }
 
+  // Sofi solo marco dudosas (ninguna util): decidirDm no mira eso y dice "ok",
+  // asi que el pedido quedaba guardado como si hubiera salido bien. El motivo
+  // real: no hay nada seguro para mandarle al colega, va a la asesora.
+  if (utilesSegunSofi.length === 0 && decisionDm.motivo === "ok") {
+    decisionDm.motivo = "solo_dudosas";
+    decisionDm.traza = [...decisionDm.traza, "NO:solo_dudosas"];
+  }
+
   // NO REENVIAR (ver quitarYaEnviadas). Lo que el colega ya recibio en los
   // ultimos dias no se le repite. Si no queda nada, el pedido NO se pierde:
   // cae al aviso a la asesora con el motivo, igual que cualquier otro freno.
@@ -652,11 +732,12 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
     // de a una propiedad Link Que se pueda pasar al posible cliente"). Primero
     // un mensaje para el colega y despues una ficha por propiedad, cada una con
     // su link de Wasi. Ver redactar.mensajesAlColega y envio-colega.js.
+    const notasDm = notasDelVeredicto(veredicto, aclaracionesDm, utilesDm.slice(0, redactar.MAX_POR_DM));
     const armado = redactar.mensajesAlColega({ autor_nombre: mensaje.autor }, utilesDm, {
       org,
       codigo: await codigoColega.asignarCodigo(org.id, signal.id),
-      sinConfirmar: veredicto.sin_confirmar || [],
-      leFalta: veredicto.le_falta || [],
+      sinConfirmar: notasDm.sinConfirmar,
+      leFalta: notasDm.leFalta,
       pedido: pedidoDe(c, { texto: mensaje.texto, fechaIso: mensaje.instanteIso }),
     });
     if (armado) {
@@ -688,11 +769,21 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
           destinoTelefono: telefonoColega || null,
           destinoLid: mensaje.autorId || mensaje.autorTelefono || null,
         });
+        const aclaradasEnviadas = refsConAclaracion(aclaracionesDm, envio.refsEnviadas);
         if (!envio.completo) {
           await groupSignals
             .guardarPolitica(org.id, signal.id, {
               motivo: "dm_parcial",
               traza: [...decisionDm.traza, `dm_parcial:salieron:${envio.refsEnviadas.join(",")}`, `faltaron:${envio.faltantes.join(",")}`, `error:${envio.error}`],
+            })
+            .catch(() => {});
+        } else if (aclaradasEnviadas.length) {
+          // Salio con al menos una ficha con aclaracion: queda dicho en la
+          // señal, para poder medir cuantos pedidos rescata esta regla.
+          await groupSignals
+            .guardarPolitica(org.id, signal.id, {
+              motivo: "dm_con_aclaracion",
+              traza: [...decisionDm.traza, `con_aclaracion:${aclaradasEnviadas.join(",")}`],
             })
             .catch(() => {});
         }
@@ -828,12 +919,17 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
     // compuerta de calidad de arriba (publicable.filtrar + verificarLink) ya
     // descarto -- alertaAsesor.js las aparta del "mandale ESTO YA" en vez de
     // ofrecerlas como si hubieran pasado.
-    { link: linkAviso, carrilAmoblados: carrilEsDelPedido, descartadosCalidad: descartadosDm }
+    // Las que iban a salir con aclaracion y no salieron vuelven a la lista de
+    // la asesora con su motivo, como antes de la regla.
+    { link: linkAviso, carrilAmoblados: carrilEsDelPedido, descartadosCalidad: [...descartadosDm, ...aclaracionesDm.map((a) => ({ ref: a.ref, motivos: a.motivos }))] }
   );
   if (!texto) {
     await feedComando.registrar(org, señalParaFeed, veredicto, matches).catch((e) =>
       console.warn("[radar] No se pudo escribir en el feed del admin:", e.message)
     );
+    // Solo se pisa el motivo si era "ok": uno real (un freno del DM) es mas
+    // informativo que este.
+    if (decisionDm.motivo === "ok") await guardarMotivoSalida(org, signal, "descartada_por_sofi", decisionDm.traza);
     return { resultado: "descartada_por_sofi", veredicto, signalId: signal.id };
   }
 
@@ -1145,9 +1241,11 @@ async function aprobarManual(org, signalId) {
   // sin_precio, precio_fuera_de_rango, sync_viejo, etc.) siguen exactamente
   // igual de duros — esos no son de confianza, son de seguridad y de dato.
   const inventario = await syncEstado.estadoDelInventario(org.id, {});
-  const { publicables: candidatas, descartados } = publicable.filtrar(signal.matches || [], {
+  // Con aclaracion, la misma regla que el DM automatico (ver asistir).
+  const { publicables: candidatas, descartados, aclaraciones = [] } = publicable.filtrar(signal.matches || [], {
     syncFresco: inventario.fresco,
     umbral: 0,
+    conAclaracion: publicable.dmConAclaracionActivo(),
   });
   const { verificadas: publicables, rotas } = await verificarLink.verificar(candidatas);
   for (const r of rotas) descartados.push({ ref: r.ref, motivos: ["link_no_abre"] });
@@ -1159,12 +1257,11 @@ async function aprobarManual(org, signalId) {
   // salvedades del veredicto — la divergencia que la revision del 2026-09-06
   // (H2) encontro entre los caminos. `texto` es el borrador de un solo
   // mensaje, para quien lo muestre cuando el DM no puede salir.
-  const sinConfirmarManual = (signal.revalidacion && signal.revalidacion.sin_confirmar) || [];
-  const leFaltaManual = (signal.revalidacion && signal.revalidacion.le_falta) || [];
+  const notasManual = notasDelVeredicto(signal.revalidacion, aclaraciones, publicables);
   const texto = redactar.mensajeGrupo({ autor_nombre: signal.autor_nombre }, publicables, {
     org,
-    sinConfirmar: sinConfirmarManual,
-    leFalta: leFaltaManual,
+    sinConfirmar: notasManual.sinConfirmar,
+    leFalta: notasManual.leFalta,
     pedido: pedidoDe(signal),
   });
   if (!texto) return { resultado: "sin_texto" };
@@ -1247,11 +1344,12 @@ async function aprobarManual(org, signalId) {
   if (!aEnviar.length) return { resultado: "ya_se_le_mando", refs: repetidas, texto, publicables };
 
   // UNA PROPIEDAD POR MENSAJE, igual que el camino automatico.
+  const notasAprobada = notasDelVeredicto(signal.revalidacion, aclaraciones, aEnviar.slice(0, redactar.MAX_POR_DM));
   const armado = redactar.mensajesAlColega({ autor_nombre: signal.autor_nombre }, aEnviar, {
     org,
     codigo: await codigoColega.asignarCodigo(org.id, signal.id),
-    sinConfirmar: sinConfirmarManual,
-    leFalta: leFaltaManual,
+    sinConfirmar: notasAprobada.sinConfirmar,
+    leFalta: notasAprobada.leFalta,
     pedido: pedidoDe(signal),
   });
   const envio = await envioColega.enviarAlColega({
@@ -1300,7 +1398,12 @@ async function aprobarManual(org, signalId) {
   await groupSignals
     .guardarPolitica(org.id, signal.id, {
       motivo: "aprobacion_manual",
-      traza: ["aprobacion_manual", `refs:${refs.join(",")}`, ...(envio.completo ? [] : [`faltaron:${envio.faltantes.join(",")}`])],
+      traza: [
+        "aprobacion_manual",
+        `refs:${refs.join(",")}`,
+        ...(envio.completo ? [] : [`faltaron:${envio.faltantes.join(",")}`]),
+        ...trazaConAclaracion(aclaraciones, refs),
+      ],
     })
     .catch(() => {});
 
@@ -1390,9 +1493,10 @@ async function responderPorDmManual(org, signalId, { sesion = null, refs = null 
     : matchesDisponibles;
 
   const inventario = await syncEstado.estadoDelInventario(org.id, {});
-  const { publicables: candidatas, descartados } = publicable.filtrar(matchesAEvaluar, {
+  const { publicables: candidatas, descartados, aclaraciones = [] } = publicable.filtrar(matchesAEvaluar, {
     syncFresco: inventario.fresco,
     umbral: 0,
+    conAclaracion: publicable.dmConAclaracionActivo(),
   });
   const { verificadas: publicables, rotas } = await verificarLink.verificar(candidatas);
   for (const r of rotas) descartados.push({ ref: r.ref, motivos: ["link_no_abre"] });
@@ -1430,12 +1534,11 @@ async function responderPorDmManual(org, signalId, { sesion = null, refs = null 
   // IA aca. Una señal que nunca paso por asistido no trae `revalidacion`, y
   // esto se degrada a "sin salvedad", igual que un mensaje redactado antes de
   // este cambio.
-  const sinConfirmar = (signal.revalidacion && signal.revalidacion.sin_confirmar) || [];
-  const leFalta = (signal.revalidacion && signal.revalidacion.le_falta) || [];
+  const notas = notasDelVeredicto(signal.revalidacion, aclaraciones, publicables);
   const texto = redactar.mensajeGrupo({ autor_nombre: signal.autor_nombre }, publicables, {
     org,
-    sinConfirmar,
-    leFalta,
+    sinConfirmar: notas.sinConfirmar,
+    leFalta: notas.leFalta,
     pedido: pedidoDe(signal),
   });
   if (!texto) return { resultado: "sin_texto" };
@@ -1485,11 +1588,12 @@ async function responderPorDmManual(org, signalId, { sesion = null, refs = null 
   if (!aEnviar.length) return { resultado: "ya_se_le_mando", refs: repetidas, descartados };
 
   // UNA PROPIEDAD POR MENSAJE, igual que el camino automatico.
+  const notasDm = notasDelVeredicto(signal.revalidacion, aclaraciones, aEnviar.slice(0, redactar.MAX_POR_DM));
   const armado = redactar.mensajesAlColega({ autor_nombre: signal.autor_nombre }, aEnviar, {
     org,
     codigo: await codigoColega.asignarCodigo(org.id, signal.id),
-    sinConfirmar,
-    leFalta,
+    sinConfirmar: notasDm.sinConfirmar,
+    leFalta: notasDm.leFalta,
     pedido: pedidoDe(signal),
   });
   const envioDm = await envioColega.enviarAlColega({
@@ -1531,7 +1635,12 @@ async function responderPorDmManual(org, signalId, { sesion = null, refs = null 
   await groupSignals
     .guardarPolitica(org.id, signal.id, {
       motivo: "dm_manual",
-      traza: ["dm_manual", `refs:${refsEnviadas.join(",")}`, ...(envioDm.completo ? [] : [`faltaron:${envioDm.faltantes.join(",")}`])],
+      traza: [
+        "dm_manual",
+        `refs:${refsEnviadas.join(",")}`,
+        ...(envioDm.completo ? [] : [`faltaron:${envioDm.faltantes.join(",")}`]),
+        ...trazaConAclaracion(aclaraciones, refsEnviadas),
+      ],
     })
     .catch(() => {});
 
@@ -1673,9 +1782,10 @@ async function prepararAviso(org, signalId, { sesion = null } = {}) {
     (refs || []).map((r) => (signal.matches || []).find((m) => m && String(m.ref) === String(r))).filter(Boolean);
 
   const inventario = await syncEstado.estadoDelInventario(org.id, {}).catch(() => ({ fresco: true }));
-  const { publicables: candidatas, descartados } = publicable.filtrar(porRef(rev.refs_utiles), {
+  const { publicables: candidatas, descartados, aclaraciones = [] } = publicable.filtrar(porRef(rev.refs_utiles), {
     syncFresco: inventario.fresco,
     umbral: 0,
+    conAclaracion: publicable.dmConAclaracionActivo(),
   });
   const { verificadas: utiles, rotas } = await verificarLink
     .verificar(candidatas)
@@ -1699,8 +1809,7 @@ async function prepararAviso(org, signalId, { sesion = null } = {}) {
   const mensaje = aprobada && !soloLlamada
     ? redactar.mensajeGrupo({ autor_nombre: signal.autor_nombre }, utiles, {
         org,
-        sinConfirmar: rev.sin_confirmar || [],
-        leFalta: rev.le_falta || [],
+        ...notasDelVeredicto(rev, aclaraciones, utiles),
         pedido: pedidoDe(signal),
       })
     : null;
@@ -1716,8 +1825,7 @@ async function prepararAviso(org, signalId, { sesion = null } = {}) {
         redactar.mensajesAlColega({ autor_nombre: signal.autor_nombre }, utiles, {
           org,
           codigo: await codigoColega.asignarCodigo(org.id, signal.id),
-          sinConfirmar: rev.sin_confirmar || [],
-          leFalta: rev.le_falta || [],
+          ...notasDelVeredicto(rev, aclaraciones, utiles.slice(0, redactar.MAX_POR_DM)),
           pedido: pedidoDe(signal),
         }) || { mensajes: [] }
       ).mensajes.map((m) => m.texto)
@@ -1762,4 +1870,6 @@ async function prepararAviso(org, signalId, { sesion = null } = {}) {
 module.exports = {
   procesarMensaje, idEnVivo, asistir, destinatarios, aprobarManual, responderPorDmManual, prepararAviso,
   manejarOferta, VENTANA_LIMITE_HORAS,
+  // Para scripts/rescate-pedidos.js: el lote arma el DM con las mismas piezas.
+  quitarYaEnviadas, pedidoDe, notasDelVeredicto, refsConAclaracion, rescatarDescartesFalsos,
 };

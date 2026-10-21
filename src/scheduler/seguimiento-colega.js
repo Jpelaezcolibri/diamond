@@ -48,7 +48,7 @@ function textoLineaGrupos(senal, org) {
     : linkContactoOficial(org);
   return [
     `Hola${nombre ? ` ${nombre}` : ""}, ¿te sirvió alguna de las opciones que te mandé?`,
-    link ? `Si querés más opciones o tenés alguna duda, escribile a Sofi 👉 ${link}` : "Si querés más opciones o tenés alguna duda, contame.",
+    link ? `Si quieres más opciones o tienes alguna duda, escríbele a Sofi 👉 ${link}` : "Si quieres más opciones o tienes alguna duda, cuéntame.",
     "— Sofi, asistente virtual",
   ].join("\n");
 }

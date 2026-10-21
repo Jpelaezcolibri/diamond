@@ -165,6 +165,8 @@ app.listen(config.port, () => {
   if (config.supabaseUrl) require("./scheduler/resumen-pedidos").start();
   // Alerta tecnica si falla el sync de Wasi, solo a ALERTA_TECNICA_TO (2026-10-17).
   if (config.supabaseUrl) require("./scheduler/alerta-sync").start();
+  // Alerta a Juan si el radar pasa 6 h habiles sin pedidos (2026-10-20).
+  if (config.supabaseUrl) require("./scheduler/radar-callado").start();
   // Amoblados publicados en grupos desde la linea del radar (Juan, 2026-10-19).
   if (config.supabaseUrl) require("./scheduler/publicador-grupos").start();
   // Recordatorios de respuestas a publicaciones (Juan, 2026-10-20).

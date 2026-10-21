@@ -222,7 +222,14 @@ function ubicacionCoincide(p, c) {
     const confirmado = sectores.find((s) => barrio.nombra(p, s));
     if (confirmado) return { razon: `${donde} (${confirmado}, según la ficha)`, puntos: 20, grado: "exacta" };
     if (barrio.otrosBarrios(p, sectores).length) return null;
-    return { razon: `${donde} (el barrio exacto no está registrado)`, puntos: -5, grado: "zona_general" };
+    // Si la ficha nombra OTRO barrio conocido (aunque sea "via las Antillas"),
+    // el barrio no es un dato que falte: publicable.js no la deja salir con
+    // aclaracion. Ver barrio.js#mencionaOtroBarrio.
+    const otrosEnFicha = barrio.mencionaOtroBarrio(p, sectores);
+    return {
+      razon: `${donde} (el barrio exacto no está registrado)`, puntos: -5, grado: "zona_general",
+      ...(otrosEnFicha.length ? { otrosEnFicha } : {}),
+    };
   }
   if (pide) {
     // Zona distinta y no contigua. Entra, pero muy castigada y marcada: solo

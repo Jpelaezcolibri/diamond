@@ -249,7 +249,7 @@ export default async function GruposPage() {
           .from("group_signals")
           .select("*", { count: "exact", head: true })
           .eq("respuesta_modo", "auto")
-      ).eq("politica_motivo", "ok"),
+      ).in("politica_motivo", ["ok", "dm_con_aclaracion"]),
       "grupos:auto_dm"
     ),
     countSafe(

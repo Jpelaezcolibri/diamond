@@ -613,7 +613,7 @@ test("el DM al colega usa el mismo texto que antes iba al grupo (redactar.mensaj
   // El saludo dice a que pedido responde (Juan, 2026-09-10): el clasificador
   // de este archivo devuelve apartamento / laureles / 900M / 3 alcobas.
   assert.match(t, /Hola Patricia, te respondo tu pedido de apartamento en Laureles, hasta \$900\.000\.000, 3 alcobas\./);
-  assert.match(t, /Comision compartida/);
+  assert.match(t, /Comisión compartida/);
   assert.match(t, /Sofi, asistente virtual/);
   assert.doesNotMatch(t, /Diamond/i, "el mensaje blanqueado nunca menciona Diamond");
 });
@@ -792,9 +792,8 @@ test("carril de arriendo (Sofi no aprobo nada util): con utiles vacio no se inve
   const ultimaPolitica = politicasGuardadas[politicasGuardadas.length - 1];
   // Ni "carril_umbral" (es para cuando SI habia candidatas y ninguna
   // califico) ni "carril_apagado" (es para cuando el interruptor freno un
-  // envio que si tenia con que salir) -- aca simplemente no habia nada
-  // aprobado, y ese es el motivo que tiene que quedar.
-  assert.strictEqual(ultimaPolitica.motivo, "ok");
+  // -- aca simplemente no habia nada aprobado: solo_dudosas (antes quedaba "ok").
+  assert.strictEqual(ultimaPolitica.motivo, "solo_dudosas");
 
   // La asesora recibe la razon autentica -- nunca una frase de carril.
   assert.match(enviadosPorSofi[0].texto, /Sofi no aprobó ninguna/);
@@ -1270,4 +1269,197 @@ test("SOLO VISITAS: el DM al colega sale y el aviso post-DM no", async () => {
   } finally {
     delete process.env.ASESORA_SOLO_VISITAS;
   }
+});
+
+// ── Ningun pedido sin motivo (rescate-pedidos, tarea 2) ──────────────────
+test("sin candidatas guarda el motivo sin_candidatas", async () => {
+  matchesDevueltos = [];
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE });
+  assert.strictEqual(r.resultado, "sin_candidatas");
+  assert.ok(politicasGuardadas.some((p) => p.id === "sig-1" && p.motivo === "sin_candidatas"));
+});
+
+// Segunda salida de descartada_por_sofi (vivo.js, rama "!texto"): el motivo
+// "ok" se pisa; un freno real ya guardado se conserva. Se fuerza construir()
+// a null para llegar a esa rama.
+test("descartada por Sofi sin texto: un motivo ok se pisa con descartada_por_sofi", async () => {
+  const alertaAsesor = require(RUTA("groups/alerta-asesor.js"));
+  const orig = alertaAsesor.construir;
+  alertaAsesor.construir = () => null;
+  try {
+    veredictoDeSofi = { ...APRUEBA };
+    const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE });
+    assert.strictEqual(r.resultado, "descartada_por_sofi");
+    assert.strictEqual(politicasGuardadas[politicasGuardadas.length - 1].motivo, "descartada_por_sofi");
+  } finally {
+    alertaAsesor.construir = orig;
+  }
+});
+
+test("descartada por Sofi sin texto: un freno real ya guardado (solo_dudosas) se conserva", async () => {
+  const alertaAsesor = require(RUTA("groups/alerta-asesor.js"));
+  const orig = alertaAsesor.construir;
+  alertaAsesor.construir = () => null;
+  try {
+    veredictoDeSofi = { ...APRUEBA, refs_utiles: [], refs_dudosas: ["9780079"] };
+    const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE });
+    assert.strictEqual(r.resultado, "descartada_por_sofi");
+    const ultimo = politicasGuardadas[politicasGuardadas.length - 1];
+    assert.strictEqual(ultimo.motivo, "solo_dudosas");
+    assert.ok(!politicasGuardadas.some((p) => p.motivo === "descartada_por_sofi"));
+  } finally {
+    alertaAsesor.construir = orig;
+  }
+});
+
+test("sin veredicto guarda el motivo sin_veredicto", async () => {
+  veredictoDeSofi = null;
+  await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE });
+  assert.ok(politicasGuardadas.some((p) => p.id === "sig-1" && p.motivo === "sin_veredicto"));
+});
+
+test("descartada por Sofi guarda el motivo descartada_por_sofi", async () => {
+  veredictoDeSofi = {
+    es_pedido_real: true, sirve_alguna: false, refs_utiles: [],
+    por_que: "Pide finca; lo que tenemos son apartamentos.", confianza: 0.95, desacuerdo_con_puntaje: "",
+  };
+  await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE });
+  assert.ok(politicasGuardadas.some((p) => p.id === "sig-1" && p.motivo === "descartada_por_sofi"));
+});
+
+test("si guardar el motivo falla, el radar sigue su camino", async () => {
+  veredictoDeSofi = null;
+  const gs = require(RUTA("data/group-signals.js"));
+  const orig = gs.guardarPolitica;
+  gs.guardarPolitica = async () => { throw new Error("db caida"); };
+  try {
+    const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE });
+    assert.strictEqual(r.resultado, "sin_veredicto");
+  } finally {
+    gs.guardarPolitica = orig;
+  }
+});
+
+test("Sofi solo marca dudosas: el motivo guardado es solo_dudosas, no ok", async () => {
+  veredictoDeSofi = { ...APRUEBA, refs_utiles: [], refs_dudosas: ["9780079"] };
+  await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE });
+  const ultimo = politicasGuardadas[politicasGuardadas.length - 1];
+  assert.strictEqual(ultimo.motivo, "solo_dudosas");
+});
+
+test("caso ccdc2404: Sofi descarta una propia de puntaje 100 diciendo que es de aliados: el descarte no vale", async () => {
+  matchesDevueltos = [match({ ref: "10013037", puntaje: 100 })];
+  veredictoDeSofi = {
+    es_pedido_real: true, sirve_alguna: false, refs_utiles: [],
+    por_que: "Las tres son de aliados, no se le pueden mandar al colega.", confianza: 0.9, desacuerdo_con_puntaje: "",
+  };
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE });
+  assert.notStrictEqual(r.resultado, "descartada_por_sofi");
+  assert.deepStrictEqual(revalidacionesGuardadas[0].v.refs_utiles, ["10013037"]);
+});
+
+test("el rescate es angosto: una ref de aliado o de puntaje bajo sigue descartada", async () => {
+  matchesDevueltos = [match({ ref: "A1", puntaje: 100, fuente: "aliado" }), match({ ref: "10013038", puntaje: 80 })];
+  veredictoDeSofi = {
+    es_pedido_real: true, sirve_alguna: false, refs_utiles: [],
+    por_que: "Son de aliados.", confianza: 0.9, desacuerdo_con_puntaje: "",
+  };
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE });
+  assert.strictEqual(r.resultado, "descartada_por_sofi");
+});
+
+// ── DM con aclaracion (Juan, 2026-10-20; RADAR_DM_CON_ACLARACION) ─────────
+// Lo desconocido de barrio, piso, parqueadero y precio sale con una
+// aclaracion en la ficha. Ver publicable.js#MOTIVOS_ACLARABLES.
+function conAclaracion(fn) {
+  return async () => {
+    process.env.RADAR_DM_CON_ACLARACION = "true";
+    try {
+      await fn();
+    } finally {
+      delete process.env.RADAR_DM_CON_ACLARACION;
+    }
+  };
+}
+
+test("con aclaracion: una ficha con solo el piso sin confirmar sale por DM con 'Aclaración: ... piso ...'", conAclaracion(async () => {
+  telefonoColegaResuelto = "573001234567";
+  matchesDevueltos = [match({ piso_sin_confirmar: true })];
+  veredictoDeSofi = { ...APRUEBA, sin_confirmar: ["piso"] };
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+
+  assert.strictEqual(r.resultado, "dm_enviado");
+  assert.strictEqual(enviosDm.length, 2);
+  assert.match(enviosDm[1].texto, /Aclaración: no tengo registrado en qué piso está: te lo confirmo si te sirve/);
+  assert.doesNotMatch(enviosDm[0].texto, /piso/, "la salvedad del primer mensaje no repite el piso");
+  assert.deepStrictEqual(marcadasRespondidas[0].refs, ["9780079"]);
+  const ultima = politicasGuardadas[politicasGuardadas.length - 1];
+  assert.strictEqual(ultima.motivo, "dm_con_aclaracion");
+  assert.ok(ultima.traza.includes("con_aclaracion:9780079"));
+  assert.strictEqual(enviadosPorSofi.length, 0);
+}));
+
+test("con aclaracion: zona vecina + piso sin confirmar no sale por DM", conAclaracion(async () => {
+  telefonoColegaResuelto = "573001234567";
+  matchesDevueltos = [match({ ubicacion: "vecina", piso_sin_confirmar: true })];
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+
+  assert.notStrictEqual(r.resultado, "dm_enviado");
+  assert.strictEqual(enviosDm.length, 0);
+  assert.ok(["zona_vecina", "piso_sin_confirmar"].includes(politicasGuardadas[politicasGuardadas.length - 1].motivo));
+}));
+
+test("con aclaracion: primero la que encaja del todo y despues la que necesita aclaracion", conAclaracion(async () => {
+  telefonoColegaResuelto = "573001234567";
+  matchesDevueltos = [
+    match({ ref: "ACL", puntaje: 99, garajes_sin_dato: true }),
+    match({ ref: "EXA", puntaje: 80 }),
+  ];
+  veredictoDeSofi = { ...APRUEBA, refs_utiles: ["ACL", "EXA"] };
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+
+  assert.strictEqual(r.resultado, "dm_enviado");
+  assert.match(enviosDm[1].texto, /Ref EXA/);
+  assert.doesNotMatch(enviosDm[1].texto, /Aclaración/);
+  assert.match(enviosDm[2].texto, /Ref ACL[\s\S]*Aclaración: no tengo registrado el parqueadero/);
+  assert.deepStrictEqual(marcadasRespondidas[0].refs, ["EXA", "ACL"]);
+  assert.ok(politicasGuardadas[politicasGuardadas.length - 1].traza.includes("con_aclaracion:ACL"));
+}));
+
+test("con aclaracion: si sale solo la exacta, el motivo sigue siendo ok", conAclaracion(async () => {
+  telefonoColegaResuelto = "573001234567";
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+  assert.strictEqual(r.resultado, "dm_enviado");
+  assert.deepStrictEqual(politicasGuardadas.map((p) => p.motivo), ["ok"]);
+}));
+
+test("con aclaracion: lo que ya se le mando no se repite", conAclaracion(async () => {
+  telefonoColegaResuelto = "573001234567";
+  matchesDevueltos = [match({ piso_sin_confirmar: true })];
+  refsYaEnviadasMock = new Set(["9780079"]);
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+  assert.strictEqual(r.resultado, "ya_se_le_mando");
+  assert.strictEqual(enviosDm.length, 0);
+}));
+
+test("con aclaracion: un colega solo llamada no recibe DM", conAclaracion(async (t) => {
+  telefonoColegaResuelto = "573001234567";
+  matchesDevueltos = [match({ piso_sin_confirmar: true })];
+  const original = colegasData.esSoloLlamada;
+  colegasData.esSoloLlamada = async () => true;
+  try {
+    await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+  } finally {
+    colegasData.esSoloLlamada = original;
+  }
+  assert.strictEqual(enviosDm.length, 0);
+}));
+
+test("interruptor apagado: la ficha con el piso sin confirmar NO sale, igual que hoy", async () => {
+  telefonoColegaResuelto = "573001234567";
+  matchesDevueltos = [match({ piso_sin_confirmar: true })];
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+  assert.notStrictEqual(r.resultado, "dm_enviado");
+  assert.strictEqual(enviosDm.length, 0);
+  assert.strictEqual(politicasGuardadas[0].motivo, "piso_sin_confirmar");
 });

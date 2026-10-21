@@ -206,6 +206,47 @@ function esPublicable(match, { umbral = UMBRAL_DEFAULT, syncFresco = true, refsB
   return { ok: motivos.length === 0, motivos };
 }
 
+// LO QUE FALTA NO ES LO QUE NO CUMPLE (Juan, 2026-10-20). De los motivos de
+// arriba, cuatro dicen "no tengo el dato" y no "el dato no calza": el barrio
+// exacto dentro del municipio pedido, el piso, el parqueadero y el precio que
+// no cuadra entre Wasi y la descripcion. Con RADAR_DM_CON_ACLARACION=true una
+// ficha cuyos motivos son TODOS de esta lista sale al DM del colega con la
+// aclaracion en la ficha ("no tengo registrado en qué piso está..."). Ningun
+// otro motivo entra: la zona vecina nunca sale, y lo que se SABE y no cumple
+// (piso 9 para quien pidio maximo 2, un parqueadero de menos) ni siquiera
+// llega hasta aca -- lo descarta match.js.
+//
+// La decision vive en filtrar() y no en cada llamador: el DM automatico, los
+// caminos manuales del CRM y el script de rescate tienen que dejar salir
+// exactamente lo mismo.
+const MOTIVOS_ACLARABLES = new Set([
+  "sector_sin_confirmar",
+  "piso_sin_confirmar",
+  "garajes_sin_dato",
+  "precio_sin_confirmar",
+]);
+
+// Apagado por defecto: solo "true" lo enciende.
+function dmConAclaracionActivo(env = process.env) {
+  return String((env && env.RADAR_DM_CON_ACLARACION) || "").trim().toLowerCase() === "true";
+}
+
+// El precio por confirmar solo es aclarable si LOS DOS precios (Wasi y
+// descripcion) caben en el presupuesto del pedido; si no, el colega abriria el
+// link y veria un precio fuera de lo que pidio.
+function soloAclarables(motivos, match) {
+  if (!Array.isArray(motivos) || motivos.length === 0) return false;
+  if (!motivos.every((m) => MOTIVOS_ACLARABLES.has(m))) return false;
+  if (motivos.includes("precio_sin_confirmar") && !(match && match.precio_texto_en_margen === true)) return false;
+  // El barrio solo es aclarable si de verdad no se sabe: si la ficha nombra
+  // otro barrio conocido del municipio (match.js#barrio_en_ficha), decirle al
+  // colega "el barrio exacto no lo tengo registrado" seria falso. Revision
+  // final del rescate (2026-10-20): 10031500 "Via las Antillas" para un pedido
+  // de Dorado/La Paz, 8989725 "Poblado Palmas" para San Lucas/Zuniga.
+  if (motivos.includes("sector_sin_confirmar") && match && Array.isArray(match.barrio_en_ficha) && match.barrio_en_ficha.length) return false;
+  return true;
+}
+
 // Filtra una lista de matches y devuelve los publicables (ya ordenados por
 // puntaje) mas el detalle de los descartes, que sirve para auditar por que un
 // pedido no se respondio.
@@ -216,19 +257,34 @@ function esPublicable(match, { umbral = UMBRAL_DEFAULT, syncFresco = true, refsB
 // un limite fijo de cantidad. `matches` ya viene acotado a 6 candidatas desde
 // match.js#cruzarDemanda, asi que el techo real sigue existiendo, solo que
 // no es un numero arbitrario despues de filtrar por calidad.
+//
+// `conAclaracion` (2026-10-20, ver MOTIVOS_ACLARABLES): las fichas a las que
+// solo les falta un dato aclarable pasan DESPUES de las que encajan del todo
+// (cada grupo por puntaje), y `aclaraciones` dice cuales son, con sus motivos
+// y el texto para el colega. Sin la opcion, el resultado es el de siempre y
+// `aclaraciones` sale vacio.
 function filtrar(matches, opciones = {}) {
   const limite = opciones.limite || Infinity;
+  const conAclaracion = opciones.conAclaracion === true;
   const publicables = [];
+  const conDatoPorConfirmar = [];
   const descartados = [];
 
   for (const m of matches || []) {
     const veredicto = esPublicable(m, opciones);
     if (veredicto.ok) publicables.push(m);
+    else if (conAclaracion && soloAclarables(veredicto.motivos, m)) conDatoPorConfirmar.push({ m, motivos: veredicto.motivos });
     else descartados.push({ ref: m && m.ref, motivos: veredicto.motivos });
   }
 
-  publicables.sort((a, b) => Number(b.puntaje) - Number(a.puntaje));
-  return { publicables: publicables.slice(0, limite), descartados };
+  const porPuntaje = (a, b) => Number(b.puntaje) - Number(a.puntaje);
+  publicables.sort(porPuntaje);
+  conDatoPorConfirmar.sort((a, b) => porPuntaje(a.m, b.m));
+  const todas = [...publicables, ...conDatoPorConfirmar.map((x) => x.m)].slice(0, limite);
+  const aclaraciones = conDatoPorConfirmar
+    .filter((x) => todas.includes(x.m))
+    .map((x) => ({ ref: String(x.m.ref), motivos: x.motivos, detalle: aclaracionParaColega(x.motivos) }));
+  return { publicables: todas, descartados, aclaraciones };
 }
 
 // QUE SIGNIFICA CADA MOTIVO, EN CASTELLANO (Juan, 2026-09-06).
@@ -404,13 +460,13 @@ const ACLARACIONES_COLEGA = {
   // Misma razon: redactar.js#desvios ya dice "queda en Envigado; el barrio
   // exacto no lo tengo registrado" para el grado zona_general.
   sector_sin_confirmar: null,
-  puntaje_bajo: "no pude verificar todo lo que pediste — confirmame lo que te falte",
-  sync_viejo: "confirmame disponibilidad antes de mostrarla",
+  puntaje_bajo: "no pude verificar todo lo que pediste — confírmame lo que te falte",
+  sync_viejo: "confírmame disponibilidad antes de mostrarla",
   periodo_no_soportado: "está cotizada por mes, no por días ni semanas",
-  varios_pedidos: "decime a cuál de tus pedidos le apunta y te confirmo",
+  varios_pedidos: "dime a cuál de tus pedidos le apunta y te confirmo",
   precio_sin_confirmar: "te confirmo el precio final",
   amoblado_sin_confirmar: "no tengo confirmado que esté amoblada",
-  garajes_sin_dato: "no tengo registrado el parqueadero: confirmame si lo necesitás",
+  garajes_sin_dato: "no tengo registrado el parqueadero: te lo confirmo si lo necesitas",
   piso_sin_confirmar: "no tengo registrado en qué piso está: te lo confirmo si te sirve",
   edificio_sin_confirmar: "no tengo confirmado que esté en la unidad que pediste",
   rentada_sin_confirmar: "no tengo confirmado que esté arrendada: te lo confirmo si te sirve",
@@ -429,6 +485,122 @@ function aclaracionParaColega(motivos) {
   return textos.length ? [...new Set(textos)].join(" · ") : null;
 }
 
+// LA ACLARACION DENTRO DE LA FICHA DEL DM (2026-10-20). Junta lo que
+// filtrar() dejo pasar con un dato por confirmar con las notas de Sofi, para
+// que el colega lea cada cosa UNA vez:
+//   · leFalta: la ficha que sale con aclaracion lleva su texto
+//     (aclaracionParaColega) y despues lo que Sofi haya escrito para esa ref.
+//     Si Sofi ya hablo del mismo tema ("no tiene piso registrado"), se queda
+//     el de Sofi, redactado para esa propiedad. El barrio no lleva texto aca:
+//     lo dice redactar.js#desvios ("queda en Envigado; el barrio exacto no lo
+//     tengo registrado").
+//   · sinConfirmar: la salvedad del primer mensaje deja de nombrar lo que ya
+//     va aclarado en la ficha (piso, parqueadero, precio, barrio).
+// `props` son las fichas que de verdad van en el mensaje: una aclaracion de
+// una ref que no sale no puede tocar la salvedad. Sin aclaraciones las notas
+// de Sofi no se combinan con nada; con `props`, la salvedad igual se recorta a
+// las fichas que van (salvedadDeLasFichas), tambien con el interruptor apagado.
+const TEMA_DEL_MOTIVO = {
+  sector_sin_confirmar: /barrio|sector/i,
+  piso_sin_confirmar: /\bpisos?\b/i,
+  garajes_sin_dato: /parqueader|garaje|parqueo/i,
+  precio_sin_confirmar: /\bprecio/i,
+};
+
+function notasParaDm({ sinConfirmar = [], leFalta = [] } = {}, aclaraciones = [], props = null, { revisadas = null } = {}) {
+  const refsQueSalen = props ? new Set(props.map((m) => String(m && m.ref))) : null;
+  const vigentes = (aclaraciones || []).filter((a) => a && (!refsQueSalen || refsQueSalen.has(String(a.ref))));
+  if (!vigentes.length) return { sinConfirmar: props ? salvedadDeLasFichas(sinConfirmar, props, revisadas) : sinConfirmar, leFalta };
+
+  const notas = Array.isArray(leFalta) ? leFalta : [];
+  const refsAclaradas = new Set(vigentes.map((a) => String(a.ref)));
+  const otras = notas.filter((f) => !(f && f.ref && refsAclaradas.has(String(f.ref))));
+  const combinadas = [];
+  for (const a of vigentes) {
+    const deSofi = notas.filter((f) => f && f.ref && String(f.ref) === String(a.ref) && f.detalle).map((f) => String(f.detalle));
+    const motivosSinTexto = a.motivos.filter((m) => !deSofi.some((d) => TEMA_DEL_MOTIVO[m] && TEMA_DEL_MOTIVO[m].test(d)));
+    const propia = aclaracionParaColega(motivosSinTexto);
+    const detalle = [...new Set([propia, ...deSofi].filter(Boolean))].join(" · ");
+    if (detalle) combinadas.push({ ref: String(a.ref), detalle });
+  }
+
+  const temas = [...new Set(vigentes.flatMap((a) => a.motivos))].map((m) => TEMA_DEL_MOTIVO[m]).filter(Boolean);
+  const salvedad = (Array.isArray(sinConfirmar) ? sinConfirmar : []).filter((item) => !temas.some((re) => re.test(String(item || ""))));
+  return { sinConfirmar: props ? salvedadDeLasFichas(salvedad, props, revisadas) : salvedad, leFalta: [...otras, ...combinadas] };
+}
+
+// LA SALVEDAD HABLA SOLO DE LAS FICHAS QUE VAN (revision final del rescate,
+// 2026-10-20). Dos casos reales de la prueba en seco:
+//   · 3ee69b01: salia UNA ficha (9944723) y el primer mensaje decia "No tengo
+//     confirmado si tiene cuarto útil (en 9944723 y 10129664)". La 10129664 no
+//     se le mandaba.
+//   · 2e6fea9a: "No tengo confirmado si tienen ... administración", con 2 de
+//     las 3 fichas mostrando la administración.
+// Por cada nota: las refs que nombra se recortan a las del DM (si no queda
+// ninguna, la nota se va); lo que se puede leer del dato (administración,
+// cuarto útil) se mira ficha por ficha y solo se nombran las que de verdad no
+// lo tienen. `revisadas` (opcional): las refs que Sofi vio cuando escribio la
+// nota; una nota sin refs habla solo de esas (el script de rescate cruza de
+// nuevo y puede traer fichas que Sofi nunca vio).
+const TEMAS_DE_DATO = [
+  { re: /administraci/i, tiene: (m) => Boolean(String((m && m.administracion) || "").trim()) },
+  {
+    re: /cuarto\s+[uú]til/i,
+    tiene: (m) => /cuarto\s+util/.test(normalizarTexto(`${(m && m.caracteristicas) || ""} ${(m && m.titulo) || ""}`)),
+  },
+];
+
+function normalizarTexto(t) {
+  return String(t || "").normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+}
+
+function unirConY(items) {
+  if (items.length <= 1) return items.join("");
+  return `${items.slice(0, -1).join(", ")} y ${items[items.length - 1]}`;
+}
+
+function escaparRe(t) {
+  return String(t).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function salvedadDeLasFichas(items, props, revisadas = null) {
+  const porRef = new Map((props || []).map((m) => [String(m && m.ref), m]));
+  const refsDm = [...porRef.keys()];
+  const vistas = revisadas ? new Set([...revisadas].map(String)) : null;
+  const salida = [];
+  for (const item0 of Array.isArray(items) ? items : []) {
+    const texto = String(item0 || "").trim();
+    if (!texto) continue;
+    const nombradas = new Set(texto.match(/\b\d{5,}\b/g) || []);
+    for (const r of refsDm) if (new RegExp(`(^|[^A-Za-z0-9])${escaparRe(r)}([^A-Za-z0-9]|$)`).test(texto)) nombradas.add(r);
+    let base = texto;
+    if (nombradas.size) {
+      const patron = [...nombradas].map(escaparRe).join("|");
+      const nombraRef = new RegExp(patron);
+      base = texto
+        .replace(/\s*\([^)]*\)/g, (par) => (nombraRef.test(par) ? "" : par))
+        .replace(new RegExp(patron, "g"), "")
+        .replace(/\s{2,}/g, " ")
+        .trim();
+      for (let previo = null; previo !== base; ) {
+        previo = base;
+        base = base.replace(/(?:\s+(?:en|de|la|las|el|los|y|e)|\s*[,;:(])\s*$/i, "").trim();
+      }
+      if (!base) continue;
+    }
+    const tema = TEMAS_DE_DATO.find((t) => t.re.test(base));
+    let alcance;
+    if (nombradas.size) alcance = refsDm.filter((r) => nombradas.has(r));
+    else if (vistas && !tema) alcance = refsDm.filter((r) => vistas.has(r));
+    else alcance = refsDm;
+    if (tema) alcance = alcance.filter((r) => !tema.tiene(porRef.get(r)));
+    if (!alcance.length) continue;
+    if (alcance.length === refsDm.length) salida.push(nombradas.size ? base : texto);
+    else salida.push(`${base} (en ${unirConY(alcance)})`);
+  }
+  return salida;
+}
+
 module.exports = {
   esPublicable,
   filtrar,
@@ -443,4 +615,8 @@ module.exports = {
   clasificarMotivos,
   ACLARACIONES_COLEGA,
   aclaracionParaColega,
+  MOTIVOS_ACLARABLES,
+  dmConAclaracionActivo,
+  notasParaDm,
+  salvedadDeLasFichas,
 };

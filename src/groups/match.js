@@ -36,16 +36,50 @@ function tiposPedidos(c) {
     .filter(Boolean);
 }
 
-// Al prefiltro de la base (ilike) solo viaja un tipo unico. Con varios, la
-// consulta no filtra por tipo y la compuerta la aplica evaluarCandidata.
+// Al prefiltro de la base viaja un tipo unico (string) o, si el tipo tiene
+// variantes, la lista de tipos aceptados con las dos grafias (ilike no ignora
+// tildes). Con varios tipos pedidos no se filtra y la compuerta la aplica
+// evaluarCandidata.
+const GRAFIAS_SQL = { duplex: ["duplex", "dúplex"] };
 function tipoParaConsulta(c) {
   const tipos = tiposPedidos(c);
-  return tipos.length === 1 ? tipos[0] : null;
+  if (tipos.length !== 1) return null;
+  const t = tipos[0];
+  const base = VARIANTES_DE_TIPO[sinTildes(t)];
+  const lista = base ? [t, ...base] : SOLO_TITULO.test(sinTildes(t)) ? [t] : null;
+  if (!lista) return t;
+  return [...new Set(lista.flatMap((x) => GRAFIAS_SQL[sinTildes(x)] || [x]))];
+}
+// Un pedido de duplex/penthouse/loft tambien acepta una ficha "Apartamento"
+// cuyo titulo lo diga (ver tipoCalza).
+const SOLO_TITULO = /^(duplex|penthouse|pent house|loft)$/;
+function aplicarTipo(f, c) {
+  const t = tipoParaConsulta(c);
+  if (!t) return;
+  f.tipo = t;
+  const pedido = tiposPedidos(c)[0];
+  if (Array.isArray(t) && SOLO_TITULO.test(sinTildes(pedido))) f.tipoEnTitulo = true;
+}
+
+// Tipos que Wasi registra con otro nombre pero que, para un pedido, son lo
+// mismo. "apartaestudio" NO esta aca: es su propio tipo. Un pedido de duplex,
+// penthouse o loft solo trae ese tipo (en el tipo o en el titulo).
+const VARIANTES_DE_TIPO = { apartamento: ["duplex", "penthouse", "pent house", "loft"] };
+function sinTildes(t) {
+  return String(t || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
+function tipoCalza(p, t) {
+  const tipo = sinTildes(p.tipo);
+  const pedido = sinTildes(t);
+  if (tipo.includes(pedido)) return true;
+  if ((VARIANTES_DE_TIPO[pedido] || []).some((v) => tipo.includes(v))) return true;
+  if (/^(duplex|penthouse|pent house|loft)$/.test(pedido)) return sinTildes(p.titulo).includes(pedido);
+  return false;
 }
 
 function filtrosInventario(c) {
   const f = {};
-  if (tipoParaConsulta(c)) f.tipo = tipoParaConsulta(c);
+  aplicarTipo(f, c);
   // Venta o arriendo viaja al prefiltro: sin esto la consulta traia las dos
   // mezcladas y, con el corte de filas, los arriendos quedaban afuera.
   const operacion = normOperacion(c.operacion);
@@ -111,7 +145,7 @@ function filtrosAliados(c) {
   // con informacion que no verificamos. Esas se usan solo hacia adentro, para
   // un cliente propio, en src/agent/tools.js.
   const f = { origen: "asesor" };
-  if (tipoParaConsulta(c)) f.tipo = tipoParaConsulta(c);
+  aplicarTipo(f, c);
   const zonasAliado = zonasPedidas(c);
   if (zonasAliado.length) f.zona = zonasAliado.join(" ");
   else if (c.ciudad) f.zona = c.ciudad;
@@ -373,7 +407,7 @@ function margenPrecioDe(c) {
 function evaluarCandidata(p, c, fuente) {
   if (!mismaOperacion(p, c)) return null;
   const tipos = tiposPedidos(c);
-  if (tipos.length && !tipos.some((t) => String(p.tipo || "").toLowerCase().includes(t))) return null;
+  if (tipos.length && !tipos.some((t) => tipoCalza(p, t))) return null;
 
   // Techo de area, literal con el mismo margen que el piso de area.
   const areaMax = areaMaxDe(c);
@@ -681,6 +715,11 @@ function evaluarCandidata(p, c, fuente) {
     // Ninguno descarta, ninguno sale solo (los lee publicable.js).
     varios_pedidos: variosPedidos(textoDelPedido(c)),
     precio_sin_confirmar: fuente === "diamond" && precioInconsistente(p),
+    // El otro precio (el de la descripcion) tambien cabe en el presupuesto:
+    // solo asi publicable.js deja salir la ficha con "te confirmo el precio
+    // final". Sin presupuesto o con el texto fuera de margen, sigue bloqueada.
+    precio_texto_en_margen: fuente === "diamond" && precioInconsistente(p) && Boolean(techo)
+      && precioTextoDe(p) <= techoConMargen && (!piso || precioTextoDe(p) >= piso),
     // El castigo se resta DESPUES del tope (ver CASTIGO_CORTO arriba): es lo
     // que hace que 100 vuelva a significar "cumple todo lo que se pudo
     // verificar". Piso en 0 porque una zona muy castigada mas dos huecos
@@ -689,6 +728,10 @@ function evaluarCandidata(p, c, fuente) {
     // Como calzo la ubicacion: exacta | vecina | otra_zona | ciudad. Sofi lo
     // usa para razonar y publicable.js para decidir si puede salir al grupo.
     ubicacion: ubicacion.grado,
+    // Barrios conocidos que la ficha nombra y el pedido no (solo con
+    // zona_general): con esto el barrio no es "desconocido" y publicable.js no
+    // deja salir la ficha con aclaracion. Ver barrio.js#mencionaOtroBarrio.
+    ...(ubicacion.otrosEnFicha ? { barrio_en_ficha: ubicacion.otrosEnFicha } : {}),
     razones,
     ...(fuente === "aliado" ? { inmobiliaria: p.inmobiliaria_origen || null } : {}),
   };

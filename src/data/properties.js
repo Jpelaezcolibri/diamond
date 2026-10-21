@@ -85,6 +85,8 @@ function resolveOrg(orgOrId) {
 // las consume como `properties.zonaTokens(...)`.
 const { zonaTokens, distinctiveTokens, sonVecinas, vecinosDe, subzonaCoincide, sinAcentos, patronSinTildes } = require("../lib/zonas");
 
+const { tipoCalzaEnMemoria, tipoOr } = require("../lib/tipos-filtro");
+
 function matchesFilters(p, f) {
   if (f.ref && p.ref.toUpperCase() !== f.ref.toUpperCase()) return false;
   if (f.zona) {
@@ -95,7 +97,7 @@ function matchesFilters(p, f) {
     const tokens = distinctiveTokens(zonaTokens(f.zona));
     if (tokens.length > 0 && !tokens.some((t) => haystack.includes(t))) return false;
   }
-  if (f.tipo && !p.tipo.toLowerCase().includes(f.tipo.toLowerCase())) return false;
+  if (f.tipo && !tipoCalzaEnMemoria(p, f)) return false;
   if (f.operacion && String(p.operacion || "").toLowerCase() !== String(f.operacion).toLowerCase()) return false;
   if (f.habitaciones_min && p.habitaciones < f.habitaciones_min) return false;
   if (f.precio_max) {
@@ -145,7 +147,10 @@ async function search(orgOrId, filters = {}, limit = 5) {
     const filtro = filtroZonaOr(filters.zona);
     if (filtro) query = query.or(filtro);
   }
-  if (filters.tipo) query = query.ilike("tipo", `%${filters.tipo}%`);
+  if (Array.isArray(filters.tipo)) {
+    const filtroTipo = tipoOr(filters);
+    if (filtroTipo) query = query.or(filtroTipo);
+  } else if (filters.tipo) query = query.ilike("tipo", `%${filters.tipo}%`);
   if (filters.operacion) query = query.ilike("operacion", filters.operacion);
   if (filters.habitaciones_min) query = query.gte("habitaciones", filters.habitaciones_min);
   // precio es texto — el filtro de precio se aplica en codigo, asi que con

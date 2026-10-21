@@ -32,7 +32,7 @@ function textoParaColega(cita, motivo) {
   return [
     `Hola, te escribo para avisarte que la visita${cuando ? ` del ${cuando}` : ""} queda cancelada.`,
     motivo ? `Motivo: ${motivo}.` : null,
-    "Disculpá el inconveniente. Si querés, te busco otras opciones parecidas.",
+    "Disculpa el inconveniente. Si quieres, te busco otras opciones parecidas.",
   ].filter(Boolean).join("\n\n");
 }
 
@@ -161,7 +161,7 @@ function textoReprogramada(cita, motivo) {
   return [
     `Hola, te escribo para avisarte que la visita quedó reprogramada${cuando ? ` para el ${cuando}` : ""}.`,
     motivo ? `Motivo: ${motivo}.` : null,
-    "Si no te sirve ese horario, decime y lo movemos.",
+    "Si no te sirve ese horario, dime y lo movemos.",
   ].filter(Boolean).join("\n\n");
 }
 

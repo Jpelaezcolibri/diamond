@@ -22,7 +22,7 @@ function instruccionTransferencia({ especialidad, advisor, org }) {
   const alias = aliasPublico(advisor, org);
   return (
     `Transferencia registrada al asesor de ${especialidad} (${alias}). Ya fue alertado con el resumen del cliente. ` +
-    `En tu respuesta despedite brevemente y decile que ${alias} lo va a contactar por este medio o por llamada. ` +
+    `En tu respuesta despídete brevemente y dile que ${alias} lo va a contactar por este medio o por llamada. ` +
     `NO le des ningún link ni número de teléfono: el contacto lo inicia el asesor.`
   );
 }
