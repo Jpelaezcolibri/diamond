@@ -27,7 +27,11 @@ function decidir(f, ahora) {
     if (!f.puente_at && desde(f.primer_at) >= 3 * H && enviados < 2) return "puente";
   }
   const hubo = f.atendida_at || f.puente_at;
-  if (hubo && !f.seguimiento_at && enviados < 2 && desde(f.ultimo_entrante_at) >= 24 * H) return "seguimiento";
+  if (hubo && !f.seguimiento_at && enviados < 2) {
+    // 24 h desde lo ULTIMO que paso: su mensaje, el puente o la atencion.
+    const ts = [f.ultimo_entrante_at, f.puente_at, f.atendida_at].map((x) => (x ? new Date(x).getTime() : NaN)).filter(Number.isFinite);
+    if (ts.length && ahora.getTime() - Math.max(...ts) >= 24 * H) return "seguimiento";
+  }
   return null;
 }
 
@@ -96,32 +100,42 @@ async function runOnce({ ahora = new Date(), deps = null } = {}) {
       const sesion = await d.sesion(org);
       const asesora = await d.asesora(org, sesion).catch(() => null);
       let enviados = await d.enviadosHoy(org, ahora).catch(() => TOPE_DIA);
+      let sinLink = false;
       for (const f of await d.abiertas(org)) {
-        const accion = decidir(f, ahora);
+        let accion = decidir(f, ahora);
+        // Sin asesora no se avisa a Daiana, pero las reglas del colega siguen.
+        if (accion === "daiana" && !asesora) accion = decidir({ ...f, recordatorio_at: f.recordatorio_at || "-" }, ahora);
         if (!accion) continue;
         const marca = new Date(ahora).toISOString();
         if (accion === "daiana") {
-          if (!asesora) continue;
-          await d.notificar({ orgId: org.id, advisor: asesora, tipo: "respuesta_sin_atender",
+          // Solo toca el CRM: si falla, se reintenta en el siguiente tick.
+          const n = await d.notificar({ orgId: org.id, advisor: asesora, tipo: "respuesta_sin_atender",
             titulo: `⏰ Un colega espera respuesta (Ref ${f.property_ref})`,
-            cuerpo: `${f.colega_nombre || "Un colega"} escribió hace más de 2 h y nadie le ha respondido.`, link: "/publicaciones" }).catch(() => null);
-          await d.marcar(f.id, { recordatorio_at: marca });
+            cuerpo: `${f.colega_nombre || "Un colega"} escribió hace más de 2 h y nadie le ha respondido.`, link: "/publicaciones" }).catch((e) => ({ ok: false, error: e.message }));
+          if (n && n.ok) await d.marcar(f.id, { recordatorio_at: marca });
+          else console.warn("[respuestas-publicacion] notificar fallo:", n && n.error);
           continue;
         }
         if (!sesion || enviados >= TOPE_DIA) continue;
         const cuota = await d.cuota(sesion).catch(() => null);
         if (!cuota || !(cuota.fraccion < CUOTA_MAX)) continue;
+        const campo = accion === "puente" ? "puente_at" : "seguimiento_at";
         if (accion === "puente" && (await d.puenteReciente(org, f).catch(() => true))) {
           await d.marcar(f.id, { puente_at: marca });
           continue;
         }
         const link = d.link(org, f);
+        if (!link) {
+          if (!sinLink) console.warn("[respuestas-publicacion] sin link de contacto oficial; no se envia a", org.name);
+          sinLink = true;
+          continue;
+        }
         const texto = accion === "puente" ? textoPuente(f, link) : textoSeguimiento(f, link);
+        // "Una vez" = un intento: primero se reclama la fila y despues se envia.
+        await d.marcar(f.id, { [campo]: marca });
+        enviados++;
         const r = await d.enviarDm(sesion, f.colega_telefono || null, texto, { ...(f.colega_lid ? { lid: f.colega_lid } : {}), orgId: org.id }).catch((e) => ({ ok: false, error: e.message }));
-        const campo = accion === "puente" ? "puente_at" : "seguimiento_at";
-        // Solo llamada o enviado: se marca para no insistir. Un fallo de red, no.
-        if ((r && r.ok) || (r && r.error === SOLO_LLAMADA)) await d.marcar(f.id, { [campo]: marca });
-        if (r && r.ok) enviados++;
+        if (!r || !r.ok) console.warn("[respuestas-publicacion] envio fallo (no se reintenta):", r && r.error);
       }
     } catch (e) {
       console.error("[respuestas-publicacion] error en", org.name, e.message);
