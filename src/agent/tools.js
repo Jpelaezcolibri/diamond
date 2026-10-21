@@ -82,7 +82,7 @@ const TOOL_DEFINITIONS = [
   {
     name: "agendar_cita",
     description:
-      "Registra la SOLICITUD de cita del cliente (el dia y la hora que el pidio). Usala cuando el cliente diga cuando quiere que lo contacten, cuando quiere visitar un inmueble, o cuando agenda una asesoria (ej para vender). La cita queda SOLICITADA, no confirmada: le llega a quien coordina las visitas, que valida la disponibilidad y la confirma por WhatsApp. Si el resultado dice que NO se pudo agendar (fuera de horario o choque), pidele al cliente otro dia u hora y vuelve a intentar — no insistas con el mismo horario ni inventes horas libres. Llamala ANTES de transferir_a_asesor cuando el cliente ya dio dia/hora, para que el asesor reciba todo junto. Si el cliente pregunta cuando se puede ver sin proponer nada, preguntale que dia y a que hora le sirve: vos no escoges un espacio de la agenda.",
+      "Registra la SOLICITUD de cita del cliente (el dia y la hora que el pidio). Usala cuando el cliente diga cuando quiere que lo contacten, cuando quiere visitar un inmueble, o cuando agenda una asesoria (ej para vender). La cita queda SOLICITADA, no confirmada: le llega a quien coordina las visitas, que valida la disponibilidad y la confirma por WhatsApp. Si el resultado dice que NO se pudo agendar (fuera de horario o choque), pidele al cliente otro dia u hora y vuelve a intentar — no insistas con el mismo horario ni inventes horas libres. Llamala ANTES de transferir_a_asesor cuando el cliente ya dio dia/hora, para que el asesor reciba todo junto. Si el cliente pregunta cuando se puede ver sin proponer nada, primero usa horarios_disponibles y ofrecele dos de esos horarios; registra la cita con el que elija o con el que proponga.",
     input_schema: {
       type: "object",
       properties: {
@@ -105,6 +105,11 @@ const TOOL_DEFINITIONS = [
           type: "string",
           description:
             "Referencia del inmueble de la cita (ej '9702941'), cuando la conversacion es sobre una propiedad concreta. Anotala SIEMPRE que la cita sea por un inmueble puntual: es el unico dato con el que el asesor sabe a que propiedad ir, y sin ella el aviso sale sin ficha. Omitila solo si la cita es de asesoria general y no hay ningun inmueble de por medio. Nunca la inventes: usa la ref exacta que viste en la conversacion o en buscar_propiedades.",
+        },
+        operacion: {
+          type: "string",
+          enum: ["venta", "arriendo"],
+          description: "Solo si no hay ref: si la visita es para comprar ('venta') o para arrendar ('arriendo'). Con ref, la operacion sale de la propiedad.",
         },
       },
       required: ["descripcion"],
@@ -386,6 +391,20 @@ const TOOL_DEFINITIONS = [
       required: ["ref", "sigue"],
     },
   },
+  // Al final de la lista a proposito: las definiciones viajan en cada llamada
+  // y agregar una en el medio corre el orden de las demas.
+  {
+    name: "horarios_disponibles",
+    description:
+      "Devuelve los proximos horarios LIBRES de verdad para una visita (agenda de los asesores, su horario y la anticipacion minima: 24 h en venta, menos en arriendo). Usala cuando la persona quiera visitar o pregunte cuando se puede ver, ANTES de agendar_cita, para ofrecerle dos opciones concretas. Ofrecer estos horarios no confirma nada: la visita queda SOLICITADA cuando la registras con agendar_cita.",
+    input_schema: {
+      type: "object",
+      properties: {
+        ref: { type: "string", description: "Ref del inmueble que quiere ver, si la hay. De ella sale si es venta o arriendo." },
+        operacion: { type: "string", enum: ["venta", "arriendo"], description: "Solo si no hay ref: si busca comprar ('venta') o arrendar ('arriendo')." },
+      },
+    },
+  },
 ];
 
 // Si la propiedad de interes tiene captador, arma el aviso inmediato para su
@@ -465,38 +484,107 @@ async function resolveLeadAdvisor(ctx, especialidad) {
 // Sin copias desde 2026-09-11 (Juan: "el principal es el que tenemos con la
 // automatizacion de la ventana abierta y luego al otro numero"): el segundo
 // numero recibe lo que el primero no pudo, no una copia de todo.
+// Venta o arriendo para la anticipacion de la cita (spec 2026-10-21 §2.2): de
+// la propiedad de la ref; si no, de lo que dijo el modelo, de la propiedad de
+// interes y por ultimo de leads.categoria (alquiler -> arriendo). null = como
+// siempre (la de venta).
+async function operacionDeCita(ctx, { ref = null, operacion = null } = {}) {
+  const { normalizarOperacion } = require("../lib/agenda-reglas");
+  if (ref) {
+    const p = await properties.findByRef(ctx.org, String(ref).trim()).catch((e) => {
+      console.warn("[tools] No se pudo leer la propiedad de la cita:", e.message);
+      return null;
+    });
+    const op = normalizarOperacion(p && p.operacion);
+    if (op) return op;
+  }
+  return (
+    normalizarOperacion(operacion) ||
+    (!ref ? normalizarOperacion(ctx.propertyInteres && ctx.propertyInteres.operacion) : null) ||
+    normalizarOperacion(ctx.lead && ctx.lead.categoria)
+  );
+}
+
+// Los proximos 3 espacios libres entre los asesores que pueden recibir la
+// visita, con las mismas reglas que agendar_cita (agenda-reglas.alternativas).
+function proximosLibres({ asesores, citasOrg, ahora, operacion, excluirLeadId }) {
+  const rotacion = require("../data/rotacion-citas");
+  const reglas = require("../lib/agenda-reglas");
+  return asesores
+    .flatMap((a) => reglas.alternativas({ ahora, horario: a.horario, ocupadas: rotacion.ocupadasDe(citasOrg, a, { excluirLeadId }), operacion }))
+    .sort()
+    .filter((x, i, arr) => arr.indexOf(x) === i)
+    .slice(0, 3);
+}
+
+// "jueves 23 de octubre, 10:00 a. m." en hora de Bogota.
+function horarioLegible(iso) {
+  const fh = formatCitaFechaHora(iso);
+  return fh ? `${fh.fecha.replace(",", "")}, ${fh.hora}` : iso;
+}
+
+// HORARIOS OFRECIDOS, NO PREGUNTADOS (spec 2026-10-21 §2.1): Sofi preguntaba
+// "¿que dia y hora te sirve?" y la visita se enfriaba. Ahora ofrece espacios
+// libres de verdad; la persona elige o propone otro, y la cita sigue quedando
+// SOLICITADA. Sin ciclo de rotacion, la agenda es la de quien coordina.
+async function horariosDisponibles(input, ctx, { ahora = new Date() } = {}) {
+  const rotacion = require("../data/rotacion-citas");
+  const operacion = await operacionDeCita(ctx, { ref: input.ref || null, operacion: input.operacion || null });
+  let asesores = await rotacion.asesoresDelCiclo(ctx.org.id).catch((e) => {
+    console.warn("[tools] No se pudo leer el ciclo de citas:", e.message);
+    return [];
+  });
+  if (asesores.length === 0) {
+    const principal = await advisors.findAsesorPrincipalRadar(ctx.org).catch((e) => {
+      console.warn("[tools] No se pudo resolver quien coordina las visitas:", e.message);
+      return null;
+    });
+    if (principal) asesores = [principal];
+  }
+  if (asesores.length === 0) {
+    return JSON.stringify({ horarios: [], motivo: "no hay ningun asesor configurado para visitas: preguntale que dia y hora le sirve y registrala con agendar_cita" });
+  }
+  const citasOrg = await appointments.citasDeLaOrg(ctx.org.id).catch((e) => {
+    console.warn("[tools] No se pudo leer la agenda de la org:", e.message);
+    return [];
+  });
+  const libres = proximosLibres({ asesores, citasOrg, ahora, operacion, excluirLeadId: ctx.lead && ctx.lead.id });
+  if (libres.length === 0) {
+    return JSON.stringify({ horarios: [], motivo: "no hay espacios libres en los proximos 14 dias: preguntale que dia le sirve y registrala con agendar_cita" });
+  }
+  return JSON.stringify({ horarios: libres.map((iso) => ({ iso, texto: horarioLegible(iso) })) });
+}
+
 // La cita en la rotacion de asesores (ver agendar_cita). Si nadie puede a esa
 // hora, no se guarda nada y Sofi recibe 3 horarios validos para ofrecer.
 async function agendarEnRotacion(ctx, cita, ciclo) {
   const rotacion = require("../data/rotacion-citas");
   const reglas = require("../lib/agenda-reglas");
   const ahora = new Date();
+  const operacion = cita.operacion || null;
   const citasOrg = await appointments.citasDeLaOrg(ctx.org.id).catch((e) => {
     console.warn("[tools] No se pudo leer la agenda de la org:", e.message);
     return [];
   });
-  const elegido = rotacion.elegirAsesor({ ciclo, citasOrg, fechaHoraIso: cita.fecha_hora, ahora, excluirLeadId: ctx.lead.id });
+  const elegido = rotacion.elegirAsesor({ ciclo, citasOrg, fechaHoraIso: cita.fecha_hora, ahora, excluirLeadId: ctx.lead.id, operacion });
 
   if (!elegido) {
-    const v = reglas.validarHora({ fechaHoraIso: cita.fecha_hora, ahora, horario: ciclo[0].horario, ocupadas: [] });
+    const horas = Math.round(reglas.anticipacionMin(operacion) / 60);
+    const v = reglas.validarHora({ fechaHoraIso: cita.fecha_hora, ahora, horario: ciclo[0].horario, ocupadas: [], operacion });
     const motivo =
       v.motivo === "anticipacion"
-        ? "necesitamos al menos 24 horas de anticipación para poder confirmarla"
+        ? `necesitamos al menos ${horas} horas de anticipación para poder confirmarla`
         : v.motivo === "fuera_de_horario"
           ? "ese horario está fuera del horario de visitas"
           : "a esa hora no hay ningún asesor libre";
-    const alt = ciclo
-      .flatMap((a) => reglas.alternativas({ ahora, horario: a.horario, ocupadas: rotacion.ocupadasDe(citasOrg, a, { excluirLeadId: ctx.lead.id }) }))
-      .sort()
-      .filter((x, i, arr) => arr.indexOf(x) === i)
-      .slice(0, 3);
+    const alt = proximosLibres({ asesores: ciclo, citasOrg, ahora, operacion, excluirLeadId: ctx.lead.id });
     const lista = alt
       .map((iso) => {
         const fh = formatCitaFechaHora(iso);
         return `- ${fh ? `${fh.fecha} a las ${fh.hora}` : iso}`;
       })
       .join("\n");
-    return `No se pudo agendar: ${motivo}. Ofrecele estos horarios (o que proponga otro con al menos 24 horas):\n${lista}`;
+    return `No se pudo agendar: ${motivo}. Ofrécele dos de estos horarios (o que proponga otro con al menos ${horas} horas):\n${lista}`;
   }
 
   const ahoraIso = ahora.toISOString();
@@ -651,6 +739,7 @@ async function executeTool(name, input, ctx) {
   if (name === "preparar_publicacion") return require("./publicar-asesor").preparar(input, ctx);
   if (name === "confirmar_publicacion") return require("./publicar-asesor").confirmar(input, ctx);
   if (name === "actualizar_vigencia") return require("./publicar-asesor").actualizarVigencia(input, ctx);
+  if (name === "horarios_disponibles") return horariosDisponibles(input || {}, ctx);
   if (name === "buscar_propiedades") {
     let results;
     if (input.ref) {
@@ -851,6 +940,12 @@ async function executeTool(name, input, ctx) {
     // tiene property_ref_origen ni ctx.propertyInteres (ver engine.js). Se
     // guarda solo si vino, para no cambiarle el shape a las citas de siempre.
     if (input.ref) cita.ref = String(input.ref).trim();
+    // Venta o arriendo (spec 2026-10-21 §2.2): define la anticipacion minima.
+    // Se guarda en la cita para que la escalera rote con la misma regla.
+    if (cita.fecha_hora) {
+      const operacion = await operacionDeCita(ctx, { ref: cita.ref || null, operacion: input.operacion || null });
+      if (operacion) cita.operacion = operacion;
+    }
 
     // ROTACION (Juan, 2026-10-07; spec 2026-10-07-sofi-vendedora-y-agenda §4):
     // si hay asesores con recibe_citas, la cita respeta 24 h de anticipacion y

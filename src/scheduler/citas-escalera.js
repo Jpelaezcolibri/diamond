@@ -35,6 +35,8 @@ function pasoDeEscalera({ lead, ciclo, citasOrg, ahora = new Date() }) {
     fechaHoraIso: c.fecha_hora,
     ahora: new Date(c.creada_at || c.asignada_at),
     excluirLeadId: lead.id,
+    // Una de arriendo se creo con 6 h: con la de venta nadie mas "podria".
+    operacion: c.operacion || null,
   });
   if (!nuevo || nuevo.id === c.asesor_id) return { accion: "nada" };
   return { accion: "rotar", nuevo };

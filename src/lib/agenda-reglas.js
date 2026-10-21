@@ -6,6 +6,10 @@
 const { partesBogota, DEFAULT_HORARIO } = require("../data/appointments");
 
 const ANTICIPACION_MIN = Number(process.env.CITAS_ANTICIPACION_MIN_H || 24) * 60;
+// Arriendo con menos colchon (spec 2026-10-21-sofi-super-agente §2.2): quien
+// arrienda decide rapido y 24 h lo enfriaban. El corte de 4 h y la escalera no
+// cambian: una cita de arriendo a 6 h tiene 2 h de escalera.
+const ANTICIPACION_ARRIENDO_MIN = Number(process.env.CITAS_ANTICIPACION_ARRIENDO_H || 6) * 60;
 const DURACION_MIN = Number(process.env.CITAS_DURACION_MIN || 60);
 const TRASLADO_MIN = Number(process.env.CITAS_TRASLADO_MIN || 90);
 const BLOQUE_MIN = DURACION_MIN + TRASLADO_MIN;
@@ -16,6 +20,20 @@ const aMin = (hhmm) => {
   return (h || 0) * 60 + (m || 0);
 };
 
+// "arriendo" | "venta" | null. Acepta lo que traen properties.operacion
+// ("Arriendo"/"Venta") y leads.categoria ("alquiler"/"compra").
+function normalizarOperacion(op) {
+  const s = String(op || "").toLowerCase();
+  if (/arriendo|arrend|alquil|renta/.test(s)) return "arriendo";
+  if (/venta|vend|compra/.test(s)) return "venta";
+  return null;
+}
+
+// Sin operacion se comporta como siempre (la de venta).
+function anticipacionMin(operacion) {
+  return normalizarOperacion(operacion) === "arriendo" ? ANTICIPACION_ARRIENDO_MIN : ANTICIPACION_MIN;
+}
+
 function dentroDeHorario(horario, iso) {
   const h = horario || DEFAULT_HORARIO;
   const p = partesBogota(iso);
@@ -25,10 +43,10 @@ function dentroDeHorario(horario, iso) {
   return p.minutos >= aMin(h.desde || DEFAULT_HORARIO.desde) && p.minutos + DURACION_MIN <= aMin(h.hasta || DEFAULT_HORARIO.hasta);
 }
 
-function validarHora({ fechaHoraIso, ahora = new Date(), horario = null, ocupadas = [] }) {
+function validarHora({ fechaHoraIso, ahora = new Date(), horario = null, ocupadas = [], operacion = null }) {
   const t = new Date(fechaHoraIso).getTime();
   if (isNaN(t)) return { ok: false, motivo: "fecha_invalida" };
-  if (t - ahora.getTime() < ANTICIPACION_MIN * MIN) return { ok: false, motivo: "anticipacion" };
+  if (t - ahora.getTime() < anticipacionMin(operacion) * MIN) return { ok: false, motivo: "anticipacion" };
   if (!dentroDeHorario(horario, fechaHoraIso)) return { ok: false, motivo: "fuera_de_horario" };
   const choca = (ocupadas || []).some((o) => {
     const u = new Date(o).getTime();
@@ -37,14 +55,14 @@ function validarHora({ fechaHoraIso, ahora = new Date(), horario = null, ocupada
   return choca ? { ok: false, motivo: "choque" } : { ok: true };
 }
 
-function alternativas({ ahora = new Date(), horario = null, ocupadas = [], n = 3, pasoMin = 30, horizonteDias = 14 }) {
+function alternativas({ ahora = new Date(), horario = null, ocupadas = [], n = 3, pasoMin = 30, horizonteDias = 14, operacion = null }) {
   const paso = pasoMin * MIN;
-  let ms = Math.ceil((ahora.getTime() + ANTICIPACION_MIN * MIN) / paso) * paso;
+  let ms = Math.ceil((ahora.getTime() + anticipacionMin(operacion) * MIN) / paso) * paso;
   const limite = ahora.getTime() + horizonteDias * 24 * 60 * MIN;
   const out = [];
   while (ms <= limite && out.length < n) {
     const iso = new Date(ms).toISOString();
-    if (validarHora({ fechaHoraIso: iso, ahora, horario, ocupadas }).ok) out.push(iso);
+    if (validarHora({ fechaHoraIso: iso, ahora, horario, ocupadas, operacion }).ok) out.push(iso);
     ms += paso;
   }
   return out;
@@ -59,4 +77,4 @@ function corteDe(fechaHoraIso) {
   return new Date(new Date(fechaHoraIso).getTime() - 4 * 60 * MIN).toISOString();
 }
 
-module.exports = { ANTICIPACION_MIN, DURACION_MIN, TRASLADO_MIN, BLOQUE_MIN, validarHora, alternativas, enSilencio, corteDe, dentroDeHorario };
+module.exports = { ANTICIPACION_MIN, ANTICIPACION_ARRIENDO_MIN, anticipacionMin, normalizarOperacion, DURACION_MIN, TRASLADO_MIN, BLOQUE_MIN, validarHora, alternativas, enSilencio, corteDe, dentroDeHorario };
