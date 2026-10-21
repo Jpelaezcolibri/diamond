@@ -179,9 +179,14 @@ async function runOnce({ ahora = new Date(), forzar = false, deps = null } = {})
   for (const org of await d.orgs()) {
     try {
       const { items, mensajes } = armar(await d.señales(org, desde, hasta));
-      const pendientes = await (d.sinAtender ? d.sinAtender(org, ahora) : require("./respuestas-publicacion").sinAtender(org.id, ahora)).catch(() => []);
+      const pendientes = await (d.sinAtender ? d.sinAtender(org, ahora) : require("./respuestas-publicacion").sinAtender(org.id, ahora)).catch(() => ({ total: 0, filas: [] }));
       const lineaR = (r) => `• Ref ${r.property_ref} · ${r.colega_nombre || "colega"} (${r.via === "grupo" ? "en el grupo" : "en tu línea"}): "${String(r.primer_texto || "").slice(0, 80)}"`;
-      if (pendientes.length) mensajes.push([`⏰ *Respuestas a nuestras publicaciones sin atender* (${pendientes.length})`, ...pendientes.map(lineaR)].join("\n"));
+      const pFilas = Array.isArray(pendientes) ? pendientes : pendientes.filas || [];
+      const pTotal = Array.isArray(pendientes) ? pFilas.length : pendientes.total ?? pFilas.length;
+      if (pFilas.length) {
+        mensajes.push([`⏰ *Respuestas a nuestras publicaciones sin atender* (${pTotal})`, ...pFilas.slice(0, 20).map(lineaR),
+          ...(pTotal > Math.min(pFilas.length, 20) ? [`… y ${pTotal - Math.min(pFilas.length, 20)} más en la pestaña Publicaciones del CRM`] : [])].join("\n"));
+      }
       if (!mensajes.length) continue;
       const asesor = await d.asesor(org);
       const tel = String(process.env.RADAR_REVISOR_PHONE || (asesor && asesor.phone) || "").replace(/\D/g, "");

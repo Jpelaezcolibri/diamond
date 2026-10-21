@@ -419,6 +419,10 @@ router.post("/webhook/grupos", async (req, res) => {
   // "message.any" solo interesa por lo que ENVIA la linea; lo entrante ya llega por "message".
   if (evento === "message.any" && !ev.fromMe) return res.json({ ok: true });
 
+  // Eco de la linea en un grupo (publicador, radar): no es de nadie, y no hace
+  // falta ni buscar la organizacion.
+  if (ev.fromMe && !esDM(ev.chatId)) return res.json({ ok: true });
+
   try {
     const org = await organizations.getDefault();
 
@@ -435,6 +439,10 @@ router.post("/webhook/grupos", async (req, res) => {
         // que esEnvioPropio ya lo conozca.
         if (config_salida.graciaMs > 0) await new Promise((r) => setTimeout(r, config_salida.graciaMs));
         if (waha.esEnvioPropio(ev.waMessageId) || yaVisto(ev.waMessageId)) return;
+        // Mismo corte de historico que los demas caminos: WAHA reentrega lo viejo
+        // al reconectar, y eso no es una respuesta humana de hoy.
+        const sesionSalida = await whatsappGroups.sesionPorNombre(org.id, ev.sesion);
+        if (esAnteriorAlCorte(ev.tsMs, sesionSalida, null)) return;
         const quien = identidadDM(ev.chatId);
         const identidad = { telefono: quien.telefono, lid: quien.lid };
         await lineaDm.create(org.id, { sesion: ev.sesion, waMessageId: ev.waMessageId, remitenteTelefono: identidad.telefono, remitenteLid: identidad.lid, remitenteNombre: null, texto: ev.texto, fechaMensaje: ev.tsMs ? new Date(ev.tsMs).toISOString() : null, senalId: null, direccion: "salida" }).catch(() => null);
@@ -469,6 +477,18 @@ router.post("/webhook/grupos", async (req, res) => {
     const blanca = await whatsappGroups.whitelist(org.id);
     const grupo = blanca.get(ev.chatId);
     if (!grupo) {
+      // Un grupo donde PUBLICAMOS pero no escuchamos (ignorar/inactivo): solo se
+      // registra la respuesta citada a nuestro post; nada del radar.
+      const pub = ev.replyToId ? await whatsappGroups.grupoDePublicacion(org.id, ev.chatId).catch(() => null) : null;
+      if (pub) {
+        const s = await whatsappGroups.sesionPorNombre(org.id, ev.sesion);
+        if (!esAnteriorAlCorte(ev.tsMs, s, null) && !yaVisto(ev.waMessageId)) {
+          require("../groups/respuestas-publicacion")
+            .deGrupo(org, { replyToId: ev.replyToId, autorId: ev.autorId, nombre: ev.autorNombre, texto: ev.texto })
+            .catch(() => null);
+        }
+        return res.json({ ok: true });
+      }
       await whatsappGroups.registrarGrupo(org.id, { jid: ev.chatId }).catch(() => {});
       return res.json({ ok: true });
     }

@@ -101,6 +101,47 @@ test("message de grupo con replyToId llama a deGrupo", async (t) => {
   assert.strictEqual(l.deGrupo[0].autorId, "77@lid");
 });
 
+test("message.any fromMe viejo (reentrega de WAHA) no escribe ni marca atendida", async (t) => {
+  const l = preparar(t);
+  const res = resFalsa();
+  const viejo = Math.floor((Date.now() - 3 * 86400e3) / 1000);
+  await rutaPost()(pedido("message.any", { id: "true_950@lid_VIEJO1", from: "5731@c.us", to: "950@lid", fromMe: true, body: "hola", timestamp: viejo }), res);
+  assert.strictEqual(l.create.length, 0);
+  assert.strictEqual(l.atendida.length, 0);
+});
+
+test("fromMe a un grupo no escribe nada ni busca la organizacion", async (t) => {
+  const l = preparar(t);
+  const org = organizations.getDefault;
+  const res = resFalsa();
+  await rutaPost()(pedido("message.any", { id: "ECO1", from: "g1@g.us", fromMe: true, body: "post" }), res);
+  assert.strictEqual(res.cuerpo.ok, true);
+  assert.strictEqual(org.mock.callCount(), 0);
+  assert.strictEqual(l.create.length, 0);
+  assert.strictEqual(l.atendida.length, 0);
+});
+
+test("grupo de publicacion fuera de la escucha: registra la respuesta citada sin radar", async (t) => {
+  const l = preparar(t);
+  t.mock.method(whatsappGroups, "whitelist", async () => new Map());
+  t.mock.method(whatsappGroups, "grupoDePublicacion", async (o, jid) => (jid === "gp@g.us" ? { id: "gp", nombre: "Pub" } : null));
+  const reg = t.mock.method(whatsappGroups, "registrarGrupo", async () => {});
+  const vivo = require("../src/groups/vivo");
+  const radar = t.mock.method(vivo, "procesarMensaje", async () => ({ resultado: "ruido" }));
+  const res = resFalsa();
+  await rutaPost()(pedido("message", { id: "GP1", from: "gp@g.us", participant: "88@lid", fromMe: false, body: "info", replyTo: { id: "3EBPOST" }, notifyName: "Ana" }), res);
+  await dormir();
+  assert.strictEqual(l.deGrupo.length, 1);
+  assert.strictEqual(l.deGrupo[0].replyToId, "3EBPOST");
+  assert.strictEqual(radar.mock.callCount(), 0);
+  assert.strictEqual(reg.mock.callCount(), 0);
+  // un grupo cualquiera no escuchado y sin publica: nada
+  await rutaPost()(pedido("message", { id: "GP2", from: "otro@g.us", participant: "88@lid", fromMe: false, body: "info", replyTo: { id: "3EBPOST" } }), resFalsa());
+  await dormir();
+  assert.strictEqual(l.deGrupo.length, 1);
+  assert.strictEqual(reg.mock.callCount(), 1);
+});
+
 test("linea-dm: la salida no entra en el historial del colega (memoria)", async () => {
   const memory = require("../src/data/memory");
   memory.lineaDm = [];

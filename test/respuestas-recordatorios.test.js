@@ -141,3 +141,51 @@ test("atendida hace 2 h: sin seguimiento aunque su ultimo mensaje sea de hace 25
   const f = fila(25, { atendida_at: new Date(LUNES_10AM - 2 * H).toISOString() });
   assert.strictEqual(rec.decidir(f, LUNES_10AM), null);
 });
+
+test("ventanas: daiana y puente solo si primer_at tiene menos de 48 h", () => {
+  assert.strictEqual(rec.decidir(fila(47), LUNES_10AM), "daiana");
+  assert.strictEqual(rec.decidir(fila(49), LUNES_10AM), null);
+  assert.strictEqual(rec.decidir(fila(49, { recordatorio_at: "x" }), LUNES_10AM), null); // ni puente
+  assert.strictEqual(rec.decidir(fila(47, { recordatorio_at: "x" }), LUNES_10AM), "puente");
+});
+
+test("ventanas: seguimiento solo entre 24 h y 7 dias de su referencia", () => {
+  const at = (h) => new Date(LUNES_10AM - h * H).toISOString();
+  const f = (h) => fila(h + 100, { atendida_at: at(h), ultimo_entrante_at: at(h + 1) });
+  assert.strictEqual(rec.decidir(f(23), LUNES_10AM), null);
+  assert.strictEqual(rec.decidir(f(25), LUNES_10AM), "seguimiento");
+  assert.strictEqual(rec.decidir(f(24 * 6), LUNES_10AM), "seguimiento");
+  assert.strictEqual(rec.decidir(f(24 * 8), LUNES_10AM), null);
+});
+
+test("tope: a Daiana se le avisan 10 por tick y por org", async () => {
+  const filas = Array.from({ length: 15 }, (_, i) => fila(2.5, { id: "r" + i }));
+  const { d, log } = deps({ abiertas: async () => filas });
+  await rec.runOnce({ ahora: LUNES_10AM, deps: d });
+  assert.strictEqual(log.notif.length, 10);
+  assert.strictEqual(log.marcas.length, 10);
+});
+
+test("sinAtender: consulta la ventana 2-48 h y devuelve total real con 20 filas", async () => {
+  const sbPath = require.resolve("../src/data/supabase");
+  const previo = require.cache[sbPath];
+  const q = { filtros: [] };
+  const cad = {
+    select(_c, o) { q.opts = o; return cad; },
+    eq() { return cad; }, in() { return cad; }, is() { return cad; },
+    lte(c, v) { q.filtros.push(["lte", c, v]); return cad; },
+    gte(c, v) { q.filtros.push(["gte", c, v]); return cad; },
+    order() { return cad; },
+    limit() { return Promise.resolve({ data: [{ property_ref: "1" }], count: 33, error: null }); },
+  };
+  require.cache[sbPath] = { id: sbPath, filename: sbPath, loaded: true, exports: { from: () => cad } };
+  try {
+    const r = await rec.sinAtender("org-1", LUNES_10AM);
+    assert.strictEqual(r.total, 33);
+    assert.strictEqual(r.filas.length, 1);
+    assert.deepStrictEqual(q.opts, { count: "exact" });
+    assert.deepStrictEqual(q.filtros, [["lte", "primer_at", new Date(LUNES_10AM - 2 * H).toISOString()], ["gte", "primer_at", new Date(LUNES_10AM - 48 * H).toISOString()]]);
+  } finally {
+    if (previo) require.cache[sbPath] = previo; else delete require.cache[sbPath];
+  }
+});

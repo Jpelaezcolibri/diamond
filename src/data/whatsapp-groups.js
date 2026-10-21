@@ -348,7 +348,17 @@ async function whitelist(orgId) {
         escuchaDesde: g.escucha_desde || null,
       });
     }
-    cache.set(orgId, { at: ahora(), porJid });
+    // Grupos donde publicamos (publica no nulo), escuchados o no: solo para
+    // atribuir respuestas citadas. Va en el mismo llenado de cache, sin consulta
+    // por mensaje; si la columna no existe, queda vacio y no rompe nada.
+    const publica = new Map();
+    try {
+      const filas = !supabase
+        ? memory.whatsappGroups.filter((g) => g.org_id === orgId && g.publica)
+        : (await supabase.from("whatsapp_groups").select("id, jid, nombre, publica").eq("org_id", orgId).not("publica", "is", null)).data || [];
+      for (const g of filas) publica.set(g.jid, { id: g.id, nombre: g.nombre });
+    } catch (_) { /* sin columna publica: nada que atribuir */ }
+    cache.set(orgId, { at: ahora(), porJid, publica });
   } catch (e) {
     console.error("[grupos] No se pudo cargar la lista blanca, quedamos sordos:", e.message);
     return new Map(); // sin cachear: se reintenta al proximo mensaje
@@ -356,7 +366,15 @@ async function whitelist(orgId) {
   return porJid;
 }
 
+// ¿Es un grupo donde publicamos? (cache de whitelist, sin consulta extra por mensaje)
+async function grupoDePublicacion(orgId, jid) {
+  await whitelist(orgId);
+  const c = cache.get(orgId);
+  return (c && c.publica && c.publica.get(jid)) || null;
+}
+
 module.exports = {
+  grupoDePublicacion,
   upsertSession, listSessions, touchSession, sesionPorNombre,
   registrarGrupo, listGroups, obtenerGrupo, setModo, setResponde, importarGrupos,
   asegurarGrupoVirtual, jidVirtual, slug,

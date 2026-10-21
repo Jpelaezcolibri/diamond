@@ -165,10 +165,21 @@ test("sin pedidos pero con respuestas sin atender, igual sale el resumen", async
   resumen._reset();
   const { d, llamadas } = deps({
     señales: async () => [],
-    sinAtender: async () => [{ property_ref: "10505566", colega_nombre: "Laura Gómez", via: "linea", primer_texto: "Hola, sigue disponible?" }],
+    sinAtender: async () => ({ total: 1, filas: [{ property_ref: "10505566", colega_nombre: "Laura Gómez", via: "linea", primer_texto: "Hola, sigue disponible?" }] }),
   });
   const r = await resumen.runOnce({ ahora: new Date("2026-10-17T17:05:00Z"), deps: d });
   assert.strictEqual(r.enviados, 1);
   assert.strictEqual(llamadas.enviados.length, 1);
   assert.match(llamadas.enviados[0].texto, /Respuestas a nuestras publicaciones sin atender\* \(1\)/);
+});
+
+test("el encabezado de sin atender muestra el total real y lista hasta 20", async () => {
+  resumen._reset();
+  const filas = Array.from({ length: 20 }, (_, i) => ({ property_ref: String(10000000 + i), colega_nombre: "C" + i, via: "grupo", primer_texto: "info" }));
+  const { d, llamadas } = deps({ señales: async () => [], sinAtender: async () => ({ total: 37, filas }) });
+  await resumen.runOnce({ ahora: new Date("2026-10-17T17:05:00Z"), deps: d });
+  const t = llamadas.enviados[0].texto;
+  assert.match(t, /sin atender\* \(37\)/);
+  assert.strictEqual((t.match(/^• Ref/gm) || []).length, 20);
+  assert.match(t, /y 17 más/);
 });

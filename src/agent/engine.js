@@ -51,12 +51,6 @@ function nowInBogota() {
 // D1001...: propiedades que publica Sofi a pedido de un asesor.
 const REF_PATTERN = /\b([A-Z]{2}\d{3}|D\d{4,}|\d{6,8})\b/;
 
-// Procesa un mensaje entrante de cualquier canal.
-// adReferral: objeto "referral" que WhatsApp Cloud API adjunta al PRIMER
-// mensaje cuando la conversacion se origino en un anuncio de clic-a-WhatsApp
-// (Click-to-WhatsApp Ads) — permite separar en el CRM los leads que llegaron
-// por un anuncio pago de los organicos, sin tocar `source` (canal).
-// Devuelve { reply, lead, transfer } — transfer: { motivo, advisorAlert } si aplico.
 async function registrarRespuestaSofi(org, lead, phone, text) {
   try {
     await require("../groups/respuestas-publicacion")
@@ -64,6 +58,12 @@ async function registrarRespuestaSofi(org, lead, phone, text) {
   } catch (_) { /* falla abierta */ }
 }
 
+// Procesa un mensaje entrante de cualquier canal.
+// adReferral: objeto "referral" que WhatsApp Cloud API adjunta al PRIMER
+// mensaje cuando la conversacion se origino en un anuncio de clic-a-WhatsApp
+// (Click-to-WhatsApp Ads) — permite separar en el CRM los leads que llegaron
+// por un anuncio pago de los organicos, sin tocar `source` (canal).
+// Devuelve { reply, lead, transfer } — transfer: { motivo, advisorAlert } si aplico.
 async function procesarMensaje({ org, phone, text, source = "whatsapp", messageExtras = {}, phoneNumberId = null, adReferral = null, radarSignalId = null }) {
   const client = getClient();
 

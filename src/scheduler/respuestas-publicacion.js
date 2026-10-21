@@ -2,9 +2,12 @@
 // la campana a las 2 h, link a Sofi al colega a las 3 h y seguimiento a las 24 h
 // de su ultimo mensaje. RADAR_RESPUESTAS_POST=true lo enciende.
 const { primerNombre } = require("../groups/redactar");
-const SOLO_LLAMADA = "colega_solo_llamada"; // error de waha.enviarDm cuando el colega pidio solo llamada
 
 const H = 3600e3;
+// Ventanas de antiguedad: al prender el interruptor no puede salir el atraso entero.
+const VENTANA_AVISO_H = 48; // Daiana, puente y resumen: solo lo reciente
+const SEGUIMIENTO_MAX_H = 7 * 24; // el seguimiento de 24 h no sirve pasada una semana
+const TOPE_DAIANA_TICK = 10; // notificaciones a Daiana por tick y por org
 const TOPE_DIA = 20;
 const CUOTA_MAX = 0.8;
 const BOGOTA_UTC = 5;
@@ -22,7 +25,7 @@ function enHorario(ahora) {
 function decidir(f, ahora) {
   const desde = (iso) => ahora.getTime() - new Date(iso).getTime();
   const enviados = (f.puente_at ? 1 : 0) + (f.seguimiento_at ? 1 : 0);
-  if (!f.atendida_at) {
+  if (!f.atendida_at && desde(f.primer_at) <= VENTANA_AVISO_H * H) {
     if (!f.recordatorio_at && desde(f.primer_at) >= 2 * H) return "daiana";
     if (!f.puente_at && desde(f.primer_at) >= 3 * H && enviados < 2) return "puente";
   }
@@ -30,7 +33,8 @@ function decidir(f, ahora) {
   if (hubo && !f.seguimiento_at && enviados < 2) {
     // 24 h desde lo ULTIMO que paso: su mensaje, el puente o la atencion.
     const ts = [f.ultimo_entrante_at, f.puente_at, f.atendida_at].map((x) => (x ? new Date(x).getTime() : NaN)).filter(Number.isFinite);
-    if (ts.length && ahora.getTime() - Math.max(...ts) >= 24 * H) return "seguimiento";
+    const edad = ahora.getTime() - Math.max(...ts);
+    if (ts.length && edad >= 24 * H && edad <= SEGUIMIENTO_MAX_H * H) return "seguimiento";
   }
   return null;
 }
@@ -66,9 +70,8 @@ function depsPorDefecto() {
       const { count: c2 } = await sb().from("respuestas_publicacion").select("id", { count: "exact", head: true }).eq("org_id", org.id).gte("seguimiento_at", inicio);
       return (c1 || 0) + (c2 || 0);
     },
-    // ¿puente-sofi ya le mando el link a este colega en 24 h? Se mira linea_dm:
-    // el puente se tiende a la primera respuesta ligada a un pedido.
-    puenteReciente: async () => false,
+    // Pendiente: ¿puente-sofi ya le mando el link a este colega en 24 h?
+    puenteReciente: async () => false, // stub: hoy no se consulta linea_dm (el reclamo de la fila evita el doble envio)
     notificar: (n) => require("../notifications/notificar").notificar(n),
     enviarDm: (s, tel, texto, opts) => require("../lib/waha").enviarDm(s, tel, texto, opts),
     marcar: (id, patch) => datos.marcar(id, patch),
@@ -77,19 +80,27 @@ function depsPorDefecto() {
 }
 
 // Abiertas (para Daiana y puente) y atendidas sin seguimiento (para las 24 h).
-async function sinAtenderOSeguimiento(orgId) {
+async function sinAtenderOSeguimiento(orgId, ahora = new Date()) {
+  const desde = new Date(ahora.getTime() - SEGUIMIENTO_MAX_H * H).toISOString();
   const { data, error } = await require("../data/supabase").from("respuestas_publicacion").select("*")
-    .eq("org_id", orgId).in("via", ["linea", "grupo"]).is("seguimiento_at", null).limit(500);
+    .eq("org_id", orgId).in("via", ["linea", "grupo"]).is("seguimiento_at", null)
+    .gte("primer_at", desde).order("primer_at", { ascending: false }).limit(500);
   if (error) throw error;
   return data || [];
 }
 
+// Sin atender para el resumen: entre 2 y 48 h. Devuelve el total real y las
+// primeras 20 filas (las mas viejas de la ventana).
 async function sinAtender(orgId, ahora = new Date()) {
   const corte = new Date(ahora.getTime() - 2 * H).toISOString();
-  const { data, error } = await require("../data/supabase").from("respuestas_publicacion").select("property_ref, colega_nombre, via, primer_at, primer_texto")
-    .eq("org_id", orgId).in("via", ["linea", "grupo"]).is("atendida_at", null).lte("primer_at", corte).order("primer_at").limit(20);
+  const desde = new Date(ahora.getTime() - VENTANA_AVISO_H * H).toISOString();
+  const { data, error, count } = await require("../data/supabase").from("respuestas_publicacion")
+    .select("property_ref, colega_nombre, via, primer_at, primer_texto", { count: "exact" })
+    .eq("org_id", orgId).in("via", ["linea", "grupo"]).is("atendida_at", null)
+    .lte("primer_at", corte).gte("primer_at", desde).order("primer_at").limit(20);
   if (error) throw error;
-  return data || [];
+  const filas = data || [];
+  return { total: typeof count === "number" ? count : filas.length, filas };
 }
 
 async function runOnce({ ahora = new Date(), deps = null } = {}) {
@@ -101,6 +112,7 @@ async function runOnce({ ahora = new Date(), deps = null } = {}) {
       const asesora = await d.asesora(org, sesion).catch(() => null);
       let enviados = await d.enviadosHoy(org, ahora).catch(() => TOPE_DIA);
       let sinLink = false;
+      let avisadas = 0;
       for (const f of await d.abiertas(org)) {
         let accion = decidir(f, ahora);
         // Sin asesora no se avisa a Daiana, pero las reglas del colega siguen.
@@ -108,6 +120,8 @@ async function runOnce({ ahora = new Date(), deps = null } = {}) {
         if (!accion) continue;
         const marca = new Date(ahora).toISOString();
         if (accion === "daiana") {
+          if (avisadas >= TOPE_DAIANA_TICK) continue; // el resto en el siguiente tick
+          avisadas++;
           // Solo toca el CRM: si falla, se reintenta en el siguiente tick.
           const n = await d.notificar({ orgId: org.id, advisor: asesora, tipo: "respuesta_sin_atender",
             titulo: `⏰ Un colega espera respuesta (Ref ${f.property_ref})`,
