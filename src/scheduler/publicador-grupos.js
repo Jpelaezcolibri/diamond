@@ -102,15 +102,7 @@ function depsPorDefecto() {
     },
     post: (org, ref) => kit.post(org, ref),
     enviar: (sesion, jid, texto) => waha.enviarTexto(sesion, jid, texto),
-    registrar: async (fila) => {
-      let { error } = await supabase.from("grupo_publicaciones").insert(fila);
-      // Antes de la migracion de respuestas la columna origen no existe: se reintenta sin ella.
-      if (error && /origen/.test(`${error.message} ${error.code}`)) {
-        const { origen, ...sinOrigen } = fila;
-        ({ error } = await supabase.from("grupo_publicaciones").insert(sinOrigen));
-      }
-      if (error) console.error("[publicador] No se pudo registrar la publicacion:", error.message);
-    },
+    registrar: (fila) => insertarPublicacion(supabase, fila),
     alertar: (resumen, detalle) => enviarAlertaTecnica(resumen, detalle).catch(() => false),
     azar: Math.random,
     // Cuenta TODAS las publicaciones enviadas de la ref, sin ventana de fechas. null = error.
@@ -141,6 +133,22 @@ function depsPorDefecto() {
       if (!r || !r.ok) console.warn(`[publicador] No se pudo avisar a ${advisor.name} de la ${propiedad.ref}`);
     },
   };
+}
+
+// Antes de las migraciones de origen y texto esas columnas no existen: si el error
+// nombra una, se reintenta sin las que falten para no perder el registro del post.
+async function insertarPublicacion(supabase, fila) {
+  let actual = { ...fila };
+  let error;
+  for (let i = 0; i < 3; i++) {
+    ({ error } = await supabase.from("grupo_publicaciones").insert(actual));
+    if (!error) return;
+    const msg = `${error.message} ${error.code}`;
+    const faltan = ["origen", "texto"].filter((c) => c in actual && new RegExp(c).test(msg));
+    if (!faltan.length) break;
+    for (const c of faltan) delete actual[c];
+  }
+  console.error("[publicador] No se pudo registrar la publicacion:", error.message);
 }
 
 async function runParaOrg(org, d, ahora) {
@@ -256,4 +264,4 @@ function _reset() {
   estado.linkRoto.clear();
 }
 
-module.exports = { demandaPorZona, start, runOnce, activo, _reset, _depsPorDefecto: depsPorDefecto };
+module.exports = { insertarPublicacion, demandaPorZona, start, runOnce, activo, _reset, _depsPorDefecto: depsPorDefecto };

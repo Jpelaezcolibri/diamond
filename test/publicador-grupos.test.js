@@ -425,3 +425,28 @@ test("un arriendo con precio imposible no se publica (ref 10488266, $550 M mensu
   assert.equal(publicador.aptaPara(amoblado("1", { precio: "$18.900.000.000" }), "amoblados"), false);
   assert.equal(publicador.aptaPara({ ...finca, precio: "$25.000.000", periodo_precio: "diario" }, "fincas"), false);
 });
+
+// --- texto guardado ---
+
+test("la fila registrada trae el texto exacto que se envio", async () => {
+  const { d, log } = deps();
+  await scheduler.runOnce({ ahora: LUNES_10AM, deps: d });
+  assert.equal(log.registrados[0].texto, log.enviados[0].texto);
+  assert.ok(log.registrados[0].texto.includes("post "));;
+});
+
+test("insertarPublicacion: sin columna texto u origen, registra sin ellas", async () => {
+  const intentos = [];
+  const supabase = {
+    from: () => ({
+      insert: async (fila) => {
+        intentos.push(fila);
+        if ("texto" in fila) return { error: { message: 'column "texto" of relation "grupo_publicaciones" does not exist', code: "42703" } };
+        return { error: null };
+      },
+    }),
+  };
+  await scheduler.insertarPublicacion(supabase, { property_ref: "1", origen: "auto", texto: "hola", estado: "enviado" });
+  assert.equal(intentos.length, 2);
+  assert.deepEqual(intentos[1], { property_ref: "1", origen: "auto", estado: "enviado" });
+});
