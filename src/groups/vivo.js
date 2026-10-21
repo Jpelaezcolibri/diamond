@@ -1862,4 +1862,6 @@ async function prepararAviso(org, signalId, { sesion = null } = {}) {
 module.exports = {
   procesarMensaje, idEnVivo, asistir, destinatarios, aprobarManual, responderPorDmManual, prepararAviso,
   manejarOferta, VENTANA_LIMITE_HORAS,
+  // Para scripts/rescate-pedidos.js: el lote arma el DM con las mismas piezas.
+  quitarYaEnviadas, pedidoDe, notasDelVeredicto, refsConAclaracion,
 };
