@@ -40,7 +40,25 @@ function tiposPedidos(c) {
 // consulta no filtra por tipo y la compuerta la aplica evaluarCandidata.
 function tipoParaConsulta(c) {
   const tipos = tiposPedidos(c);
-  return tipos.length === 1 ? tipos[0] : null;
+  // Un tipo con variantes (apartamento -> duplex, penthouse, loft) tampoco
+  // viaja: el ilike por la palabra sola dejaria las variantes afuera.
+  return tipos.length === 1 && !VARIANTES_DE_TIPO[sinTildes(tipos[0])] ? tipos[0] : null;
+}
+
+// Tipos que Wasi registra con otro nombre pero que, para un pedido, son lo
+// mismo. "apartaestudio" NO esta aca: es su propio tipo. Un pedido de duplex,
+// penthouse o loft solo trae ese tipo (en el tipo o en el titulo).
+const VARIANTES_DE_TIPO = { apartamento: ["duplex", "penthouse", "pent house", "loft"] };
+function sinTildes(t) {
+  return String(t || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
+function tipoCalza(p, t) {
+  const tipo = sinTildes(p.tipo);
+  const pedido = sinTildes(t);
+  if (tipo.includes(pedido)) return true;
+  if ((VARIANTES_DE_TIPO[pedido] || []).some((v) => tipo.includes(v))) return true;
+  if (/^(duplex|penthouse|pent house|loft)$/.test(pedido)) return sinTildes(p.titulo).includes(pedido);
+  return false;
 }
 
 function filtrosInventario(c) {
@@ -373,7 +391,7 @@ function margenPrecioDe(c) {
 function evaluarCandidata(p, c, fuente) {
   if (!mismaOperacion(p, c)) return null;
   const tipos = tiposPedidos(c);
-  if (tipos.length && !tipos.some((t) => String(p.tipo || "").toLowerCase().includes(t))) return null;
+  if (tipos.length && !tipos.some((t) => tipoCalza(p, t))) return null;
 
   // Techo de area, literal con el mismo margen que el piso de area.
   const areaMax = areaMaxDe(c);

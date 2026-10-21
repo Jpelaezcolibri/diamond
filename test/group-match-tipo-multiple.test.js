@@ -54,8 +54,9 @@ test("el tipo simple no cambia: casa no entra en un pedido de apartamento", () =
 });
 
 test("prefiltro: con un solo tipo se manda igual que antes", () => {
-  assert.strictEqual(filtrosInventario(pide()).tipo, "apartamento");
-  assert.strictEqual(filtrosAliados(pide()).tipo, "apartamento");
+  // (apartamento ya no viaja: tiene variantes, ver group-match-tipo-variantes)
+  assert.strictEqual(filtrosInventario(pide({ tipo: "casa" })).tipo, "casa");
+  assert.strictEqual(filtrosAliados(pide({ tipo: "casa" })).tipo, "casa");
 });
 
 test("BUG: prefiltro: con varios tipos NO se manda el string entero a la consulta", () => {
