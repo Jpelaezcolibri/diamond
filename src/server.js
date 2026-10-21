@@ -173,6 +173,8 @@ app.listen(config.port, () => {
   if (config.supabaseUrl) require("./scheduler/respuestas-publicacion").start();
   // Vigencia de las propiedades que publico un asesor con Sofi (Juan, 2026-10-19).
   if (config.supabaseUrl) require("./scheduler/vigencia-asesor").start();
+  // Recordatorio y pregunta despues de la visita (spec sofi-super-agente 2.3).
+  if (config.supabaseUrl) require("./scheduler/visita-cliente").start();
   // Seguimiento por plantilla pasada la ventana de 24 h, 48 h y 7 dias (Juan, 2026-10-17).
   if (config.supabaseUrl) require("./scheduler/seguimiento-plantilla").start();
   // Inbox de la linea: dice al arrancar si el clasificador esta prendido, como
