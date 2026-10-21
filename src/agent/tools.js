@@ -109,7 +109,7 @@ const TOOL_DEFINITIONS = [
         operacion: {
           type: "string",
           enum: ["venta", "arriendo"],
-          description: "Solo si no hay ref: si la visita es para comprar ('venta') o para arrendar ('arriendo'). Con ref, la operacion sale de la propiedad.",
+          description: "Solo si no hay ref: si la visita es para comprar ('venta') o para arrendar ('arriendo'). Con ref, la operacion sale de la propiedad; sin respaldo en la conversacion, 'arriendo' no baja la anticipacion de venta (24 h).",
         },
       },
       required: ["descripcion"],
@@ -485,9 +485,9 @@ async function resolveLeadAdvisor(ctx, especialidad) {
 // automatizacion de la ventana abierta y luego al otro numero"): el segundo
 // numero recibe lo que el primero no pudo, no una copia de todo.
 // Venta o arriendo para la anticipacion de la cita (spec 2026-10-21 §2.2): de
-// la propiedad de la ref; si no, de lo que dijo el modelo, de la propiedad de
-// interes y por ultimo de leads.categoria (alquiler -> arriendo). null = como
-// siempre (la de venta).
+// la propiedad de la ref; si no, de la propiedad de interes, de leads.categoria
+// (alquiler -> arriendo) y solo al final de lo que dijo el modelo (que nunca
+// puede bajar a la anticipacion de arriendo). null = como siempre (la de venta).
 async function operacionDeCita(ctx, { ref = null, operacion = null } = {}) {
   const { normalizarOperacion } = require("../lib/agenda-reglas");
   if (ref) {
@@ -498,18 +498,26 @@ async function operacionDeCita(ctx, { ref = null, operacion = null } = {}) {
     const op = normalizarOperacion(p && p.operacion);
     if (op) return op;
   }
-  return (
-    normalizarOperacion(operacion) ||
-    (!ref ? normalizarOperacion(ctx.propertyInteres && ctx.propertyInteres.operacion) : null) ||
-    normalizarOperacion(ctx.lead && ctx.lead.categoria)
-  );
+  const propia =
+    normalizarOperacion(ctx.propertyInteres && ctx.propertyInteres.operacion) ||
+    normalizarOperacion(ctx.lead && ctx.lead.categoria);
+  if (propia) return propia;
+  // Solo lo que dijo el modelo: nunca baja la anticipacion. Un "arriendo" sin
+  // respaldo en la propiedad ni en la categoria del lead cuenta como venta (24 h).
+  const delModelo = normalizarOperacion(operacion);
+  return delModelo === "arriendo" ? null : delModelo;
 }
 
 // Hasta 3 espacios libres bien separados (primero, otra media jornada, otro dia) entre los asesores que pueden recibir la
 // visita, con las mismas reglas que agendar_cita (agenda-reglas.alternativas).
-function proximosLibres({ asesores, citasOrg, ahora, operacion, excluirLeadId }) {
+// Lo ofrecido lleva un colchon (COLCHON_OFERTA_MIN) sobre la anticipacion para
+// que siga siendo valido cuando la persona conteste; agendar_cita acepta desde
+// la anticipacion simple.
+const COLCHON_OFERTA_MIN = 120;
+function proximosLibres({ asesores, citasOrg, ahora: ahoraReal, operacion, excluirLeadId }) {
   const rotacion = require("../data/rotacion-citas");
   const reglas = require("../lib/agenda-reglas");
+  const ahora = new Date(ahoraReal.getTime() + COLCHON_OFERTA_MIN * 60 * 1000);
   const todos = asesores
     .flatMap((a) => reglas.alternativas({ ahora, horario: a.horario, ocupadas: rotacion.ocupadasDe(citasOrg, a, { excluirLeadId }), operacion, n: 1000 }));
   return reglas.espaciar([...new Set(todos)]);

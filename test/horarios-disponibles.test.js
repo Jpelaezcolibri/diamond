@@ -42,6 +42,7 @@ const PROPS = [
   { org_id: "org-1", ref: "VEN1", operacion: "Venta", disponible: true },
 ];
 const ctx = (lead = {}) => ({ org: { id: "org-1", name: "Diamond" }, lead: { id: "l1", org_id: "org-1", phone: "573125550000", ...lead } });
+const conColchon = () => new Date(Date.now() + 120 * 60 * 1000); // COLCHON_OFERTA_MIN
 const enHoras = (h) => new Date(Date.now() + h * 3600 * 1000);
 // Primer instante a las 10:00 Bogota (15:00Z) al menos `h` horas adelante.
 const aLas10 = (d) => { const x = new Date(d); x.setUTCHours(15, 0, 0, 0); return x.toISOString(); };
@@ -74,17 +75,43 @@ test("arriendo por la ref: el primer horario puede caer a menos de 24 h", async 
   const out = await horarios({ ref: "ARR1" });
   assert.strictEqual(out.horarios.length, 3);
   const primero = new Date(out.horarios[0].iso).getTime() - Date.now();
-  assert.ok(primero >= 6 * 3600 * 1000 - 1000, "nunca menos de 6 h");
+  assert.ok(primero >= 8 * 3600 * 1000 - 1000, "6 h de anticipacion + 2 h de colchon");
   // Lo mismo que calcula la regla pura con la operacion de arriendo.
-  const esperado = r.alternativas({ ahora: new Date(), horario: H, operacion: "arriendo" })[0];
+  const esperado = r.alternativas({ ahora: conColchon(), horario: H, operacion: "arriendo" })[0];
   assert.strictEqual(out.horarios[0].iso, esperado);
 });
 
 test("sin ref, la operación sale de lead.categoria (alquiler → arriendo)", async () => {
   const conCategoria = await horarios({}, ctx({ categoria: "alquiler" }));
-  assert.strictEqual(conCategoria.horarios[0].iso, r.alternativas({ ahora: new Date(), horario: H, operacion: "arriendo" })[0]);
+  assert.strictEqual(conCategoria.horarios[0].iso, r.alternativas({ ahora: conColchon(), horario: H, operacion: "arriendo" })[0]);
   const sinNada = await horarios({}, ctx());
-  assert.strictEqual(sinNada.horarios[0].iso, r.alternativas({ ahora: new Date(), horario: H })[0]);
+  assert.strictEqual(sinNada.horarios[0].iso, r.alternativas({ ahora: conColchon(), horario: H })[0]);
+});
+
+test("el modelo no baja la anticipacion: operacion arriendo con una ref de venta sigue en 24 h", async () => {
+  const out = await horarios({ ref: "VEN1", operacion: "arriendo" });
+  for (const h of out.horarios) assert.ok(new Date(h.iso).getTime() - Date.now() >= 24 * 3600 * 1000, "venta: 24 h");
+});
+
+test("sin ref, categoria compra y el modelo dice arriendo: 24 h", async () => {
+  const out = await horarios({ operacion: "arriendo" }, ctx({ categoria: "compra" }));
+  for (const h of out.horarios) assert.ok(new Date(h.iso).getTime() - Date.now() >= 24 * 3600 * 1000, "venta: 24 h");
+  const solo = await horarios({ operacion: "arriendo" }, ctx());
+  for (const h of solo.horarios) assert.ok(new Date(h.iso).getTime() - Date.now() >= 24 * 3600 * 1000, "sin respaldo: 24 h");
+});
+
+test("propertyInteres de venta gana sobre el arriendo del modelo", async () => {
+  const c = { ...ctx(), propertyInteres: { operacion: "Venta" } };
+  const out = await horarios({ operacion: "arriendo" }, c);
+  for (const h of out.horarios) assert.ok(new Date(h.iso).getTime() - Date.now() >= 24 * 3600 * 1000);
+});
+
+test("el primer horario ofrecido tiene colchon: sigue valido 40 min despues", async () => {
+  const out = await horarios({ ref: "VEN1" });
+  const despues = new Date(Date.now() + 40 * 60 * 1000);
+  const v = r.validarHora({ fechaHoraIso: out.horarios[0].iso, ahora: despues, horario: H, ocupadas: [], operacion: "venta" });
+  assert.deepStrictEqual(v, { ok: true });
+  assert.ok(new Date(out.horarios[0].iso).getTime() - Date.now() >= (24 * 60 + 120) * 60 * 1000 - 1000);
 });
 
 test("con los dos asesores ocupados a una hora, esa hora no se ofrece; con uno libre, sí", async () => {
@@ -118,7 +145,7 @@ test("sin ciclo de rotación usa a quien coordina las visitas", async (t) => {
   t.mock.method(advisors, "findAsesorPrincipalRadar", async () => principal);
   const out = await horarios({ ref: "VEN1" });
   assert.strictEqual(out.horarios.length, 3);
-  assert.deepStrictEqual(out.horarios.map((h) => h.iso), r.espaciar(r.alternativas({ ahora: new Date(), horario: principal.horario, n: 1000 })));
+  assert.deepStrictEqual(out.horarios.map((h) => h.iso), r.espaciar(r.alternativas({ ahora: conColchon(), horario: principal.horario, n: 1000 })));
 });
 
 test("sin espacios en 14 días: lista vacía y un motivo", async () => {

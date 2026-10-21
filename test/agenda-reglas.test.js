@@ -51,11 +51,14 @@ test("espaciar: todo libre da manana, tarde y el dia siguiente", () => {
   assert.deepStrictEqual(r.espaciar(libres), ["2026-10-08T13:00:00Z", "2026-10-08T17:00:00Z", "2026-10-09T13:00:00Z"]);
 });
 
-test("espaciar: solo mananas libres da manana de hoy y manana de otro dia", () => {
+test("espaciar: solo mananas libres da tres mananas de dias distintos", () => {
   const libres = [...slotsDia("2026-10-08", [8, 9, 10]), ...slotsDia("2026-10-09", [8, 9]), ...slotsDia("2026-10-10", [8])];
-  const out = r.espaciar(libres);
-  assert.deepStrictEqual(out.slice(0, 2), ["2026-10-08T13:00:00Z", "2026-10-09T13:00:00Z"]);
-  assert.strictEqual(out.length, 3);
+  assert.deepStrictEqual(r.espaciar(libres), ["2026-10-08T13:00:00Z", "2026-10-09T13:00:00Z", "2026-10-10T13:00:00Z"]);
+});
+
+test("espaciar: tarde de hoy llena y tarde de manana libre: la opcion 2 es manana en la tarde", () => {
+  const libres = [...slotsDia("2026-10-08", [8, 9, 10]), ...slotsDia("2026-10-09", [8, 9, 14, 15]), ...slotsDia("2026-10-10", [8])];
+  assert.deepStrictEqual(r.espaciar(libres), ["2026-10-08T13:00:00Z", "2026-10-09T19:00:00Z", "2026-10-10T13:00:00Z"]);
 });
 
 test("espaciar: sin libres devuelve vacio, y con uno solo devuelve uno", () => {
