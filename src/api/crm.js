@@ -1075,6 +1075,28 @@ router.post("/api/citas/accion", async (req, res) => {
   }
 });
 
+// "Marcar atendida" de la pestaña Publicaciones del CRM (spec
+// 2026-10-20-publicaciones-y-respuestas §6). Solo el equipo: un asesor activo
+// o un admin del CRM (el CRM manda esAdmin, leido del app_metadata del usuario
+// en la sesion; el bot no tiene ese dato).
+router.post("/api/respuestas/atendida", async (req, res) => {
+  try {
+    const { id, authUserId, esAdmin } = req.body || {};
+    if (!id || !authUserId) return res.status(400).json({ ok: false, error: "faltan id o authUserId" });
+    const org = await organizations.getDefault();
+    if (esAdmin !== true) {
+      const advisor = await require("../data/advisors").findByAuthUserId(org.id, authUserId);
+      if (!advisor || advisor.activo === false) return res.status(403).json({ ok: false, error: "no_es_del_equipo" });
+    }
+    const r = await require("../data/respuestas-publicacion").marcarAtendidaPorId(org.id, String(id), "manual");
+    if (!r.ok) return res.status(404).json({ ok: false, error: "no_existe" });
+    res.json({ ok: true, ya: r.ya });
+  } catch (e) {
+    console.error("[api] Error en respuestas/atendida:", e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // Boton "Sigue disponible" / "Ya no está" de "Para atender" en el CRM (Juan,
 // 2026-10-20). El CRM manda el auth del usuario; solo el captador de la
 // propiedad puede renovarla o darla de baja (aplicarVigencia lo filtra).

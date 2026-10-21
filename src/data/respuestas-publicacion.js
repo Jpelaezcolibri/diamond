@@ -98,6 +98,20 @@ self.marcarAtendidas = async function marcarAtendidas(orgId, { lid = null, telef
   return (data || []).length;
 };
 
+// "Marcar atendida" del CRM: una sola fila, de esta org. Devuelve si existia
+// (una ya atendida se deja como esta y cuenta como existente).
+self.marcarAtendidaPorId = async function marcarAtendidaPorId(orgId, id, por = "manual") {
+  const { data, error } = await self._supabase().from("respuestas_publicacion")
+    .update({ atendida_at: new Date().toISOString(), atendida_por: por })
+    .eq("org_id", orgId).eq("id", id).is("atendida_at", null).select("id");
+  if (error) throw error;
+  if ((data || []).length) return { ok: true, ya: false };
+  const { data: fila, error: e2 } = await self._supabase().from("respuestas_publicacion")
+    .select("id").eq("org_id", orgId).eq("id", id).maybeSingle();
+  if (e2) throw e2;
+  return fila ? { ok: true, ya: true } : { ok: false };
+};
+
 self.abiertas = async function abiertas(orgId) {
   const { data, error } = await self._supabase().from("respuestas_publicacion").select("*")
     .eq("org_id", orgId).in("via", ["linea", "grupo"]).is("atendida_at", null).limit(500);
