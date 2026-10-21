@@ -2,6 +2,15 @@
 const DIA_MS = 86400000;
 const self = { _supabase: () => require("./supabase") };
 
+// Una sola forma del lid: solo digitos + "@lid" (acepta "123" o "123@lid").
+// null si no hay lid o no tiene digitos.
+function lidCanonico(lid) {
+  if (!lid) return null;
+  const digitos = String(lid).replace(/\D/g, "");
+  return digitos ? `${digitos}@lid` : null;
+}
+self.lidCanonico = lidCanonico;
+
 self.postReciente = async function postReciente(orgId, ref, { dias = 7, ahora = new Date() } = {}) {
   const desde = new Date(ahora.getTime() - dias * DIA_MS).toISOString();
   const { data, error } = await self._supabase()
@@ -48,7 +57,9 @@ self.colegaGrupos = async function colegaGrupos(orgId, { lid = null, telefono = 
 };
 
 self.registrar = async function registrar(orgId, { ref, publicacionId = null, groupId = null, via, lid = null, telefono = null, nombre = null, texto = null, leadId = null, atendida = false }) {
-  const clave = lid || telefono;
+  const lidC = lidCanonico(lid);
+  const clave = lidC || telefono;
+  if (!clave) return null;
   const ahora = new Date().toISOString();
   const { data: previa, error: e1 } = await self._supabase()
     .from("respuestas_publicacion").select("id, mensajes")
@@ -63,7 +74,7 @@ self.registrar = async function registrar(orgId, { ref, publicacionId = null, gr
   }
   const fila = {
     org_id: orgId, property_ref: String(ref), publicacion_id: publicacionId, group_id: groupId, via,
-    colega_lid: lid, colega_telefono: telefono, colega_nombre: nombre, colega_clave: clave,
+    colega_lid: lidC, colega_telefono: telefono, colega_nombre: nombre, colega_clave: clave,
     primer_texto: texto ? String(texto).slice(0, 500) : null, lead_id: leadId,
     ...(atendida ? { atendida_at: ahora, atendida_por: via === "sofi" ? "sofi" : "linea" } : {}),
   };
@@ -73,7 +84,7 @@ self.registrar = async function registrar(orgId, { ref, publicacionId = null, gr
 };
 
 self.marcarAtendidas = async function marcarAtendidas(orgId, { lid = null, telefono = null }, por) {
-  const clave = lid || telefono;
+  const clave = lidCanonico(lid) || telefono;
   if (!clave) return 0;
   const { data, error } = await self._supabase().from("respuestas_publicacion")
     .update({ atendida_at: new Date().toISOString(), atendida_por: por })
@@ -95,7 +106,7 @@ self.marcar = async function marcar(id, patch) {
 };
 
 self.marcarPuente = async function marcarPuente(orgId, { lid = null, telefono = null } = {}) {
-  const clave = lid || telefono;
+  const clave = lidCanonico(lid) || telefono;
   if (!clave) return 0;
   const { data, error } = await self._supabase().from("respuestas_publicacion")
     .update({ puente_at: new Date().toISOString() })

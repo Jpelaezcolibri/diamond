@@ -142,3 +142,36 @@ test("datos.colegaGrupos: el lid se busca sin sufijo (colegas_grupos lo guarda e
   assert.deepStrictEqual(await datos.colegaGrupos("org-1", { lid: "123456789@lid" }), ["ARRIENDOS 7AM 8PM"]);
   assert.ok(sb.llamadas[0].ops.some(([o, c, v]) => o === "eq" && c === "lid" && v === "123456789"));
 });
+
+test("lidCanonico: una sola forma, solo digitos + @lid", () => {
+  assert.strictEqual(datos.lidCanonico("123"), "123@lid");
+  assert.strictEqual(datos.lidCanonico("123@lid"), "123@lid");
+  assert.strictEqual(datos.lidCanonico(""), null);
+  assert.strictEqual(datos.lidCanonico(null), null);
+  assert.strictEqual(datos.lidCanonico("@lid"), null);
+});
+
+test("datos.registrar: lid '123' y '123@lid' guardan la misma colega_clave '123@lid'", async (t) => {
+  for (const lid of ["123", "123@lid"]) {
+    const sb = falso([{ data: null, error: null }, { data: { id: "n" }, error: null }]);
+    t.mock.method(datos, "_supabase", () => sb);
+    await datos.registrar("org-1", { ref: "10505566", via: "linea", lid });
+    const fila = op(sb.llamadas[1], "insert")[1];
+    assert.strictEqual(fila.colega_clave, "123@lid");
+    assert.strictEqual(fila.colega_lid, "123@lid");
+    t.mock.restoreAll();
+  }
+});
+
+test("datos.registrar sin lid ni telefono devuelve null sin tocar la base", async (t) => {
+  const sb = falso([]);
+  t.mock.method(datos, "_supabase", () => sb);
+  assert.strictEqual(await datos.registrar("org-1", { ref: "10505566", via: "grupo" }), null);
+  assert.strictEqual(sb.llamadas.length, 0);
+});
+
+test("groups: registrar null -> deSofi devuelve null, no un objeto roto", async (t) => {
+  t.mock.method(datos, "postReciente", async () => POST);
+  t.mock.method(datos, "registrar", async () => null);
+  assert.strictEqual(await rp.deSofi(ORG, { texto: "vi en un grupo la Ref 10505566" }), null);
+});

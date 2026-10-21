@@ -38,6 +38,7 @@ async function deLinea(org, { texto, senalId = null, identidad = {}, nombre = nu
     const r = await datos.registrar(org.id, {
       ref: post.property_ref, publicacionId: post.id, groupId: post.group_id, via: "linea", lid, telefono, nombre, texto,
     });
+    if (!r) return null;
     return { ...r, ref: post.property_ref, via: "linea" };
   });
 }
@@ -51,6 +52,7 @@ async function deSofi(org, { texto, telefono, nombre = null, leadId = null }) {
     const r = await datos.registrar(org.id, {
       ref, publicacionId: post.id, groupId: post.group_id, via: "sofi", telefono, nombre, texto, leadId, atendida: true,
     });
+    if (!r) return null;
     return { ...r, ref, via: "sofi" };
   });
 }
@@ -65,6 +67,7 @@ async function deGrupo(org, { replyToId, autorId, nombre = null, texto }) {
       ref: post.property_ref, publicacionId: post.id, groupId: post.group_id, via: "grupo",
       lid: esLid ? autorId : null, telefono: esLid ? null : String(autorId).replace(/\D/g, ""), nombre, texto,
     });
+    if (!r) return null;
     return { ...r, ref: post.property_ref, via: "grupo" };
   });
 }
