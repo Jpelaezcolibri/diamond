@@ -63,6 +63,22 @@ test("grupo: cita a nuestro post -> via grupo", async (t) => {
   assert.strictEqual(await rp.deGrupo(ORG, { replyToId: null, autorId: "9@lid", texto: "x" }), null);
 });
 
+test("postPorWamid: un wamid con sintaxis de filtro no llega a la base", async (t) => {
+  const sb = falso([{ data: [POST], error: null }]);
+  t.mock.method(datos, "_supabase", () => sb);
+  assert.strictEqual(await datos.postPorWamid("org-1", "3EB0,wamid.neq.x"), null);
+  assert.strictEqual(await datos.postPorWamid("org-1", "3EB0)"), null);
+  assert.strictEqual(await datos.postPorWamid("org-1", ""), null);
+  assert.strictEqual(sb.llamadas.length, 0);
+});
+
+test("postPorWamid: un id normal consulta con el filtro exacto", async (t) => {
+  const sb = falso([{ data: [POST], error: null }]);
+  t.mock.method(datos, "_supabase", () => sb);
+  assert.deepStrictEqual(await datos.postPorWamid("org-1", "3EB0WAMID"), POST);
+  assert.strictEqual(op(sb.llamadas[0], "or")[1], "wamid.eq.3EB0WAMID,wamid.like.*_3EB0WAMID");
+});
+
 test("atendidaPorLinea marca las abiertas del colega", async (t) => {
   const m = t.mock.method(datos, "marcarAtendidas", async () => 2);
   assert.strictEqual(await rp.atendidaPorLinea(ORG, { lid: "1@lid" }), 2);

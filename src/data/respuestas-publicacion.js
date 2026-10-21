@@ -38,7 +38,9 @@ self.postsEnGrupos = async function postsEnGrupos(orgId, nombresGrupos, { horas 
 };
 
 self.postPorWamid = async function postPorWamid(orgId, wamid) {
-  if (!wamid) return null;
+  // El wamid viene del payload externo y va dentro de un filtro .or() de PostgREST:
+  // solo se aceptan caracteres de un id de WhatsApp (sin , ( ) * ni espacios).
+  if (!wamid || !/^[A-Za-z0-9@._:-]+$/.test(String(wamid))) return null;
   const { data, error } = await self._supabase()
     .from("grupo_publicaciones").select("id, property_ref, group_id, created_at")
     .eq("org_id", orgId)
