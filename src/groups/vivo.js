@@ -420,6 +420,34 @@ async function quitarYaEnviadas(org, { lid = null, telefono = null } = {}, propi
   return { quedan: propiedades.filter((m) => !repetidas.includes(m)), repetidas: repetidas.map((m) => String(m.ref)) };
 }
 
+// Guarda en la señal por que el pedido no salio. Fail-open: un error de base de
+// datos no puede tumbar el camino del radar.
+async function guardarMotivoSalida(org, signal, motivo, trazaPrevia = []) {
+  if (!signal || !signal.id) return;
+  try {
+    await groupSignals.guardarPolitica(org.id, signal.id, { motivo, traza: [...trazaPrevia, `NO:${motivo}`] });
+  } catch (e) {
+    console.warn(`[radar] No se pudo guardar el motivo ${motivo}:`, e.message);
+  }
+}
+
+// Un descarte de Sofi que contradice el dato no vale: una ref PROPIA (no de
+// aliado) con puntaje >= 95 que Sofi saca diciendo que "es de aliados" vuelve a
+// refs_utiles (caso ccdc2404: la 10013037, puntaje 100, "las tres son de
+// aliados"). Angosto a proposito: solo propias, solo >= 95, solo si el texto
+// de Sofi menciona "aliad", y solo si no la marco ni util ni dudosa.
+function rescatarDescartesFalsos(veredicto, matches) {
+  if (!veredicto || !veredicto.es_pedido_real || !/aliad/i.test(String(veredicto.por_que || ""))) return veredicto;
+  const utiles = Array.isArray(veredicto.refs_utiles) ? veredicto.refs_utiles.map(String) : [];
+  const dudosas = Array.isArray(veredicto.refs_dudosas) ? veredicto.refs_dudosas.map(String) : [];
+  const rescatadas = (matches || [])
+    .filter((m) => m && m.ref !== null && m.ref !== undefined && m.fuente !== "aliado" && Number(m.puntaje) >= 95)
+    .map((m) => String(m.ref))
+    .filter((r) => !utiles.includes(r) && !dudosas.includes(r));
+  if (rescatadas.length === 0) return veredicto;
+  return { ...veredicto, sirve_alguna: true, refs_utiles: [...utiles, ...rescatadas], refs_rescatadas: rescatadas };
+}
+
 // Sofi da su veredicto y, si aprueba, le avisa a la asesora.
 //
 // Sofi ve TODAS las candidatas, tambien las de puntaje bajo: es la unica forma
@@ -430,13 +458,18 @@ async function quitarYaEnviadas(org, { lid = null, telefono = null } = {}, propi
 // SIEMPRE —aunque diga que no sirve— porque el "no" tambien ensena.
 async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, sesion = null }) {
   const matches = señal.matches || [];
-  if (matches.length === 0) return { resultado: "sin_candidatas", signalId: signal && signal.id };
+  if (matches.length === 0) {
+    await guardarMotivoSalida(org, signal, "sin_candidatas");
+    return { resultado: "sin_candidatas", signalId: signal && signal.id };
+  }
 
-  const { veredicto } = await revalidar.revalidar(c, matches);
-  if (!veredicto) {
+  const { veredicto: veredictoSofi } = await revalidar.revalidar(c, matches);
+  if (!veredictoSofi) {
     // Falla cerrada: sin veredicto no se le escribe a nadie.
+    await guardarMotivoSalida(org, signal, "sin_veredicto");
     return { resultado: "sin_veredicto", signalId: signal && signal.id };
   }
+  const veredicto = rescatarDescartesFalsos(veredictoSofi, matches);
   await groupSignals.guardarRevalidacion(org.id, signal.id, veredicto);
 
   const señalParaFeed = { grupo_nombre: grupo.nombre || grupo.jid, autor_nombre: mensaje.autor, texto_original: mensaje.texto };
@@ -447,6 +480,7 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
     await feedComando.registrar(org, señalParaFeed, veredicto, matches).catch((e) =>
       console.warn("[radar] No se pudo escribir en el feed del admin:", e.message)
     );
+    await guardarMotivoSalida(org, signal, "descartada_por_sofi");
     return { resultado: "descartada_por_sofi", veredicto, signalId: signal.id };
   }
 
@@ -585,6 +619,14 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
       decisionDm.motivo = motivoCalidad;
       decisionDm.traza = [...decisionDm.traza, `NO:${motivoCalidad}`];
     }
+  }
+
+  // Sofi solo marco dudosas (ninguna util): decidirDm no mira eso y dice "ok",
+  // asi que el pedido quedaba guardado como si hubiera salido bien. El motivo
+  // real: no hay nada seguro para mandarle al colega, va a la asesora.
+  if (utilesSegunSofi.length === 0 && decisionDm.motivo === "ok") {
+    decisionDm.motivo = "solo_dudosas";
+    decisionDm.traza = [...decisionDm.traza, "NO:solo_dudosas"];
   }
 
   // NO REENVIAR (ver quitarYaEnviadas). Lo que el colega ya recibio en los
@@ -834,6 +876,9 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
     await feedComando.registrar(org, señalParaFeed, veredicto, matches).catch((e) =>
       console.warn("[radar] No se pudo escribir en el feed del admin:", e.message)
     );
+    // Solo se pisa el motivo si era "ok": uno real (un freno del DM) es mas
+    // informativo que este.
+    if (decisionDm.motivo === "ok") await guardarMotivoSalida(org, signal, "descartada_por_sofi", decisionDm.traza);
     return { resultado: "descartada_por_sofi", veredicto, signalId: signal.id };
   }
 
