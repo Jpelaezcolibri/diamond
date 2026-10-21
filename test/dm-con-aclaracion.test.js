@@ -29,10 +29,10 @@ test("el interruptor esta apagado por defecto y solo 'true' lo enciende", () => 
   assert.strictEqual(publicable.dmConAclaracionActivo({ RADAR_DM_CON_ACLARACION: " TRUE " }), true);
 });
 
-test("solo los cuatro datos desconocidos pasan a aclaracion", () => {
+test("solo los cinco datos desconocidos pasan a aclaracion", () => {
   assert.deepStrictEqual(
     [...publicable.MOTIVOS_ACLARABLES].sort(),
-    ["garajes_sin_dato", "piso_sin_confirmar", "precio_sin_confirmar", "sector_sin_confirmar"]
+    ["garajes_sin_dato", "piso_sin_confirmar", "precio_sin_confirmar", "sector_sin_confirmar", "sin_area"]
   );
 });
 
@@ -329,4 +329,30 @@ test("prompt de Sofi, regla 43: la frase que se le dice al cliente va en tuteo",
   const fuente = require("node:fs").readFileSync(require.resolve("../src/agent/prompts.js"), "utf8");
   assert.match(fuente, /¿la consultas para ti o para un cliente tuyo de otra inmobiliaria\?/);
   assert.doesNotMatch(fuente, /para vos o para/);
+});
+
+// ── Area no registrada (2026-10-21) ────────────────────────────────────────
+test("area: una ficha con solo sin_area sale con la aclaracion", () => {
+  const r = publicable.filtrar([ficha({ area: "" })], ON);
+  assert.strictEqual(r.publicables.length, 1);
+  assert.deepStrictEqual(r.aclaraciones[0].motivos, ["sin_area"]);
+  assert.match(r.aclaraciones[0].detalle, /no tengo registrada el área: te la confirmo si la necesitas/);
+  const apagado = publicable.filtrar([ficha({ area: "" })], { umbral: 0 });
+  assert.deepStrictEqual(apagado.publicables, []);
+});
+
+test("area: sin_area + zona vecina no sale", () => {
+  const r = publicable.filtrar([ficha({ area: "", ubicacion: "vecina" })], ON);
+  assert.deepStrictEqual(r.publicables, []);
+  assert.deepStrictEqual(r.descartados[0].motivos.sort(), ["sin_area", "zona_vecina"]);
+});
+
+test("area: conocida por debajo del minimo la descarta el motor; sin dato pasa y sale con aclaracion", () => {
+  const pedido = pedidoBarrio(["Envigado"], { area_min: 100, precio_max: 520000000 });
+  assert.strictEqual(evaluarCandidata(aptoBarrio({ area: "70m2" }), pedido, "diamond"), null);
+  const m = evaluarCandidata(aptoBarrio({ area: "" }), pedido, "diamond");
+  assert.ok(m, "sin area el motor no descarta");
+  const r = publicable.filtrar([m], ON);
+  assert.strictEqual(r.publicables.length, 1);
+  assert.ok(r.aclaraciones[0].motivos.includes("sin_area"));
 });

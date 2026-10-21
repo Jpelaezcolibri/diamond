@@ -224,6 +224,9 @@ const MOTIVOS_ACLARABLES = new Set([
   "piso_sin_confirmar",
   "garajes_sin_dato",
   "precio_sin_confirmar",
+  // Area NO registrada (2026-10-21). Solo el dato ausente: un area conocida que
+  // no llega al minimo (o pasa el techo) la descarta match.js antes de aqui.
+  "sin_area",
 ]);
 
 // Apagado por defecto: solo "true" lo enciende.
@@ -470,7 +473,7 @@ const ACLARACIONES_COLEGA = {
   piso_sin_confirmar: "no tengo registrado en qué piso está: te lo confirmo si te sirve",
   edificio_sin_confirmar: "no tengo confirmado que esté en la unidad que pediste",
   rentada_sin_confirmar: "no tengo confirmado que esté arrendada: te lo confirmo si te sirve",
-  sin_area: "no tengo el área registrada",
+  sin_area: "no tengo registrada el área: te la confirmo si la necesitas",
   sin_zona: "no tengo la zona registrada",
   sin_titulo: "el nombre puede estar incompleto en mi sistema",
   sin_link: "no tengo ficha propia cargada todavía",
@@ -505,6 +508,7 @@ const TEMA_DEL_MOTIVO = {
   piso_sin_confirmar: /\bpisos?\b/i,
   garajes_sin_dato: /parqueader|garaje|parqueo/i,
   precio_sin_confirmar: /\bprecio/i,
+  sin_area: /\báreas?\b|metros|m2|m²/i,
 };
 
 function notasParaDm({ sinConfirmar = [], leFalta = [] } = {}, aclaraciones = [], props = null, { revisadas = null } = {}) {

@@ -40,7 +40,14 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
     fichas exactas, máximo 3. Zona vecina nunca; un dato conocido que no
     cumple, nunca. Precio por confirmar solo si los dos precios (Wasi y
     descripción) caben en el presupuesto; si el título nombra otro barrio, no
-    sale. Interruptor `RADAR_DM_CON_ACLARACION`.
+    sale. Interruptor `RADAR_DM_CON_ACLARACION`, **encendido en Railway el
+    2026-10-21**.
+  - **También aclarable: el área no registrada (`sin_area`, 2026-10-21).** Solo
+    el dato ausente; un área conocida bajo el mínimo o sobre el techo la
+    descarta `match.js`. Texto: "no tengo registrada el área: te la confirmo si
+    la necesitas".
+  - Línea de comisión "Comisión compartida 50/50." (`RADAR_LINEA_COMISION`): se
+    usa una vez desplegada la rama del super-agente de Sofi.
   - Arreglos: barrios de El Poblado y Laureles en `SUBZONA_DE` (ya no son
     "vecina"); `pisoDe` lee las características y "PISO | N" (no "pisos");
     dúplex/penthouse/loft calzan con apartamento (el prefiltro manda la lista
