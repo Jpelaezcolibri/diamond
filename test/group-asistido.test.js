@@ -1274,10 +1274,42 @@ test("SOLO VISITAS: el DM al colega sale y el aviso post-DM no", async () => {
 // ── Ningun pedido sin motivo (rescate-pedidos, tarea 2) ──────────────────
 test("sin candidatas guarda el motivo sin_candidatas", async () => {
   matchesDevueltos = [];
-  await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE });
-  // sin matches la señal puede no llegar a asistir; si llega, el motivo queda guardado
-  const p = politicasGuardadas.filter((x) => x.motivo === "sin_candidatas");
-  assert.ok(p.length <= 1);
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE });
+  assert.strictEqual(r.resultado, "sin_candidatas");
+  assert.ok(politicasGuardadas.some((p) => p.id === "sig-1" && p.motivo === "sin_candidatas"));
+});
+
+// Segunda salida de descartada_por_sofi (vivo.js, rama "!texto"): el motivo
+// "ok" se pisa; un freno real ya guardado se conserva. Se fuerza construir()
+// a null para llegar a esa rama.
+test("descartada por Sofi sin texto: un motivo ok se pisa con descartada_por_sofi", async () => {
+  const alertaAsesor = require(RUTA("groups/alerta-asesor.js"));
+  const orig = alertaAsesor.construir;
+  alertaAsesor.construir = () => null;
+  try {
+    veredictoDeSofi = { ...APRUEBA };
+    const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE });
+    assert.strictEqual(r.resultado, "descartada_por_sofi");
+    assert.strictEqual(politicasGuardadas[politicasGuardadas.length - 1].motivo, "descartada_por_sofi");
+  } finally {
+    alertaAsesor.construir = orig;
+  }
+});
+
+test("descartada por Sofi sin texto: un freno real ya guardado (solo_dudosas) se conserva", async () => {
+  const alertaAsesor = require(RUTA("groups/alerta-asesor.js"));
+  const orig = alertaAsesor.construir;
+  alertaAsesor.construir = () => null;
+  try {
+    veredictoDeSofi = { ...APRUEBA, refs_utiles: [], refs_dudosas: ["9780079"] };
+    const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE });
+    assert.strictEqual(r.resultado, "descartada_por_sofi");
+    const ultimo = politicasGuardadas[politicasGuardadas.length - 1];
+    assert.strictEqual(ultimo.motivo, "solo_dudosas");
+    assert.ok(!politicasGuardadas.some((p) => p.motivo === "descartada_por_sofi"));
+  } finally {
+    alertaAsesor.construir = orig;
+  }
 });
 
 test("sin veredicto guarda el motivo sin_veredicto", async () => {
