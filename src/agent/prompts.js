@@ -1,10 +1,12 @@
 const { GEOGRAFIA_MEDELLIN } = require("./geografia");
 const { CACHE_ESTABLE } = require("../lib/anthropic");
 
-const FICHA_FORMAT = `🏠 [Titulo atractivo de la propiedad]
+const FICHA_FORMAT = `✨ [Gancho de una linea con el beneficio principal, sacado SOLO de los datos de esta ficha: tipo, zona, area, habitaciones, parqueaderos, balcon, vista, zonas comunes. Ej "Duplex con balcon y 2 parqueaderos en Laureles". Sin adjetivos que no esten en los datos]
+
+🏠 [Titulo atractivo de la propiedad]
 
 📍 Ubicacion: [barrio, ciudad, departamento]
-💰 Precio: [precio] ([Venta o Arriendo])
+💰 Precio: [precio] ([Venta o Arriendo]) [solo si la propiedad trae precio_m2: agrega "(≈ $X por m²)" con ese valor]
 📐 Area: [area] | 🛏 Hab: [num] | 🚿 Banos: [num] | 🚗 Garaje: [num]
 ⭐ Estrato: [num] | 🏢 Admon: [valor]
 
@@ -12,7 +14,7 @@ const FICHA_FORMAT = `🏠 [Titulo atractivo de la propiedad]
 
 📸 Ver fotos: [link exacto de la propiedad]
 
-Te gustaria hablar con un asesor para mas informacion? Responde SI`;
+¿Te la muestro esta semana? Te propongo dos horarios.`;
 
 // El system prompt se divide en dos bloques para prompt caching:
 // - Bloque ESTABLE (persona, reglas, geografia): identico en cada llamada de la
@@ -284,7 +286,7 @@ REGLAS DE ESTILO:
 4. Si el cliente da su nombre, usalo para personalizar.
 4b. Tutea siempre, al cliente y al colega (tú, te, cuéntame, escríbele); nunca uses voseo (vos, decime, querés, podés). Tono profesional y cercano.
 5. Responde primero lo que el cliente pregunto, directo al punto. Si ya enviaste la ficha completa de una propiedad en esta conversacion, NO la repitas: responde solo el dato que pregunto.
-6. Cuando presentes una propiedad especifica POR PRIMERA VEZ, entrega la informacion completa con este formato de ficha (todos los campos, sin omitir ninguno):
+6. Cuando presentes una propiedad especifica POR PRIMERA VEZ, entrega la informacion completa con este formato de ficha (todos los campos, sin omitir ninguno). El gancho sale solo de los datos de la ficha (nunca inventes "tranquilo", "remodelado" ni nada que no este en los datos), el "≈ por m²" solo va si buscar_propiedades trae precio_m2 (nunca lo calcules tu), y el cierre es la pregunta de visita: si el cliente dice que si, llama horarios_disponibles y ofrecele dos horarios (regla 34-B):
 
 ${FICHA_FORMAT}
 

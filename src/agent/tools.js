@@ -10,6 +10,7 @@ const { buildAllyClientMatchAlert, buildAppointmentAlert, buildColegaAppointment
 const { instruccionTransferencia, aliasPublico } = require("../lib/identidad-publica");
 const { LEGAL_TOPICS, LEGAL_DISCLAIMER } = require("./knowledge");
 const crypto = require("node:crypto");
+const formato = require("../lib/formato");
 const groupSignals = require("../data/group-signals");
 const signalEvents = require("../data/signal-events");
 const radarCierres = require("../data/radar-cierres");
@@ -730,6 +731,18 @@ function _resetAvisosDemandaColega() {
   avisosDemandaRecientes.clear();
 }
 
+// Precio por m2 calculado en codigo (solo venta): la ficha lo cita y el modelo
+// no debe hacer la division. null si falta precio o area, es arriendo, o el
+// resultado es absurdo (dato mal cargado en Wasi).
+function precioPorM2(p) {
+  if (String(p.operacion || "").toLowerCase() !== "venta") return null;
+  const precio = formato.parsearPrecio(p.precio);
+  const area = formato.parsearArea(p.area);
+  if (!precio || !area) return null;
+  const m2 = Math.round(precio / area / 1000) * 1000;
+  return m2 >= 500_000 && m2 <= 60_000_000 ? m2 : null;
+}
+
 // Columnas de `properties` que NO viajan al modelo en buscar_propiedades. El
 // resultado entra como tool_result y se reenvia entero en cada vuelta del tool
 // loop de engine.js, asi que cada campo de mas se paga por iteracion.
@@ -863,9 +876,10 @@ async function executeTool(name, input, ctx) {
     // Sin sangria (2026-09-14): el modelo no la necesita para leer el JSON y
     // son tokens puros. Medido con count_tokens sobre 5 propiedades reales:
     // 3.002 con sangria contra 2.572 compacto.
-    const paraElModelo = results.map((p) =>
-      Object.fromEntries(Object.entries(p).filter(([campo]) => !NO_AL_MODELO.has(campo)))
-    );
+    const paraElModelo = results.map((p) => ({
+      ...Object.fromEntries(Object.entries(p).filter(([campo]) => !NO_AL_MODELO.has(campo))),
+      precio_m2: precioPorM2(p),
+    }));
     return JSON.stringify(paraElModelo);
   }
 
