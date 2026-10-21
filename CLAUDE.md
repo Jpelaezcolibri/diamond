@@ -30,6 +30,30 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
 
 ## 2. Estado actual (2026-10-21)
 
+- **Sofi super agente (desplegado 2026-10-21, rama `sofi-super-agente`).**
+  Spec `docs/superpowers/specs/2026-10-21-sofi-super-agente-design.md`, plan
+  en `docs/superpowers/plans/`. Juan delegó el diseño ("te doy libertad").
+  - **Horarios ofrecidos:** tool `horarios_disponibles` (3 espacios libres
+    reales, en distinta franja o día, con 2 h de colchón); Sofi ofrece DOS en
+    un mensaje (regla 34-B) y la cita sigue quedando SOLICITADA. Un "sí" a la
+    ficha lleva a horarios, no a transferir.
+  - **Anticipación:** venta 24 h; arriendo `CITAS_ANTICIPACION_ARRIENDO_H`=6.
+    La operación la decide la propiedad (el modelo no puede bajarla).
+  - **Ficha que vende:** gancho con datos de la ficha, `precio_m2` calculado en
+    código (venta), cierre "¿Te la muestro? Te propongo dos horarios."
+  - **Visitas confirmadas:** `src/scheduler/visita-cliente.js` recuerda 2 h
+    antes y pregunta 3 h después (`SOFI_RECORDATORIO_VISITA`,
+    `SOFI_POSTVISITA`; fuera de la ventana de 24 h solo con plantilla
+    `SOFI_RECORDATORIO_PLANTILLA` / `SOFI_POSTVISITA_PLANTILLA`, que aún no
+    existen en Meta).
+  - **Seguimiento al colega con opción nueva** (+4 h por la línea):
+    `RADAR_SEGUIMIENTO_CON_OPCION`; respeta lo que Sofi descartó
+    (`src/groups/pedido-guardado.js`, compartido con el rescate).
+  - **Comisión 50/50:** `RADAR_LINEA_COMISION` (DM, post de grupo y Sofi).
+  - **Cliente esperando:** `src/scheduler/lead-esperando.js` (15 min; modo bot
+    → alerta a Juan; modo humano → campana de la asesora; `SOFI_ALERTA_ESPERA`).
+  - El área no registrada también sale con aclaración.
+
 - **Rescate de pedidos y DM con aclaración (desplegado 2026-10-21, merge de
   `rescate-pedidos`).** Plan
   `docs/superpowers/plans/2026-10-20-rescate-pedidos-y-aclaraciones.md`;
