@@ -13,6 +13,7 @@
 //    exacta no tienen donde caer en un calendario — esas se ven en el inbox.
 import { getTeamRoster } from "@/lib/team";
 import { anclaHilo } from "@/lib/linea-dm-hilo";
+import { vencidaSinConfirmar } from "@/lib/cita-tiempo";
 
 export type CalendarEvent = {
   id: string;
@@ -38,7 +39,7 @@ export type CalendarEvent = {
    *  que decirlo. Las canceladas no llegan hasta acá — se filtran antes.
    *  Una cita vieja sin estado se lee como "confirmada": es lo que el equipo
    *  asumió todo este tiempo. */
-  estado: "propuesta" | "confirmada";
+  estado: "propuesta" | "confirmada" | "vencida";
   /** Lead dueño de la cita, para poder cancelarla desde el calendario (Juan,
    *  2026-09-04). Solo lo trae "cita_cliente": el recordatorio de un asesor y
    *  el avance de un colega no son citas del bot y no se cancelan por acá.
@@ -55,14 +56,15 @@ type Cita = {
   advisor_id?: string | null;
   origen?: string | null;
   estado?: string | null;
+  ref?: string | null;
 };
 
 // Espejo de src/data/citas.js#estadoDe. Se duplica a propósito: el CRM no
 // comparte código con el bot, y una cita sin estado —todas las que ya
 // existen— tiene que leerse igual en los dos lados.
-function estadoDeCita(cita: Cita | null): "propuesta" | "confirmada" | "cancelada" | "reprogramada" {
+function estadoDeCita(cita: Cita | null): "propuesta" | "confirmada" | "cancelada" | "reprogramada" | "vencida" {
   const e = cita?.estado;
-  if (e === "propuesta" || e === "cancelada" || e === "reprogramada") return e;
+  if (e === "propuesta" || e === "cancelada" || e === "reprogramada" || e === "vencida") return e;
   return "confirmada";
 }
 
@@ -128,9 +130,14 @@ function avisarMigracionLineaDmPendiente(codigo: string) {
   console.warn("[calendario:linea_dm] Falta una migración de linea_dm: el calendario va sin los avances de colegas.", codigo);
 }
 
+/** Visita cuya hora ya pasó sin que nadie la confirmara y que el bot todavía
+ *  no marcó vencida (2026-10-21): va en la sección colapsada del calendario. */
+export type CitaVencida = { leadId: string; cliente: string; fechaHora: string; ref: string | null };
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function getCalendarEvents(supabase: any): Promise<{
   events: CalendarEvent[];
+  vencidas: CitaVencida[];
   hasError: boolean;
   message: string | null;
 }> {
@@ -185,9 +192,15 @@ export async function getCalendarEvents(supabase: any): Promise<{
   // Un for en vez de filter+map: el estado se calcula una sola vez por lead y
   // decide dos cosas distintas (si el evento entra, y cómo se pinta).
   const citaEvents: CalendarEvent[] = [];
+  const vencidas: CitaVencida[] = [];
+  const ahora = Date.now();
   for (const l of ((citasRes.data as LeadConCita[]) || [])) {
-    if (!l.cita?.fecha_hora || new Date(l.cita.fecha_hora) < hoyInicio) continue;
-    const estado = estadoDeCita(l.cita);
+    if (!l.cita?.fecha_hora) continue;
+    // Pasó la hora sin confirmar: nunca se pinta como "propuesta".
+    const pasada = vencidaSinConfirmar(l.cita, ahora);
+    if (pasada) vencidas.push({ leadId: l.id, cliente: l.nombre || `+${l.phone}`, fechaHora: l.cita.fecha_hora, ref: l.cita.ref || l.property_ref_origen });
+    if (new Date(l.cita.fecha_hora) < hoyInicio) continue;
+    const estado = pasada ? "vencida" : estadoDeCita(l.cita);
     if (estado === "cancelada") continue; // no se muestra: fue cancelada
     citaEvents.push({
       id: `lead:${l.id}`,
@@ -202,7 +215,7 @@ export async function getCalendarEvents(supabase: any): Promise<{
       autoAgendada: l.cita?.origen === "auto",
       // "reprogramada" ya trae la fecha nueva: es un compromiso vigente, se
       // pinta igual que una confirmada.
-      estado: estado === "propuesta" ? "propuesta" : "confirmada",
+      estado: estado === "propuesta" || estado === "vencida" ? estado : "confirmada",
       leadId: l.id,
     });
   }
@@ -252,5 +265,6 @@ export async function getCalendarEvents(supabase: any): Promise<{
     (a, b) => new Date(a.fechaHora).getTime() - new Date(b.fechaHora).getTime()
   );
 
-  return { events, hasError: mensajes.length > 0, message: mensajes.join(" · ") || null };
+  vencidas.sort((a, b) => a.fechaHora.localeCompare(b.fechaHora));
+  return { events, vencidas, hasError: mensajes.length > 0, message: mensajes.join(" · ") || null };
 }

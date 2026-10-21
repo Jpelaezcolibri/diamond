@@ -4,6 +4,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { callBot } from "@/lib/bot";
+import { isAdmin } from "@/lib/auth";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -13,10 +14,12 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
   const { leadId, accion } = (await request.json().catch(() => ({}))) as { leadId?: string; accion?: string };
-  if (!leadId || (accion !== "confirmar" && accion !== "otro")) {
+  // "descartar" (2026-10-21): una visita vencida sin confirmar sale de "Para
+  // atender" sin escribirle a nadie.
+  if (!leadId || (accion !== "confirmar" && accion !== "otro" && accion !== "descartar")) {
     return NextResponse.json({ error: "Faltan datos" }, { status: 400 });
   }
-  const r = await callBot<{ ok: boolean; texto?: string; error?: string }>("/api/citas/accion", { leadId, accion, authUserId: user.id });
+  const r = await callBot<{ ok: boolean; texto?: string; error?: string }>("/api/citas/accion", { leadId, accion, authUserId: user.id, esAdmin: isAdmin(user) });
   if (!r.ok) return NextResponse.json({ error: r.error || "El bot no respondió" }, { status: 502 });
   return NextResponse.json({ ok: true, texto: r.data?.texto || null });
 }

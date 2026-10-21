@@ -10,6 +10,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Lead, Message } from "@/lib/types";
+import { vencidaSinConfirmar } from "@/lib/cita-tiempo";
+import TiempoCita from "@/components/tiempo-cita";
+import DescartarCita from "@/components/descartar-cita";
 
 const fmt = (iso?: string) =>
   iso
@@ -42,7 +45,10 @@ export default function ChatAtencion({
   const ultimoDelCliente = [...messages].reverse().find((m) => m.role === "user");
   const horasQuedan = ultimoDelCliente ? 24 - (Date.now() - new Date(ultimoDelCliente.created_at).getTime()) / 3600000 : -1;
 
-  const cita = lead.cita && lead.cita.estado === "propuesta" ? lead.cita : null;
+  // Una visita cuya hora ya paso sin confirmar no es "por confirmar": va
+  // aparte, colapsada, con boton para descartarla (2026-10-21).
+  const vencida = lead.cita && vencidaSinConfirmar(lead.cita, Date.now()) ? lead.cita : null;
+  const cita = !vencida && lead.cita && lead.cita.estado === "propuesta" ? lead.cita : null;
   const pendiente = lead.atencion_pendiente && lead.atencion_pendiente !== "visita" ? lead.atencion_pendiente : null;
 
   async function accion(tipo: "confirmar" | "otro") {
@@ -92,6 +98,7 @@ export default function ChatAtencion({
             {cita.ref ? ` · ref ${cita.ref}` : ""}
           </div>
           {cita.corte_at && <div className="text-xs text-slate-300">Confirmá antes de {fmt(cita.corte_at)} o se cancela sola.</div>}
+          <TiempoCita cita={cita} oscuro />
           <div className="mt-2 flex flex-wrap gap-2">
             <button
               disabled={!!enviando}
@@ -110,6 +117,20 @@ export default function ChatAtencion({
           </div>
           <div className="mt-1 text-[11px] text-slate-400">Al confirmar, Sofi le avisa al cliente por este chat. “Otro horario” cancela y le ofrece reagendar.</div>
         </div>
+      )}
+
+      {vencida && (
+        <details className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700 ring-1 ring-slate-200">
+          <summary className="cursor-pointer select-none text-xs font-semibold text-slate-500">Vencida sin confirmar (1)</summary>
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+            <span>
+              📅 {fmt(vencida.fecha_hora)}
+              {vencida.ref ? ` · ref ${vencida.ref}` : ""}
+              <span className="block text-xs text-slate-500">Ya pasó la hora y nadie la confirmó. Descartarla no le escribe a nadie.</span>
+            </span>
+            <DescartarCita leadId={lead.id} />
+          </div>
+        </details>
       )}
 
       {resultado && <div className="text-xs text-slate-600">{resultado}</div>}

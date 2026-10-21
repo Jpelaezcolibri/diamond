@@ -2,7 +2,9 @@
 // tomada de Innoarte: los pendientes se calculan de los datos y desaparecen
 // solos cuando se resuelven). Cuatro listas:
 //   0. Sus propiedades por renovar (vencen en 5 dias o menos; Juan, 2026-10-20).
-//   1. Visitas por confirmar que hoy son suyas (rotacion), con el corte.
+//   1. Visitas por confirmar que hoy son suyas (rotacion), con el corte y el
+//      tiempo que les queda; las que ya pasaron sin confirmar van aparte,
+//      colapsadas, con boton para descartarlas (2026-10-21).
 //   2. Pedidos de contacto (notificaciones asesor_solicitado sin leer).
 //   3. Sus leads en conversacion sin movimiento hace mas de 2 h.
 // El admin ve las visitas por confirmar de todo el equipo.
@@ -13,10 +15,13 @@ import { miAsesor, filtroMisLeads } from "@/lib/mi-asesor";
 import ActivarNotificaciones from "@/components/activar-notificaciones";
 import RenovarPropiedad, { type PropiedadPorRenovar } from "@/components/renovar-propiedad";
 import { formatearPrecio } from "@/lib/formato";
+import { vencidaSinConfirmar } from "@/lib/cita-tiempo";
+import TiempoCita from "@/components/tiempo-cita";
+import DescartarCita from "@/components/descartar-cita";
 
 export const dynamic = "force-dynamic";
 
-type Cita = { estado?: string; fecha_hora?: string; ref?: string; asesor_id?: string; corte_at?: string; descripcion?: string };
+type Cita = { estado?: string; fecha_hora?: string; ref?: string; asesor_id?: string; advisor_id?: string; corte_at?: string; asignada_at?: string; descripcion?: string };
 type LeadCita = { id: string; nombre: string | null; phone: string; source: string | null; cita: Cita | null };
 type LeadQuieto = { id: string; nombre: string | null; phone: string; updated_at: string; estado: string };
 type Nota = { id: string; titulo: string; cuerpo: string | null; link: string | null; created_at: string };
@@ -79,9 +84,18 @@ export default async function PendientesPage() {
     .select("id, nombre, phone, source, cita")
     .not("cita", "is", null)
     .limit(500);
-  const porConfirmar = ((conCita as LeadCita[]) || [])
-    .filter((l) => l.cita && l.cita.estado === "propuesta" && (admin || (asesor && l.cita.asesor_id === asesor.id)))
-    .sort((a, b) => String(a.cita?.fecha_hora).localeCompare(String(b.cita?.fecha_hora)));
+  const ahora = Date.now();
+  // Las viejas (sin asesor_id, de antes de la rotacion) son de quien tenia el
+  // advisor_id (auth del CRM).
+  const esMia = (c: Cita) => admin || Boolean(asesor && c.asesor_id === asesor.id) || Boolean(user && !c.asesor_id && c.advisor_id === user.id);
+  const porFecha = (a: LeadCita, b: LeadCita) => String(a.cita?.fecha_hora).localeCompare(String(b.cita?.fecha_hora));
+  const citas = (conCita as LeadCita[]) || [];
+  // Una cita cuya hora ya paso no se muestra como "por confirmar", aunque el
+  // bot todavia no la haya marcado vencida.
+  const porConfirmar = citas
+    .filter((l) => l.cita && l.cita.estado === "propuesta" && !vencidaSinConfirmar(l.cita, ahora) && esMia(l.cita))
+    .sort(porFecha);
+  const vencidas = citas.filter((l) => l.cita && vencidaSinConfirmar(l.cita, ahora) && esMia(l.cita)).sort(porFecha);
 
   const { data: notas } = asesor
     ? await supabase
@@ -146,11 +160,37 @@ export default async function PendientesPage() {
                   {l.cita?.ref ? ` · ref ${l.cita.ref}` : ""}
                 </div>
                 {l.cita?.corte_at && <div className="mt-1 text-xs text-amber-800">Confirmá antes de {fmt(l.cita.corte_at)} o se cancela</div>}
+                <TiempoCita cita={l.cita} />
                 <div className="mt-1 text-xs text-slate-500">Se confirma con el botón del WhatsApp o escribiéndole “OK CONFIRMADA” a Sofi.</div>
               </li>
             ))}
           </ul>
         </section>
+      )}
+
+      {vencidas.length > 0 && (
+        <details className="rounded-xl border border-slate-200 bg-white">
+          <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+            Vencidas sin confirmar ({vencidas.length})
+          </summary>
+          <ul className="divide-y divide-slate-100 border-t border-slate-100">
+            {vencidas.map((l) => (
+              <li key={l.id} className="flex flex-wrap items-center justify-between gap-3 p-3 text-sm">
+                <span className="text-slate-700">
+                  <span className="font-medium text-slate-800">{l.nombre || `+${l.phone}`}</span>
+                  {l.source === "colega" && <span className="text-xs text-slate-500"> (colega)</span>}
+                  <span className="text-slate-500">
+                    {" "}
+                    · {fmt(l.cita?.fecha_hora)}
+                    {l.cita?.ref ? ` · ref ${l.cita.ref}` : ""}
+                  </span>
+                </span>
+                <DescartarCita leadId={l.id} />
+              </li>
+            ))}
+          </ul>
+          <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-400">Ya pasó la hora y nadie las confirmó. Descartarlas no le escribe a nadie.</p>
+        </details>
       )}
 
       {(notas || []).length > 0 && (

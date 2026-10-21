@@ -24,6 +24,7 @@ const ICONO: Record<string, string> = {
   cita_reasignada: "↪️",
   cita_confirmada: "✅",
   cita_cancelada: "❌",
+  cita_recordatorio: "⏰",
   asesor_solicitado: "🙋",
   cliente_esperando: "⌛",
   vigencia_propiedad: "🏷️",

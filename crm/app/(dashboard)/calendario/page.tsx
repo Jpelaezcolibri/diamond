@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCalendarEvents, bogotaDateKey, type CalendarEvent } from "@/lib/calendar-events";
 import ErrorBanner from "@/components/error-banner";
 import { CancelarCitaAvisos, BotonCancelarCita } from "@/components/cancelar-cita";
+import DescartarCita from "@/components/descartar-cita";
 
 export const dynamic = "force-dynamic";
 
@@ -94,7 +95,7 @@ export default async function CalendarioPage({
   const { year, month } = parseMes(mes);
 
   const supabase = await createClient();
-  const { events, hasError, message } = await getCalendarEvents(supabase);
+  const { events, vencidas, hasError, message } = await getCalendarEvents(supabase);
 
   const porDia = new Map<string, CalendarEvent[]>();
   for (const ev of events) {
@@ -137,6 +138,30 @@ export default async function CalendarioPage({
 
       {hasError && <ErrorBanner message={message} />}
 
+      {/* Pasó la hora y nadie la confirmó (2026-10-21): no es "por confirmar".
+          Colapsadas, con botón para descartarlas sin escribirle a nadie. */}
+      {vencidas.length > 0 && (
+        <details className="mb-4 rounded-xl border border-slate-200 bg-white">
+          <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold text-slate-600">Vencidas sin confirmar ({vencidas.length})</summary>
+          <ul className="divide-y divide-slate-100 border-t border-slate-100">
+            {vencidas.map((v) => (
+              <li key={v.leadId} className="flex flex-wrap items-center justify-between gap-3 px-4 py-2 text-sm">
+                <span className="text-slate-700">
+                  <span className="font-medium">{v.cliente}</span>
+                  <span className="text-slate-500">
+                    {" "}
+                    · {new Intl.DateTimeFormat("es-CO", { timeZone: "America/Bogota", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }).format(new Date(v.fechaHora))}
+                    {v.ref ? ` · ref ${v.ref}` : ""}
+                  </span>
+                </span>
+                <DescartarCita leadId={v.leadId} />
+              </li>
+            ))}
+          </ul>
+          <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-400">Ya pasó la hora y nadie las confirmó. Descartarlas no le escribe a nadie.</p>
+        </details>
+      )}
+
       {/* La grilla va envuelta porque el aviso de la cancelación NO puede vivir
           dentro de la celda: al cancelar se refresca y la cita desaparece del
           calendario, y con ella se iría el mensaje (Juan, 2026-09-04). */}
@@ -174,7 +199,7 @@ export default async function CalendarioPage({
                       // "lo marcas para yo hacerle seguimiento" (mismo dia) —
                       // 🤖 marca la que Sofi agendó sola, sin que nadie la revisara.
                       const contenido = `${ev.autoAgendada ? "🤖 " : ""}${horaBogota(ev.fechaHora)} ${ev.titulo}`;
-                      const titulo = `${horaBogota(ev.fechaHora)} · ${ev.titulo}${ev.advisorNombre ? ` · ${ev.advisorNombre}` : ""}${ev.linkChat ? " · ver chat" : ""}${ev.autoAgendada ? " · agendada sola por Sofi, revisar" : ""}${ev.estado === "propuesta" ? " · propuesta, sin confirmar" : ""}`;
+                      const titulo = `${horaBogota(ev.fechaHora)} · ${ev.titulo}${ev.advisorNombre ? ` · ${ev.advisorNombre}` : ""}${ev.linkChat ? " · ver chat" : ""}${ev.autoAgendada ? " · agendada sola por Sofi, revisar" : ""}${ev.estado === "propuesta" ? " · propuesta, sin confirmar" : ""}${ev.estado === "vencida" ? " · vencida, nadie la confirmó" : ""}`;
                       const clase = `block truncate rounded-md border px-1.5 py-0.5 text-[11px] font-medium ${colorFor(ev.advisorId)}${ev.linkChat ? " hover:brightness-95" : ""}`;
                       const chip = ev.linkChat ? (
                         <Link href={ev.linkChat} title={titulo} className={clase}>
@@ -202,7 +227,12 @@ export default async function CalendarioPage({
                               recordatorio del equipo y un avance de un colega no
                               son citas del bot, no hay a quién avisarle y no
                               tienen leadId. */}
-                          {ev.origen === "cita_cliente" && ev.leadId && (
+                          {ev.estado === "vencida" && (
+                            <span className="block truncate rounded-md border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-500 line-through">
+                              vencida — sin confirmar
+                            </span>
+                          )}
+                          {ev.origen === "cita_cliente" && ev.leadId && ev.estado !== "vencida" && (
                             <BotonCancelarCita leadId={ev.leadId} cliente={ev.clienteNombre} />
                           )}
                         </div>

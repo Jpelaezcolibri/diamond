@@ -32,7 +32,7 @@ export type Lead = {
   atencion_pendiente?: string | null;
   atencion_desde?: string | null;
   /** La cita del lead (jsonb leads.cita). */
-  cita?: { estado?: string; fecha_hora?: string; ref?: string; corte_at?: string; asesor_id?: string; descripcion?: string } | null;
+  cita?: { estado?: string; fecha_hora?: string; ref?: string; corte_at?: string; asignada_at?: string; asesor_id?: string; descripcion?: string } | null;
   created_at: string;
   updated_at: string;
 };
