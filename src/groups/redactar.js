@@ -154,12 +154,40 @@ function lineaMedidas(p) {
     .join(" · ");
 }
 
+const norm = (t) => String(t).normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().trim();
+
+// Las que venden van primero; las genericas (servicios basicos) al final.
+const PRIORIDAD_CARACTERISTICAS = [
+  /amoblado|amueblado/,
+  /piscina/,
+  /aire acondicionado/,
+  /gimnasio/,
+  /jacuzzi|sauna|turco/,
+  /terraza|balcon|vista/,
+  /porteria|vigilancia|recepcion/,
+  /ascensor/,
+  /cocina integral|cocina equipada/,
+  /zona bbq|bbq|zonas humedas|salon comunal|area social/,
+  /parqueadero visitantes|urbanizacion cerrada|conjunto cerrado/,
+];
+const GENERICAS = /^(agua|electricidad|gas domiciliario|gas|calentador|citofono|acceso pavimentado|cerca zona urbana|trans\. publico cercano|transporte publico cercano)$/;
+
+function prioridadCaracteristica(n) {
+  if (GENERICAS.test(n)) return PRIORIDAD_CARACTERISTICAS.length + 1;
+  const i = PRIORIDAD_CARACTERISTICAS.findIndex((re) => re.test(n));
+  return i === -1 ? PRIORIDAD_CARACTERISTICAS.length : i;
+}
+
 function listaCaracteristicas(p) {
-  return String(p.caracteristicas || "")
-    .split(",")
-    .map((c) => c.trim())
-    .filter(Boolean)
-    .slice(0, 6);
+  const vistas = new Set();
+  const items = [];
+  for (const c of String(p.caracteristicas || "").split(",").map((x) => x.trim()).filter(Boolean)) {
+    const n = norm(c);
+    if (vistas.has(n)) continue;
+    vistas.add(n);
+    items.push({ c, pr: prioridadCaracteristica(n), i: items.length });
+  }
+  return items.sort((a, b) => a.pr - b.pr || a.i - b.i).slice(0, 6).map((x) => x.c);
 }
 
 function ficha(match, indice, { detalleFalta = null } = {}) {
@@ -578,4 +606,4 @@ function postGrupo(propiedad, { org = null, comision = true } = {}) {
   return lineas.join("\n");
 }
 
-module.exports = { postGrupo, mensajeGrupo, mensajesAlColega, MAX_POR_DM, detallesPorFicha, lineasCierre, ficha, desvios, primerNombre, tituloUtil, lineaSalvedad, unirConNi, MAX_PROPIEDADES };
+module.exports = { listaCaracteristicas, postGrupo, mensajeGrupo, mensajesAlColega, MAX_POR_DM, detallesPorFicha, lineasCierre, ficha, desvios, primerNombre, tituloUtil, lineaSalvedad, unirConNi, MAX_PROPIEDADES };

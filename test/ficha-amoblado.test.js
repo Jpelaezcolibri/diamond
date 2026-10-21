@@ -21,3 +21,19 @@ test("una propiedad de la que no sabemos NO se declara amoblada", () => {
   const t = ficha({ ...amoblada, amoblado: null }, 1);
   assert.ok(!t.includes("amoblada"), `afirmo lo que no sabe:\n${t}`);
 });
+
+// Caracteristicas: las que venden primero, las genericas al final.
+const REAL_10505566 = "Agua, Armarios Empotrados, Balcón, Baño auxiliar, Baño en habitación principal, Barra estilo americano, Calentador, Citófono / Intercomunicador, Cocina integral, Doble Ventana, Electricidad, Gas domiciliario, Suelo de cerámica / mármol, Zona de lavandería, Adosado, Aire acondicionado, Amoblado, Cocina equipada, Extractor";
+
+test("caracteristicas: orden de lo que vende (caso 10505566)", () => {
+  const { postGrupo } = require("../src/groups/redactar");
+  const texto = postGrupo({ ref: "10505566", operacion: "arriendo", caracteristicas: REAL_10505566 }, "https://x.co/1");
+  assert.ok(texto.includes("Amoblado · Aire acondicionado · Balcón · Cocina integral · Cocina equipada · Armarios Empotrados"), texto);
+  assert.ok(!/Agua/.test(texto));
+});
+
+test("caracteristicas: empate conserva orden de Wasi, genericas al final, sin duplicados, vacio", () => {
+  const { listaCaracteristicas } = require("../src/groups/redactar");
+  assert.deepStrictEqual(listaCaracteristicas({ caracteristicas: "Agua, Closet, Patio, Piscina, Patio, PISCINA" }), ["Piscina", "Closet", "Patio", "Agua"]);
+  assert.deepStrictEqual(listaCaracteristicas({ caracteristicas: null }), []);
+});
