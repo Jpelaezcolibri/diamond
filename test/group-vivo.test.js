@@ -1771,7 +1771,7 @@ test("aprobarManual: encendido, sale con la aclaracion", conAclaracionManual(asy
 
 test("prepararAviso: encendido, el borrador trae la ficha con aclaracion", conAclaracionManual(async () => {
   señalParaAprobar = señalCallada({
-    matches: [matchBueno({ precio_sin_confirmar: true })],
+    matches: [matchBueno({ precio_sin_confirmar: true, precio_texto_en_margen: true })],
     revalidacion: { refs_utiles: ["AP004"], sin_confirmar: [] },
   });
   grupoParaAprobar = grupoHabilitado();

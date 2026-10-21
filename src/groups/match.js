@@ -699,6 +699,11 @@ function evaluarCandidata(p, c, fuente) {
     // Ninguno descarta, ninguno sale solo (los lee publicable.js).
     varios_pedidos: variosPedidos(textoDelPedido(c)),
     precio_sin_confirmar: fuente === "diamond" && precioInconsistente(p),
+    // El otro precio (el de la descripcion) tambien cabe en el presupuesto:
+    // solo asi publicable.js deja salir la ficha con "te confirmo el precio
+    // final". Sin presupuesto o con el texto fuera de margen, sigue bloqueada.
+    precio_texto_en_margen: fuente === "diamond" && precioInconsistente(p) && Boolean(techo)
+      && precioTextoDe(p) <= techoConMargen && (!piso || precioTextoDe(p) >= piso),
     // El castigo se resta DESPUES del tope (ver CASTIGO_CORTO arriba): es lo
     // que hace que 100 vuelva a significar "cumple todo lo que se pudo
     // verificar". Piso en 0 porque una zona muy castigada mas dos huecos

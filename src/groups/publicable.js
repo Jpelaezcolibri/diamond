@@ -231,8 +231,14 @@ function dmConAclaracionActivo(env = process.env) {
   return String((env && env.RADAR_DM_CON_ACLARACION) || "").trim().toLowerCase() === "true";
 }
 
-function soloAclarables(motivos) {
-  return Array.isArray(motivos) && motivos.length > 0 && motivos.every((m) => MOTIVOS_ACLARABLES.has(m));
+// El precio por confirmar solo es aclarable si LOS DOS precios (Wasi y
+// descripcion) caben en el presupuesto del pedido; si no, el colega abriria el
+// link y veria un precio fuera de lo que pidio.
+function soloAclarables(motivos, match) {
+  if (!Array.isArray(motivos) || motivos.length === 0) return false;
+  if (!motivos.every((m) => MOTIVOS_ACLARABLES.has(m))) return false;
+  if (motivos.includes("precio_sin_confirmar") && !(match && match.precio_texto_en_margen === true)) return false;
+  return true;
 }
 
 // Filtra una lista de matches y devuelve los publicables (ya ordenados por
@@ -261,7 +267,7 @@ function filtrar(matches, opciones = {}) {
   for (const m of matches || []) {
     const veredicto = esPublicable(m, opciones);
     if (veredicto.ok) publicables.push(m);
-    else if (conAclaracion && soloAclarables(veredicto.motivos)) conDatoPorConfirmar.push({ m, motivos: veredicto.motivos });
+    else if (conAclaracion && soloAclarables(veredicto.motivos, m)) conDatoPorConfirmar.push({ m, motivos: veredicto.motivos });
     else descartados.push({ ref: m && m.ref, motivos: veredicto.motivos });
   }
 

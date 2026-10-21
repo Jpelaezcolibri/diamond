@@ -54,7 +54,7 @@ test("encendido: una ficha con solo el piso sin confirmar sale, con su aclaracio
 });
 
 test("encendido: varios datos desconocidos salen todos en la aclaracion", () => {
-  const r = publicable.filtrar([ficha({ piso_sin_confirmar: true, garajes_sin_dato: true, precio_sin_confirmar: true })], ON);
+  const r = publicable.filtrar([ficha({ piso_sin_confirmar: true, garajes_sin_dato: true, precio_sin_confirmar: true, precio_texto_en_margen: true })], ON);
   assert.strictEqual(r.publicables.length, 1);
   const d = r.aclaraciones[0].detalle;
   assert.match(d, /piso/);
@@ -188,4 +188,43 @@ test("el texto nuevo va en tuteo, sin voseo", () => {
     const t = publicable.ACLARACIONES_COLEGA[m];
     if (t) assert.doesNotMatch(t, /necesitás|confirmame|decime|querés|podés/, `${m}: ${t}`);
   }
+});
+
+// ── Precio por confirmar: solo si los DOS precios caben en el presupuesto ──
+const pedidoPrecio = (extra = {}) => ({
+  operacion: "venta", tipo: "apartamento", zona: "Envigado",
+  precio_min: 0, precio_max: 450000000, habitaciones: 3,
+  area_min: 0, banos: 0, garajes: 0, estrato: 0, ...extra,
+});
+const aptoPrecio = (descripcion) => ({
+  ref: "P1", titulo: "Apartamento en Envigado", tipo: "Apartamento",
+  operacion: "Venta", precio: "$450.000.000", zona: "Envigado", ciudad: "Envigado",
+  habitaciones: 3, banos: 2, garaje: 1, estrato: 5, area: "95 m²", descripcion,
+  link: "https://diamondinmobiliaria.com/propiedades/p1",
+  linkWasi: "https://info.wasi.co/apartamento-venta-envigado/10416693",
+});
+
+test("precio: Wasi $450M y descripcion $650M contra tope $450M: bloqueada", () => {
+  const m = evaluarCandidata(aptoPrecio("Precio de venta: $650.000.000"), pedidoPrecio(), "diamond");
+  assert.strictEqual(m.precio_sin_confirmar, true);
+  assert.strictEqual(m.precio_texto_en_margen, false);
+  const r = publicable.filtrar([m], { umbral: 0, conAclaracion: true });
+  assert.deepStrictEqual(r.publicables, []);
+  assert.ok(r.descartados[0].motivos.includes("precio_sin_confirmar"));
+});
+
+test("precio: Wasi $450M y descripcion $480M contra tope $450M: sale con 'te confirmo el precio final'", () => {
+  const m = evaluarCandidata(aptoPrecio("Precio de venta: $480.000.000"), pedidoPrecio(), "diamond");
+  assert.strictEqual(m.precio_texto_en_margen, true);
+  const r = publicable.filtrar([m], { umbral: 0, conAclaracion: true });
+  assert.strictEqual(r.publicables.length, 1);
+  assert.match(r.aclaraciones[0].detalle, /te confirmo el precio final/);
+});
+
+test("precio: sin presupuesto en el pedido: bloqueada", () => {
+  const m = evaluarCandidata(aptoPrecio("Precio de venta: $480.000.000"), pedidoPrecio({ precio_max: 0 }), "diamond");
+  assert.strictEqual(m.precio_sin_confirmar, true);
+  assert.strictEqual(m.precio_texto_en_margen, false);
+  const r = publicable.filtrar([m], { umbral: 0, conAclaracion: true });
+  assert.deepStrictEqual(r.publicables, []);
 });
