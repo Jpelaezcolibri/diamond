@@ -282,6 +282,13 @@ const SUBZONA_DE = new Map([
     "conquistadores", "teresita", "bolivariana", "castellana", "lorena", "velodromo",
     "suramericana", "naranjal",
   ].map((barrio) => [barrio, "laureles"]),
+  // VEREDAS DE LAS FINCAS EN ARRIENDO (Juan, 2026-10-21). El sync trajo de
+  // Wasi la vereda como zona y la ficha dejo de caer a la ciudad: un pedido de
+  // "Copacabana" ya no encontraba la 10479033 (Vereda Las Canoas). Santa Fe de
+  // Antioquia se reconoce por "antioquia": "santa" esta en GENERIC_GEO.
+  ["canoas", "copacabana"],
+  ["espinal", "antioquia"],
+  ["pena", "guatape"],
 ]);
 
 // ¿Algun token de la propiedad es una sub-zona conocida de algun token
