@@ -1115,4 +1115,34 @@ router.post("/api/propiedades/vigencia", async (req, res) => {
   }
 });
 
+// Mapa de demanda para captar (CRM /demanda, mockup aprobado 2026-10-21).
+// Solo lectura. Mismo control que /api/respuestas/atendida: del equipo
+// (asesor activo) o admin del CRM. GET con query o POST con body (callBot
+// del CRM hace POST).
+const demanda = require("../data/demanda");
+const DIAS_DEMANDA = [7, 30, 90];
+
+async function mapaDemanda(req, res) {
+  try {
+    const p = { ...(req.query || {}), ...(req.body || {}) };
+    const { authUserId } = p;
+    const esAdmin = p.esAdmin === true || p.esAdmin === "true";
+    if (!authUserId) return res.status(400).json({ ok: false, error: "falta authUserId" });
+    const dias = DIAS_DEMANDA.includes(Number(p.dias)) ? Number(p.dias) : 30;
+    const operacion = p.operacion === "arriendo" ? "arriendo" : "venta";
+    const org = await organizations.getDefault();
+    if (!esAdmin) {
+      const advisor = await require("../data/advisors").findByAuthUserId(org.id, authUserId);
+      if (!advisor || advisor.activo === false) return res.status(403).json({ ok: false, error: "no_es_del_equipo" });
+    }
+    const m = await demanda.mapa(org, { dias, operacion });
+    res.json({ ok: true, org: { name: org.name || "" }, ...m });
+  } catch (e) {
+    console.error("[api] Error en demanda:", e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+}
+router.get("/api/demanda", mapaDemanda);
+router.post("/api/demanda", mapaDemanda);
+
 module.exports = router;
