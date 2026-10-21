@@ -186,7 +186,7 @@ test("ficha con solo el sector sin confirmar: el DM dice el municipio y que falt
 test("el texto nuevo va en tuteo, sin voseo", () => {
   for (const m of publicable.MOTIVOS_ACLARABLES) {
     const t = publicable.ACLARACIONES_COLEGA[m];
-    if (t) assert.doesNotMatch(t, /necesitás|confirmame|decime|querés|podés/, `${m}: ${t}`);
+    if (t) assert.doesNotMatch(t, /necesitás|confirmame|confírmame|decime|querés|podés/, `${m}: ${t}`);
   }
 });
 

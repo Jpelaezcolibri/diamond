@@ -788,7 +788,7 @@ test("sync de Wasi caido: el aviso no se convierte en un muro de ⛔", () => {
   assert.match(texto, /▸ Ref AP009/);
   assert.ok(!texto.includes("⛔"));
   const borrador = texto.slice(texto.indexOf("mandale ESTO YA"));
-  assert.match(borrador, /Aclaración:.*confirmame disponibilidad/, "el colega igual lee la salvedad");
+  assert.match(borrador, /Aclaración:.*confírmame disponibilidad/, "el colega igual lee la salvedad");
 });
 
 // ── El encabezado, el punto final y el motivo sin traducir ───────────────

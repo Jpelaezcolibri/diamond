@@ -65,7 +65,7 @@ test("una señal respondida en modo auto trae el texto EXACTO en respuesta.texto
         ...SEÑAL_BASE,
         respondida_at: "2026-08-19T14:46:00Z",
         respuesta_modo: "auto",
-        respuesta_texto: "Hola, vi tu solicitud...\n\n1) Apartamento en Belen\n   Ref AP1\n\nComision compartida.\n— Sofi, asistente virtual",
+        respuesta_texto: "Hola, vi tu solicitud...\n\n1) Apartamento en Belen\n   Ref AP1\n\nComisión compartida.\n— Sofi, asistente virtual",
         respuesta_refs: ["AP1", "AP2"],
       }],
       error: null,
@@ -78,7 +78,7 @@ test("una señal respondida en modo auto trae el texto EXACTO en respuesta.texto
   const s = r.señales[0];
   assert.strictEqual(s.respuesta.salio, true);
   assert.strictEqual(s.respuesta.modo, "auto");
-  assert.match(s.respuesta.texto, /Comision compartida/);
+  assert.match(s.respuesta.texto, /Comisión compartida/);
   assert.deepStrictEqual(s.respuesta.refs, ["AP1", "AP2"]);
 });
 

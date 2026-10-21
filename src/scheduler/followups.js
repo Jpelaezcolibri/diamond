@@ -92,6 +92,7 @@ Reglas:
 - Retoma el contexto real de la conversacion (propiedad, dato pendiente o siguiente paso que quedo en el aire). No repitas informacion ya dada.
 - Cierra con UNA pregunta concreta y facil de responder.
 - No presiones ni insistas; si el cliente ya habia dicho que no le interesa, limita el mensaje a dejarle la puerta abierta.
+- Tutea siempre (tú, te, cuéntame, escríbele); nunca uses voseo (vos, decime, querés, podés). Tono profesional y cercano.
 - Responde SOLO con el texto del mensaje, sin comillas ni explicaciones.${idioma}${colega}`;
 }
 

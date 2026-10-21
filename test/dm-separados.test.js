@@ -42,7 +42,7 @@ test("primero un mensaje para el colega, despues una ficha limpia por propiedad"
   const [primero, f1, f2] = r.mensajes.map((m) => m.texto);
   assert.match(primero, /Hola Mateo, te respondo tu pedido de apartamento en Envigado\./);
   assert.match(primero, /2 opciones que pueden servirte, cada una en un mensaje aparte/);
-  assert.match(primero, /Comision compartida/);
+  assert.match(primero, /Comisión compartida/);
   assert.match(primero, /Sofi, asistente virtual/);
   assert.doesNotMatch(primero, /info\.wasi\.co/, "el primer mensaje no lleva propiedades");
 
@@ -69,7 +69,7 @@ test("hasta 3 por DM; si Sofi aprobo mas, el primer mensaje lo dice", () => {
   assert.strictEqual(r.mensajes.length, 4, "el mensaje para el colega + 3 fichas");
   assert.deepStrictEqual(r.refs, ["A", "B", "C"]);
   assert.strictEqual(r.restantes, 2);
-  assert.match(r.mensajes[0].texto, /Tengo 2 opciones más para este pedido; si querés verlas/);
+  assert.match(r.mensajes[0].texto, /Tengo 2 opciones más para este pedido; si quieres verlas/);
 });
 
 test("la salvedad va en el primer mensaje y cada aclaracion dentro de SU ficha", () => {
@@ -240,7 +240,7 @@ test("con código, el primer mensaje trae los dos links a Sofi y las fichas NO",
   conNumeroOficial(() => {
     const r = redactar.mensajesAlColega({ autor_nombre: "Laura" }, [PROP("A"), PROP("B")], { codigo: "D7K2" });
     const primero = r.mensajes[0].texto;
-    assert.match(primero, /📅 ¿Agendamos una visita\? Escribile a Sofi:\nhttps:\/\/wa\.me\/573009998877\?text=[^\n]*agendar[^\n]*D7K2/);
+    assert.match(primero, /📅 ¿Agendamos una visita\? Escríbele a Sofi:\nhttps:\/\/wa\.me\/573009998877\?text=[^\n]*agendar[^\n]*D7K2/);
     assert.match(primero, /🔎 ¿Más opciones o alguna duda\?\nhttps:\/\/wa\.me\/573009998877\?text=[^\n]*m%C3%A1s%20opciones[^\n]*D7K2/);
     assert.match(primero, /— Sofi, asistente virtual/);
     for (const f of r.mensajes.slice(1)) assert.doesNotMatch(f.texto, /D7K2|wa\.me\/573009998877/, "las fichas se reenvían al cliente: sin código");
@@ -250,7 +250,7 @@ test("con código, el primer mensaje trae los dos links a Sofi y las fichas NO",
 test("con código y opciones de más, el link de más opciones lo dice", () => {
   conNumeroOficial(() => {
     const r = redactar.mensajesAlColega({ autor_nombre: "Ana" }, [PROP("A"), PROP("B"), PROP("C"), PROP("D")], { codigo: "D7K2", max: 3 });
-    assert.match(r.mensajes[0].texto, /🔎 Tengo 1 opción más para este pedido; pedísela a Sofi:\nhttps:\/\/wa\.me\/\S+D7K2/);
+    assert.match(r.mensajes[0].texto, /🔎 Tengo 1 opción más para este pedido; pídesela a Sofi:\nhttps:\/\/wa\.me\/\S+D7K2/);
   });
 });
 
@@ -258,4 +258,26 @@ test("sin código, el DM sale exactamente como antes", () => {
   const conCodigoNulo = redactar.mensajesAlColega({ autor_nombre: "Ana" }, [PROP("A")], { codigo: null });
   const sinOpcion = redactar.mensajesAlColega({ autor_nombre: "Ana" }, [PROP("A")], {});
   assert.deepStrictEqual(conCodigoNulo, sinOpcion);
+});
+
+// ── Un solo registro: tuteo, nunca voseo (Juan, 2026-10-20) ──────────────
+test("lo que sale al colega y al cliente nunca usa voseo", () => {
+  const VOSEO = /\b(escribile|decime|querés|podés|pedíselas?|pedísela|contame|mirá|fijate|tenés|sabés|confirmame)\b/i;
+  const pedido = { tipo: "apartamento", zonas: ["Envigado"] };
+  const salidas = [];
+  const props = [PROP("A", { terraza: undefined }), PROP("B"), PROP("C"), PROP("D"), PROP("E")];
+  for (const [colega, ps, opts] of [
+    [{ autor_nombre: "Mateo" }, props.slice(0, 2), { pedido }],
+    [{ autor_nombre: "Ana" }, props.slice(0, 1), { pedido, sinConfirmar: ["terraza"] }],
+    [{ autor_nombre: "Ana" }, props, { pedido }],
+    [{ autor_nombre: "Ana", codigo_colega: "D7K2" }, props, { pedido }],
+  ]) {
+    const r = redactar.mensajesAlColega(colega, ps, opts);
+    for (const m of r.mensajes) salidas.push(m.texto);
+  }
+  const seguimiento = require("../src/scheduler/seguimiento-colega");
+  salidas.push(seguimiento.textoLineaGrupos({ autor_nombre: "Ana", codigo_colega: "D7K2" }, { slug: "x" }));
+  salidas.push(require("../src/groups/puente-sofi").textoPuente("Ana", "https://wa.me/57300"));
+  assert.ok(salidas.length >= 6);
+  for (const t of salidas) assert.doesNotMatch(t, VOSEO, t);
 });

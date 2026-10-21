@@ -454,10 +454,10 @@ const ACLARACIONES_COLEGA = {
   // Misma razon: redactar.js#desvios ya dice "queda en Envigado; el barrio
   // exacto no lo tengo registrado" para el grado zona_general.
   sector_sin_confirmar: null,
-  puntaje_bajo: "no pude verificar todo lo que pediste — confirmame lo que te falte",
-  sync_viejo: "confirmame disponibilidad antes de mostrarla",
+  puntaje_bajo: "no pude verificar todo lo que pediste — confírmame lo que te falte",
+  sync_viejo: "confírmame disponibilidad antes de mostrarla",
   periodo_no_soportado: "está cotizada por mes, no por días ni semanas",
-  varios_pedidos: "decime a cuál de tus pedidos le apunta y te confirmo",
+  varios_pedidos: "dime a cuál de tus pedidos le apunta y te confirmo",
   precio_sin_confirmar: "te confirmo el precio final",
   amoblado_sin_confirmar: "no tengo confirmado que esté amoblada",
   garajes_sin_dato: "no tengo registrado el parqueadero: te lo confirmo si lo necesitas",
