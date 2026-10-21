@@ -9,6 +9,7 @@ const advisors = require("../data/advisors");
 const colegas = require("../data/colegas");
 const citasData = require("../data/citas");
 const { formatCitaFechaHora } = require("../notifications/advisor");
+const { VENTANA_CERRADA } = require("./mensaje-asesor");
 const { textoCitaConfirmada, aliasPublico } = require("./identidad-publica");
 
 // Requires tardios del canal: whatsapp.js -> engine.js -> tools.js -> este archivo.
@@ -61,6 +62,19 @@ async function confirmar({ org, lead, advisor, deps = {} }) {
       .texto(org, lead.phone, textoCitaConfirmada({ cuando, ref: cita.ref, advisor, org }))
       .catch((e) => ({ ok: false, error: e.message }));
     avisado = Boolean(r && r.ok);
+    // Ventana de 24 h cerrada: la plantilla cita_confirmada llega igual.
+    const nombrePlantilla = process.env.SOFI_CITA_CONFIRMADA_PLANTILLA;
+    if (!avisado && nombrePlantilla && cita.ref && VENTANA_CERRADA.test((r && r.error) || "")) {
+      const fh = formatCitaFechaHora(cita.fecha_hora);
+      const diaHora = fh ? `${fh.fecha} a las ${fh.hora}` : cita.descripcion || "la hora acordada";
+      const r2 = await c
+        .plantilla(org, lead.phone, {
+          name: nombrePlantilla,
+          bodyParams: [String(lead.nombre || "").trim().split(/\s+/)[0] || "cliente", diaHora, String(cita.ref), aliasPublico(advisor, org) || "tu asesor"],
+        })
+        .catch((e) => ({ ok: false, error: e.message }));
+      avisado = Boolean(r2 && r2.ok);
+    }
   }
 
   // Los que la tuvieron antes en la rotacion se enteran de que ya no es suya.

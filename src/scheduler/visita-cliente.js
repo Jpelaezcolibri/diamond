@@ -153,6 +153,11 @@ async function runOnce({ ahora = new Date(), deps = null } = {}) {
           continue;
         }
         const ref = lead.cita.ref || null;
+        // Meta rechaza parametros vacios: sin ref no hay plantilla.
+        if (!abierta && !ref) {
+          console.log(`[visita-cliente] ${paso} a +${lead.phone}: ventana cerrada y la cita no tiene ref, la plantilla no sale`);
+          continue;
+        }
         const fh = formatCitaFechaHora(lead.cita.fecha_hora);
         const hora = fh ? fh.hora : "la hora acordada";
         let texto, params;
@@ -161,10 +166,10 @@ async function runOnce({ ahora = new Date(), deps = null } = {}) {
           const alias = aliasPublico(asesor, org);
           const zona = ref ? await d.zona(org, ref) : null;
           texto = textoRecordatorio({ lead, hora, ref, zona, alias });
-          params = [primerNombre(lead), hora, ref || "", zona || "", alias];
+          params = [primerNombre(lead) || "cliente", hora, String(ref), zona || "la zona acordada", alias || "tu asesor"];
         } else {
           texto = textoPostvisita({ lead, ref });
-          params = [primerNombre(lead), ref || ""];
+          params = [primerNombre(lead) || "cliente", String(ref)];
         }
         const llave = paso === "recordatorio" ? "recordatorio_cliente_at" : "postvisita_at";
         // Claim antes de enviar: nada sale dos veces.

@@ -151,3 +151,21 @@ test("los textos nuevos no tienen voseo", () => {
   const t = [vc.textoRecordatorio({ lead: { nombre: "Ana" }, hora: "3:00 p. m.", ref: "1", zona: "Z", alias: "Asesor 1" }), vc.textoPostvisita({ lead: { nombre: "Ana" }, ref: "1" }), vc.textoPostvisita({ lead: { source: "colega" }, ref: "1" })].join(" ");
   assert.doesNotMatch(t, /\b(contame|decime|tenés|querés|podés|avisame|respondé|sabés)\b/i);
 });
+
+test("plantilla: sin nombre ni zona los parametros no van vacios; sin ref no sale plantilla", async () => {
+  process.env.SOFI_RECORDATORIO_PLANTILLA = "recordatorio_visita";
+  const viejo = new Date(ANTES.getTime() - 30 * H).toISOString();
+  let a = armar([lead({ nombre: "" })], { ultimo: viejo });
+  a.deps.zona = async () => null;
+  await vc.runOnce({ ahora: ANTES, deps: a.deps });
+  const params = a.log.plantilla[0].p.bodyParams;
+  assert.strictEqual(params.length, 5);
+  assert.ok(params.every((x) => typeof x === "string" && x.trim() !== ""), JSON.stringify(params));
+  assert.strictEqual(params[0], "cliente");
+  assert.strictEqual(params[3], "la zona acordada");
+
+  a = armar([lead({}, { ref: null })], { ultimo: viejo });
+  await vc.runOnce({ ahora: ANTES, deps: a.deps });
+  assert.strictEqual(a.log.plantilla.length, 0);
+  assert.strictEqual(a.log.marcas.length, 0);
+});

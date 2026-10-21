@@ -72,3 +72,41 @@ test("confirmar_cita: colega marcado solo llamada -- no le escribe, se lo dice a
   assert.strictEqual(envios.length, 0);
   assert.match(r, /no le pude avisar|avisale vos|solo llamada/i);
 });
+
+test("confirmar: ventana cerrada y SOFI_CITA_CONFIRMADA_PLANTILLA, sale la plantilla con 4 parametros", async (t) => {
+  const { confirmar } = require("../src/lib/confirmar-cita");
+  process.env.SOFI_CITA_CONFIRMADA_PLANTILLA = "cita_confirmada";
+  t.after(() => delete process.env.SOFI_CITA_CONFIRMADA_PLANTILLA);
+  t.mock.method(leads, "update", async () => ({}));
+  const plantillas = [];
+  const mk = () => ({
+    org: ORG,
+    advisor: ADVISOR,
+    lead: { id: "l1", nombre: "Ana Pérez", phone: "573009998888", source: "whatsapp", cita: { fecha_hora: "2026-10-23T10:00:00-05:00", tipo: "visita", ref: "9548121" } },
+  });
+  const deps = {
+    soloLlamada: async () => false,
+    texto: async () => ({ ok: false, error: "Message undeliverable: more than 24 hours" }),
+    plantilla: async (o, tel, p) => (plantillas.push(p), { ok: true }),
+  };
+  const r = await confirmar({ ...mk(), deps });
+  assert.strictEqual(plantillas[0].name, "cita_confirmada");
+  assert.strictEqual(plantillas[0].bodyParams.length, 4);
+  assert.strictEqual(plantillas[0].bodyParams[0], "Ana");
+  assert.match(plantillas[0].bodyParams[1], /viernes.*23 de octubre a las 10:00/);
+  assert.strictEqual(plantillas[0].bodyParams[2], "9548121");
+  assert.strictEqual(plantillas[0].bodyParams[3], "Asesor 3");
+  assert.match(r.texto, /ya le avis/i);
+
+  // sin ref: no se usa la plantilla y se le pide al asesor avisar
+  plantillas.length = 0;
+  const m = mk();
+  m.lead.cita.ref = null;
+  const r2 = await confirmar({ ...m, deps });
+  assert.strictEqual(plantillas.length, 0);
+  assert.match(r2.texto, /avisale vos/i);
+
+  // la plantilla tambien falla: fallback de siempre
+  const r3 = await confirmar({ ...mk(), deps: { ...deps, plantilla: async () => ({ ok: false, error: "x" }) } });
+  assert.match(r3.texto, /avisale vos/i);
+});
