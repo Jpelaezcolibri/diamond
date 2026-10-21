@@ -1367,3 +1367,99 @@ test("el rescate es angosto: una ref de aliado o de puntaje bajo sigue descartad
   const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE });
   assert.strictEqual(r.resultado, "descartada_por_sofi");
 });
+
+// ── DM con aclaracion (Juan, 2026-10-20; RADAR_DM_CON_ACLARACION) ─────────
+// Lo desconocido de barrio, piso, parqueadero y precio sale con una
+// aclaracion en la ficha. Ver publicable.js#MOTIVOS_ACLARABLES.
+function conAclaracion(fn) {
+  return async () => {
+    process.env.RADAR_DM_CON_ACLARACION = "true";
+    try {
+      await fn();
+    } finally {
+      delete process.env.RADAR_DM_CON_ACLARACION;
+    }
+  };
+}
+
+test("con aclaracion: una ficha con solo el piso sin confirmar sale por DM con 'Aclaración: ... piso ...'", conAclaracion(async () => {
+  telefonoColegaResuelto = "573001234567";
+  matchesDevueltos = [match({ piso_sin_confirmar: true })];
+  veredictoDeSofi = { ...APRUEBA, sin_confirmar: ["piso"] };
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+
+  assert.strictEqual(r.resultado, "dm_enviado");
+  assert.strictEqual(enviosDm.length, 2);
+  assert.match(enviosDm[1].texto, /Aclaración: no tengo registrado en qué piso está: te lo confirmo si te sirve/);
+  assert.doesNotMatch(enviosDm[0].texto, /piso/, "la salvedad del primer mensaje no repite el piso");
+  assert.deepStrictEqual(marcadasRespondidas[0].refs, ["9780079"]);
+  const ultima = politicasGuardadas[politicasGuardadas.length - 1];
+  assert.strictEqual(ultima.motivo, "dm_con_aclaracion");
+  assert.ok(ultima.traza.includes("con_aclaracion:9780079"));
+  assert.strictEqual(enviadosPorSofi.length, 0);
+}));
+
+test("con aclaracion: zona vecina + piso sin confirmar no sale por DM", conAclaracion(async () => {
+  telefonoColegaResuelto = "573001234567";
+  matchesDevueltos = [match({ ubicacion: "vecina", piso_sin_confirmar: true })];
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+
+  assert.notStrictEqual(r.resultado, "dm_enviado");
+  assert.strictEqual(enviosDm.length, 0);
+  assert.ok(["zona_vecina", "piso_sin_confirmar"].includes(politicasGuardadas[politicasGuardadas.length - 1].motivo));
+}));
+
+test("con aclaracion: primero la que encaja del todo y despues la que necesita aclaracion", conAclaracion(async () => {
+  telefonoColegaResuelto = "573001234567";
+  matchesDevueltos = [
+    match({ ref: "ACL", puntaje: 99, garajes_sin_dato: true }),
+    match({ ref: "EXA", puntaje: 80 }),
+  ];
+  veredictoDeSofi = { ...APRUEBA, refs_utiles: ["ACL", "EXA"] };
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+
+  assert.strictEqual(r.resultado, "dm_enviado");
+  assert.match(enviosDm[1].texto, /Ref EXA/);
+  assert.doesNotMatch(enviosDm[1].texto, /Aclaración/);
+  assert.match(enviosDm[2].texto, /Ref ACL[\s\S]*Aclaración: no tengo registrado el parqueadero/);
+  assert.deepStrictEqual(marcadasRespondidas[0].refs, ["EXA", "ACL"]);
+  assert.ok(politicasGuardadas[politicasGuardadas.length - 1].traza.includes("con_aclaracion:ACL"));
+}));
+
+test("con aclaracion: si sale solo la exacta, el motivo sigue siendo ok", conAclaracion(async () => {
+  telefonoColegaResuelto = "573001234567";
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+  assert.strictEqual(r.resultado, "dm_enviado");
+  assert.deepStrictEqual(politicasGuardadas.map((p) => p.motivo), ["ok"]);
+}));
+
+test("con aclaracion: lo que ya se le mando no se repite", conAclaracion(async () => {
+  telefonoColegaResuelto = "573001234567";
+  matchesDevueltos = [match({ piso_sin_confirmar: true })];
+  refsYaEnviadasMock = new Set(["9780079"]);
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+  assert.strictEqual(r.resultado, "ya_se_le_mando");
+  assert.strictEqual(enviosDm.length, 0);
+}));
+
+test("con aclaracion: un colega solo llamada no recibe DM", conAclaracion(async (t) => {
+  telefonoColegaResuelto = "573001234567";
+  matchesDevueltos = [match({ piso_sin_confirmar: true })];
+  const original = colegasData.esSoloLlamada;
+  colegasData.esSoloLlamada = async () => true;
+  try {
+    await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+  } finally {
+    colegasData.esSoloLlamada = original;
+  }
+  assert.strictEqual(enviosDm.length, 0);
+}));
+
+test("interruptor apagado: la ficha con el piso sin confirmar NO sale, igual que hoy", async () => {
+  telefonoColegaResuelto = "573001234567";
+  matchesDevueltos = [match({ piso_sin_confirmar: true })];
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+  assert.notStrictEqual(r.resultado, "dm_enviado");
+  assert.strictEqual(enviosDm.length, 0);
+  assert.strictEqual(politicasGuardadas[0].motivo, "piso_sin_confirmar");
+});

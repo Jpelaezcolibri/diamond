@@ -1708,3 +1708,86 @@ test("prepararAviso: devuelve el borrador partido, la presentacion y cada ficha 
   assert.doesNotMatch(r.mensajes[1], /Hola|Comision|Sofi/, "la ficha se reenvia tal cual");
   assert.ok(r.mensaje, "el borrador de un solo bloque sigue viajando");
 });
+
+// ── DM con aclaracion en los caminos manuales (Juan, 2026-10-20) ──────────
+// La misma regla y el mismo interruptor que el DM automatico.
+function conAclaracionManual(fn) {
+  return async () => {
+    process.env.RADAR_DM_CON_ACLARACION = "true";
+    try {
+      await fn();
+    } finally {
+      delete process.env.RADAR_DM_CON_ACLARACION;
+    }
+  };
+}
+
+test("responderPorDmManual: apagado, la ficha con el piso sin confirmar sigue sin salir", async () => {
+  señalParaAprobar = señalCallada({ matches: [matchBueno({ piso_sin_confirmar: true })] });
+  grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = "573001234567";
+  const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
+  assert.strictEqual(r.resultado, "sin_propiedades_publicables");
+  assert.deepStrictEqual(r.descartados, [{ ref: "AP004", motivos: ["piso_sin_confirmar"] }]);
+});
+
+test("responderPorDmManual: encendido, sale con la aclaracion y la traza lo dice", conAclaracionManual(async () => {
+  señalParaAprobar = señalCallada({
+    matches: [matchBueno({ ref: "ACL", piso_sin_confirmar: true, puntaje: 99 }), matchBueno()],
+    revalidacion: { sin_confirmar: ["piso"], le_falta: [] },
+  });
+  grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = "573001234567";
+  const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
+
+  assert.strictEqual(r.resultado, "dm_enviado");
+  assert.strictEqual(enviosDmManual.length, 3);
+  assert.match(enviosDmManual[1].texto, /Ref AP004/, "la exacta primero");
+  assert.match(enviosDmManual[2].texto, /Ref ACL[\s\S]*Aclaración: no tengo registrado en qué piso está/);
+  assert.doesNotMatch(enviosDmManual[0].texto, /piso/);
+  const politica = politicasGuardadas[politicasGuardadas.length - 1];
+  assert.strictEqual(politica.motivo, "dm_manual", "el motivo sigue diciendo quien lo mando");
+  assert.ok(politica.traza.includes("con_aclaracion:ACL"));
+}));
+
+test("responderPorDmManual: encendido, la zona vecina sigue sin salir", conAclaracionManual(async () => {
+  señalParaAprobar = señalCallada({ matches: [matchBueno({ ubicacion: "vecina", piso_sin_confirmar: true })] });
+  grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = "573001234567";
+  const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
+  assert.strictEqual(r.resultado, "sin_propiedades_publicables");
+  assert.strictEqual(enviosDmManual.length, 0);
+}));
+
+test("aprobarManual: encendido, sale con la aclaracion", conAclaracionManual(async () => {
+  señalParaAprobar = señalCallada({ matches: [matchBueno({ garajes_sin_dato: true })] });
+  grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = "573001234567";
+  const r = await vivo.aprobarManual({ id: "org-1" }, "sig-callada");
+  assert.strictEqual(r.resultado, "publicado");
+  assert.match(textoDmManual(), /Aclaración: no tengo registrado el parqueadero: te lo confirmo si lo necesitas/);
+  assert.ok(politicasGuardadas[politicasGuardadas.length - 1].traza.includes("con_aclaracion:AP004"));
+}));
+
+test("prepararAviso: encendido, el borrador trae la ficha con aclaracion", conAclaracionManual(async () => {
+  señalParaAprobar = señalCallada({
+    matches: [matchBueno({ precio_sin_confirmar: true })],
+    revalidacion: { refs_utiles: ["AP004"], sin_confirmar: [] },
+  });
+  grupoParaAprobar = grupoHabilitado();
+  const r = await vivo.prepararAviso({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
+  assert.strictEqual(r.aprobada, true);
+  assert.match(r.mensajes[1], /Aclaración: te confirmo el precio final/);
+  assert.match(r.mensaje, /Aclaración: te confirmo el precio final/);
+}));
+
+test("prepararAviso: apagado, la misma señal queda sin borrador, como hoy", async () => {
+  señalParaAprobar = señalCallada({
+    matches: [matchBueno({ precio_sin_confirmar: true })],
+    revalidacion: { refs_utiles: ["AP004"], sin_confirmar: [] },
+  });
+  grupoParaAprobar = grupoHabilitado();
+  const r = await vivo.prepararAviso({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
+  assert.strictEqual(r.aprobada, false);
+  assert.strictEqual(r.mensaje, null);
+});
