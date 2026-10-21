@@ -28,7 +28,33 @@ Equipo: 1 dev (Juan) + Claude Code. Idioma de la app: español (Colombia).
 Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
 `docs:`, `config:`).
 
-## 2. Estado actual (2026-10-20)
+## 2. Estado actual (2026-10-21)
+
+- **Rescate de pedidos y DM con aclaración (desplegado 2026-10-21, merge de
+  `rescate-pedidos`).** Plan
+  `docs/superpowers/plans/2026-10-20-rescate-pedidos-y-aclaraciones.md`;
+  diagnóstico en `Claude outputs/pedidos-sin-dm-diagnostico.md` y
+  `Claude outputs/diagnostico-por-que-no-vendemos.md` (sin versionar).
+  - **La decisión de Juan (2026-10-20):** lo que NO sabemos de barrio/sector,
+    piso, parqueadero y precio sale con "Aclaración:" en la ficha; primero las
+    fichas exactas, máximo 3. Zona vecina nunca; un dato conocido que no
+    cumple, nunca. Precio por confirmar solo si los dos precios (Wasi y
+    descripción) caben en el presupuesto; si el título nombra otro barrio, no
+    sale. Interruptor `RADAR_DM_CON_ACLARACION`.
+  - Arreglos: barrios de El Poblado y Laureles en `SUBZONA_DE` (ya no son
+    "vecina"); `pisoDe` lee las características y "PISO | N" (no "pisos");
+    dúplex/penthouse/loft calzan con apartamento (el prefiltro manda la lista
+    de tipos); todo pedido que no sale guarda `politica_motivo`
+    (`solo_dudosas`, `sin_veredicto`, `descartada_por_sofi`, `sin_candidatas`).
+  - **El radar estuvo mudo del 25-sep al 16-oct sin aviso.** Ahora
+    `src/scheduler/radar-callado.js` le avisa a Juan (`ALERTA_TECNICA_TO`) tras
+    6 h hábiles sin pedidos o 24 h sin `linea_dm` (`RADAR_CALLADO_ACTIVO`,
+    encendido por defecto; no lo apaga `ASESORA_SOLO_VISITAS`).
+  - Todo lo que sale a colegas y clientes va en **tuteo** profesional (regla de
+    Juan; un test falla si aparece voseo). Seguimiento: solo hasta 24 h.
+  - `scripts/rescate-pedidos.js`: prueba en seco por defecto, `--aplicar`
+    envía con todos los frenos (falla cerrado). Se corre desde la raíz con
+    `railway run --service diamond node scripts/rescate-pedidos.js --horas 24`.
 
 - **Publicaciones y respuestas (desplegado 2026-10-21, merge de `modulo-publicaciones`;
   interruptor apagado).** Spec
