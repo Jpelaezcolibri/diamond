@@ -40,6 +40,7 @@ const VENTANA_DUPLICADO_MS = 15 * 60 * 1000;
 const PAUSA_MIN_MS = 20000;
 const PAUSA_RANGO_MS = 20000;
 const CODIGO_PROVISIONAL = "XXXX";
+const MOTIVO_DESCONOCIDO = "rescate_estado_desconocido";
 
 // ── Utilidades puras ──
 
@@ -62,6 +63,11 @@ function enmascarar(v) {
   return d ? `…${d.slice(-4)}` : null;
 }
 
+// Los errores de WAHA pueden traer el destino ("Destino invalido: 57300...").
+function mascararTexto(v) {
+  return String(v == null ? "" : v).replace(/\d{10,}/g, (m) => `…${m.slice(-4)}`);
+}
+
 const normTexto = (t) =>
   String(t || "").normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 
@@ -72,7 +78,7 @@ function fechaDe(s) {
 function seleccionar(senales, solo = null) {
   const ids = solo && solo.length ? new Set(solo) : null;
   return (senales || []).filter(
-    (s) => s && s.clase === "demanda" && !s.respondida_at && !s.colega_escribio_at && (!ids || ids.has(s.id))
+    (s) => s && s.clase === "demanda" && !s.respondida_at && !s.colega_escribio_at && s.politica_motivo !== MOTIVO_DESCONOCIDO && (!ids || ids.has(s.id))
   );
 }
 
@@ -137,7 +143,6 @@ function depsReales() {
   const { cruzar } = require("../src/groups/match");
   const syncEstado = require("../src/data/sync-estado");
   const verificarLink = require("../src/groups/verificar-link");
-  const vivo = require("../src/groups/vivo");
   const directorio = require("../src/groups/directorio");
   const colegas = require("../src/data/colegas");
   const codigoColega = require("../src/groups/codigo-colega");
@@ -162,7 +167,17 @@ function depsReales() {
     },
     estadoInventario: (org, ahora) => syncEstado.estadoDelInventario(org.id, { ahora }),
     verificarLinks: (ms) => verificarLink.verificar(ms),
-    quitarYaEnviadas: (org, destino, ms, ahora) => vivo.quitarYaEnviadas(org, destino, ms, ahora),
+    // Fail-CLOSED (a diferencia de vivo.quitarYaEnviadas, que sigue sin filtrar
+    // si la consulta falla): aqui una consulta fallida lanza.
+    quitarYaEnviadas: async (org, destino, ms, ahora) => {
+      if (!ms.length) return { quedan: [], repetidas: [] };
+      const dias = Number(process.env.RADAR_DM_NO_REENVIAR_DIAS || 7);
+      const desdeIso = new Date(ahora.getTime() - dias * 24 * 3600 * 1000).toISOString();
+      const ya = await groupSignals.refsYaEnviadas(org.id, destino, desdeIso);
+      if (!ya) throw new Error("refsYaEnviadas fallo");
+      const repetidas = ms.filter((m) => m && m.ref != null && ya.has(String(m.ref)));
+      return { quedan: ms.filter((m) => !repetidas.includes(m)), repetidas: repetidas.map((m) => String(m.ref)) };
+    },
     telefonoDe: (orgId, lid) => directorio.telefonoDe(orgId, lid, {}),
     esSoloLlamada: (orgId, datos) => colegas.esSoloLlamada(orgId, datos),
     // En seco no se escribe nada: el codigo que ya tenga la señal o uno
@@ -177,6 +192,22 @@ function depsReales() {
     enviarAlColega: (args) => envioColega.enviarAlColega(args),
     marcarRespondida: (orgId, id, datos) => groupSignals.marcarRespondida(orgId, id, datos),
     guardarPolitica: (orgId, id, datos) => groupSignals.guardarPolitica(orgId, id, datos),
+    frenosEfectivos: () => {
+      const politica = require("../src/groups/politica");
+      const carril = require("../src/groups/carril-arriendo");
+      const l = politica.LIMITES_DM_DEFAULT;
+      return {
+        cuota_max: l.fraccionCuotaMaxima,
+        tope_diario_linea: l.topeDiarioLinea,
+        horario: "L-S 8-20 Bogota",
+        pausa_s: `${PAUSA_MIN_MS / 1000}-${(PAUSA_MIN_MS + PAUSA_RANGO_MS) / 1000}`,
+        no_reenviar_dias: Number(process.env.RADAR_DM_NO_REENVIAR_DIAS || 7),
+        amoblado_activo: carril.carrilActivo(),
+        amoblado_umbral: carril.umbralDm ? carril.umbralDm() : process.env.RADAR_AMOBLADO_UMBRAL_DM || "(default)",
+        sesion: "unica activa en la base",
+        env_RADAR: Object.keys(process.env).filter((k) => k.startsWith("RADAR_")).map((k) => `${k}=${process.env[k]}`).join(",") || "(ninguna)",
+      };
+    },
     dormir: (ms) => new Promise((r) => setTimeout(r, ms)),
     rand: Math.random,
     ahora: () => new Date(),
@@ -245,7 +276,14 @@ async function planificar(org, s, deps, { ahora, aplicar = false, yaPlaneadas = 
   }
   if (esArriendo && !carrilArriendo.puedeSalirSolo(verificadas)) return no("carril_umbral", extra);
 
-  let { quedan: aEnviar, repetidas } = await deps.quitarYaEnviadas(org, { lid, telefono }, verificadas, ahora);
+  let yaEnv;
+  try {
+    yaEnv = await deps.quitarYaEnviadas(org, { lid, telefono }, verificadas, ahora);
+  } catch {
+    yaEnv = null;
+  }
+  if (!yaEnv || !Array.isArray(yaEnv.quedan)) return no("ya_enviadas_no_verificable", extra);
+  let { quedan: aEnviar, repetidas } = yaEnv;
   // En la misma corrida, lo que ya se le planeo a este colega por otro pedido.
   if (yaPlaneadas) {
     const ya = yaPlaneadas.get(lid || telefono) || new Set();
@@ -352,6 +390,10 @@ async function ejecutar(opciones, deps) {
   const senales = seleccionar(await deps.leerSenales(org, { desdeIso, solo }), solo);
   const grupos = agruparDuplicados(senales);
 
+  if (deps.frenosEfectivos) {
+    const f = deps.frenosEfectivos();
+    log(`Frenos efectivos: ${Object.entries(f).map(([k, v]) => `${k}=${v}`).join(" · ")}`);
+  }
   log(`${aplicar ? "ENVÍO REAL" : "PRUEBA EN SECO (no envía ni escribe nada)"} · ${senales.length} señal(es), ${grupos.length} pedido(s) distinto(s) desde ${desdeIso}`);
 
   const resultado = {
@@ -362,6 +404,7 @@ async function ejecutar(opciones, deps) {
   if (aplicar) {
     sesion = await deps.sesionActiva(org);
     resultado.sesion = sesion;
+    log(`Sesión de la línea: ${sesion || "(ninguna activa o más de una)"}`);
     if (!sesion) resultado.detenido = { id: null, motivo: "sin_sesion_activa" };
   }
 
@@ -401,7 +444,19 @@ async function ejecutar(opciones, deps) {
       mensajes: p.mensajes,
     });
     if (!envio || !envio.ok) {
-      resultado.detenido = { id: s.id, motivo: "error_waha", error: (envio && envio.error) || "sin_respuesta" };
+      const error = mascararTexto((envio && envio.error) || "sin_respuesta");
+      // previoAlEnvio:false = no se sabe si el primer mensaje llego (timeout):
+      // queda anotado en la señal para que otra corrida no lo repita.
+      const desconocido = !envio || !envio.previoAlEnvio;
+      if (desconocido) {
+        for (const id of [s.id, ...p.duplicados]) {
+          await Promise.resolve(
+            deps.guardarPolitica(org.id, id, { motivo: MOTIVO_DESCONOCIDO, traza: ["rescate", `error:${error}`] })
+          ).catch(() => {});
+        }
+        log(`  ENTREGA DESCONOCIDA en ${s.id}: marcada ${MOTIVO_DESCONOCIDO}; no se vuelve a intentar sin revisar a mano.`);
+      }
+      resultado.detenido = { id: s.id, motivo: desconocido ? MOTIVO_DESCONOCIDO : "error_waha", error };
       break;
     }
     enviadosAntes++;
@@ -416,25 +471,39 @@ async function ejecutar(opciones, deps) {
       ...(aclaradas.length ? [`con_aclaracion:${aclaradas.join(",")}`] : []),
       ...(envio.completo ? [] : [`faltaron:${(envio.faltantes || []).join(",")}`, `error:${envio.error}`]),
     ];
+    let marcadoFallido = null;
     for (const id of [s.id, ...p.duplicados]) {
-      await deps.marcarRespondida(org.id, id, {
-        texto: envio.texto, wamid: envio.wamid, modo: "auto", refs: envio.refsEnviadas,
-        destinoTelefono: p.telefono || null,
-        destinoLid: porLid ? `${p.lid}@lid` : null,
-      });
-      await deps.guardarPolitica(org.id, id, { motivo, traza: id === s.id ? trazaBase : [...trazaBase, `duplicado_de:${s.id}`] });
+      let ok = false;
+      try {
+        ok = await deps.marcarRespondida(org.id, id, {
+          texto: envio.texto, wamid: envio.wamid, modo: "auto", refs: envio.refsEnviadas,
+          destinoTelefono: p.telefono || null,
+          destinoLid: porLid ? `${p.lid}@lid` : null,
+        });
+      } catch {
+        ok = false;
+      }
+      if (ok === false && !marcadoFallido) marcadoFallido = id;
+      await Promise.resolve(
+        deps.guardarPolitica(org.id, id, { motivo, traza: id === s.id ? trazaBase : [...trazaBase, `duplicado_de:${s.id}`] })
+      ).catch(() => {});
     }
     resultado.enviados.push({ id: s.id, duplicados: p.duplicados, refs: envio.refsEnviadas, completo: Boolean(envio.completo), motivo });
     log(`  ENVIADO (${motivo})`);
+    if (marcadoFallido) {
+      resultado.detenido = { id: marcadoFallido, motivo: "marcado_fallido", error: `DM enviado (refs ${(envio.refsEnviadas || []).join(",")}) pero no se pudo marcar la señal ${marcadoFallido}; NO volver a correr sin marcarla a mano` };
+      log(`  ERROR: ${resultado.detenido.error}`);
+      break;
+    }
     if (!envio.completo) {
-      resultado.detenido = { id: s.id, motivo: "error_waha", error: envio.error || "dm_parcial" };
+      resultado.detenido = { id: s.id, motivo: "error_waha", error: mascararTexto(envio.error || "dm_parcial") };
       break;
     }
   }
 
   log(`\n${"=".repeat(72)}\nSalen: ${resultado.salen.length} · No salen: ${resultado.noSalen.length}` +
     (aplicar ? ` · Enviados: ${resultado.enviados.length}` : "") +
-    (resultado.detenido ? ` · DETENIDO: ${resultado.detenido.motivo}${resultado.detenido.error ? ` (${resultado.detenido.error})` : ""}` : ""));
+    (resultado.detenido ? ` · DETENIDO: ${resultado.detenido.motivo}${resultado.detenido.error ? ` (${mascararTexto(resultado.detenido.error)})` : ""}` : ""));
 
   const dir = opciones.salida || path.join(process.cwd(), "Claude outputs");
   const archivo = path.join(dir, `rescate-pedidos-${diaBogota(inicio)}.json`);
@@ -448,7 +517,7 @@ function diaBogota(fecha) {
 }
 
 module.exports = {
-  parsearArgs, enmascarar, seleccionar, agruparDuplicados, excluirPorSofi, planificar, ejecutar, frenoDeLinea,
+  parsearArgs, enmascarar, mascararTexto, seleccionar, agruparDuplicados, excluirPorSofi, planificar, ejecutar, frenoDeLinea,
 };
 
 if (require.main === module) {

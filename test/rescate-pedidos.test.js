@@ -249,7 +249,7 @@ test("--aplicar: para al primer error de WAHA y no marca esa senal", async () =>
     enviarAlColega: async (args) => {
       n++;
       llamadas.enviar.push(args);
-      return { ok: false, error: "waha_500", refsEnviadas: [], faltantes: ["A1"] };
+      return { ok: false, error: "waha_500", previoAlEnvio: true, refsEnviadas: [], faltantes: ["A1"] };
     },
   });
   const r = await rescate.ejecutar({ horas: 24, aplicar: true, solo: null, salida: os.tmpdir() }, d);
@@ -272,4 +272,68 @@ test("--aplicar: fuera de horario, sin sesion unica o con la cuota alta no envia
     assert.strictEqual(llamadas.enviar.length, 0, motivo);
     assert.strictEqual(r.detenido && r.detenido.motivo, motivo);
   }
+});
+
+const APLICAR = { horas: 24, aplicar: true, solo: null, salida: os.tmpdir() };
+
+test("--aplicar: si marcarRespondida devuelve false tras enviar, para con marcado_fallido y no sigue", async () => {
+  const { d, llamadas } = deps({
+    leerSenales: async () => [senal({ id: "a" }), senal({ id: "c", autor_telefono: LID2, texto_original: "otro pedido distinto" })],
+    marcarRespondida: async () => false,
+  });
+  const r = await rescate.ejecutar(APLICAR, d);
+  assert.strictEqual(llamadas.enviar.length, 1);
+  assert.strictEqual(r.detenido.motivo, "marcado_fallido");
+  assert.strictEqual(r.detenido.id, "a");
+});
+
+test("--aplicar: marcarRespondida que lanza tambien es marcado_fallido, y guardarPolitica que lanza no salta los duplicados", async () => {
+  const marcadas = [];
+  const { d } = deps({
+    leerSenales: async () => [senal({ id: "a", fecha_mensaje: "2026-10-20T13:18:00Z" }), senal({ id: "b", fecha_mensaje: "2026-10-20T13:23:00Z" })],
+    marcarRespondida: async (_o, id) => { marcadas.push(id); return true; },
+    guardarPolitica: async () => { throw new Error("db"); },
+  });
+  const r = await rescate.ejecutar(APLICAR, d);
+  assert.deepStrictEqual(marcadas, ["a", "b"]);
+  assert.strictEqual(r.detenido, null);
+  const { d: d2 } = deps({ marcarRespondida: async () => { throw new Error("db"); } });
+  assert.strictEqual((await rescate.ejecutar(APLICAR, d2)).detenido.motivo, "marcado_fallido");
+});
+
+test("planificar: si no se puede verificar lo ya enviado en 7 dias, el pedido no sale", async () => {
+  for (const over of [
+    { quitarYaEnviadas: async () => { throw new Error("db"); } },
+    { quitarYaEnviadas: async () => null },
+  ]) {
+    const p = await rescate.planificar({ id: "org1" }, senal(), deps(over).d, { ahora: AHORA });
+    assert.strictEqual(p.sale, false);
+    assert.strictEqual(p.motivo, "ya_enviadas_no_verificable");
+  }
+});
+
+test("--aplicar: entrega desconocida del primer mensaje se anota en la señal y para la corrida", async () => {
+  const { d, llamadas } = deps({
+    leerSenales: async () => [senal({ id: "a", fecha_mensaje: "2026-10-20T13:18:00Z" }), senal({ id: "b", fecha_mensaje: "2026-10-20T13:23:00Z" }), senal({ id: "c", autor_telefono: LID2, texto_original: "otro", fecha_mensaje: "2026-10-20T14:30:00Z" })],
+    enviarAlColega: async (args) => { llamadas.enviar.push(args); return { ok: false, error: "timeout 573001234567", previoAlEnvio: false, refsEnviadas: [], faltantes: [] }; },
+  });
+  const r = await rescate.ejecutar(APLICAR, d);
+  assert.strictEqual(llamadas.enviar.length, 1);
+  assert.strictEqual(llamadas.marcar.length, 0);
+  assert.deepStrictEqual(llamadas.politica.map((p) => [p.id, p.motivo]), [["a", "rescate_estado_desconocido"], ["b", "rescate_estado_desconocido"]]);
+  assert.strictEqual(r.detenido.motivo, "rescate_estado_desconocido");
+  assert.ok(!JSON.stringify(r.detenido).includes("573001234567"), "error enmascarado");
+});
+
+test("seleccionar: salta las señales con rescate_estado_desconocido", () => {
+  const s = rescate.seleccionar([senal({ id: "x", politica_motivo: "rescate_estado_desconocido" }), senal({ id: "y" })]);
+  assert.deepStrictEqual(s.map((q) => q.id), ["y"]);
+  assert.strictEqual(rescate.mascararTexto("Destino invalido: 573001234567 y 12"), "Destino invalido: …4567 y 12");
+});
+
+test("arranque: imprime los frenos efectivos", async () => {
+  const lineas = [];
+  const { d } = deps({ log: (...a) => lineas.push(a.join(" ")), frenosEfectivos: () => ({ cuota_max: 0.8, horario: "L-S" }) });
+  await rescate.ejecutar({ horas: 24, aplicar: false, solo: null, salida: os.tmpdir() }, d);
+  assert.ok(lineas.some((l) => /Frenos efectivos: cuota_max=0.8 · horario=L-S/.test(l)));
 });
