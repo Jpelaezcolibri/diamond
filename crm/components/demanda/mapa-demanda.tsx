@@ -51,6 +51,7 @@ export default function MapaDemandaVista({ mapa, dias, operacion }: { mapa: Mapa
   }
   async function copiarArgumento(c: Celda) {
     setSelId(c.id);
+    if (!c.argumento) return;
     avisar((await copiar(c.argumento)) ? "Argumento copiado" : "No se pudo copiar: selecciona el texto");
   }
 
@@ -155,7 +156,9 @@ export default function MapaDemandaVista({ mapa, dias, operacion }: { mapa: Mapa
                     e.stopPropagation();
                     copiarArgumento(c);
                   }}
-                  className="w-full rounded-[9px] border border-[#0b1526] bg-white px-2.5 py-2 text-[12.5px] text-[#0b1526] hover:bg-[#0b1526] hover:text-white lg:py-1.5"
+                  disabled={!c.argumento}
+                  title={c.argumento ? undefined : (c.argumentoMotivo ?? undefined)}
+                  className="w-full rounded-[9px] border border-[#0b1526] bg-white px-2.5 py-2 text-[12.5px] text-[#0b1526] hover:bg-[#0b1526] hover:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white disabled:hover:text-[#0b1526] lg:py-1.5"
                 >
                   Copiar argumento
                 </button>
@@ -221,27 +224,35 @@ export default function MapaDemandaVista({ mapa, dias, operacion }: { mapa: Mapa
         )}
         {sel && (
           <Bloque titulo="Argumento para el propietario">
-            <div className="rounded-[14px] border border-[#c9a24b]/40 bg-[#0b1526] p-3.5 text-[13.5px] leading-relaxed text-slate-200">
-              <p className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-[#c9a24b]">WhatsApp listo para copiar</p>
-              <p>{sel.argumento}</p>
-            </div>
-            <div className="mt-2.5 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => copiarArgumento(sel)}
-                className="rounded-[9px] border border-[#0b1526] bg-[#0b1526] px-2.5 py-1.5 text-[12.5px] text-[#c9a24b]"
-              >
-                Copiar
-              </button>
-              <a
-                href={`https://wa.me/?text=${encodeURIComponent(sel.argumento)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="rounded-[9px] border border-green-600 bg-green-600 px-2.5 py-1.5 text-[12.5px] text-white"
-              >
-                Abrir WhatsApp
-              </a>
-            </div>
+            {sel.argumento ? (
+              <>
+                <div className="rounded-[14px] border border-[#c9a24b]/40 bg-[#0b1526] p-3.5 text-[13.5px] leading-relaxed text-slate-200">
+                  <p className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-[#c9a24b]">WhatsApp listo para copiar</p>
+                  <p>{sel.argumento}</p>
+                </div>
+                <div className="mt-2.5 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => copiarArgumento(sel)}
+                    className="rounded-[9px] border border-[#0b1526] bg-[#0b1526] px-2.5 py-1.5 text-[12.5px] text-[#c9a24b]"
+                  >
+                    Copiar
+                  </button>
+                  <a
+                    href={`https://wa.me/?text=${encodeURIComponent(sel.argumento)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="rounded-[9px] border border-green-600 bg-green-600 px-2.5 py-1.5 text-[12.5px] text-white"
+                  >
+                    Abrir WhatsApp
+                  </a>
+                </div>
+              </>
+            ) : (
+              <p className="rounded-[14px] border border-slate-200 bg-slate-50 p-3.5 text-[13.5px] text-slate-600">
+                {sel.argumentoMotivo ?? "Muy pocos pedidos para usar como argumento"}
+              </p>
+            )}
           </Bloque>
         )}
         <Bloque titulo="Inventario que no calza">

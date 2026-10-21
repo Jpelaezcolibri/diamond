@@ -285,6 +285,9 @@ const TIPO_SINGULAR = {
   apartaestudio: { texto: "un apartaestudio", fem: false },
   "local-oficina": { texto: "un local u oficina", fem: false },
   finca: { texto: "una finca", fem: true },
+  oficina: { texto: "una oficina", fem: true },
+  bodega: { texto: "una bodega", fem: true },
+  local: { texto: "un local", fem: false },
   otro: { texto: "un inmueble", fem: false },
 };
 
@@ -300,15 +303,28 @@ function comisionTexto(comisionEnv) {
     : "compartiendo comisión con la red";
 }
 
-// Texto exacto del mockup aprobado. Va al propietario: "usted".
-function argumento({ orgName, pedidosMes, tipo, macrozona, banda, tenemos, comision }) {
+// Texto del mockup aprobado, con la concordancia corregida. Va al propietario:
+// "usted". La cifra es honesta: "Este mes" solo con los pedidos de los ultimos
+// 30 dias; si son pocos, "En los ultimos tres meses" con los de 90 dias.
+function argumento({ orgName, colegas, ventana = "mes", tipo, macrozona, banda, tenemos, comision }) {
   const t = TIPO_SINGULAR[tipo] || TIPO_SINGULAR.otro;
-  const colegas = pedidosMes === 1 ? "1 colega de la red buscó" : `${pedidosMes} colegas de la red buscaron`;
+  const cuantos = colegas === 1 ? "1 colega de la red buscó" : `${colegas} colegas de la red buscaron`;
+  const cuando = ventana === "trimestre" ? "En los últimos tres meses" : "Este mes";
   return (
-    `Hola, soy de ${orgName}. Este mes ${colegas} ${t.texto} como el suyo en ${macrozona} (${banda.palabras}), ` +
-    `y hoy ${tenemosTexto(tenemos, t.fem)} para ofrecerles. Si nos da la exclusiva, su inmueble le llega a todos ` +
+    `Hola, soy de ${orgName}. ${cuando} ${cuantos} ${t.texto} como ${t.fem ? "la suya" : "el suyo"} en ${macrozona} (${banda.palabras}), ` +
+    `y hoy ${tenemosTexto(tenemos, t.fem)} para ofrecerles. Si nos da la exclusiva, su inmueble les llega a todos ` +
     `ellos el mismo día, ${comisionTexto(comision)}. ¿Le parece si lo visitamos esta semana?`
   );
+}
+
+const MIN_PARA_ARGUMENTO = 3;
+
+// Elige la ventana honesta: 30 dias si hay >= 3 pedidos, si no 90 dias, si no nada.
+function argumentoDeCelda({ orgName, n30, n90, tipo, macrozona, banda, tenemos, comision }) {
+  const base = { orgName, tipo, macrozona, banda, tenemos, comision };
+  if (n30 >= MIN_PARA_ARGUMENTO) return { texto: argumento({ ...base, colegas: n30, ventana: "mes" }), motivo: null };
+  if (n90 >= MIN_PARA_ARGUMENTO) return { texto: argumento({ ...base, colegas: n90, ventana: "trimestre" }), motivo: null };
+  return { texto: null, motivo: "Muy pocos pedidos para usar como argumento" };
 }
 
 // ── Inventario que no calza ─────────────────────────────────────────────
@@ -349,28 +365,48 @@ function inicioDeMes(ahora) {
  */
 function calcular({ pedidos = [], propiedades = [], dias = 30, operacion = "venta", orgName = "", comision = "", ahora = Date.now() }) {
   const op = operacion === "arriendo" ? "arriendo" : "venta";
-  const unicos = deduplicar(pedidos.filter((s) => !s.clase || s.clase === "demanda"));
-  const delaOp = unicos.filter((s) => operacionDePedido(s) === op);
+  const todos = pedidos.filter((s) => !s.clase || s.clase === "demanda");
 
-  const celdas = new Map();
-  const celda = (macro, tipo, banda) => {
-    const k = claveCelda(macro, tipo, banda.id);
-    if (!celdas.has(k)) celdas.set(k, { macrozona: macro, tipo, banda, pedidos: [], tenemos: [] });
-    return celdas.get(k);
+  // Pedidos de la operacion dentro de una ventana de N dias (sin created_at
+  // cuenta como dentro). Los grupos se cuentan antes de deduplicar.
+  const ventana = (n) => {
+    const desde = ahora - n * 86400e3;
+    const dentro = todos.filter((s) => {
+      if (operacionDePedido(s) !== op) return false;
+      const t = s.created_at ? new Date(s.created_at).getTime() : NaN;
+      return Number.isNaN(t) || t >= desde;
+    });
+    return { gruposIds: new Set(dentro.map((s) => s.group_id).filter(Boolean)), unicos: deduplicar(dentro) };
+  };
+  const armar = (lista) => {
+    const m = new Map();
+    for (const s of lista) {
+      const banda = bandaDe(presupuesto(s), op);
+      for (const macro of macrozonasDePedido(s)) {
+        for (const tipo of tiposDePedido(s.tipo)) {
+          const k = claveCelda(macro, tipo, banda.id);
+          if (!m.has(k)) m.set(k, { macrozona: macro, tipo, banda, pedidos: [], tenemos: [] });
+          m.get(k).pedidos.push(s);
+        }
+      }
+    }
+    return m;
   };
 
-  const grupos = new Set();
+  const vSel = ventana(dias);
+  const delaOp = vSel.unicos;
+  const celdas = armar(delaOp);
+  const cuenta30 = dias === 30 ? null : armar(ventana(30).unicos);
+  const cuenta90 = dias === 90 ? null : armar(ventana(90).unicos);
+  const nEn = (mapa, selMapa, k) => (mapa || selMapa).get(k)?.pedidos.length || 0;
+
+  const grupos = vSel.gruposIds;
   const refsConMatch = new Set();
   let sinInventario = 0;
   for (const s of delaOp) {
-    if (s.group_id) grupos.add(s.group_id);
     const propias = refsPropias(s);
     for (const r of propias) refsConMatch.add(r);
     if (!propias.length) sinInventario++;
-    const banda = bandaDe(presupuesto(s), op);
-    for (const macro of macrozonasDePedido(s)) {
-      for (const tipo of tiposDePedido(s.tipo)) celda(macro, tipo, banda).pedidos.push(s);
-    }
   }
 
   const disponibles = propiedades.filter((p) => p.disponible !== false && operacionDePropiedad(p)[op]);
@@ -387,8 +423,12 @@ function calcular({ pedidos = [], propiedades = [], dias = 30, operacion = "vent
       const tenemos = c.tenemos.length;
       const porPropiedad = pedidosN / Math.max(tenemos, 1);
       const pedidosMes = Math.round((pedidosN * 30) / dias);
+      const id = claveCelda(c.macrozona, c.tipo, c.banda.id);
+      const n30 = nEn(cuenta30, celdas, id);
+      const n90 = nEn(cuenta90, celdas, id);
+      const arg = argumentoDeCelda({ orgName, n30, n90, tipo: c.tipo, macrozona: c.macrozona, banda: c.banda, tenemos, comision });
       return {
-        id: claveCelda(c.macrozona, c.tipo, c.banda.id),
+        id,
         macrozona: c.macrozona,
         tipo: c.tipo,
         banda: c.banda.id,
@@ -400,7 +440,10 @@ function calcular({ pedidos = [], propiedades = [], dias = 30, operacion = "vent
         porPropiedad: Math.round(porPropiedad * 10) / 10,
         caliente: porPropiedad >= umbral,
         quePiden: quePiden(c.pedidos, c.macrozona),
-        argumento: argumento({ orgName, pedidosMes, tipo: c.tipo, macrozona: c.macrozona, banda: c.banda, tenemos, comision }),
+        pedidos30: n30,
+        pedidos90: n90,
+        argumento: arg.texto,
+        argumentoMotivo: arg.motivo,
       };
     })
     .sort((a, b) => b.porPropiedad - a.porPropiedad || b.pedidos - a.pedidos);
@@ -452,6 +495,7 @@ module.exports = {
   refsPropias,
   quePiden,
   argumento,
+  argumentoDeCelda,
   tenemosTexto,
   comisionTexto,
   umbralCaliente,

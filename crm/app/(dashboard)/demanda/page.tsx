@@ -98,7 +98,7 @@ export default async function DemandaPage({
       </section>
 
       {mapa ? (
-        <MapaDemandaVista mapa={mapa} dias={dias} operacion={operacion} />
+        <MapaDemandaVista key={`${dias}-${operacion}`} mapa={mapa} dias={dias} operacion={operacion} />
       ) : (
         <div className="rounded-2xl border border-slate-200 bg-white px-5 py-10 text-center">
           <p className="text-base font-semibold text-slate-800">No pudimos traer el mapa de demanda en este momento.</p>

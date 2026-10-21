@@ -171,29 +171,70 @@ test("captaciones del mes en celdas calientes", () => {
 });
 
 const banda = md.BANDAS.venta.find((b) => b.id === "500-800");
-const base = { orgName: "Diamond Inmobiliaria", pedidosMes: 36, tipo: "apartamento", macrozona: "Envigado", banda, comision: "50/50 con la red" };
+const base = { orgName: "Diamond Inmobiliaria", colegas: 36, tipo: "apartamento", macrozona: "Envigado", banda, comision: "50/50 con la red" };
 
 test("argumento: texto exacto del mockup con 1 propiedad", () => {
   assert.equal(
     md.argumento({ ...base, tenemos: 1 }),
-    "Hola, soy de Diamond Inmobiliaria. Este mes 36 colegas de la red buscaron un apartamento como el suyo en Envigado (de 500 a 800 millones), y hoy solo tenemos uno para ofrecerles. Si nos da la exclusiva, su inmueble le llega a todos ellos el mismo día, con comisión compartida 50/50 con la red. ¿Le parece si lo visitamos esta semana?"
+    "Hola, soy de Diamond Inmobiliaria. Este mes 36 colegas de la red buscaron un apartamento como el suyo en Envigado (de 500 a 800 millones), y hoy solo tenemos uno para ofrecerles. Si nos da la exclusiva, su inmueble les llega a todos ellos el mismo día, con comisión compartida 50/50 con la red. ¿Le parece si lo visitamos esta semana?"
   );
 });
 
 test("argumento con 0 y con N, y comisión sin 50/50", () => {
   assert.equal(
     md.argumento({ ...base, tenemos: 0, comision: "" }),
-    "Hola, soy de Diamond Inmobiliaria. Este mes 36 colegas de la red buscaron un apartamento como el suyo en Envigado (de 500 a 800 millones), y hoy no tenemos ninguno para ofrecerles. Si nos da la exclusiva, su inmueble le llega a todos ellos el mismo día, compartiendo comisión con la red. ¿Le parece si lo visitamos esta semana?"
+    "Hola, soy de Diamond Inmobiliaria. Este mes 36 colegas de la red buscaron un apartamento como el suyo en Envigado (de 500 a 800 millones), y hoy no tenemos ninguno para ofrecerles. Si nos da la exclusiva, su inmueble les llega a todos ellos el mismo día, compartiendo comisión con la red. ¿Le parece si lo visitamos esta semana?"
   );
   assert.match(md.argumento({ ...base, tenemos: 3 }), /y hoy solo tenemos 3 para ofrecerles/);
   const casa = md.argumento({ ...base, tipo: "casa", tenemos: 1, banda: md.BANDAS.venta.find((b) => b.id === ">2000"), macrozona: "El Poblado" });
-  assert.match(casa, /buscaron una casa como el suyo en El Poblado \(de más de 2\.000 millones\), y hoy solo tenemos una para/);
+  assert.match(casa, /buscaron una casa como la suya en El Poblado \(de más de 2\.000 millones\), y hoy solo tenemos una para/);
 });
 
-test("el argumento de la celda usa pedidos/mes y tenemos", () => {
-  const pedidos = Array.from({ length: 109 }, () => ped({}));
-  const r = md.calcular({ pedidos, propiedades: [prop({})], dias: 90, orgName: "Diamond Inmobiliaria", comision: "50/50" });
-  const c = celda(r, "Envigado|apartamento|500-800");
-  assert.equal(c.pedidosMes, 36);
-  assert.equal(c.argumento, md.argumento({ ...base, tenemos: 1 }));
+test("argumento: concordancia por tipo (suyo/suya, uno/una, ninguno/ninguna)", () => {
+  for (const [tipo, fem] of [["apartamento", false], ["apartaestudio", false], ["lote", false], ["local", false], ["casa", true], ["finca", true], ["oficina", true], ["bodega", true]]) {
+    const t0 = md.argumento({ ...base, tipo, tenemos: 0 });
+    const t1 = md.argumento({ ...base, tipo, tenemos: 1 });
+    assert.match(t0, fem ? /una .* como la suya/ : /un .* como el suyo/, tipo);
+    assert.match(t0, fem ? /no tenemos ninguna para/ : /no tenemos ninguno para/, tipo);
+    assert.match(t1, fem ? /solo tenemos una para/ : /solo tenemos uno para/, tipo);
+  }
+  assert.match(md.argumento({ ...base, tenemos: 1 }), /su inmueble les llega a todos ellos/);
+});
+
+test("el argumento de la celda cuenta los ultimos 30 dias, sea cual sea el periodo", () => {
+  const ahora = Date.parse("2026-10-21T15:00:00Z");
+  const hace = (d) => new Date(ahora - d * 86400e3).toISOString();
+  // 5 en los ultimos 30 dias y 104 mas entre 31 y 89 dias.
+  const pedidos = [
+    ...Array.from({ length: 5 }, () => ped({ created_at: hace(3) })),
+    ...Array.from({ length: 104 }, () => ped({ created_at: hace(60) })),
+  ];
+  for (const dias of [7, 30, 90]) {
+    const r = md.calcular({ pedidos, propiedades: [prop({})], dias, orgName: "Diamond Inmobiliaria", comision: "50/50", ahora });
+    const c = celda(r, "Envigado|apartamento|500-800");
+    assert.equal(c.pedidos30, 5);
+    assert.equal(c.pedidos90, 109);
+    assert.equal(c.argumento, md.argumento({ ...base, colegas: 5, ventana: "mes", tenemos: 1 }), `dias=${dias}`);
+    assert.match(c.argumento, /Este mes 5 colegas/);
+  }
+});
+
+test("argumento: con menos de 3 en 30 dias usa 90 dias; con menos de 3 en 90, no se ofrece", () => {
+  const ahora = Date.parse("2026-10-21T15:00:00Z");
+  const hace = (d) => new Date(ahora - d * 86400e3).toISOString();
+  const tres90 = [ped({ created_at: hace(2) }), ped({ created_at: hace(40) }), ped({ created_at: hace(70) })];
+  const c = celda(md.calcular({ pedidos: tres90, propiedades: [], dias: 30, orgName: "D", ahora }), "Envigado|apartamento|500-800");
+  assert.match(c.argumento, /En los últimos tres meses 3 colegas de la red buscaron/);
+  const uno = [ped({ created_at: hace(80) })];
+  const c1 = celda(md.calcular({ pedidos: uno, propiedades: [], dias: 90, orgName: "D", ahora }), "Envigado|apartamento|500-800");
+  assert.equal(c1.argumento, null);
+  assert.equal(c1.argumentoMotivo, "Muy pocos pedidos para usar como argumento");
+  assert.doesNotMatch(JSON.stringify(c1), /Este mes 0/);
+});
+
+test("KPI grupos cuenta los grupos antes de deduplicar", () => {
+  const pedidos = [ped({ texto_original: "igual", group_id: "g1" }), ped({ texto_original: "igual", group_id: "g2" }), ped({ group_id: "g3" })];
+  const r = md.calcular({ pedidos, propiedades: [], dias: 30 });
+  assert.equal(r.kpis.pedidos, 2);
+  assert.equal(r.kpis.grupos, 3);
 });

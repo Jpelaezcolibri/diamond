@@ -47,7 +47,8 @@ async function mapa(org, { dias = 30, operacion = "venta", ahora = Date.now() } 
   const hit = cache.get(clave);
   if (hit && ahora - hit.at < CACHE_MS) return { ...hit.valor, cache: true };
   if (!supabase) throw new Error("El mapa de demanda requiere Supabase");
-  const desde = new Date(ahora - dias * 86400e3).toISOString();
+  // Siempre 90 dias: el calculo filtra el periodo y cuenta 30/90 para el argumento.
+  const desde = new Date(ahora - 90 * 86400e3).toISOString();
   const [pedidos, propiedades] = await Promise.all([pedidosDesde(org.id, desde), propiedadesDe(org.id)]);
   const valor = {
     ...mapaDemanda.calcular({

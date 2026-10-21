@@ -1117,16 +1117,15 @@ router.post("/api/propiedades/vigencia", async (req, res) => {
 
 // Mapa de demanda para captar (CRM /demanda, mockup aprobado 2026-10-21).
 // Solo lectura. Mismo control que /api/respuestas/atendida: del equipo
-// (asesor activo) o admin del CRM. GET con query o POST con body (callBot
-// del CRM hace POST).
+// (asesor activo) o admin del CRM. Solo POST (callBot del CRM hace POST).
 const demanda = require("../data/demanda");
 const DIAS_DEMANDA = [7, 30, 90];
 
 async function mapaDemanda(req, res) {
   try {
-    const p = { ...(req.query || {}), ...(req.body || {}) };
+    const p = req.body || {};
     const { authUserId } = p;
-    const esAdmin = p.esAdmin === true || p.esAdmin === "true";
+    const esAdmin = p.esAdmin === true;
     if (!authUserId) return res.status(400).json({ ok: false, error: "falta authUserId" });
     const dias = DIAS_DEMANDA.includes(Number(p.dias)) ? Number(p.dias) : 30;
     const operacion = p.operacion === "arriendo" ? "arriendo" : "venta";
@@ -1142,7 +1141,6 @@ async function mapaDemanda(req, res) {
     res.status(500).json({ ok: false, error: e.message });
   }
 }
-router.get("/api/demanda", mapaDemanda);
 router.post("/api/demanda", mapaDemanda);
 
 module.exports = router;

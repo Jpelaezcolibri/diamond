@@ -1,5 +1,5 @@
 // Tipos y constantes del Mapa de demanda (CRM /demanda). El calculo lo hace
-// el bot (src/groups/mapa-demanda.js, GET/POST /api/demanda); aca solo lo que
+// el bot (src/groups/mapa-demanda.js, POST /api/demanda); aca solo lo que
 // la pagina necesita para pintarlo.
 
 export const META_CAPTACIONES_MES = 10;
@@ -20,7 +20,10 @@ export type Celda = {
   porPropiedad: number;
   caliente: boolean;
   quePiden: { barras: { texto: string; pct: number }[]; barrios: string[] };
-  argumento: string;
+  pedidos30: number;
+  pedidos90: number;
+  argumento: string | null;
+  argumentoMotivo: string | null;
 };
 
 export type NoCalza = { ref: string; titulo: string | null; zona: string | null; motivo: string };

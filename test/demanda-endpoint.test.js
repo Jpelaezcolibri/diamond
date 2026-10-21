@@ -59,12 +59,12 @@ test("asesor activo: calcula con la org por defecto y el periodo pedido", async 
   assert.deepEqual(mapa.mock.calls[0].arguments, [ORG, { dias: 90, operacion: "arriendo" }]);
 });
 
-test("admin no necesita fila de asesor; valores raros caen a 30 días y venta (GET)", async (t) => {
+test("admin no necesita fila de asesor; valores raros caen a 30 días y venta", async (t) => {
   t.mock.method(organizations, "getDefault", async () => ORG);
   const buscar = t.mock.method(advisors, "findByAuthUserId", async () => null);
   const mapa = t.mock.method(demanda, "mapa", async () => ({}));
   const res = respuestaFalsa();
-  await rutaDe("/api/demanda", "get")({ query: { authUserId: "u1", esAdmin: "true", dias: "45", operacion: "x" } }, res);
+  await rutaDe("/api/demanda")({ body: { authUserId: "u1", esAdmin: true, dias: 45, operacion: "x" } }, res);
   assert.equal(res.codigo, 200);
   assert.equal(buscar.mock.callCount(), 0);
   assert.deepEqual(mapa.mock.calls[0].arguments[1], { dias: 30, operacion: "venta" });
