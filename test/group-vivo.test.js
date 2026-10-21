@@ -155,6 +155,8 @@ function instalarDobles() {
   require.cache[RUTA("data/advisors.js")] = {
     exports: {
       findByPhone: async () => revisorEncontrado,
+      // Destinatario = solo fila activa (2026-10-21).
+      findDestinatarioByPhone: async () => (revisorEncontrado && revisorEncontrado.activo !== false ? revisorEncontrado : null),
     },
   };
   require.cache[RUTA("lib/waha.js")] = {

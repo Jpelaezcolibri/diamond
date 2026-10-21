@@ -452,29 +452,32 @@ router.post("/webhook", async (req, res) => {
       if (transfer) {
         // TODO AL CHAT DEL CRM (plan 6, 2026-10-07): la transferencia queda en
         // el chat de este cliente, asignado al asesor; notificacion en la app
-        // con link al chat y aviso corto por WhatsApp sin datos. El asesor toma
-        // la conversacion desde el CRM y escribe por el numero de Sofi.
-        const { avisarAsesor } = require("../notifications/avisar-asesor");
-        const r = await avisarAsesor({
-          org,
-          advisor: transfer.advisor,
-          motivo: "transferido",
-          lead: leadAtendido,
-          titulo: `Sofi te transfirió a ${(leadAtendido && leadAtendido.nombre) || `+${userPhone}`}`,
-          cuerpo: transfer.motivo || null,
-        }).catch((e) => ({ ok: false, error: e.message }));
-        if (!r.ok) {
-          console.error(`[whatsapp] Aviso de transferencia a ${transfer.advisorName} (${transfer.advisorPhone}) NO se pudo enviar:`, r.error);
-          if (transfer.conversationId) {
-            await conversations
-              .appendMessage(transfer.conversationId, "system", `⚠️ El aviso de transferencia a ${transfer.advisorName} no se pudo enviar (${r.error || "error desconocido"}). Avisale por otra via.`)
-              .catch((e) => console.warn("[whatsapp] No se pudo dejar la nota del fallo:", e.message));
-          }
-        }
+        // con link al chat y aviso corto por WhatsApp sin datos. Desde
+        // 2026-10-21 ademas Sofi queda EN PAUSA (modo humano) despues de la
+        // despedida, y si no hay asesora a quien avisar, Juan recibe una
+        // alerta tecnica. Todo eso vive en src/lib/transferencia.js.
+        const { cerrarTransferencia } = require("../lib/transferencia");
+        await cerrarTransferencia({ org, transfer, lead: leadAtendido, telefonoCliente: userPhone }).catch((e) =>
+          console.error("[whatsapp] No se pudo cerrar la transferencia:", e.message)
+        );
       }
+      // AVISOS A LA ASESORA SOLO POR LA CAMPANA DEL CRM (Juan, 2026-10-21):
+      // el match de aliado, el interes en una propiedad captada y la cita fuera
+      // de la rotacion salian como texto libre por WhatsApp con los datos del
+      // cliente (y fuera de la ventana de 24 h Meta los rechazaba). Ahora van
+      // por avisarAsesor: campana + push con link al chat, y por WhatsApp solo
+      // la plantilla aviso_app sin datos. La informacion queda en el cuerpo de
+      // la campana, que es dentro del CRM.
+      const { avisarPorCampana } = require("../notifications/avisar-asesor");
       if (allyAlert) {
-        const r = await sendWhatsApp(org, allyAlert.advisorPhone, allyAlert.advisorAlert, { fromPhoneId: phoneNumberId });
-        if (!r.ok) console.error(`[whatsapp] Aviso de match de aliado a ${allyAlert.advisorPhone} NO se pudo enviar:`, r.error);
+        await avisarPorCampana({
+          org,
+          alerta: allyAlert,
+          motivo: "aviso",
+          lead: leadAtendido,
+          titulo: "Un cliente hace match con una propiedad de colega",
+          que: "match de aliado",
+        });
       }
       if (appointmentAlert && appointmentAlert.porPlantilla) {
         // ROTACION (2026-10-07): la cita va por la plantilla cita_por_confirmar
@@ -489,30 +492,29 @@ router.post("/webhook", async (req, res) => {
         }).catch((e) => ({ ok: false, error: e.message }));
         if (!r.ok) console.error(`[whatsapp] Aviso de cita a ${appointmentAlert.advisorName} NO se pudo entregar:`, r.error);
       } else if (appointmentAlert) {
-        // CON RESPALDO (Juan, 2026-09-11): "siempre las citas van al numero de
-        // Daiana que tiene la ventana abierta... y luego al otro numero". Antes
-        // salia con sendWhatsApp directo: la visita de Sebastian Velasquez se
-        // le aviso a una asesora con la ventana cerrada hacia 142 h y se perdio
-        // sin que nada lo dijera. entregarConRespaldo la pasa al numero de
-        // respaldo si la ventana esta cerrada, y la deja registrada en el
-        // Inbox. Reemplaza a las copias del 2026-09-04: el segundo numero ya no
-        // recibe todo dos veces, recibe lo que el primero no pudo.
-        // Require tardio: entrega-asesor -> mensaje-asesor -> este archivo.
-        const { entregarConRespaldo } = require("../lib/entrega-asesor");
-        const principal = {
-          id: appointmentAlert.advisorId || null,
-          name: appointmentAlert.advisorName || null,
-          phone: appointmentAlert.advisorPhone,
-        };
-        const r = await entregarConRespaldo(org, principal, appointmentAlert.advisorAlert).catch((e) => ({
-          ok: false,
-          error: e.message,
-        }));
-        if (!r.ok) console.error(`[whatsapp] Aviso de cita a ${appointmentAlert.advisorPhone} NO se pudo entregar:`, r.error);
+        // Cita fuera de la rotacion (la de un colega, o sin ciclo de citas):
+        // va a quien coordina las visitas, por la campana. La plantilla
+        // aviso_app no depende de la ventana de 24 h, que era lo que obligaba
+        // al respaldo por texto (caso Sebastian Velasquez, 2026-09-11).
+        await avisarPorCampana({
+          org,
+          alerta: appointmentAlert,
+          motivo: "visita",
+          lead: leadAtendido,
+          titulo: "Visita por confirmar",
+          que: "cita",
+          alertaTecnicaSiFalla: true,
+        });
       }
       if (captadorAlert) {
-        const r = await sendWhatsApp(org, captadorAlert.advisorPhone, captadorAlert.advisorAlert, { fromPhoneId: phoneNumberId });
-        if (!r.ok) console.error(`[whatsapp] Aviso de captador a ${captadorAlert.advisorPhone} NO se pudo enviar:`, r.error);
+        await avisarPorCampana({
+          org,
+          alerta: captadorAlert,
+          motivo: "aviso",
+          lead: leadAtendido,
+          titulo: "Un cliente se interesó en tu propiedad",
+          que: "captador",
+        });
       }
     });
   } catch (e) {

@@ -453,6 +453,8 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
       advisor,
       advisorName: advisor.name,
       advisorPhone: advisor.phone,
+      // El resumen del cliente: va en el CUERPO de la campana del CRM
+      // (src/lib/transferencia.js), nunca por WhatsApp (2026-10-21).
       advisorAlert: buildAdvisorAlert(org, lead, ctx.transfer.motivo, ctx.propertyInteres, ctx.transfer.especialidad, ctx.cita, ctx.allyMatch),
       // Para poder dejar constancia EN LA MISMA conversacion si el aviso al
       // asesor falla (Juan, 2026-08-20 — ver whatsapp.js). Antes el envio se

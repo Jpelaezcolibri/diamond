@@ -1,14 +1,14 @@
-// EL AVISO DE UNA CITA NO SE PUEDE PERDER (Juan, 2026-09-11).
+// EL AVISO DE UNA CITA NO SE PUEDE PERDER (Juan, 2026-09-11) — Y VA POR LA
+// CAMPANA DEL CRM (Juan, 2026-10-21).
 //
-// "siempre las citas van al numero de Daiana que tiene la ventana abierta...
-// el principal es el que tenemos con la automatizacion de la ventana abierta
-// y luego al otro numero".
-//
-// Caso real: la visita de Sebastian Velasquez (11-sep, 3:00 p. m.) se aviso
-// con un sendWhatsApp directo a una asesora con la ventana cerrada hacia
-// 142 h. WhatsApp no se lo entrego y nada lo dijo. Ahora el aviso sale por
-// entregarConRespaldo: si la ventana de la coordinadora esta cerrada, pasa al
-// numero de respaldo (RADAR_ESCALADO_PHONE).
+// Caso real 2026-09-11: la visita de Sebastian Velasquez se aviso con un
+// sendWhatsApp directo a una asesora con la ventana cerrada hacia 142 h, y se
+// perdio. Hasta 2026-10-21 la salida era entregarConRespaldo (texto libre con
+// los datos del cliente, y si la ventana estaba cerrada, al numero de
+// respaldo). Ahora la cita fuera de la rotacion (la de un colega, o sin ciclo
+// de citas) va por avisarAsesor: campana + push con link al chat y, por
+// WhatsApp, solo la plantilla aviso_app, que no depende de la ventana. Si no
+// hay asesora con usuario a quien avisar, Juan recibe una alerta tecnica.
 //
 // Se mete un body de webhook de Meta por el handler real del router (mismo
 // patron que test/whatsapp-usuario-sin-telefono.test.js).
@@ -21,14 +21,14 @@ config.metaAppSecret = null;
 
 const organizations = require("../src/data/organizations");
 const engine = require("../src/agent/engine");
-const advisors = require("../src/data/advisors");
 const mensajeAsesor = require("../src/lib/mensaje-asesor");
+const avisar = require("../src/notifications/avisar-asesor");
+const alertaSaldo = require("../src/lib/alerta-saldo");
 const router = require("../src/channels/whatsapp");
 
 const ORG = { id: "org-1", name: "Diamond", whatsapp_token: "tok", whatsapp_phone_id: "PID" };
-const CERRADA = "(#131047) Message failed to send because more than 24 hours have passed";
 const PRINCIPAL = "573011880668";
-const RESPALDO = "573001878024";
+const DAIANA = { id: "adv-daiana", name: "Daiana Zea", phone: PRINCIPAL, activo: true };
 
 function handler() {
   const capa = router.stack.find((c) => c.route?.path === "/webhook" && c.route.methods.post);
@@ -49,49 +49,65 @@ function webhookMeta(wamid) {
 async function entregar(req) {
   const res = { sendStatus: () => res };
   await handler()(req, res);
-  // El handler responde 200 y procesa encolado: se deja drenar la cola.
   await new Promise((r) => setTimeout(r, 50));
 }
 
-function preparar(t, resultadoPorTelefono) {
+function preparar(t, appointmentAlert) {
   t.mock.method(organizations, "findByWhatsappPhoneId", async () => ORG);
   t.mock.method(organizations, "getDefault", async () => ORG);
   t.mock.method(engine, "procesarMensaje", async () => ({
     reply: "Quedó solicitada tu visita.",
-    appointmentAlert: { advisorPhone: PRINCIPAL, advisorName: "Daiana Zea", advisorId: "adv-daiana", advisorAlert: "📅 Nueva cita PROPUESTA" },
+    lead: { id: "lead-1", nombre: "Sebastian" },
+    appointmentAlert,
     assistantMessageId: null,
   }));
-  // La respuesta al cliente sale por Graph directo: se acepta sin mas.
   t.mock.method(globalThis, "fetch", async () => ({ ok: true, status: 200, json: async () => ({ messages: [{ id: "wamid.SALE" }] }) }));
-  t.mock.method(advisors, "listElegibles", async () => []);
-  t.mock.method(advisors, "findByPhone", async (orgId, tel) =>
-    tel === RESPALDO ? { id: "adv-daiana-2", name: "Daiana Zea (línea 2)", phone: RESPALDO, activo: true } : null
-  );
-  const avisos = [];
+  const textosLibres = [];
   t.mock.method(mensajeAsesor, "enviarYRegistrar", async (org, tel, texto) => {
-    avisos.push({ tel, texto });
-    return resultadoPorTelefono[tel] || { ok: true, wamid: `wm-${tel}` };
+    textosLibres.push({ tel, texto });
+    return { ok: true };
   });
-  const previo = process.env.RADAR_ESCALADO_PHONE;
-  process.env.RADAR_ESCALADO_PHONE = RESPALDO;
-  t.after(() => {
-    if (previo === undefined) delete process.env.RADAR_ESCALADO_PHONE;
-    else process.env.RADAR_ESCALADO_PHONE = previo;
+  const campanas = [];
+  t.mock.method(avisar, "avisarAsesor", async (args) => {
+    campanas.push(args);
+    return args.advisor && args.advisor.id ? { ok: true, whatsapp: true } : { ok: false, error: "sin asesora con usuario" };
   });
-  return { avisos };
+  const alertas = [];
+  t.mock.method(alertaSaldo, "enviarAlertaTecnica", async (resumen, detalle) => {
+    alertas.push(`${resumen} ${detalle}`);
+  });
+  return { textosLibres, campanas, alertas };
 }
 
-test("ventana de la coordinadora cerrada: el aviso de cita pasa al numero de respaldo", async (t) => {
-  const { avisos } = preparar(t, { [PRINCIPAL]: { ok: false, error: CERRADA } });
+test("la cita fuera de la rotacion va por la campana del CRM, con el detalle adentro y sin texto libre", async (t) => {
+  const { textosLibres, campanas, alertas } = preparar(t, {
+    advisor: DAIANA,
+    advisorPhone: PRINCIPAL,
+    advisorName: DAIANA.name,
+    advisorId: DAIANA.id,
+    advisorAlert: "📅 Nueva cita PROPUESTA · Sebastian +573023980359",
+  });
   await entregar(webhookMeta("wamid.CITA1"));
 
-  assert.deepStrictEqual(avisos.map((a) => a.tel), [PRINCIPAL, RESPALDO], "primero el principal, luego el respaldo");
-  assert.match(avisos[1].texto, /Nueva cita PROPUESTA/, "el aviso original va completo");
+  assert.strictEqual(campanas.length, 1);
+  assert.strictEqual(campanas[0].advisor.id, DAIANA.id);
+  assert.strictEqual(campanas[0].motivo, "visita");
+  assert.match(campanas[0].cuerpo, /Nueva cita PROPUESTA/, "el detalle queda en la campana (dentro del CRM)");
+  assert.strictEqual(textosLibres.length, 0, "nada sale como texto libre con datos del cliente");
+  assert.strictEqual(alertas.length, 0);
 });
 
-test("con la ventana abierta, el aviso de cita sale solo al principal", async (t) => {
-  const { avisos } = preparar(t, {});
+test("cita sin asesora con usuario: alerta tecnica a Juan, sin el telefono del cliente", async (t) => {
+  const { textosLibres, alertas } = preparar(t, {
+    advisorPhone: "573000000000",
+    advisorName: "Asesor",
+    advisorId: null,
+    advisorAlert: "📅 Nueva cita PROPUESTA · +573023980359",
+  });
   await entregar(webhookMeta("wamid.CITA2"));
 
-  assert.deepStrictEqual(avisos.map((a) => a.tel), [PRINCIPAL]);
+  assert.strictEqual(textosLibres.length, 0);
+  assert.strictEqual(alertas.length, 1);
+  assert.match(alertas[0], /lead-1/);
+  assert.doesNotMatch(alertas[0], /3023980359/);
 });

@@ -90,7 +90,7 @@ async function runVenta(org, cutoffIso) {
 
   // Se resuelve UNA vez por org, no por señal: el nombre no cambia entre
   // candidatos de la misma corrida (Juan, 2026-09-10).
-  const revisora = await advisors.findByPhone(org.id, RADAR_REVISOR_PHONE()).catch(() => null);
+  const revisora = await advisors.findDestinatarioByPhone(org.id, RADAR_REVISOR_PHONE()).catch(() => null);
   const nombreRevisora = revisora && revisora.name;
 
   for (const señal of candidatos) {

@@ -429,7 +429,9 @@ async function maybeCaptadorAlert(ctx, property) {
     if (!esNuevo) return;
     const advisor = await advisors.findById(ctx.org.id, property.captador_id);
     if (!advisor || advisor.activo === false) return;
-    ctx.captadorAlert = { advisorPhone: advisor.phone, advisorAlert: buildCaptadorInterestAlert(property, ctx.lead) };
+    // Va por la campana del CRM (+ aviso_app sin datos), nunca texto libre por
+    // WhatsApp con los datos del cliente (2026-10-21; ver whatsapp.js).
+    ctx.captadorAlert = { advisor, advisorPhone: advisor.phone, advisorAlert: buildCaptadorInterestAlert(property, ctx.lead) };
   } catch (e) {
     console.warn("[tools] No se pudo generar el aviso al captador (revisar migracion property_captador):", e.message);
   }
@@ -446,7 +448,8 @@ async function maybeCaptadorAlert(ctx, property) {
 // rotacion.
 async function resolveLeadAdvisor(ctx, especialidad) {
   // COLEGA (Juan, 2026-09-04): "que todo llegue a Natalia... natalia sera la
-  // encargada de todo en esa linea". Una visita que pide un colega de otra
+  // encargada de todo en esa linea" — hoy esa persona es Daiana (la que diga
+  // RADAR_REVISOR_PHONE); Natalia esta inactiva desde 2026-09-10. Una visita que pide un colega de otra
   // inmobiliaria no entra a la rotacion de leads propios: la atiende siempre
   // la asesora principal del radar, que es la misma persona que ya recibe
   // todo lo que viene del gremio (findAsesorPrincipalRadar resuelve por
@@ -629,7 +632,9 @@ async function armarAvisoCitaColega(ctx, advisor, cita, ref) {
     cita,
     ref,
   });
-  return { advisorPhone: advisor.phone, advisorName: advisor.name || null, advisorId: advisor.id || null, advisorAlert };
+  // El canal lo entrega por la campana del CRM (avisarAsesor, motivo visita),
+  // no como texto libre con los datos del colega (2026-10-21).
+  return { advisor, advisorPhone: advisor.phone, advisorName: advisor.name || null, advisorId: advisor.id || null, advisorAlert };
 }
 
 // AVISO INMEDIATO cuando un COLEGA (no un asesor reenviando) le hace un
@@ -645,7 +650,8 @@ async function armarAvisoCitaColega(ctx, advisor, cita, ref) {
 // Resultado real: Sofi le aseguraba a un colega que lo iban a contactar y
 // nadie se enteraba nunca.
 //
-// Se reusa RADAR_REVISOR_PHONE (Natalia) — el mismo destinatario que ya usa
+// Se reusa RADAR_REVISOR_PHONE (la asesora principal: hoy Daiana; en 2026-08 era
+// Natalia, hoy inactiva) — el mismo destinatario que ya usa
 // src/groups/vivo.js#avisarCercano para todo pedido de un grupo que el bot no
 // puede cerrar solo — en vez de inventar un destinatario nuevo: ya es el
 // punto de triage establecido para esto. Best-effort y nunca bloqueante:
@@ -688,7 +694,7 @@ async function avisarDemandaColegaInmediata(ctx, { contacto, contactoTelefono, m
     return;
   }
   avisosDemandaRecientes.set(clave, Date.now());
-  const revisor = await advisors.findByPhone(ctx.org.id, RADAR_REVISOR_PHONE).catch(() => null);
+  const revisor = await advisors.findDestinatarioByPhone(ctx.org.id, RADAR_REVISOR_PHONE).catch(() => null);
   if (!revisor) {
     avisosDemandaRecientes.delete(clave);
     return;
@@ -836,8 +842,9 @@ async function executeTool(name, input, ctx) {
               const advisor = ctx.allyMatch.puente_advisor_id
                 ? await advisors.findById(ctx.org.id, ctx.allyMatch.puente_advisor_id)
                 : await advisors.findByAuthUserId(ctx.org.id, ctx.allyMatch.registrado_por);
-              if (advisor) {
-                ctx.allyAlert = { advisorPhone: advisor.phone, advisorAlert: buildAllyClientMatchAlert(ctx.allyMatch, ctx.lead) };
+              if (advisor && advisor.activo !== false) {
+                // Por la campana del CRM, no por WhatsApp libre (2026-10-21).
+                ctx.allyAlert = { advisor, advisorPhone: advisor.phone, advisorAlert: buildAllyClientMatchAlert(ctx.allyMatch, ctx.lead) };
               }
             }
           } catch (e) {
@@ -1025,6 +1032,7 @@ async function executeTool(name, input, ctx) {
       ctx.appointmentAlert = ctx.colega
         ? await armarAvisoCitaColega(ctx, advisor, cita, cita.ref)
         : {
+            advisor,
             advisorPhone: advisor.phone,
             advisorName: advisor.name || null,
             advisorId: advisor.id || null,
@@ -1121,10 +1129,15 @@ async function executeTool(name, input, ctx) {
       input.especialidad ||
       (ctx.propertyInteres?.operacion || "").toLowerCase() ||
       "venta";
-    const advisor = await resolveLeadAdvisor(ctx, especialidad);
-    if (!advisor) {
-      return "No hay asesor configurado para esta organizacion. Pide disculpas y dile al cliente que pronto lo contactaran.";
-    }
+    // Sin asesor (ni siquiera el de la org) la transferencia igual se registra
+    // (2026-10-21): el lead queda en "Para atender" y Juan recibe una alerta
+    // tecnica (src/lib/transferencia.js). Sofi no promete un aviso que no salio.
+    const advisor = (await resolveLeadAdvisor(ctx, especialidad)) || {
+      id: null,
+      name: ctx.org.advisor_name || "Sin asesor",
+      phone: null,
+      especialidad: "general",
+    };
     ctx.transfer = { motivo: input.motivo || "Cliente solicito asesor", advisor, especialidad };
     const catMap = { venta: "compra", arriendo: "alquiler" };
     // Un vendedor no es del tablero "compra": su categoria es "otros" (captacion).

@@ -63,7 +63,7 @@ test("si la plantilla no está aprobada, cae a un texto corto igual de pelado", 
 
 test("sin asesor no hace nada", async () => {
   const { log, d } = deps();
-  assert.deepStrictEqual(await avisarAsesor({ org: ORG, advisor: null, motivo: "pide_asesor", lead: LEAD, titulo: "x" }, d), { ok: false });
+  assert.strictEqual((await avisarAsesor({ org: ORG, advisor: null, motivo: "pide_asesor", lead: LEAD, titulo: "x" }, d)).ok, false);
   assert.strictEqual(log.notas.length, 0);
 });
 
@@ -71,7 +71,11 @@ test("la transferencia del webhook va por avisarAsesor y no por un texto al celu
   const fuente = require("node:fs").readFileSync(require("node:path").join(__dirname, "..", "src", "channels", "whatsapp.js"), "utf8");
   const i = fuente.indexOf("if (transfer) {");
   const bloque = fuente.slice(i, i + 1500);
-  assert.match(bloque, /avisarAsesor\(/);
-  assert.match(bloque, /motivo: "transferido"/);
+  // Desde 2026-10-21 el cierre (aviso + pausa + alerta sin asesora) vive en src/lib/transferencia.js.
+  assert.match(bloque, /cerrarTransferencia\(/);
   assert.doesNotMatch(bloque, /sendWhatsApp\(org, transfer\.advisorPhone, transfer\.advisorAlert/);
+  const cierre = require("node:fs").readFileSync(require("node:path").join(__dirname, "..", "src", "lib", "transferencia.js"), "utf8");
+  assert.match(cierre, /avisarAsesor\(/);
+  assert.match(cierre, /motivo: "transferido"/);
+  assert.doesNotMatch(fuente, /sendWhatsApp\(org, (allyAlert|captadorAlert)\.advisorPhone/, "ningun aviso a la asesora sale como texto libre");
 });

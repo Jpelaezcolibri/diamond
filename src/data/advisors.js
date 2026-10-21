@@ -208,7 +208,29 @@ function mismoTelefono(a, b) {
 function buscarEnLista(lista, phone) {
   const candidatos = (lista || []).filter((a) => mismoTelefono(a.phone, phone));
   if (candidatos.length === 0) return null;
-  return candidatos.find((a) => a.activo !== false) || candidatos[0];
+  // Orden estable: activa primero; entre activas, la que tiene login del CRM;
+  // y por id, para que el resultado no dependa del orden de la consulta.
+  // Caso real (2026-10-21): el 8024 es a la vez de Natalia Velez (inactiva) y
+  // de "Daiana Zea (línea 2)" (activa) — siempre tiene que ganar la segunda.
+  const orden = [...candidatos].sort((x, y) => {
+    const ax = x.activo !== false ? 0 : 1;
+    const ay = y.activo !== false ? 0 : 1;
+    if (ax !== ay) return ax - ay;
+    const lx = x.auth_user_id ? 0 : 1;
+    const ly = y.auth_user_id ? 0 : 1;
+    if (lx !== ly) return lx - ly;
+    return String(x.id).localeCompare(String(y.id));
+  });
+  return orden[0];
+}
+
+// Para ELEGIR A QUIEN AVISARLE (no para reconocer quien escribe): solo una
+// fila activa. Una inactiva solo sale de buscarEnLista cuando no hay ninguna
+// activa con ese telefono, y en ese caso no es destinataria de nada (2026-10-21).
+// Pura, exportada para tests.
+function destinatarioEnLista(lista, phone) {
+  const a = buscarEnLista(lista, phone);
+  return a && a.activo !== false ? a : null;
 }
 
 async function findByPhone(orgId, phone) {
@@ -221,15 +243,24 @@ async function findByPhone(orgId, phone) {
   return buscarEnLista(lista, phone);
 }
 
-// El asesor PRINCIPAL del radar de grupos: siempre Natalia (linea RADA-NATALIA,
-// la unica dentro de los grupos gremiales — puede copiar el aviso directo al
-// grupo del que se esta hablando). Si RADAR_REVISOR_PHONE no esta configurada
-// o no resuelve a nadie, cae a la rotacion de siempre (findForTransfer) para
-// que el sistema nunca se quede sin nadie a quien avisar.
+// El asesor ACTIVO de ese telefono, para MANDARLE algo (avisos, respaldo de
+// entrega, el principal del radar). findByPhone sigue sirviendo para reconocer
+// quien escribe (un asesor dado de baja tampoco es un cliente). Pasa por
+// module.exports.findByPhone para que los tests que la simulan sigan valiendo.
+async function findDestinatarioByPhone(orgId, phone) {
+  const a = await module.exports.findByPhone(orgId, phone);
+  return a && a.activo !== false ? a : null;
+}
+
+// El asesor PRINCIPAL del radar de grupos: quien diga RADAR_REVISOR_PHONE (hoy
+// Daiana, la linea que esta dentro de los grupos gremiales; hasta sep-2026 fue
+// Natalia, hoy inactiva). Solo una fila ACTIVA. Si RADAR_REVISOR_PHONE no esta
+// configurada o no resuelve a nadie, cae a la rotacion de siempre
+// (findForTransfer) para que el sistema nunca se quede sin nadie a quien avisar.
 async function findAsesorPrincipalRadar(org) {
   const telefono = process.env.RADAR_REVISOR_PHONE || "";
   if (telefono) {
-    const porTelefono = await findByPhone(org.id, telefono).catch(() => null);
+    const porTelefono = await findDestinatarioByPhone(org.id, telefono).catch(() => null);
     if (porTelefono) return porTelefono;
   }
   return findForTransfer(org, "venta");
@@ -256,4 +287,4 @@ async function searchByName(orgId, q) {
   return data || [];
 }
 
-module.exports = { findForTransfer, findAsesorPrincipalRadar, findByAuthUserId, findById, findByPhone, mismoTelefono, buscarEnLista, searchByName, rotationCandidates, nextInRotation, listElegibles, elegiblesEnLista };
+module.exports = { findForTransfer, findAsesorPrincipalRadar, findByAuthUserId, findById, findByPhone, findDestinatarioByPhone, mismoTelefono, buscarEnLista, destinatarioEnLista, searchByName, rotationCandidates, nextInRotation, listElegibles, elegiblesEnLista };

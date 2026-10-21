@@ -33,7 +33,10 @@ function depsPorDefecto() {
 }
 
 async function avisarAsesor({ org, advisor, motivo, lead, titulo, cuerpo = null }, deps = null) {
-  if (!advisor || !advisor.id || !org) return { ok: false };
+  if (!advisor || !advisor.id || !org) return { ok: false, error: "sin asesora con usuario" };
+  // Un asesor dado de baja no recibe nada (2026-10-21: Natalia, inactiva,
+  // comparte el 8024 con la linea 2 de Daiana).
+  if (advisor.activo === false) return { ok: false, error: "asesor dado de baja" };
   const m = MOTIVOS[motivo] || MOTIVOS.aviso;
   const d = deps || depsPorDefecto();
 
@@ -63,4 +66,30 @@ async function avisarAsesor({ org, advisor, motivo, lead, titulo, cuerpo = null 
   return { ok: true, whatsapp };
 }
 
-module.exports = { avisarAsesor, MOTIVOS };
+// Envoltorio para los avisos que arma tools.js ({advisor, advisorAlert, ...}):
+// el captador, el match de aliado y la cita fuera de la rotacion (2026-10-21).
+// Antes salian como texto libre por WhatsApp con los datos del cliente; ahora
+// el texto completo va al cuerpo de la campana (dentro del CRM) y por WhatsApp
+// solo sale aviso_app. Nunca lanza. Con `alertaTecnicaSiFalla` (la cita), si no
+// hay asesora con id a quien avisar, Juan recibe una alerta tecnica sin datos
+// del cliente.
+async function avisarPorCampana({ org, alerta, motivo, lead, titulo, que = "aviso", alertaTecnicaSiFalla = false }, deps = null) {
+  if (!alerta) return { ok: false };
+  const advisor = alerta.advisor || (alerta.advisorId ? { id: alerta.advisorId, name: alerta.advisorName || null, phone: alerta.advisorPhone || null } : null);
+  const r = await module.exports.avisarAsesor({ org, advisor, motivo, lead, titulo, cuerpo: alerta.advisorAlert || null }, deps ? deps.avisar : null).catch((e) => ({
+    ok: false,
+    error: e.message,
+  }));
+  if (r && r.ok) return r;
+  const quien = (advisor && (advisor.name || advisor.id)) || "nadie";
+  console.error(`[avisar-asesor] Aviso de ${que} a ${quien} NO se pudo dejar en el CRM:`, (r && r.error) || "sin asesora con usuario");
+  if (alertaTecnicaSiFalla) {
+    const alertaTecnica = (deps && deps.alertaTecnica) || require("../lib/alerta-saldo").enviarAlertaTecnica;
+    await Promise.resolve(
+      alertaTecnica(`Aviso de ${que} sin asesora: lead ${(lead && lead.id) || "?"}.`, `No hay asesora activa a quien avisarle. Revisar "Para atender" del CRM ${(org && org.name) || ""}.`)
+    ).catch(() => {});
+  }
+  return r || { ok: false };
+}
+
+module.exports = { avisarAsesor, avisarPorCampana, MOTIVOS };

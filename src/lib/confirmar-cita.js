@@ -130,13 +130,14 @@ async function pedirOtroHorario({ org, lead, advisor, deps = {} }) {
   };
 }
 
-// Quien toca el boton. Tiene que ser un asesor ACTIVO (Natalia, inactiva,
-// comparte el 8024 con la linea 2 de Daiana). El respaldo de entrega (ej.
+// Quien toca el boton. Tiene que ser un asesor ACTIVO: Natalia (inactiva)
+// comparte el 8024 con la linea 2 de Daiana, y la busqueda devuelve siempre
+// la fila activa (Daiana línea 2), nunca la de Natalia. El respaldo de entrega (ej.
 // "Daiana Zea (línea 2)", sin recibe_citas) actua como el asesor del ciclo
 // que tiene su mismo alias publico.
 async function asesorDelBoton(org, userPhone) {
-  const fila = await advisors.findByPhone(org.id, userPhone).catch(() => null);
-  if (!fila || fila.activo === false) return null;
+  const fila = await advisors.findDestinatarioByPhone(org.id, userPhone).catch(() => null);
+  if (!fila) return null;
   if (fila.recibe_citas || !fila.alias_publico) return fila;
   const ciclo = await require("../data/rotacion-citas").asesoresDelCiclo(org.id).catch(() => []);
   return ciclo.find((a) => a.alias_publico === fila.alias_publico) || fila;

@@ -18,7 +18,23 @@ function textoCitaConfirmada({ cuando, ref, advisor, org }) {
   return `Tu visita ${cuando}${refLinea} quedó CONFIRMADA. Te recibe ${aliasPublico(advisor, org)}.`;
 }
 
+// Una asesora de verdad es una fila de advisors (con id): a ella le llega la
+// campana del CRM. El respaldo de findForTransfer (org.advisor_phone, sin id)
+// o la ausencia total de asesor NO avisan a nadie en el momento (2026-10-21).
+function hayAsesoraParaAvisar(advisor) {
+  return Boolean(advisor && advisor.id);
+}
+
 function instruccionTransferencia({ especialidad, advisor, org }) {
+  if (!hayAsesoraParaAvisar(advisor)) {
+    // Sin nadie a quien avisar en el momento: Sofi no puede decir "ya fue
+    // alertado". El lead queda en "Para atender" y Juan recibe alerta tecnica.
+    return (
+      `Transferencia registrada, pero en este momento no hay un asesor disponible para avisarle al instante. ` +
+      `En tu respuesta despídete brevemente y dile que alguien del equipo lo contacta pronto por este medio. ` +
+      `NO digas que ya le avisaste a un asesor ni nombres a nadie, y NO le des ningún link ni número de teléfono.`
+    );
+  }
   const alias = aliasPublico(advisor, org);
   return (
     `Transferencia registrada al asesor de ${especialidad} (${alias}). Ya fue alertado con el resumen del cliente. ` +
@@ -27,4 +43,4 @@ function instruccionTransferencia({ especialidad, advisor, org }) {
   );
 }
 
-module.exports = { aliasPublico, textoCitaConfirmada, instruccionTransferencia };
+module.exports = { aliasPublico, textoCitaConfirmada, instruccionTransferencia, hayAsesoraParaAvisar };

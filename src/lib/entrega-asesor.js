@@ -65,8 +65,14 @@ async function entregarConRespaldo(org, principal, texto) {
   const suplentes = [];
   const escalado = soloDigitos(process.env.RADAR_ESCALADO_PHONE);
   if (escalado && escalado !== telPrincipal) {
-    const fila = await advisors.findByPhone(org.id, escalado).catch(() => null);
-    suplentes.push(fila || { id: null, name: null, phone: escalado });
+    // Solo una fila ACTIVA (2026-10-21): el 8024 resuelve a "Daiana Zea
+    // (línea 2)", nunca a Natalia (inactiva, mismo numero). Un numero que solo
+    // es de alguien dado de baja no recibe nada; uno que no esta en advisors
+    // se respeta tal cual, porque lo configuro Juan.
+    const fila = await advisors.findDestinatarioByPhone(org.id, escalado).catch(() => null);
+    const deBaja = fila ? null : await advisors.findByPhone(org.id, escalado).catch(() => null);
+    if (fila) suplentes.push(fila);
+    else if (!deBaja) suplentes.push({ id: null, name: null, phone: escalado });
   }
   const equipo = await advisors
     .listElegibles(org.id, { especialidades: ["venta"] })

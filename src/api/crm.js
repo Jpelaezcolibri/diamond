@@ -955,6 +955,10 @@ router.post("/api/conversations/:id/send", async (req, res) => {
       .from("conversations")
       .update({ last_activity_at: new Date().toISOString() })
       .eq("id", conv.id);
+    // Desde 2026-10-21 la transferencia deja la conversacion en modo humano sin
+    // que nadie toque "Tomar control": el pendiente se da por atendido cuando
+    // la asesora le escribe al cliente.
+    if (ok) await limpiarPendienteAtendido(conv.lead_id);
 
     res.json({ ok: true, delivery: ok ? "sent" : "failed" });
   } catch (e) {
@@ -1020,6 +1024,18 @@ router.post("/api/conversations/:id/media", upload.single("file"), async (req, r
   }
 });
 
+// El chat deja de esperar (pide asesor / transferido): la visita se limpia al
+// confirmarla o cancelarla, no aca. Best-effort.
+async function limpiarPendienteAtendido(leadId) {
+  if (!leadId || !supabase) return;
+  await supabase
+    .from("leads")
+    .update({ atencion_pendiente: null, atencion_desde: null })
+    .eq("id", leadId)
+    .in("atencion_pendiente", ["pide_asesor", "transferido"])
+    .then(({ error }) => error && console.warn("[api] No se pudo limpiar atencion_pendiente:", error.message));
+}
+
 // Tomar control (humano) o devolverselo a Sofi (bot)
 router.post("/api/conversations/:id/modo", async (req, res) => {
   try {
@@ -1030,14 +1046,7 @@ router.post("/api/conversations/:id/modo", async (req, res) => {
     const conv = await conversations.setModo(req.params.id, modo);
     // Tomar el control ATIENDE el pendiente del chat (pide asesor, transferido;
     // la visita se limpia al confirmarla o cancelarla) — plan 6, 2026-10-07.
-    if (modo === "humano" && conv && conv.lead_id && supabase) {
-      await supabase
-        .from("leads")
-        .update({ atencion_pendiente: null, atencion_desde: null })
-        .eq("id", conv.lead_id)
-        .in("atencion_pendiente", ["pide_asesor", "transferido"])
-        .then(({ error }) => error && console.warn("[api] No se pudo limpiar atencion_pendiente:", error.message));
-    }
+    if (modo === "humano" && conv && conv.lead_id) await limpiarPendienteAtendido(conv.lead_id);
     res.json({ ok: true, modo: conv.modo });
   } catch (e) {
     console.error("[api] Error en modo:", e);

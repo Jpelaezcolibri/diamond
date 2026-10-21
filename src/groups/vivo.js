@@ -63,14 +63,16 @@ const colaPostDm = require("./cola-post-dm");
 
 const VENTANA_LIMITE_HORAS = 24;
 
-// Quien revisa los "casi" del radar (Juan, 2026-08-20) — el telefono de
-// Natalia Velez, la misma linea vinculada al radar. Configurable a proposito,
+// Quien revisa los "casi" del radar (Juan, 2026-08-20) — la asesora PRINCIPAL,
+// la de la linea vinculada al radar: hoy Daiana (desde 2026-09-10; antes fue
+// Natalia Velez, hoy inactiva). Configurable a proposito,
 // mismo criterio que RADAR_ALERTA_TO: si cambia quien revisa, no hay que
 // tocar codigo.
 const RADAR_REVISOR_PHONE = process.env.RADAR_REVISOR_PHONE || "";
 
-// A quien se escala de inmediato si el envio al asesor PRINCIPAL (Natalia)
-// falla — Catherine (Juan, 2026-08-26): "si a Natalia no le llega, se escala".
+// A quien se escala de inmediato si el envio al asesor PRINCIPAL (quien diga
+// RADAR_REVISOR_PHONE; en 2026-08 era Natalia) falla (Juan, 2026-08-26: "si a
+// Natalia no le llega, se escala"). Hoy RADAR_ESCALADO_PHONE es la linea 2 de Daiana.
 // Se lee en cada llamado (no como constante de modulo) para que los tests
 // puedan setear/cambiar la env var entre corridas sin recargar el modulo.
 const radarEscaladoPhone = () => process.env.RADAR_ESCALADO_PHONE || "";
@@ -982,8 +984,8 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
     }
   }
 
-  // Escalado INMEDIATO a Catherine si especificamente a Natalia (el asesor
-  // PRINCIPAL) no le llego el aviso (Juan, 2026-08-26) — sin importar si algun
+  // Escalado INMEDIATO a RADAR_ESCALADO_PHONE si especificamente al asesor
+  // PRINCIPAL (RADAR_REVISOR_PHONE; en 2026-08 era Natalia) no le llego el aviso (Juan, 2026-08-26) — sin importar si algun
   // destino extra de RADAR_ALERTA_TO si lo recibio: la condicion de Juan es
   // "si a Natalia no le llega", no "si a nadie le llega". Es un intento EXTRA,
   // no reemplaza los destinos existentes.
@@ -1109,7 +1111,7 @@ async function avisarCercano(org, signal, mensaje, grupo, matches, { edificio = 
   // que el pedido tiene que llegarle (ver politica.js#edificio_especifico).
   if (!candidatas.length && !edificio) return;
 
-  const revisor = await advisors.findByPhone(org.id, RADAR_REVISOR_PHONE).catch(() => null);
+  const revisor = await advisors.findDestinatarioByPhone(org.id, RADAR_REVISOR_PHONE).catch(() => null);
   if (!revisor) return;
 
   const señalParaAviso = { grupo_nombre: grupo.nombre || grupo.jid, autor_nombre: mensaje.autor, texto_original: mensaje.texto };

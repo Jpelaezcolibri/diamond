@@ -64,6 +64,23 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
     `SOFI_POSTVISITA_PLANTILLA` y `SOFI_CITA_CONFIRMADA_PLANTILLA` en Railway.
   - **Pendiente encender** (Juan, en Railway): `SOFI_RECORDATORIO_VISITA`,
     `SOFI_POSTVISITA` y `RADAR_SEGUIMIENTO_CON_OPCION`.
+  - **Transferencias sin huecos (2026-10-21, SIN desplegar; Juan: "corrige:
+    número de Natalia, Sofi en pausa al transferir, alerta si no hay asesora,
+    avisos por la campana del CRM y notas viejas").**
+    - Destinatarios solo activos: `advisors.findDestinatarioByPhone` (radar,
+      respaldo de entrega, botón de cita). El 8024 resuelve a "Daiana Zea
+      (línea 2)", nunca a Natalia (inactiva, mismo número).
+    - Al transferir, después de la despedida, campana + `aviso_app` y la
+      conversación queda en modo humano: Sofi calla hasta "Devolver a Sofi".
+      El pendiente se limpia al tomar control o cuando la asesora escribe
+      desde el CRM. Lógica en `src/lib/transferencia.js`.
+    - Sin asesora (respaldo de la org sin id, o el aviso falla): alerta técnica
+      a Juan sin teléfono del cliente, chat en "Para atender", Sofi NO se pausa
+      y no dice "ya fue alertado".
+    - Captador, aliado y cita fuera de la rotación (colega o sin ciclo) van por
+      `avisarPorCampana` (detalle en el cuerpo de la campana); ya no hay texto
+      libre por WhatsApp con datos del cliente. Arriendo sigue repartido entre
+      las tres.
 
 - **Rescate de pedidos y DM con aclaración (desplegado 2026-10-21, merge de
   `rescate-pedidos`).** Plan
@@ -135,7 +152,8 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
   a los 25 se le pregunta en "Para atender" del CRM (dos botones).
   La pregunta, el aviso de vencimiento y el de "salió en tal grupo" van por
   la campana del CRM, no por WhatsApp (Juan, 2026-10-20); sin plantilla de
-  Meta. Claudia (sin usuario del CRM) responde a Sofi con `actualizar_vigencia`.
+  Meta. Quien no tenga usuario del CRM responde a Sofi con `actualizar_vigencia`
+  (Claudia ya tiene usuario del CRM, verificado 2026-10-21).
   Interruptores `SOFI_PUBLICA_ASESOR` y `SOFI_VIGENCIA_ASESOR`.
   **Pendiente:** migración `2026-10-19_propiedades_asesor.sql` (Juan).
 
@@ -194,7 +212,7 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
     por la plantilla `cita_por_confirmar` (botones Confirmar / Otro horario)
     y rota de asesor cada hora (`src/scheduler/citas-escalera.js`) hasta que
     alguien confirme; 4 h antes se cancela. `cita.asesor_id` = `advisors.id`
-    (Claudia no tiene usuario del CRM).
+    (Claudia ya tiene usuario del CRM, verificado 2026-10-21).
   - **Vendedora senior y seguimientos:** prompt de colega nuevo, memoria
     "LO QUE YA HABLAMOS", seguimiento a las 3 h (followups.js), +4 h del DM y
     +24 h por plantilla (`src/scheduler/seguimiento-colega.js`).
@@ -207,8 +225,8 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
     refresca zona/área/alcobas en cada corrida. Validar con
     `railway run --service dmap npx tsx dmap/scripts/wasi-vs-base.ts`.
   - **Pendientes:** recargar Anthropic; plantillas
-    `asesor_solicitado` y `alerta_tecnica` en revisión; usuario del CRM para
-    Claudia (sin él no recibe el recordatorio de 1 h antes de la visita);
+    `asesor_solicitado` y `alerta_tecnica` en revisión; (hecho: Claudia ya
+    tiene usuario del CRM);
     20 propiedades sin zona en Wasi; App de asesores
     (`docs/superpowers/specs/2026-10-07-app-diamond-asesores-design.md`).
 

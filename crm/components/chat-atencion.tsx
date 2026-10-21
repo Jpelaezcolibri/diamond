@@ -73,6 +73,17 @@ export default function ChatAtencion({
         </div>
       )}
 
+      {/* Desde 2026-10-21 la transferencia deja a Sofi en pausa (modo humano)
+          sin que nadie toque "Tomar control": el aviso sigue a la vista hasta
+          que la asesora le escribe al cliente. */}
+      {pendiente && modo === "humano" && (
+        <div className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 ring-1 ring-amber-200">
+          {MOTIVO[pendiente] || "Este chat espera a un asesor"}
+          {lead.atencion_desde ? <span className="text-amber-700"> · {fmt(lead.atencion_desde)}</span> : null}
+          <div className="text-xs text-amber-800">Sofi está en pausa: escribile al cliente desde acá. Si querés que ella siga, tocá «Devolver a Sofi».</div>
+        </div>
+      )}
+
       {cita && (
         <div className="rounded-lg bg-[#0b1526] px-3 py-2.5 text-sm text-white">
           <div className="font-semibold text-[#e8c46a]">📅 Visita por confirmar</div>
