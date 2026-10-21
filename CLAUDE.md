@@ -30,8 +30,8 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
 
 ## 2. Estado actual (2026-10-20)
 
-- **Publicaciones y respuestas (rama `modulo-publicaciones`, 2026-10-20, SIN
-  desplegar).** Spec
+- **Publicaciones y respuestas (desplegado 2026-10-21, merge de `modulo-publicaciones`;
+  interruptor apagado).** Spec
   `docs/superpowers/specs/2026-10-20-publicaciones-y-respuestas-design.md`,
   plan y mockup en `docs/superpowers/`.
   - Cada respuesta de un colega a un post nuestro queda en
