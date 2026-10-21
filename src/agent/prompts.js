@@ -172,7 +172,7 @@ function reglaComision(org) {
   return `${base} Si te pregunta por la comision, puedes repetirle exactamente esta condicion de la casa: "${lineaComision(org)}" Nada mas alla de ese texto.`;
 }
 
-function promptColega({ org, colega, now, ultimoPedido = null, coordinador = null, historial = [], lead = null }) {
+function promptColega({ org, colega, now, ultimoPedido = null, coordinador = null, historial = [], lead = null, fichasPedido = [] }) {
   const stable = `Eres Sofi, la asistente virtual de ${org.name} en Colombia. Eres mujer y paisa (de Medellin).
 
 CON QUIEN ESTAS HABLANDO: un colega de otra inmobiliaria. NO es un cliente: es un par del gremio, y ya publico o va a publicar pedidos en los grupos donde estamos. Casi siempre escribe porque tiene un CLIENTE PROPIO buscando algo.
@@ -188,6 +188,7 @@ COMO TE COMPORTAS CON UN COLEGA:
 QUE SI PODES HACER (y es a lo que viene):
 - Mostrarle lo que tenemos. Si te dice que busca algo, usa buscar_propiedades y pasale las refs que calcen, con precio, area y zona. Datos exactos, nunca inventados.
 - Si pregunta por una referencia puntual, dale la ficha completa.
+- EL LINK QUE LE DAS a un colega es SIEMPRE el campo linkWasi de la ficha (de buscar_propiedades o de DATOS REALES abajo), copiado tal cual: es el que puede reenviarle a su cliente. Nunca armes un link ni le cambies el dominio o la ruta; si no tienes el linkWasi, dile que se lo confirmas.
 - Si lo que le mandamos no le sirve, pregunta que fallo (zona, precio, area, piso, parqueadero) y busca SIMILARES con buscar_propiedades con ese ajuste. No le repitas refs que ya le mandamos (estan abajo, en LO QUE YA HABLAMOS).
 - Si llega con un link de agendar visita ("quiero agendar una visita para mi PEDIDO"), preguntale a cual de las opciones del pedido y ofrécele dos horarios de horarios_disponibles (ver abajo, SI QUIERE LLEVAR A SU CLIENTE A VER UN INMUEBLE).
 - Si te ofrece una propiedad de SU cartera, usa registrar_propiedad_aliado para que quede en la red.
@@ -231,6 +232,30 @@ REGLA DE ORO: ante la duda, preguntale que necesita. Un colega que escribe "hola
       }`
     : "";
 
+  // La ficha REAL de las refs que le respondimos (caso Laura V., 2026-10-20):
+  // con solo el numero de la ref y el texto del pedido, Sofi describio la
+  // 10505674 con la zona y el tope del PEDIDO ("La Estrella, $349.900.000")
+  // en vez de los de la ficha (Sabaneta, $315.000.000) y armo un link que no
+  // existe. Los datos van en el contexto; no depende de que consulte.
+  const bloqueFichas = (fichasPedido || []).length
+    ? `\n\nDATOS REALES DE ESAS REFERENCIAS (de la ficha; NO son los del pedido: la zona y el presupuesto del pedido son lo que busca su cliente, no lo que tiene el inmueble):\n${fichasPedido
+        .map((p) => {
+          const datos = [
+            [p.tipo, p.operacion].filter(Boolean).join(" en "),
+            [p.zona, p.ciudad].filter(Boolean).join(", "),
+            p.precio,
+            p.area,
+            p.habitaciones != null ? `${p.habitaciones} alcobas` : null,
+            p.banos != null ? `${p.banos} baños` : null,
+            p.garaje != null ? `${p.garaje} parqueaderos` : null,
+            p.estrato ? `estrato ${p.estrato}` : null,
+          ].filter(Boolean).join(" · ");
+          const estado = p.disponible === false ? " · YA NO ESTA DISPONIBLE" : "";
+          return `- Ref ${p.ref}: ${datos}${estado}${p.linkWasi ? `\n  linkWasi: ${p.linkWasi}` : ""}`;
+        })
+        .join("\n")}`
+    : "";
+
   // Quien coordina las visitas, con su ALIAS publico (Juan, 2026-10-07): hacia
   // el colega no va el nombre real ni el celular; ella lo contacta. Antes
   // (2026-09-04) iban nombre y celular. Va INYECTADO en el bloque volatil,
@@ -242,7 +267,7 @@ REGLA DE ORO: ante la duda, preguntale que necesita. Un colega que escribe "hola
       ? `\n\nCOORDINA LAS VISITAS: ${coordinador.alias}. Es quien valida la visita y le escribe o lo llama para confirmarla.`
       : "";
 
-  const contexto = `${now ? `FECHA Y HORA ACTUAL EN COLOMBIA: ${now.legible} (referencia ISO: ${now.iso}).\n\n` : ""}COLEGA: ${colega.nombre || "un colega del gremio"}.${bloqueCoordinador}${bloquePedido}${bloqueHistorial(historial, lead)}`;
+  const contexto = `${now ? `FECHA Y HORA ACTUAL EN COLOMBIA: ${now.legible} (referencia ISO: ${now.iso}).\n\n` : ""}COLEGA: ${colega.nombre || "un colega del gremio"}.${bloqueCoordinador}${bloquePedido}${bloqueFichas}${bloqueHistorial(historial, lead)}`;
 
   return [
     { type: "text", text: stable + REGLAS_COMUNES, cache_control: CACHE_ESTABLE },
@@ -260,11 +285,11 @@ ${datosLead}
 No los des por vigentes: lo que busca pudo cambiar. Confirma con el cliente el presupuesto, la zona y el tipo antes de usarlos en una búsqueda o en una respuesta ("la vez pasada me hablaste de hasta 400 millones, ¿sigue siendo así?"), y nunca digas que te los dio hoy. Lo que aparece en el historial antes de la pausa también es de esa conversación anterior.`;
 }
 
-function buildSystemPrompt({ org, lead, qualified, now, advisor = null, colega = null, ultimoPedido = null, coordinador = null, historial = [], pausaDias = 0 }) {
+function buildSystemPrompt({ org, lead, qualified, now, advisor = null, colega = null, ultimoPedido = null, coordinador = null, historial = [], pausaDias = 0, fichasPedido = [] }) {
   if (advisor) return promptAsesor({ org, advisor, now });
   // Un asesor propio que ademas esta en un grupo gremial sigue siendo de la
   // casa: por eso este orden y no el contrario.
-  if (colega) return promptColega({ org, colega, now, ultimoPedido, coordinador, historial, lead });
+  if (colega) return promptColega({ org, colega, now, ultimoPedido, coordinador, historial, lead, fichasPedido });
 
   const datosLead = [
     lead.nombre && `Nombre: ${lead.nombre}`,

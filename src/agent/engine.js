@@ -14,6 +14,7 @@ const { refDeKit } = require("./kit-origen");
 const { getClient, registrarUso, paramsDeModelo } = require("../lib/anthropic");
 const { aliasPublico } = require("../lib/identidad-publica");
 const codigoColega = require("../groups/codigo-colega");
+const { quitarLinksInventados } = require("./links-verificados");
 
 const MAX_TOOL_ITERATIONS = 5;
 const HISTORY_LIMIT = 12;
@@ -322,9 +323,27 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
       })
     : [];
 
+  // La ficha real de las refs que le mandamos (caso Laura V., 2026-10-20):
+  // sin ella, Sofi describio la 10505674 con los datos del pedido. Hasta 3,
+  // best-effort: si una falla, va sin esa.
+  const refsPedido = colega && ultimoPedido && Array.isArray(ultimoPedido.respuesta_refs)
+    ? ultimoPedido.respuesta_refs.filter(Boolean).slice(0, 3)
+    : [];
+  const fichasPedido = (
+    await Promise.all(
+      refsPedido.map((ref) =>
+        properties.findByRef(org, String(ref)).catch((e) => {
+          console.warn(`[engine] No se pudo leer la ficha ${ref} del pedido del colega:`, e.message);
+          return null;
+        })
+      )
+    )
+  ).filter(Boolean);
+
   const system = buildSystemPrompt({
     org, lead, qualified: isQualified(lead), now: nowInBogota(), advisor, colega, ultimoPedido, coordinador, historial,
     pausaDias: require("./pausa").diasDePausa(history),
+    fichasPedido,
   });
 
   const extractText = (r) =>
@@ -412,6 +431,17 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
     reply = extractText(response);
   }
   reply = reply || "Disculpa, no pude procesar tu mensaje. ¿Puedes intentarlo de nuevo? 🙏";
+
+  // Un link que no salio del prompt, del historial ni de una herramienta no
+  // llega al chat (caso Laura V., 2026-10-20: "diamondinmobiliaria.co/ficha/...").
+  const sinInventados = quitarLinksInventados(reply, [
+    ...(Array.isArray(system) ? system.map((b) => b.text) : [system]),
+    JSON.stringify(messages),
+  ]);
+  if (sinInventados.quitados.length) {
+    console.warn(`[engine] Link inventado quitado de la respuesta a ${phone}: ${sinInventados.quitados.join(", ")}`);
+    reply = sinInventados.texto;
+  }
 
   const assistantMsg = await conversations.appendMessage(conv.id, "assistant", reply);
 

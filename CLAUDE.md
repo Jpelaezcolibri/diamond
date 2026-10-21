@@ -60,6 +60,12 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
   - **Cliente esperando:** `src/scheduler/lead-esperando.js` (15 min; modo bot
     → alerta a Juan; modo humano → campana de la asesora; `SOFI_ALERTA_ESPERA`).
   - El área no registrada también sale con aclaración.
+  - **Ficha real al colega (caso Laura V., 2026-10-20):** Sofi le describió la
+    10505674 con la zona y el tope del PEDIDO (La Estrella, $349.900.000) en
+    vez de la ficha (Sabaneta, $315.000.000) y armó un link inexistente. Ahora
+    el contexto del colega trae la ficha real de las refs que le mandamos (con
+    su `linkWasi`), y `src/agent/links-verificados.js` quita de la respuesta
+    todo link que no salió del prompt, del historial o de una herramienta.
   - **Mapa de demanda (CRM `/demanda`):** cruza los pedidos de colegas
     (`group_signals`) con el inventario por macrozona × tipo × banda de
     precio. Muestra dónde captar, qué piden y el argumento para el
