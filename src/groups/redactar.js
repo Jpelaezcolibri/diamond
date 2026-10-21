@@ -392,8 +392,19 @@ function detallesPorFicha(props, leFalta, pedido) {
 // escribirle a la linea oficial no es "mas informacion", es que ahi la
 // conversacion no corre el riesgo de baneo de una linea personal y queda
 // registrada en el CRM.
+// La linea de comision de los DM y del post. Hoy sale del env; cuando cada org
+// tenga la suya (multi-tenant), se resuelve aca desde `org` sin tocar los
+// llamadores. Vacia = el texto de siempre.
+const COMISION_POR_DEFECTO = "Comisión compartida.";
+function comisionConfigurada(_org) {
+  return String(process.env.RADAR_LINEA_COMISION || "").trim();
+}
+function lineaComision(org) {
+  return comisionConfigurada(org) || COMISION_POR_DEFECTO;
+}
+
 function lineasCierre(org) {
-  const cierre = ["Comisión compartida.", "— Sofi, asistente virtual"];
+  const cierre = [lineaComision(org), "— Sofi, asistente virtual"];
   const linkSofi = linkContactoOficial(org);
   if (linkSofi) {
     cierre.push(
@@ -541,7 +552,7 @@ function mensajesAlColega(
   const linkMas = codigo ? linkContactoOficial(org, `Hola Sofi, quiero más opciones para mi PEDIDO (cód. ${codigo})`) : null;
   const cierre = linkAgendar && linkMas
     ? [
-        "Comisión compartida.",
+        lineaComision(org),
         "— Sofi, asistente virtual",
         "",
         "📅 ¿Agendamos una visita? Escríbele a Sofi:",
@@ -554,7 +565,7 @@ function mensajesAlColega(
       ]
     : restantes > 0
       ? [
-          "Comisión compartida.",
+          lineaComision(org),
           "— Sofi, asistente virtual",
           "",
           ...(linkSofi
@@ -599,11 +610,14 @@ function postGrupo(propiedad, { org = null, comision = true } = {}) {
   const caracteristicas = listaCaracteristicas(propiedad).join(" · ");
 
   const lineas = [titulo, identidad, lineaMedidas(propiedad), detalles, caracteristicas].filter(Boolean);
-  if (comision) lineas.push("", "Comparto comisión con colegas 🤝");
+  if (comision) {
+    const propia = comisionConfigurada(org);
+    lineas.push("", propia ? `🤝 ${propia}` : "Comparto comisión con colegas 🤝");
+  }
   lineas.push("", `Fotos y ficha: ${propiedad.linkWasi}`);
   const sofi = linkContactoOficial(org, `Hola, vi en un grupo la Ref ${propiedad.ref}`);
   if (sofi) lineas.push(`Info o visita con Sofi: ${sofi}`);
   return lineas.join("\n");
 }
 
-module.exports = { listaCaracteristicas, postGrupo, mensajeGrupo, mensajesAlColega, MAX_POR_DM, detallesPorFicha, lineasCierre, ficha, desvios, primerNombre, tituloUtil, lineaSalvedad, unirConNi, MAX_PROPIEDADES };
+module.exports = { lineaComision, listaCaracteristicas, postGrupo, mensajeGrupo, mensajesAlColega, MAX_POR_DM, detallesPorFicha, lineasCierre, ficha, desvios, primerNombre, tituloUtil, lineaSalvedad, unirConNi, MAX_PROPIEDADES };
