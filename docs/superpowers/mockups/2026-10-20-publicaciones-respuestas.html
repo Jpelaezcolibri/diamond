@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Publicaciones en grupos</title>
+<style>
+  :root {
+    --navy: #0b1526; --gold: #c9a24b; --bg: #eef1f5; --card: #fff; --ink: #0f172a;
+    --muted: #64748b; --line: #e2e8f0; --indigo: #4f46e5; --teal: #0d9488; --amber: #d97706;
+    --sky: #0284c7; --rose: #e11d48; --wa: #16a34a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--ink); }
+  .note { background: #fff7ed; border-bottom: 1px solid #fed7aa; color: #9a3412; font-size: 13px; padding: 8px 24px; }
+  .topnav { background: var(--navy); color: #cbd5e1; display: flex; gap: 22px; align-items: center; padding: 10px 24px; font-size: 14px; border-bottom: 1px solid rgba(201,162,75,.3); overflow-x: auto; }
+  .topnav b { color: var(--gold); letter-spacing: .08em; margin-right: 10px; }
+  .topnav .on { background: rgba(201,162,75,.18); color: var(--gold); padding: 5px 10px; border-radius: 8px; }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 18px 16px 48px; }
+  .island { background: var(--navy); border-radius: 22px; padding: 20px 22px; color: #fff; }
+  .island .head { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; }
+  .island h1 { margin: 0; font-size: 20px; } .island h1 span { color: var(--gold); }
+  .island small { color: #94a3b8; font-size: 12px; }
+  .seg { display: inline-flex; background: rgba(255,255,255,.08); border-radius: 10px; padding: 3px; }
+  .seg span { padding: 6px 12px; border-radius: 8px; font-size: 13px; color: #cbd5e1; }
+  .seg .on { background: #fff; color: var(--navy); font-weight: 600; }
+  .kpis { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-top: 16px; }
+  .kpi { border-radius: 14px; padding: 14px; }
+  .kpi b { display: block; font-size: 30px; line-height: 1.1; }
+  .kpi .t { font-weight: 600; font-size: 13px; margin-top: 6px; } .kpi .s { font-size: 11.5px; opacity: .85; }
+  .k1 { background: var(--sky); } .k2 { background: var(--indigo); } .k3 { background: var(--teal); } .k4 { background: var(--amber); } .k5 { background: #475569; }
+  .vias { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; font-size: 12.5px; color: #cbd5e1; }
+  .vias span { background: rgba(255,255,255,.07); border-radius: 999px; padding: 5px 10px; }
+  .vias b { color: #fff; }
+  .alerta { margin-top: 12px; background: rgba(225,29,72,.18); border: 1px solid rgba(225,29,72,.4); color: #fecdd3; border-radius: 12px; padding: 9px 12px; font-size: 13px; }
+  .alerta b { color: #fff; }
+  .grid { display: grid; grid-template-columns: 1fr 340px; gap: 16px; margin-top: 16px; }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; }
+  .panel > .ph { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+  .panel > .ph h2 { margin: 0; font-size: 15px; }
+  .count { background: var(--bg); border-radius: 999px; padding: 2px 9px; font-size: 12px; color: var(--muted); }
+  .filters { display: flex; gap: 6px; padding: 10px 16px; flex-wrap: wrap; border-bottom: 1px solid var(--line); }
+  .chip { font-size: 12px; border: 1px solid var(--line); background: #fff; padding: 5px 10px; border-radius: 999px; color: #334155; }
+  .chip.on { border-color: var(--navy); background: var(--navy); color: #fff; }
+  .post { padding: 14px 16px; border-bottom: 1px solid var(--line); }
+  .post .row1 { display: flex; gap: 10px; align-items: flex-start; }
+  .thumb { width: 56px; height: 56px; border-radius: 10px; flex: 0 0 auto; background: linear-gradient(135deg,#94a3b8,#e2e8f0); }
+  .thumb.v { background: linear-gradient(135deg,#a8a29e,#f5f5f4); } .thumb.f { background: linear-gradient(135deg,#86efac,#dcfce7); }
+  .post .t { font-weight: 600; font-size: 14px; }
+  .post .m { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .tag { display: inline-block; font-size: 11px; padding: 2px 7px; border-radius: 999px; margin-right: 4px; }
+  .t-auto { background: #e0e7ff; color: #3730a3; } .t-mano { background: #fef3c7; color: #92400e; }
+  .t-am { background: #ccfbf1; color: #115e59; } .t-ve { background: #e0f2fe; color: #075985; } .t-fi { background: #dcfce7; color: #166534; }
+  .resp { margin-left: auto; text-align: right; flex: 0 0 auto; }
+  .resp b { font-size: 20px; } .resp small { display: block; font-size: 11px; color: var(--muted); }
+  .resp.cero b { color: #cbd5e1; }
+  .vchips { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  .vchip { font-size: 11.5px; border-radius: 8px; padding: 3px 8px; background: #f1f5f9; color: #334155; }
+  .respuestas { margin: 10px 0 0 66px; border-left: 3px solid var(--line); padding-left: 12px; }
+  .r { font-size: 13px; padding: 6px 0; display: grid; grid-template-columns: 92px 1fr auto; gap: 8px; align-items: start; }
+  .r .via { font-size: 11px; font-weight: 600; }
+  .via-sofi { color: var(--wa); } .via-linea { color: var(--indigo); } .via-grupo { color: var(--amber); }
+  .r .txt { color: #334155; } .r .txt i { color: var(--muted); font-style: normal; font-size: 11.5px; display: block; }
+  .est { font-size: 11px; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+  .e-ok { background: #dcfce7; color: #166534; } .e-pend { background: #ffe4e6; color: #9f1239; } .e-cita { background: #fef3c7; color: #92400e; }
+  .side .block { padding: 14px 16px; border-bottom: 1px solid var(--line); }
+  .side h3 { margin: 0 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  .bar { display: grid; grid-template-columns: 1fr 120px 28px; gap: 8px; align-items: center; font-size: 12.5px; margin-bottom: 8px; }
+  .bar .b { height: 8px; border-radius: 4px; background: var(--bg); overflow: hidden; }
+  .bar .b span { display: block; height: 100%; background: var(--indigo); border-radius: 4px; }
+  .bar .n { text-align: right; font-weight: 600; }
+  .muted { color: var(--muted); font-size: 12px; }
+  .legend { font-size: 12.5px; color: #334155; line-height: 1.6; }
+  @media (max-width: 960px) { .grid { grid-template-columns: 1fr; } .kpis { grid-template-columns: repeat(2, 1fr); } .respuestas { margin-left: 0; } }
+</style>
+</head>
+<body>
+<div class="note">Mockup para aprobación (2026-10-20). Los posts son los reales del 19 y 20-oct; las respuestas son de ejemplo para mostrar las tres vías.</div>
+<nav class="topnav"><b>DIAMOND</b><span>Para atender</span><span>Inbox</span><span>Leads</span><span>Grupos</span><span>Amoblados</span><span class="on">Publicaciones</span><span>Kit</span><span>Marketing</span></nav>
+
+<div class="wrap">
+  <section class="island">
+    <div class="head">
+      <h1>Publicaciones en grupos <span>· últimos 7 días</span></h1>
+      <div class="seg"><span>Hoy</span><span class="on">7 días</span><span>30 días</span></div>
+    </div>
+    <div class="kpis">
+      <div class="kpi k1"><b>31</b><div class="t">Posts enviados</div><div class="s">10 grupos · 22 fichas distintas</div></div>
+      <div class="kpi k2"><b>9</b><div class="t">Respuestas</div><div class="s">de colegas, por las 3 vías</div></div>
+      <div class="kpi k3"><b>6</b><div class="t">Colegas distintos</div><div class="s">que preguntaron por algo</div></div>
+      <div class="kpi k4"><b>1</b><div class="t">Visitas</div><div class="s">agendadas desde un post</div></div>
+      <div class="kpi k5"><b>29%</b><div class="t">Posts con respuesta</div><div class="s">9 de 31</div></div>
+    </div>
+    <div class="vias">
+      <span>💬 Escribió a Sofi <b>3</b></span>
+      <span>📱 Escribió a la línea de Daiana <b>4</b></span>
+      <span>↩️ Respondió en el grupo <b>2</b></span>
+    </div>
+    <div class="alerta">⚠️ <b>2 respuestas sin atender</b> hace más de 2 h: un colega preguntó en la línea y otro respondió en el grupo. Abajo están marcadas en rojo.</div>
+  </section>
+
+  <div class="grid">
+    <section class="panel">
+      <div class="ph"><h2>Lo que enviamos</h2><span class="count">31 posts</span></div>
+      <div class="filters">
+        <span class="chip on">Todos</span><span class="chip">Con respuesta · 9</span><span class="chip">Sin atender · 2</span>
+        <span class="chip">Amoblados</span><span class="chip">Venta</span><span class="chip">Fincas</span>
+        <span class="chip">Todos los grupos ▾</span>
+      </div>
+
+      <div class="post">
+        <div class="row1">
+          <div class="thumb"></div>
+          <div>
+            <div class="t">Arriendo Amoblado Apartamento Dúplex – El Poblado La Linde</div>
+            <div class="m"><span class="tag t-am">Amoblado</span><span class="tag t-mano">A mano</span>Ref 10505566 · $7.900.000 · salió en <b>7 grupos</b> · 20-oct, 3:16–5:30 p. m.</div>
+            <div class="vchips"><span class="vchip">💬 Sofi 1</span><span class="vchip">📱 Línea 1</span><span class="vchip">↩️ Grupo 1</span></div>
+          </div>
+          <div class="resp"><b>3</b><small>respuestas</small></div>
+        </div>
+        <div class="respuestas">
+          <div class="r"><span class="via via-sofi">💬 SOFI</span><span class="txt">"Hola, vi en un grupo la Ref 10505566, ¿acepta mascota?"<i>Colega · OFERTAS 2 7am 8pm → 20-oct 4:12 p. m. · Sofi respondió</i></span><span class="est e-ok">Atendido</span></div>
+          <div class="r"><span class="via via-linea">📱 LÍNEA</span><span class="txt">"Buenas, ¿el dúplex de La Linde lo puedo mostrar el jueves?"<i>Laura · ARRIENDOS 7AM 8PM → 20-oct 5:40 p. m.</i></span><span class="est e-cita">Visita propuesta</span></div>
+          <div class="r"><span class="via via-grupo">↩️ GRUPO</span><span class="txt">"Info al privado 🙏" (citando el post)<i>Colega en RENTA AMOBLADOS/FINCAS → 20-oct 4:50 p. m.</i></span><span class="est e-pend">Sin atender</span></div>
+        </div>
+      </div>
+
+      <div class="post">
+        <div class="row1">
+          <div class="thumb"></div>
+          <div>
+            <div class="t">Renta Moderno Loft Sector Laureles Floresta</div>
+            <div class="m"><span class="tag t-am">Amoblado</span><span class="tag t-auto">Automático</span>Ref 10392197 · $4.400.000 · RENTA AMOBLADOS/FINCAS · 20-oct 9:17 a. m.</div>
+            <div class="vchips"><span class="vchip">📱 Línea 1</span></div>
+          </div>
+          <div class="resp"><b>1</b><small>respuesta</small></div>
+        </div>
+        <div class="respuestas">
+          <div class="r"><span class="via via-linea">📱 LÍNEA</span><span class="txt">"¿Cuánto es la administración?"<i>Colega · 20-oct 10:05 a. m.</i></span><span class="est e-pend">Sin atender</span></div>
+        </div>
+      </div>
+
+      <div class="post">
+        <div class="row1">
+          <div class="thumb v"></div>
+          <div>
+            <div class="t">Apartamento en venta en Envigado</div>
+            <div class="m"><span class="tag t-ve">Venta</span><span class="tag t-auto">Automático</span>Ref 10077063 · $490.000.000 · OFERTAS SUR POB ENV SAB · 21-oct 8:04 a. m.</div>
+            <div class="vchips"><span class="vchip">💬 Sofi 1</span><span class="vchip">↩️ Grupo 1</span></div>
+          </div>
+          <div class="resp"><b>2</b><small>respuestas</small></div>
+        </div>
+      </div>
+
+      <div class="post">
+        <div class="row1">
+          <div class="thumb f"></div>
+          <div>
+            <div class="t">Casa Finca de Lujo en Renta El Poblado</div>
+            <div class="m"><span class="tag t-fi">Finca</span><span class="tag t-auto">Automático</span>Ref 10488373 · $35.000.000 mensual · FINCAS 2 · 20-oct 8:02 a. m.</div>
+          </div>
+          <div class="resp cero"><b>0</b><small>respuestas</small></div>
+        </div>
+      </div>
+
+      <div class="post">
+        <div class="row1">
+          <div class="thumb"></div>
+          <div>
+            <div class="t">Hermoso Amoblado en Renta en el Sector del Poblado, Patio Bonito</div>
+            <div class="m"><span class="tag t-am">Amoblado</span><span class="tag t-mano">A mano</span>Ref 10383517 · $6.800.000 · RENTA AMOBLADOS/FINCAS · 19-oct 12:06 p. m.</div>
+          </div>
+          <div class="resp cero"><b>0</b><small>respuestas</small></div>
+        </div>
+      </div>
+      <div class="post muted" style="text-align:center">Ver los 26 posts restantes</div>
+    </section>
+
+    <aside class="panel side">
+      <div class="block">
+        <h3>Fichas que más responden</h3>
+        <div class="bar"><span>10505566 · Dúplex La Linde</span><div class="b"><span style="width:100%"></span></div><span class="n">3</span></div>
+        <div class="bar"><span>10077063 · Envigado venta</span><div class="b"><span style="width:66%"></span></div><span class="n">2</span></div>
+        <div class="bar"><span>10392197 · Loft Laureles</span><div class="b"><span style="width:33%"></span></div><span class="n">1</span></div>
+        <div class="muted">18 fichas publicadas sin ninguna respuesta todavía.</div>
+      </div>
+      <div class="block">
+        <h3>Grupos que más responden</h3>
+        <div class="bar"><span>RENTA AMOBLADOS/FINCAS</span><div class="b"><span style="width:100%"></span></div><span class="n">3</span></div>
+        <div class="bar"><span>OFERTAS SUR POB ENV SAB</span><div class="b"><span style="width:66%"></span></div><span class="n">2</span></div>
+        <div class="bar"><span>ARRIENDOS 7AM 8PM</span><div class="b"><span style="width:66%"></span></div><span class="n">2</span></div>
+        <div class="bar"><span>OFERTAS 2 7am 8pm</span><div class="b"><span style="width:33%"></span></div><span class="n">1</span></div>
+        <div class="muted">FINCAS 2 y FINCAS NORTE: 0 en 7 días.</div>
+      </div>
+      <div class="block legend">
+        <h3>Cómo se cuenta una respuesta</h3>
+        💬 <b>Sofi:</b> el colega le escribe con "vi en un grupo la Ref N".<br>
+        📱 <b>Línea de Daiana:</b> escribe a la línea nombrando la ref, o pregunta dentro de las 48 h siguientes a un post en un grupo donde está.<br>
+        ↩️ <b>Grupo:</b> responde citando nuestro post (solo en los grupos que el radar escucha).<br>
+        <span class="muted">"Sin atender": nadie le contestó en 2 h. Las visitas vienen del detector de la línea y de Sofi.</span>
+      </div>
+    </aside>
+  </div>
+</div>
+</body>
+</html>
