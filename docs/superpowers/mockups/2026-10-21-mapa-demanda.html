@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mapa de demanda</title>
+<style>
+  :root {
+    --navy: #0b1526; --gold: #c9a24b; --bg: #eef1f5; --card: #fff; --ink: #0f172a;
+    --muted: #64748b; --line: #e2e8f0; --indigo: #4f46e5; --teal: #0d9488; --amber: #d97706;
+    --sky: #0284c7; --rose: #e11d48; --wa: #16a34a;
+  }
+  * { box-sizing: border-box; }
+  html, body { overflow-x: hidden; }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--ink); }
+  .note { background: #fff7ed; border-bottom: 1px solid #fed7aa; color: #9a3412; font-size: 13px; padding: 8px 24px; }
+  .topnav { background: var(--navy); color: #cbd5e1; display: flex; gap: 22px; align-items: center; padding: 10px 24px; font-size: 14px; border-bottom: 1px solid rgba(201,162,75,.3); overflow-x: auto; white-space: nowrap; }
+  .topnav b { color: var(--gold); letter-spacing: .08em; margin-right: 10px; }
+  .topnav .on { background: rgba(201,162,75,.18); color: var(--gold); padding: 5px 10px; border-radius: 8px; }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 18px 16px 48px; }
+  .island { background: var(--navy); border-radius: 22px; padding: 20px 22px; color: #fff; }
+  .island .head { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; }
+  .island h1 { margin: 0; font-size: 20px; } .island h1 span { color: var(--gold); }
+  .seg { display: inline-flex; background: rgba(255,255,255,.08); border-radius: 10px; padding: 3px; }
+  .seg span { padding: 6px 12px; border-radius: 8px; font-size: 13px; color: #cbd5e1; cursor: default; }
+  .seg .on { background: #fff; color: var(--navy); font-weight: 600; }
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 16px; }
+  .kpi { border-radius: 14px; padding: 14px; }
+  .kpi b { display: block; font-size: 30px; line-height: 1.1; }
+  .kpi .t { font-weight: 600; font-size: 13px; margin-top: 6px; } .kpi .s { font-size: 11.5px; opacity: .85; }
+  .k1 { background: var(--sky); } .k2 { background: var(--indigo); } .k3 { background: var(--rose); } .k4 { background: var(--teal); }
+  .prog { height: 7px; border-radius: 4px; background: rgba(255,255,255,.3); margin-top: 8px; overflow: hidden; }
+  .prog span { display: block; height: 100%; width: 20%; background: #fff; border-radius: 4px; }
+  .grid { display: grid; grid-template-columns: 1fr 360px; gap: 16px; margin-top: 16px; align-items: start; }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; }
+  .panel > .ph { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--line); gap: 8px; }
+  .panel > .ph h2 { margin: 0; font-size: 15px; }
+  .count { background: var(--bg); border-radius: 999px; padding: 2px 9px; font-size: 12px; color: var(--muted); }
+  .filters { display: flex; gap: 8px; padding: 10px 16px; flex-wrap: wrap; border-bottom: 1px solid var(--line); align-items: center; }
+  .tog { display: inline-flex; background: var(--bg); border-radius: 10px; padding: 3px; }
+  .tog span { padding: 5px 12px; border-radius: 8px; font-size: 13px; color: #334155; }
+  .tog .on { background: var(--navy); color: #fff; font-weight: 600; }
+  select { font: inherit; font-size: 13px; border: 1px solid var(--line); background: #fff; color: #334155; padding: 6px 10px; border-radius: 10px; max-width: 100%; }
+  .tr { display: grid; grid-template-columns: minmax(0,2.3fr) 70px 70px 70px 80px minmax(110px,1.2fr) 130px; gap: 10px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); font-size: 13.5px; }
+  .tr.th { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); padding-top: 9px; padding-bottom: 9px; background: #f8fafc; }
+  .tr.row { border-left: 4px solid transparent; }
+  .tr.row.hot { background: #fff7ed; border-left-color: var(--amber); }
+  .tr.row.sel { box-shadow: inset 0 0 0 2px var(--navy); }
+  .zt b { display: block; font-size: 14px; }
+  .zt small { color: var(--muted); font-size: 12px; }
+  .num { text-align: right; font-weight: 600; }
+  .lbl { display: none; }
+  .ppp { text-align: right; font-weight: 700; }
+  .hot .ppp { color: var(--amber); }
+  .gap { height: 10px; border-radius: 5px; background: var(--bg); overflow: hidden; }
+  .gap span { display: block; height: 100%; background: var(--indigo); border-radius: 5px; }
+  .hot .gap span { background: var(--amber); }
+  .btn { font: inherit; font-size: 12.5px; border: 1px solid var(--navy); background: #fff; color: var(--navy); padding: 6px 10px; border-radius: 9px; cursor: pointer; }
+  .btn:hover { background: var(--navy); color: #fff; }
+  .btn.wa { background: var(--wa); border-color: var(--wa); color: #fff; }
+  .btn.gold { background: var(--navy); color: var(--gold); }
+  .legend { padding: 10px 16px; font-size: 12px; color: var(--muted); }
+  .legend i { display: inline-block; width: 10px; height: 10px; background: var(--amber); border-radius: 3px; margin-right: 5px; }
+  .side .block { padding: 14px 16px; border-bottom: 1px solid var(--line); }
+  .side .block:last-child { border-bottom: 0; }
+  .side h3 { margin: 0 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  .side .sel-title { margin: 0; font-size: 16px; }
+  .side .sel-sub { color: var(--muted); font-size: 12.5px; margin-top: 3px; }
+  .bar { display: grid; grid-template-columns: 1fr 110px 40px; gap: 8px; align-items: center; font-size: 12.5px; margin-bottom: 8px; }
+  .bar .b { height: 8px; border-radius: 4px; background: var(--bg); overflow: hidden; }
+  .bar .b span { display: block; height: 100%; background: var(--indigo); border-radius: 4px; }
+  .bar .n { text-align: right; font-weight: 600; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip { font-size: 12px; background: #f1f5f9; color: #334155; border-radius: 999px; padding: 4px 10px; }
+  .arg { background: var(--navy); color: #e2e8f0; border-radius: 14px; padding: 14px; font-size: 13.5px; line-height: 1.5; border: 1px solid rgba(201,162,75,.4); }
+  .arg-h { color: var(--gold); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; }
+  .acts { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .mini { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .mini b { font-size: 22px; }
+  .mini a { color: var(--indigo); font-size: 13px; font-weight: 600; text-decoration: none; }
+  .muted { color: var(--muted); font-size: 12px; }
+  .foot { margin-top: 16px; color: var(--muted); font-size: 12.5px; }
+  #toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--navy); color: #fff; padding: 8px 16px; border-radius: 999px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  #toast.show { opacity: 1; }
+  @media (max-width: 960px) {
+    .grid { grid-template-columns: 1fr; }
+    .kpis { grid-template-columns: repeat(2, 1fr); }
+    .tr.th { display: none; }
+    .tr { grid-template-columns: 1fr 1fr 1fr; gap: 8px; padding: 14px 16px; }
+    .tr .zt, .tr .gapc, .tr .acts1 { grid-column: 1 / -1; }
+    .tr .num, .tr .ppp { text-align: left; }
+    .lbl { display: block; font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 500; }
+    .tr .acts1 .btn { width: 100%; padding: 9px; }
+  }
+  @media (max-width: 520px) {
+    .topnav { padding: 10px 16px; gap: 16px; }
+    .island { padding: 16px; }
+    .kpi b { font-size: 26px; }
+    .bar { grid-template-columns: 1fr 70px 36px; }
+  }
+</style>
+</head>
+<body>
+<div class="note">Mockup para aprobación (2026-10-21). Cifras reales del análisis de 90 días; el detalle de "Qué piden" y los barrios son de ejemplo.</div>
+<nav class="topnav"><b>DIAMOND</b><span>Para atender</span><span>Inbox</span><span>Leads</span><span>Grupos</span><span>Amoblados</span><span>Publicaciones</span><span class="on">Mapa de demanda</span><span>Kit</span><span>Marketing</span></nav>
+
+<div class="wrap">
+  <section class="island">
+    <div class="head">
+      <h1>Mapa de demanda <span>· últimos 90 días</span></h1>
+      <div class="seg"><span>7 días</span><span>30 días</span><span class="on">90 días</span></div>
+    </div>
+    <div class="kpis">
+      <div class="kpi k1"><b>1.697</b><div class="t">Pedidos de colegas</div><div class="s">de compra, en ~50 grupos</div></div>
+      <div class="kpi k2"><b>941</b><div class="t">Pedidos sin inventario nuestro</div><div class="s">55 % de los pedidos</div></div>
+      <div class="kpi k3"><b>10</b><div class="t">Celdas calientes</div><div class="s">zona · tipo · precio donde captar</div></div>
+      <div class="kpi k4"><b>2 de 10</b><div class="t">Exclusivas captadas este mes</div><div class="s">meta del mes</div><div class="prog"><span></span></div></div>
+    </div>
+  </section>
+
+  <div class="grid">
+    <section class="panel">
+      <div class="ph"><h2>Dónde captar</h2><span class="count">10 celdas</span></div>
+      <div class="filters">
+        <div class="tog"><span class="on">Venta</span><span>Arriendo</span></div>
+        <select aria-label="Zona"><option>Todas las zonas</option><option>El Poblado</option><option>Envigado</option><option>Laureles</option><option>Belén</option></select>
+        <select aria-label="Tipo"><option>Todos los tipos</option><option>Apartamento</option><option>Casa</option></select>
+        <select aria-label="Precio"><option>Todos los precios</option><option>300–500M</option><option>500–800M</option><option>800M–1.200M</option><option>1.200–2.000M</option><option>&gt; 2.000M</option></select>
+      </div>
+      <div class="tr th"><span>Zona · tipo · precio</span><span class="num">Pedidos 90 d</span><span class="num">Por mes</span><span class="num">Tenemos</span><span class="num">Por propiedad</span><span>Brecha</span><span></span></div>
+      <div id="rows"></div>
+      <div class="legend"><i></i>Resaltadas: 30 pedidos o más por cada propiedad que tenemos.</div>
+    </section>
+
+    <aside class="panel side">
+      <div class="block">
+        <h3>Celda seleccionada</h3>
+        <p class="sel-title" id="selTitle">Envigado · apartamento · 500–800M</p>
+        <div class="sel-sub" id="selSub">109 pedidos en 90 días · 36 al mes · tenemos 1</div>
+      </div>
+      <div class="block">
+        <h3>Qué piden</h3>
+        <div class="bar"><span>3 alcobas</span><div class="b"><span style="width:61%"></span></div><span class="n">61 %</span></div>
+        <div class="bar"><span>2 alcobas</span><div class="b"><span style="width:28%"></span></div><span class="n">28 %</span></div>
+        <div class="bar"><span>1 parqueadero</span><div class="b"><span style="width:55%"></span></div><span class="n">55 %</span></div>
+        <div class="bar"><span>Unidad con portería</span><div class="b"><span style="width:31%"></span></div><span class="n">31 %</span></div>
+        <div class="bar"><span>Piso máximo / ascensor</span><div class="b"><span style="width:18%"></span></div><span class="n">18 %</span></div>
+        <div class="muted" style="margin:10px 0 6px">Barrios más nombrados</div>
+        <div class="chips"><span class="chip">Zona plana</span><span class="chip">El Dorado</span><span class="chip">La Paz</span><span class="chip">Otraparte</span><span class="chip">Loma de las Brujas</span></div>
+      </div>
+      <div class="block">
+        <h3>Argumento para el propietario</h3>
+        <div class="arg">
+          <div class="arg-h">WhatsApp listo para copiar</div>
+          <div id="argText">Hola, soy de Diamond Inmobiliaria. Este mes 36 colegas de la red buscaron un apartamento como el suyo en Envigado (de 500 a 800 millones), y hoy solo tenemos uno para ofrecerles. Si nos da la exclusiva, su inmueble le llega a todos ellos el mismo día, con comisión compartida 50/50 con la red. ¿Le parece si lo visitamos esta semana?</div>
+        </div>
+        <div class="acts"><button class="btn gold" id="copy">Copiar</button><button class="btn wa" id="wa">Abrir WhatsApp</button></div>
+      </div>
+      <div class="block">
+        <h3>Inventario que no calza</h3>
+        <div class="mini">
+          <div><b>40 de 85</b><div class="muted">propiedades en venta sin pedidos en 90 días (rurales, sin zona en Wasi)</div></div>
+          <a href="#">Ver lista →</a>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <div class="foot">Fuente: pedidos que publican los colegas en ~50 grupos de WhatsApp, leídos por el radar. Un pedido repetido en varios grupos cuenta una vez.</div>
+</div>
+<div id="toast"></div>
+
+<script>
+  var data = [
+    ["El Poblado","apartamento","800M–1.200M",120,4],
+    ["Envigado","apartamento","500–800M",109,1],
+    ["Envigado","apartamento","800M–1.200M",105,2],
+    ["El Poblado","casa","> 2.000M",100,2],
+    ["El Poblado","apartamento","1.200–2.000M",86,3],
+    ["Laureles","apartamento","500–800M",84,1],
+    ["El Poblado","apartamento","500–800M",80,3],
+    ["Envigado","casa","1.200–2.000M",79,1],
+    ["Laureles","apartamento","300–500M",63,4],
+    ["Belén","apartamento","300–500M",58,1]
+  ];
+  var maxPpp = 109, sel = 1;
+  function fmt(n){ return (Math.round(n*10)/10).toString().replace(".", ","); }
+  function render(){
+    var h = "";
+    data.forEach(function(d, i){
+      var ppp = d[3]/d[4], hot = ppp >= 30;
+      h += '<div class="tr row' + (hot?' hot':'') + (i===sel?' sel':'') + '" data-i="' + i + '">' +
+        '<div class="zt"><b>' + d[0] + ' · ' + d[1] + '</b><small>' + d[2] + '</small></div>' +
+        '<div class="num"><span class="lbl">Pedidos 90 d</span>' + d[3] + '</div>' +
+        '<div class="num"><span class="lbl">Por mes</span>' + Math.round(d[3]/3) + '</div>' +
+        '<div class="num"><span class="lbl">Tenemos</span>' + d[4] + '</div>' +
+        '<div class="ppp"><span class="lbl">Por propiedad</span>' + fmt(ppp) + '</div>' +
+        '<div class="gapc"><div class="gap"><span style="width:' + Math.round(ppp/maxPpp*100) + '%"></span></div></div>' +
+        '<div class="acts1"><button class="btn" data-i="' + i + '">Copiar argumento</button></div></div>';
+    });
+    document.getElementById("rows").innerHTML = h;
+  }
+  function pick(i){
+    sel = i; var d = data[i];
+    var m = Math.round(d[3]/3);
+    document.getElementById("selTitle").textContent = d[0] + " · " + d[1] + " · " + d[2];
+    document.getElementById("selSub").textContent = d[3] + " pedidos en 90 días · " + m + " al mes · tenemos " + d[4];
+    var tipo = d[1] === "casa" ? "una casa" : "un apartamento";
+    var rango = d[2].replace("M","").replace("> ","más de ").replace("–"," a ") + " millones";
+    var tiene = d[4] === 1 ? "solo tenemos uno" : "solo tenemos " + ["","uno","dos","tres","cuatro"][d[4]];
+    document.getElementById("argText").textContent = "Hola, soy de Diamond Inmobiliaria. Este mes " + m + " colegas de la red buscaron " + tipo + " como el suyo en " + d[0] + " (de " + rango.replace("más de ","") + "), y hoy " + tiene + " para ofrecerles. Si nos da la exclusiva, su inmueble le llega a todos ellos el mismo día, con comisión compartida 50/50 con la red. ¿Le parece si lo visitamos esta semana?";
+    if (d[2].indexOf("> ") === 0) {
+      document.getElementById("argText").textContent = document.getElementById("argText").textContent.replace("(de " + d[2].replace("M","").replace("> ","").replace("–"," a ") + " millones)", "(de más de 2.000 millones)");
+    }
+    render();
+  }
+  function toast(t){ var e = document.getElementById("toast"); e.textContent = t; e.className = "show"; setTimeout(function(){ e.className = ""; }, 1600); }
+  document.getElementById("rows").addEventListener("click", function(e){
+    var r = e.target.closest(".row"); if (!r) return;
+    var i = +r.getAttribute("data-i"); pick(i);
+    if (e.target.tagName === "BUTTON") {
+      var t = document.getElementById("argText").textContent;
+      if (navigator.clipboard) { navigator.clipboard.writeText(t).catch(function(){}); }
+      toast("Argumento copiado");
+    }
+  });
+  document.getElementById("copy").onclick = function(){
+    var t = document.getElementById("argText").textContent;
+    if (navigator.clipboard) { navigator.clipboard.writeText(t).catch(function(){}); }
+    toast("Argumento copiado");
+  };
+  document.getElementById("wa").onclick = function(){ toast("Abriría WhatsApp con el texto"); };
+  render();
+</script>
+</body>
+</html>
