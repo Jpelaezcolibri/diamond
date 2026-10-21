@@ -115,8 +115,10 @@ const VECINDAD = [
   ["sabaneta", "estrella"],
   ["itagui", "estrella"],
   // Lomas y sectores que son parte de El Poblado o de su borde con Envigado.
-  ["poblado", "balsos"], ["poblado", "indio"], ["poblado", "palmas"],
-  ["poblado", "castropol"], ["poblado", "manila"], ["poblado", "provenza"],
+  // balsos, indio, castropol, manila y provenza pasaron a SUBZONA_DE el
+  // 2026-10-20: dejarlos aca los graduaba 'vecina' (la vecindad se evalua
+  // primero) en vez de 'zona_general'. Ver SUBZONA_DE.
+  ["poblado", "palmas"],
   ["envigado", "escobero"], ["envigado", "chocho"], ["envigado", "zuniga"],
   ["poblado", "rio"],
   // Juan, 2026-09-07 (medicion contra produccion): las UNICAS dos propiedades
@@ -129,8 +131,9 @@ const VECINDAD = [
   // (comuna 14). Ver SUBZONA_DE mas abajo para la otra mitad del arreglo.
   ["poblado", "gonzales"],
   // Corredor occidental: Laureles y su entorno inmediato.
-  ["laureles", "estadio"], ["laureles", "conquistadores"], ["laureles", "velodromo"],
-  ["laureles", "america"], ["laureles", "joaquin"], ["laureles", "bolivariana"],
+  // conquistadores, velodromo y bolivariana pasaron a SUBZONA_DE (2026-10-20).
+  ["laureles", "estadio"],
+  ["laureles", "america"], ["laureles", "joaquin"],
   ["laureles", "colores"], ["laureles", "calasanz"], ["laureles", "bolivar"],
   // Juan, 2026-09-07 (misma medicion): ref 10319552, la otra de las dos
   // propiedades en arriendo de Diamond, esta en "Don Quijote". Decision del
@@ -262,6 +265,23 @@ const SUBZONA_DE = new Map([
     "zuniga", "chocho", "escobero", "abadia", "cuenca", "portal", "chingui", "salado",
     "sebastiana", "ayura", "villagrande",
   ].map((barrio) => [barrio, "envigado"]),
+  // BARRIOS DEL POBLADO Y DE LAURELES (Juan, 2026-10-20, rescate de pedidos
+  // sin DM). Un pedido de "Los Balsos" o "Conquistadores" contra una ficha
+  // registrada solo como "El Poblado"/"Laureles" caia en 'vecina' (que nunca
+  // sale) porque estos barrios estaban en VECINDAD y no en SUBZONA_DE. Ahora
+  // gradua 'zona_general' (sector_sin_confirmar). Misma regla de arriba: solo
+  // tokens que no chocan con otra zona. Dejados afuera por ambiguos: calera
+  // (municipio La Calera), diamante, almendros, angeles, naranjos, campestre,
+  // colombia, lomas (genericos o de otra comuna), rio (tambien Guayabal),
+  // restrepo, acacias, florida (otras comunas).
+  ...[
+    "balsos", "lalinde", "linde", "castropol", "tesoro", "tomatera", "lucas", "bonito",
+    "provenza", "manila", "astorga", "alejandria", "carlota", "parra", "indio", "aguacatala",
+  ].map((barrio) => [barrio, "poblado"]),
+  ...[
+    "conquistadores", "teresita", "bolivariana", "castellana", "lorena", "velodromo",
+    "suramericana", "naranjal",
+  ].map((barrio) => [barrio, "laureles"]),
 ]);
 
 // ¿Algun token de la propiedad es una sub-zona conocida de algun token

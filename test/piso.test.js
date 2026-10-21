@@ -88,3 +88,20 @@ test("pero el piso del apartamento sigue leyendose aunque el edificio tenga loca
   };
   assert.strictEqual(pisoDe(p), 12);
 });
+
+// ── Rescate de pedidos (2026-10-20): el piso tambien se lee de caracteristicas y de la tabla ──
+
+test("caracteristicas: 'piso 9, balcon' y 'Piso: 3'", () => {
+  assert.strictEqual(pisoDe({ titulo: "Apto", descripcion: "Bonito", caracteristicas: "Ascensor, piso 9, balcon" }), 9);
+  assert.strictEqual(pisoDe({ titulo: "Apto", caracteristicas: "Piso: 3, Gimnasio" }), 3);
+});
+
+test("la tabla de la descripcion: 'PISO | 3' y <td>PISO</td><td>3</td>", () => {
+  assert.strictEqual(pisoDe({ titulo: "Apto", descripcion: "PISO | 3 ESTRATO | 5 AREA | 80" }), 3);
+  assert.strictEqual(pisoDe({ titulo: "Apto", descripcion: "<table><tr><td>PISO</td><td>7</td></tr></table>" }), 7);
+});
+
+test("'pisos en madera' y '3 pisos' no son un piso", () => {
+  assert.strictEqual(pisoDe({ titulo: "Apto", descripcion: "Pisos en madera", caracteristicas: "Balcon" }), null);
+  assert.strictEqual(pisoDe({ titulo: "Casa de 3 pisos", descripcion: "Casa con 3 pisos y terraza", caracteristicas: "3 pisos" }), null);
+});
