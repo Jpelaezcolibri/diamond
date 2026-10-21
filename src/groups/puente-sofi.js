@@ -115,6 +115,8 @@ async function tenderPuente(org, { mensaje, señal, identidad, dmId }, deps = nu
   }
 
   if (!envio || !envio.ok) return { resultado: "envio_fallido", error: envio && envio.error };
+  // Las respuestas a publicaciones de este colega ya tienen su link a Sofi: el recordatorio de las 3 h no insiste.
+  await require("../data/respuestas-publicacion").marcarPuente(org.id, identidad).catch(() => 0);
   return { resultado: "tendido" };
 }
 

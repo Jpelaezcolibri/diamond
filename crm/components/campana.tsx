@@ -30,6 +30,7 @@ const ICONO: Record<string, string> = {
   propiedad_publicada: "📣",
   visita_colega: "🗓️",
   interes_colega: "🔥",
+  respuesta_sin_atender: "⏰",
 };
 
 function hace(iso: string) {

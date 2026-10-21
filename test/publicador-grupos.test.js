@@ -167,6 +167,7 @@ test("publica un post, lo registra y espera antes del siguiente", async () => {
   assert.equal(log.enviados.length, 1);
   assert.equal(log.registrados[0].estado, "enviado");
   assert.equal(log.registrados[0].wamid, "W1");
+  assert.equal(log.registrados[0].origen, "auto");
   const [r2] = await scheduler.runOnce({ ahora: new Date(LUNES_10AM.getTime() + 10 * MIN), deps: d });
   assert.equal(r2.resultado, "espaciado");
 });

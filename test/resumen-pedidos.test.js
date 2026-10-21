@@ -160,3 +160,15 @@ test("la advertencia va pegada a la ficha que la tiene, no al pedido entero", ()
   assert.match(m, /⚠️ 10459832:/);
   assert.doesNotMatch(m, /⚠️ 10383517:/);
 });
+
+test("sin pedidos pero con respuestas sin atender, igual sale el resumen", async () => {
+  resumen._reset();
+  const { d, llamadas } = deps({
+    señales: async () => [],
+    sinAtender: async () => [{ property_ref: "10505566", colega_nombre: "Laura Gómez", via: "linea", primer_texto: "Hola, sigue disponible?" }],
+  });
+  const r = await resumen.runOnce({ ahora: new Date("2026-10-17T17:05:00Z"), deps: d });
+  assert.strictEqual(r.enviados, 1);
+  assert.strictEqual(llamadas.enviados.length, 1);
+  assert.match(llamadas.enviados[0].texto, /Respuestas a nuestras publicaciones sin atender\* \(1\)/);
+});

@@ -103,7 +103,12 @@ function depsPorDefecto() {
     post: (org, ref) => kit.post(org, ref),
     enviar: (sesion, jid, texto) => waha.enviarTexto(sesion, jid, texto),
     registrar: async (fila) => {
-      const { error } = await supabase.from("grupo_publicaciones").insert(fila);
+      let { error } = await supabase.from("grupo_publicaciones").insert(fila);
+      // Antes de la migracion de respuestas la columna origen no existe: se reintenta sin ella.
+      if (error && /origen/.test(`${error.message} ${error.code}`)) {
+        const { origen, ...sinOrigen } = fila;
+        ({ error } = await supabase.from("grupo_publicaciones").insert(sinOrigen));
+      }
       if (error) console.error("[publicador] No se pudo registrar la publicacion:", error.message);
     },
     alertar: (resumen, detalle) => enviarAlertaTecnica(resumen, detalle).catch(() => false),
@@ -189,6 +194,7 @@ async function runParaOrg(org, d, ahora) {
     group_id: grupo.id,
     group_jid: grupo.jid,
     property_ref: String(propiedad.ref),
+    origen: "auto",
     estado: r && r.ok ? "enviado" : "fallo",
     wamid: (r && r.wamid) || null,
     error: r && r.ok ? null : String((r && r.error) || "sin detalle").slice(0, 500),
