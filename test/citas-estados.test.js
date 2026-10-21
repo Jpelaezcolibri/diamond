@@ -24,20 +24,22 @@ test("un estado desconocido tampoco rompe: se lee como confirmada", () => {
 // ["confirmada"], o si estadoDe pasaba a `return e` sin validar, el test
 // seguia verde. Un test que no puede fallar no prueba nada. Escribir los
 // cuatro a mano es justamente lo que hace que sacar uno rompa aca.
-const LOS_CUATRO = ["propuesta", "confirmada", "cancelada", "reprogramada"];
+// 2026-10-21: se suma "vencida" (nadie la confirmo y paso la hora).
+const LOS_CUATRO = ["propuesta", "confirmada", "cancelada", "reprogramada", "vencida"];
 
-test("los cuatro estados validos se leen tal cual", () => {
+test("los cinco estados validos se leen tal cual", () => {
   for (const e of LOS_CUATRO) assert.strictEqual(citas.estadoDe({ estado: e }), e);
 });
 
-test("ESTADOS son exactamente esos cuatro, ni uno mas ni uno menos", () => {
+test("ESTADOS son exactamente esos cinco, ni uno mas ni uno menos", () => {
   assert.deepStrictEqual([...citas.ESTADOS].sort(), [...LOS_CUATRO].sort());
 });
 
 // `estaViva` es lo que van a consultar el calendario y el anti-choque de la
 // agenda: una cancelada no ocupa espacio ni se muestra.
-test("solo la cancelada deja de estar viva", () => {
+test("solo la cancelada y la vencida dejan de estar vivas", () => {
   assert.strictEqual(citas.estaViva({ estado: "cancelada" }), false);
+  assert.strictEqual(citas.estaViva({ estado: "vencida" }), false);
   assert.strictEqual(citas.estaViva({ estado: "propuesta" }), true);
   assert.strictEqual(citas.estaViva({ estado: "confirmada" }), true);
   assert.strictEqual(citas.estaViva({ estado: "reprogramada" }), true);

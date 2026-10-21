@@ -1059,18 +1059,30 @@ router.post("/api/conversations/:id/modo", async (req, res) => {
 // advisors (activa). Misma logica que el boton de WhatsApp y "OK CONFIRMADA".
 router.post("/api/citas/accion", async (req, res) => {
   try {
-    const { leadId, accion, authUserId } = req.body || {};
-    if (!leadId || !["confirmar", "otro"].includes(accion) || !authUserId) {
-      return res.status(400).json({ error: "faltan leadId, accion (confirmar|otro) o authUserId" });
+    const { leadId, accion, authUserId, esAdmin } = req.body || {};
+    if (!leadId || !["confirmar", "otro", "descartar"].includes(accion) || !authUserId) {
+      return res.status(400).json({ error: "faltan leadId, accion (confirmar|otro|descartar) o authUserId" });
     }
     const org = await organizations.getDefault();
     const advisors = require("../data/advisors");
     const leads = require("../data/leads");
     const citasData = require("../data/citas");
     const advisor = await advisors.findByAuthUserId(org.id, authUserId);
-    if (!advisor || advisor.activo === false) return res.status(403).json({ error: "tu usuario no está ligado a un asesor activo" });
+    const asesorActivo = advisor && advisor.activo !== false;
+    // Descartar una vencida tambien lo puede hacer un admin sin fila de asesor.
+    if (!asesorActivo && !(accion === "descartar" && esAdmin === true)) {
+      return res.status(403).json({ error: "tu usuario no está ligado a un asesor activo" });
+    }
     const lead = await leads.findById(org.id, leadId);
     if (!lead || !lead.cita) return res.status(404).json({ error: "no hay cita para ese lead" });
+    // "Descartar" (brief citas-avisos §1): una cita cuya hora ya paso sin
+    // confirmar se marca vencida. No le escribe a nadie.
+    if (accion === "descartar") {
+      const cv = require("../lib/citas-vencidas");
+      if (!cv.pasoSinConfirmar(lead.cita)) return res.status(409).json({ error: "esa visita no está vencida sin confirmar" });
+      await leads.update(lead.id, cv.patchVencida(lead, { por: asesorActivo ? advisor.name : "admin" }));
+      return res.json({ ok: true, texto: "Listo: la visita quedó como vencida." });
+    }
     if (citasData.estadoDe(lead.cita) !== "propuesta") {
       return res.status(409).json({ error: `esa visita ya estaba ${citasData.estadoDe(lead.cita)}` });
     }

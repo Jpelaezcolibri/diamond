@@ -13,7 +13,9 @@
 // —todas las que ya existen— se lee como `confirmada`. Es lo que el equipo
 // asumio todo este tiempo; inventarle otro estado seria reescribir la
 // historia. Por eso `estadoDe` nunca falla ni devuelve null.
-const ESTADOS = ["propuesta", "confirmada", "cancelada", "reprogramada"];
+// "vencida" (2026-10-21): nadie la confirmo y su hora ya paso
+// (src/lib/citas-vencidas.js). Tampoco ocupa espacio ni se recuerda.
+const ESTADOS = ["propuesta", "confirmada", "cancelada", "reprogramada", "vencida"];
 
 function esValido(estado) {
   return ESTADOS.includes(estado);
@@ -29,7 +31,8 @@ function estadoDe(cita) {
 // confirmarse, y dos personas no pueden reservar la misma hora.
 function estaViva(cita) {
   if (!cita) return false;
-  return estadoDe(cita) !== "cancelada";
+  const e = estadoDe(cita);
+  return e !== "cancelada" && e !== "vencida";
 }
 
 module.exports = { ESTADOS, esValido, estadoDe, estaViva };

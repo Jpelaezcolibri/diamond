@@ -152,4 +152,19 @@ async function listCitasPropuestasEnRotacion() {
   return (data || []).filter(filtro);
 }
 
-module.exports = { findOrCreate, findById, update, claimFollowup, claimAppointmentReminder, listConCitasPropuestasVencidas, listCitasPropuestasEnRotacion };
+// Citas que todavia esperan confirmacion por su estado CRUDO (solicitada,
+// propuesta, por_confirmar), con o sin rotacion: las lee
+// src/lib/citas-vencidas.js para marcar las que ya pasaron.
+async function listConCitaPendiente(estados) {
+  const filtro = (l) => l.cita && estados.includes(l.cita.estado);
+  if (!supabase) return memory.leads.filter(filtro);
+  const { data, error } = await supabase
+    .from("leads")
+    .select("id, org_id, nombre, phone, source, cita, atencion_pendiente")
+    .not("cita", "is", null)
+    .limit(1000);
+  if (error) throw error;
+  return (data || []).filter(filtro);
+}
+
+module.exports = { findOrCreate, findById, update, claimFollowup, claimAppointmentReminder, listConCitasPropuestasVencidas, listCitasPropuestasEnRotacion, listConCitaPendiente };

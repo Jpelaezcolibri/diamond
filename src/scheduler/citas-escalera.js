@@ -15,6 +15,9 @@ const { aliasPublico } = require("../lib/identidad-publica");
 const { formatCitaFechaHora } = require("../notifications/advisor");
 
 const PASO_MIN = Number(process.env.ESCALERA_PASO_MIN || 60);
+// Aviso repetido a la misma asesora si a los 15 min no confirmo (brief
+// citas-avisos §3, Juan 2026-10-21). Uno por asignacion: al rotar se reinicia.
+const REAVISO_MIN = Number(process.env.ESCALERA_REAVISO_MIN || 15);
 const INTERVALO_MIN = Number(process.env.ESCALERA_INTERVALO_MIN || 5);
 
 // Que le toca a esta cita ahora: "nada", "rotar" (con el nuevo asesor) o
@@ -42,6 +45,21 @@ function pasoDeEscalera({ lead, ciclo, citasOrg, ahora = new Date() }) {
   return { accion: "rotar", nuevo };
 }
 
+// ¿Le toca hoy el aviso repetido a la asesora actual? Pura. Una vez por
+// asignacion (reaviso_at posterior a asignada_at), nunca de noche, nunca
+// pasado el corte. No cambia el paso de 60 min.
+function tocaReaviso({ lead, ahora = new Date() }) {
+  const c = lead && lead.cita;
+  if (!c || !c.asesor_id || c.estado !== "propuesta") return false;
+  if (c.corte_at && ahora.getTime() >= new Date(c.corte_at).getTime()) return false;
+  if (reglas.enSilencio(ahora)) return false;
+  const desde = new Date(c.asignada_at || c.creada_at || 0).getTime();
+  if (isNaN(desde) || desde <= 0) return false;
+  if (ahora.getTime() - desde < REAVISO_MIN * 60 * 1000) return false;
+  const ya = c.reaviso_at ? new Date(c.reaviso_at).getTime() : NaN;
+  return !(ya >= desde);
+}
+
 function canal(deps) {
   return {
     aviso: deps.aviso || ((args) => require("../notifications/aviso-cita").avisarCitaPorConfirmar(args)),
@@ -49,6 +67,8 @@ function canal(deps) {
     plantilla: deps.plantilla || ((...a) => require("../channels/whatsapp").sendWhatsAppTemplate(...a)),
     org: deps.org || ((id) => organizations.findById(id)),
     notificar: deps.notificar || ((...a) => require("../notifications/notificar").notificar(...a)),
+    reaviso: deps.reaviso || ((...a) => require("../notifications/avisar-asesor").avisarAsesor(...a)),
+    vencidas: deps.vencidas || ((args) => require("../lib/citas-vencidas").marcarVencidas(args)),
   };
 }
 
@@ -67,6 +87,8 @@ async function rotar({ org, lead, ciclo, nuevo, ahora, c }) {
     asesor_id: nuevo.id,
     advisor_id: nuevo.auth_user_id || null,
     asignada_at: ahoraIso,
+    // El aviso repetido de 15 min vuelve a empezar con la nueva asesora.
+    reaviso_at: null,
     historial,
   };
   await leads.update(lead.id, { cita });
@@ -103,14 +125,48 @@ async function cortar({ org, lead, ciclo, ahora, c }) {
   console.log(`[citas-escalera] lead ${lead.id}: cancelada por falta de confirmacion`);
 }
 
+function refCuando(cita) {
+  const fh = formatCitaFechaHora(cita.fecha_hora);
+  return `Ref ${cita.ref || "sin ref"}, ${fh ? `${fh.fecha}, ${fh.hora}` : "sin hora"}`;
+}
+
+async function reavisar({ org, lead, ciclo, ahora, c }) {
+  const actual = ciclo.find((a) => a.id === lead.cita.asesor_id) || null;
+  if (!actual) return false;
+  // Se marca ANTES de avisar: un fallo de WhatsApp no repite la campana.
+  const cita = { ...lead.cita, reaviso_at: ahora.toISOString() };
+  await leads.update(lead.id, { cita });
+  lead.cita = cita;
+  const quien = `${lead.nombre || `+${lead.phone}`}${lead.source === "colega" ? " (colega)" : ""}`;
+  const corte = cita.corte_at ? formatCitaFechaHora(cita.corte_at) : null;
+  await c
+    .reaviso({
+      org, advisor: actual, motivo: "visita", lead,
+      titulo: `Sigue pendiente: visita por confirmar (${refCuando(cita)})`,
+      cuerpo: `${quien}${corte ? ` · confírmala antes de ${corte.fecha}, ${corte.hora}` : ""}`,
+    })
+    .catch((e) => console.warn("[citas-escalera] aviso repetido:", e.message));
+  console.log(`[citas-escalera] lead ${lead.id}: aviso repetido a ${actual.name}`);
+  return true;
+}
+
 let corriendo = false;
 async function runOnce({ ahora = new Date(), deps = {} } = {}) {
-  if (corriendo) return { rotadas: 0, cortadas: 0 };
+  if (corriendo) return { rotadas: 0, cortadas: 0, reavisadas: 0, vencidas: 0 };
   corriendo = true;
   const c = canal(deps);
   let rotadas = 0;
   let cortadas = 0;
+  let reavisadas = 0;
+  let vencidas = 0;
   try {
+    // Primero las vencidas (con o sin rotacion): una cita cuya hora ya paso
+    // sale sola de "Para atender", sin escribirle a nadie.
+    const v = await c.vencidas({ ahora }).catch((e) => {
+      console.error("[citas-escalera] vencidas:", e.message);
+      return null;
+    });
+    vencidas = (v && v.vencidas) || 0;
     const pendientes = await leads.listCitasPropuestasEnRotacion().catch((e) => {
       console.error("[citas-escalera] no se pudieron leer las citas:", e.message);
       return [];
@@ -133,12 +189,14 @@ async function runOnce({ ahora = new Date(), deps = {} } = {}) {
         } else if (paso.accion === "cortar") {
           await cortar({ org, lead, ciclo, ahora, c });
           cortadas++;
+        } else if (tocaReaviso({ lead, ahora })) {
+          if (await reavisar({ org, lead, ciclo, ahora, c })) reavisadas++;
         }
       } catch (e) {
         console.error("[citas-escalera] error con lead", lead.id, e.message);
       }
     }
-    return { rotadas, cortadas };
+    return { rotadas, cortadas, reavisadas, vencidas };
   } finally {
     corriendo = false;
   }
@@ -161,4 +219,4 @@ function stop() {
   timer = null;
 }
 
-module.exports = { pasoDeEscalera, runOnce, start, stop };
+module.exports = { pasoDeEscalera, tocaReaviso, runOnce, start, stop, REAVISO_MIN };

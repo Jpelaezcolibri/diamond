@@ -143,6 +143,10 @@ async function checkAvailability(orgId, advisor, fechaHoraIso, { excludeLeadId =
 function isReminderDue(lead, nowMs, windowMin) {
   const c = lead && lead.cita;
   if (!c || !c.fecha_hora || !c.advisor_id || c.recordatorio_enviado) return false;
+  // Las de la rotacion (asesor_id, 2026-10-07) van por isRecordatorioRotacionDue:
+  // su asesora puede no tener usuario del CRM (Claudia) y solo se recuerdan
+  // las confirmadas.
+  if (c.asesor_id) return false;
   // Una cancelada no se recuerda (Juan, 2026-09-04). Sin esto, una cita que se
   // cancelo ayer desde el CRM desaparecia del calendario pero al asesor le
   // llegaba igual la plantilla `recordatorio_cita` una hora antes: la agenda
@@ -152,6 +156,35 @@ function isReminderDue(lead, nowMs, windowMin) {
   const t = new Date(c.fecha_hora).getTime();
   if (isNaN(t)) return false;
   return t > nowMs && t <= nowMs + windowMin * 60 * 1000;
+}
+
+// Recordatorio a la asesora de una cita de la ROTACION (brief citas-avisos §2,
+// Juan 2026-10-21): solo confirmada (o reprogramada), dentro de la ventana,
+// una sola vez (recordatorio_asesor_at). Las que ya recibieron el recordatorio
+// del camino viejo (recordatorio_enviado) no se repiten.
+function isRecordatorioRotacionDue(lead, nowMs, windowMin) {
+  const c = lead && lead.cita;
+  if (!c || !c.asesor_id || !c.fecha_hora || c.recordatorio_asesor_at || c.recordatorio_enviado) return false;
+  const e = citasData.estadoDe(c);
+  if (e !== "confirmada" && e !== "reprogramada") return false;
+  const t = new Date(c.fecha_hora).getTime();
+  if (isNaN(t)) return false;
+  return t > nowMs && t <= nowMs + windowMin * 60 * 1000;
+}
+
+async function dueRecordatoriosRotacion(orgId, { windowMin = 60, nowMs = null } = {}) {
+  const now = nowMs == null ? Date.now() : nowMs;
+  if (!supabase) {
+    return memory.leads.filter((l) => l.org_id === orgId && isRecordatorioRotacionDue(l, now, windowMin));
+  }
+  const { data, error } = await supabase
+    .from("leads")
+    .select("id, nombre, phone, source, cita")
+    .eq("org_id", orgId)
+    .not("cita", "is", null)
+    .limit(500);
+  if (error) throw error;
+  return (data || []).filter((l) => isRecordatorioRotacionDue(l, now, windowMin));
 }
 
 // Leads con cita proxima que necesitan recordatorio, dentro del alcance de la
@@ -214,6 +247,8 @@ module.exports = {
   proximoDisponible,
   isReminderDue,
   dueReminders,
+  isRecordatorioRotacionDue,
+  dueRecordatoriosRotacion,
   citasPendientesDeConfirmar,
   citasDeLaOrg,
 };

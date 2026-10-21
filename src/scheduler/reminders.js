@@ -32,19 +32,73 @@ function horaBogota(iso) {
   }
 }
 
+// Sin telefono: la plantilla no lo pide y el celular del cliente no sale.
+function clienteDe(lead) {
+  return lead.nombre || (lead.source === "colega" ? "un colega" : "un cliente");
+}
+
 // Los 4 valores del cuerpo de la plantilla recordatorio_cita, en orden:
 // {{1}} asesor, {{2}} tipo, {{3}} cliente, {{4}} hora.
 function reminderParams(advisor, lead) {
   return [
     advisor.name || "asesor",
     tipoLabel(lead.cita.tipo),
-    lead.nombre || "un cliente",
+    clienteDe(lead),
     horaBogota(lead.cita.fecha_hora),
   ];
 }
 
-async function runOnce() {
+// Recordatorio de una cita de la ROTACION (brief citas-avisos §2, Juan
+// 2026-10-21): a la asesora que la confirmo o la tiene asignada
+// (cita.asesor_id -> advisors), por la campana del CRM y por la plantilla
+// recordatorio_cita. Una sola vez: recordatorio_asesor_at se marca antes de
+// enviar, asi un fallo de WhatsApp no duplica la campana.
+async function recordarRotacion({ org, lead, d, nowMs }) {
+  const advisor = await d.asesor(org.id, lead.cita.asesor_id).catch(() => null);
+  if (!advisor || advisor.activo === false) return false;
+  const cita = { ...lead.cita, recordatorio_asesor_at: new Date(nowMs).toISOString() };
+  await d.actualizar(lead.id, { cita });
+  lead.cita = cita;
+  const hora = horaBogota(cita.fecha_hora);
+  await d
+    .notificar({
+      orgId: org.id, advisor, tipo: "cita_recordatorio",
+      titulo: `En 1 h: ${tipoLabel(cita.tipo)} con ${clienteDe(lead)}${cita.ref ? ` (Ref ${cita.ref})` : ""}`,
+      cuerpo: `Hoy a las ${hora}`, link: "/calendario", leadId: lead.id,
+    })
+    .catch(() => {});
+  const tel = String(advisor.phone || "").replace(/\D/g, "");
+  if (tel) {
+    const r = await d
+      .plantilla(org, tel, { name: config.reminders.templateName, language: config.reminders.templateLang, bodyParams: reminderParams(advisor, lead) })
+      .catch((e) => ({ ok: false, error: e.message }));
+    if (!r || !r.ok) console.warn(`[reminders] recordatorio_cita a ${advisor.name} no salio (queda la campana):`, (r && r.error) || "?");
+  }
+  return true;
+}
+
+function depsPorDefecto() {
+  return {
+    asesor: (orgId, id) => advisors.findById(orgId, id),
+    actualizar: (id, patch) => leads.update(id, patch),
+    notificar: (...a) => require("../notifications/notificar").notificar(...a),
+    plantilla: (...a) => sendWhatsAppTemplate(...a),
+  };
+}
+
+let corriendo = false;
+async function runOnce({ deps = null, nowMs = null } = {}) {
   if (!config.reminders.enabled) return { sent: 0 };
+  if (corriendo) return { sent: 0 };
+  corriendo = true;
+  try {
+    return await correr({ d: { ...depsPorDefecto(), ...(deps || {}) }, nowMs: nowMs == null ? Date.now() : nowMs });
+  } finally {
+    corriendo = false;
+  }
+}
+
+async function correr({ d, nowMs }) {
 
   // Antes solo se procesaba organizations.getDefault() (la primera org): el
   // dia que exista una org #2 sus recordatorios de cita nunca corrian.
@@ -52,7 +106,7 @@ async function runOnce() {
 
   let sent = 0;
   for (const org of orgs) {
-    const due = await appointments.dueReminders(org.id, { windowMin: config.reminders.windowMin });
+    const due = await appointments.dueReminders(org.id, { windowMin: config.reminders.windowMin, nowMs });
     for (const lead of due) {
       try {
         const advisor = await advisors.findByAuthUserId(org.id, lead.cita.advisor_id);
@@ -64,7 +118,7 @@ async function runOnce() {
         const claimed = await leads.claimAppointmentReminder(lead.id);
         if (!claimed) continue; // otro tick/proceso ya lo esta manejando
 
-        const { ok } = await sendWhatsAppTemplate(org, advisor.phone, {
+        const { ok } = await d.plantilla(org, advisor.phone, {
           name: config.reminders.templateName,
           language: config.reminders.templateLang,
           bodyParams: reminderParams(advisor, lead),
@@ -82,8 +136,22 @@ async function runOnce() {
       }
     }
   }
-  if (sent) console.log(`[reminders] ${sent} recordatorio(s) enviado(s)`);
-  return { sent };
+  let rotacion = 0;
+  for (const org of orgs) {
+    const due = await appointments.dueRecordatoriosRotacion(org.id, { windowMin: config.reminders.windowMin, nowMs }).catch((e) => {
+      console.error("[reminders] citas de la rotacion:", e.message);
+      return [];
+    });
+    for (const lead of due) {
+      try {
+        if (await recordarRotacion({ org, lead, d, nowMs })) rotacion++;
+      } catch (e) {
+        console.error("[reminders] error con lead", lead.id, e.message);
+      }
+    }
+  }
+  if (sent || rotacion) console.log(`[reminders] ${sent} recordatorio(s) enviado(s), ${rotacion} de la rotacion`);
+  return { sent, rotacion };
 }
 
 function start() {
@@ -100,4 +168,4 @@ function start() {
   );
 }
 
-module.exports = { start, runOnce, reminderParams, tipoLabel, horaBogota };
+module.exports = { start, runOnce, reminderParams, tipoLabel, horaBogota, clienteDe };
