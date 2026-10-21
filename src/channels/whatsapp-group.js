@@ -59,6 +59,7 @@ const vivo = require("../groups/vivo");
 const waha = require("../lib/waha");
 const dm = require("../groups/dm");
 const groupSignals = require("../data/group-signals");
+const lineaDm = require("../data/linea-dm");
 
 const router = express.Router();
 
@@ -197,12 +198,17 @@ function normalizar(body) {
   return {
     sesion: body?.session || null,
     waMessageId: p.id || null,
-    chatId: p.from || null,
+    // En un mensaje que ENVIA la linea, WAHA pone en `from` a la propia cuenta
+    // y el chat de destino en `to`; para lo entrante `from` es el chat.
+    chatId: (p.fromMe && p.to) || p.from || null,
     autorId: p.participant || p.author || null,
     autorTelefonoVisible: telefonoVisible(p),
     autorNombre,
     texto: typeof p.body === "string" ? p.body : "",
     fromMe: Boolean(p.fromMe),
+    // Id del mensaje citado (respuesta a nuestro post). WAHA NOWEB lo manda en
+    // payload.replyTo.id; si no viene, null y la via "grupo" queda en 0.
+    replyToId: (p.replyTo && (p.replyTo.id || p.replyTo._serialized)) || (p._data && p._data.quotedStanzaID) || null,
     tieneMedia: Boolean(p.hasMedia),
     // WAHA manda segundos epoch. Sin fecha NO se asume "ahora": se asume
     // sospechoso y se descarta (ver esAnteriorAlCorte).
@@ -280,6 +286,14 @@ function claseDelResultado(resultado) {
 // Procesa el mensaje despues de haber respondido 200. WAHA reintenta si el
 // webhook tarda, y clasificar + cruzar + publicar no cabe en ese plazo.
 async function procesar(org, ev, grupo, sesion) {
+  // Un colega citando UNO DE NUESTROS posts (respuesta en el grupo): se atribuye
+  // a la publicacion. Nunca lanza ni frena el resto del procesamiento.
+  if (ev.replyToId) {
+    require("../groups/respuestas-publicacion")
+      .deGrupo(org, { replyToId: ev.replyToId, autorId: ev.autorId, nombre: ev.autorNombre, texto: ev.texto })
+      .catch(() => null);
+  }
+
   const mensaje = {
     id: ev.waMessageId,
     grupo: grupo.nombre || ev.chatId,
@@ -379,6 +393,10 @@ async function procesarDM(org, ev, sesion) {
   return dm.procesarMensaje(org, mensaje);
 }
 
+// Espera (ms) antes de decidir si un fromMe es humano (ver arriba). Inyectable
+// para que los tests no duerman.
+const config_salida = { graciaMs: 8000 };
+
 router.post("/webhook/grupos", async (req, res) => {
   if (!autorizado(req)) return res.status(401).json({ ok: false });
 
@@ -394,16 +412,37 @@ router.post("/webhook/grupos", async (req, res) => {
   // al radar, sin uso personal — ver la nota completa en
   // db/migrations/2026-08-21_linea_dm.sql antes de tocar esto.
   // ... Un DM llega por @c.us o por @lid (2026-09-08); los dos entran.
-  if (req.body?.event !== "message" || !ev.waMessageId || (!esGrupo(ev.chatId) && !esDM(ev.chatId))) {
+  const evento = req.body?.event;
+  if ((evento !== "message" && evento !== "message.any") || !ev.waMessageId || (!esGrupo(ev.chatId) && !esDM(ev.chatId))) {
     return res.json({ ok: true });
   }
+  // "message.any" solo interesa por lo que ENVIA la linea; lo entrante ya llega por "message".
+  if (evento === "message.any" && !ev.fromMe) return res.json({ ok: true });
 
   try {
     const org = await organizations.getDefault();
 
     // Lo que escribe la propia linea no es senal de nadie — y evita que el
     // radar se conteste o se guarde a si mismo.
-    if (ev.fromMe) return res.json({ ok: true });
+    if (ev.fromMe) {
+      // Salida humana a un colega (Daiana escribiendo desde su celular): marca
+      // atendidas sus respuestas y queda en linea_dm. Lo que manda el propio
+      // sistema (DM del radar, puente, publicador) no cuenta.
+      if (esDM(ev.chatId)) {
+        res.json({ ok: true });
+        // WAHA puede entregar el webhook de un envio nuestro ANTES de que
+        // enviarDm/enviarTexto devuelvan su wamid: se espera un momento para
+        // que esEnvioPropio ya lo conozca.
+        if (config_salida.graciaMs > 0) await new Promise((r) => setTimeout(r, config_salida.graciaMs));
+        if (waha.esEnvioPropio(ev.waMessageId) || yaVisto(ev.waMessageId)) return;
+        const quien = identidadDM(ev.chatId);
+        const identidad = { telefono: quien.telefono, lid: quien.lid };
+        await lineaDm.create(org.id, { sesion: ev.sesion, waMessageId: ev.waMessageId, remitenteTelefono: identidad.telefono, remitenteLid: identidad.lid, remitenteNombre: null, texto: ev.texto, fechaMensaje: ev.tsMs ? new Date(ev.tsMs).toISOString() : null, senalId: null, direccion: "salida" }).catch(() => null);
+        await require("../groups/respuestas-publicacion").atendidaPorLinea(org, identidad).catch(() => 0);
+        return;
+      }
+      return res.json({ ok: true });
+    }
 
     // ── Camino DM: mas simple a proposito. Sin lista blanca (no hay "grupos"
     // que habilitar en un chat 1 a 1) y sin publicacion — solo lectura,
@@ -499,6 +538,7 @@ router.get("/webhook/grupos/estado", async (req, res) => {
 
 module.exports = router;
 module.exports._normalizar = normalizar;
+module.exports._configSalida = config_salida;
 module.exports._esGrupo = esGrupo;
 module.exports._esDM = esDM;
 module.exports._identidadDM = identidadDM;

@@ -27,6 +27,7 @@ function chain(resultado) {
   const c = {
     select: () => c,
     eq: () => c,
+    neq: () => c,
     not: () => c,
     order: () => c,
     limit: () => c,

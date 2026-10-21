@@ -105,13 +105,39 @@ async function pedir(ruta, { metodo = "GET", body = null } = {}) {
 
 // Crea (o reusa) la sesion y la arranca. Idempotente: si ya existe, WAHA
 // devuelve 422 y devolvemos la que hay.
+// Eventos de la sesion (2026-10-20): "message.any" trae tambien lo que la
+// linea envia, para saber si Daiana le contesto a un colega. Los mensajes
+// propios del sistema se reconocen por su wamid (esEnvioPropio).
+const EVENTOS_SESION = ["message", "message.any"];
+const enviosPropios = new Map(); // id desnudo -> ts
+const TTL_PROPIO_MS = 6 * 3600e3;
+// WAHA devuelve `true_<chat>_<ID>` al enviar y el webhook puede traer esa forma
+// o el ID desnudo: se compara siempre por lo que va tras el ultimo "_".
+const idDesnudo = (wamid) => String(wamid || "").split("_").pop();
+function _recordarEnvioPropio(wamid) {
+  if (!wamid) return;
+  const ahora = Date.now();
+  enviosPropios.set(idDesnudo(wamid), ahora);
+  for (const [k, ts] of enviosPropios) if (ahora - ts > TTL_PROPIO_MS) enviosPropios.delete(k);
+}
+function esEnvioPropio(wamid) {
+  if (!wamid) return false;
+  return enviosPropios.has(idDesnudo(wamid));
+}
+// Solo helper: aplica EVENTOS_SESION a una sesion ya creada. No se llama solo.
+async function actualizarEventos(nombre, { webhookUrl, webhookSecret }) {
+  const config = { webhooks: [{ url: webhookUrl, events: EVENTOS_SESION, customHeaders: [{ name: "x-api-key", value: webhookSecret }] }] };
+  return pedir(`/api/sessions/${encodeURIComponent(nombre)}`, { metodo: "PUT", body: { config } });
+}
+
 async function crearSesion(nombre, { webhookUrl, webhookSecret }) {
   const config = {
     webhooks: [{
       url: webhookUrl,
-      // Solo mensajes. Nada de acks, presencia ni typing: es ruido, y cada
-      // evento extra es superficie de exposicion sin contrapartida.
-      events: ["message"],
+      // Mensajes (entrantes y, via message.any, salientes). Nada de acks,
+      // presencia ni typing: es ruido, y cada evento extra es superficie de
+      // exposicion sin contrapartida.
+      events: EVENTOS_SESION,
       customHeaders: [{ name: "x-api-key", value: webhookSecret }],
     }],
   };
@@ -440,6 +466,7 @@ async function enviarTexto(sesion, chatId, texto, { replyTo = null } = {}) {
     if (replyTo) body.reply_to = replyTo;
     const r = await pedir("/api/sendText", { metodo: "POST", body });
     const wamid = r?.id?._serialized || r?.id || r?.key?.id || null;
+    _recordarEnvioPropio(wamid);
     return { ok: true, wamid };
   } catch (e) {
     console.error(`[waha] No se pudo publicar en ${chatId}: ${e.message}`);
@@ -518,6 +545,7 @@ async function enviarDm(sesion, telefono, texto, { lid = null, orgId = null } = 
       body: { session: sesion, chatId, text: texto },
     });
     const wamid = r?.id?._serialized || r?.id || r?.key?.id || null;
+    _recordarEnvioPropio(wamid);
     return { ok: true, wamid, destino: chatId };
   } catch (e) {
     console.error(`[waha] No se pudo mandar el DM a ${chatId}: ${e.message}`);
@@ -650,5 +678,5 @@ async function contarLids(sesion) {
 module.exports = {
   configurado, crearSesion, estadoSesion, cuotaDeLinea, reintentarUnaVez, revincular, qr,
   listarGrupos, nombresPorJid, enviarTexto, enviarDm, telefonoDeLid, contarLids, participantesDeGrupo,
-  versionInfo,
+  versionInfo, EVENTOS_SESION, esEnvioPropio, actualizarEventos, _recordarEnvioPropio,
 };

@@ -76,12 +76,24 @@ function depsPorDefecto() {
       const lid = String(senal.respuesta_destino_lid || "").replace(/@.*$/, "");
       const ors = [`senal_id.eq.${senal.id}`];
       if (lid) ors.push(`remitente_lid.eq.${lid}`, `remitente_lid.eq.${lid}@lid`);
-      const { data } = await supabase
+      // Solo cuenta lo que ESCRIBIO el colega (direccion entrada); lo que la
+      // linea manda a mano (salida) comparte lid y no es una respuesta suya.
+      let { data, error } = await supabase
         .from("linea_dm")
         .select("id")
         .or(ors.join(","))
+        .or("direccion.eq.entrada,direccion.is.null")
         .gte("fecha_mensaje", senal.respondida_at)
         .limit(1);
+      if (error) {
+        // Columna direccion aun sin migrar: no hay filas de salida, se lee sin filtro.
+        ({ data } = await supabase
+          .from("linea_dm")
+          .select("id")
+          .or(ors.join(","))
+          .gte("fecha_mensaje", senal.respondida_at)
+          .limit(1));
+      }
       return Boolean(data && data.length);
     },
     soloLlamada: (orgId, senal) =>

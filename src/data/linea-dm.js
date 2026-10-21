@@ -38,6 +38,16 @@ function esColumnaFaltante(error) {
 // otra columna nueva, va aca.
 const COLUMNAS_NUEVAS = ["remitente_lid"];
 
+// direccion (2026-10-20_publicaciones_respuestas): 'entrada' (lo que dice el
+// colega) o 'salida' (lo que escribe la linea a mano). Sin la columna, las filas
+// de salida NO se guardan (entrarian como si fueran del colega).
+let faltaDireccion = false;
+function avisarFaltaDireccion() {
+  if (faltaDireccion) return;
+  faltaDireccion = true;
+  console.warn("[linea-dm] Falta la columna linea_dm.direccion — no se guardan los mensajes de salida de la linea.");
+}
+
 let faltaTabla = false;
 function avisarFaltaTabla() {
   if (faltaTabla) return;
@@ -82,6 +92,7 @@ async function create(orgId, fields) {
     texto: fields.texto || null,
     fecha_mensaje: fields.fechaMensaje || null,
     senal_id: fields.senalId || null,
+    direccion: fields.direccion === "salida" ? "salida" : "entrada",
   };
 
   if (!supabase) {
@@ -94,6 +105,17 @@ async function create(orgId, fields) {
   }
 
   let { data, error } = await supabase.from("linea_dm").insert(row).select().single();
+
+  // Falta la columna direccion: una fila de entrada se guarda sin ella (igual
+  // que antes); una de salida se descarta, porque sin la columna se leeria como
+  // palabras del colega.
+  if (error && esColumnaFaltante(error) && /direccion/i.test(error.message || "")) {
+    avisarFaltaDireccion();
+    if (row.direccion === "salida") return { mensaje: null, duplicado: false };
+    const sinDireccion = { ...row };
+    delete sinDireccion.direccion;
+    ({ data, error } = await supabase.from("linea_dm").insert(sinDireccion).select().single());
+  }
 
   // DEGRADACION SI FALTA LA COLUMNA (revision final, 2026-09-08). El caso
   // real es desplegar antes de que corra 2026-09-08_linea_dm_lid.sql. Sin
@@ -127,16 +149,29 @@ async function historialDe(orgId, identidad, { limite = 10 } = {}) {
   if (!filtro) return [];
   if (!supabase) {
     return (memory.lineaDm || [])
-      .filter((m) => m.org_id === orgId && m[filtro.columna] === filtro.valor)
+      .filter((m) => m.org_id === orgId && m[filtro.columna] === filtro.valor && (m.direccion || "entrada") === "entrada")
       .slice(-limite);
   }
-  const { data, error } = await supabase
+  // Solo lo que dijo el colega: la salida de la linea no es "su" hilo.
+  // direccion es NOT NULL default 'entrada'; neq basta.
+  let { data, error } = await supabase
     .from("linea_dm")
     .select("id, texto, created_at, senal_id")
     .eq("org_id", orgId)
     .eq(filtro.columna, filtro.valor)
+    .neq("direccion", "salida")
     .order("created_at", { ascending: false })
     .limit(limite);
+  if (error && esColumnaFaltante(error) && /direccion/i.test(error.message || "")) {
+    // Sin la columna no existen filas de salida: se lee sin filtro.
+    ({ data, error } = await supabase
+      .from("linea_dm")
+      .select("id, texto, created_at, senal_id")
+      .eq("org_id", orgId)
+      .eq(filtro.columna, filtro.valor)
+      .order("created_at", { ascending: false })
+      .limit(limite));
+  }
   if (error) {
     // Tabla o columna faltante: el hilo se degrada a vacio (el clasificador
     // trabaja con el mensaje suelto) en vez de tumbar todo el procesamiento.

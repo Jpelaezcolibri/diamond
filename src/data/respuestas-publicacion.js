@@ -41,7 +41,10 @@ self.postPorWamid = async function postPorWamid(orgId, wamid) {
   if (!wamid) return null;
   const { data, error } = await self._supabase()
     .from("grupo_publicaciones").select("id, property_ref, group_id, created_at")
-    .eq("org_id", orgId).eq("wamid", String(wamid)).limit(1);
+    .eq("org_id", orgId)
+    // wamid guardado = lo que devolvio enviarTexto (`true_<chat>_<ID>`); el
+    // webhook puede citar esa forma o el ID desnudo: se aceptan las dos.
+    .or(`wamid.eq.${String(wamid)},wamid.like.*_${String(wamid).split("_").pop()}`).limit(1);
   if (error) throw error;
   return (data && data[0]) || null;
 };

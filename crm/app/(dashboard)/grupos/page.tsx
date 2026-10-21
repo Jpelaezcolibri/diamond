@@ -360,14 +360,26 @@ export default async function GruposPage() {
   // de propiedades es trabajo diario de la asesora que atiende la línea, no
   // una decisión sobre la privacidad de nadie — mismo criterio que
   // /api/grupos/venta. La política RLS "team read" ya lo permite.
-  const dmRes = await fetchSafe<DmMensaje>(
+  // Solo lo que dijo el colega (direccion = 'entrada'): lo que escribe la
+  // linea a mano (salida) no es un mensaje suyo. Si la migración de la columna
+  // `direccion` todavía no corrió, la consulta falla y se repite sin el filtro
+  // (sin la columna tampoco hay filas de salida).
+  const columnasDm = "id, remitente_telefono, remitente_lid, remitente_nombre, texto, created_at, tiene_cita, avance_tipo, cita_fecha_hora_iso, senal_id";
+  let dmRes = await fetchSafe<DmMensaje>(
     supabase
       .from("linea_dm")
-      .select("id, remitente_telefono, remitente_lid, remitente_nombre, texto, created_at, tiene_cita, avance_tipo, cita_fecha_hora_iso, senal_id")
+      .select(columnasDm)
+      .or("direccion.eq.entrada,direccion.is.null")
       .order("created_at", { ascending: false })
       .limit(300),
     "grupos:linea_dm"
   );
+  if (dmRes.hasError) {
+    dmRes = await fetchSafe<DmMensaje>(
+      supabase.from("linea_dm").select(columnasDm).order("created_at", { ascending: false }).limit(300),
+      "grupos:linea_dm_sin_direccion"
+    );
+  }
 
   // "Posibles ventas" sigue admin-only: son cifras de toda la organización.
   const ventasRes = admin

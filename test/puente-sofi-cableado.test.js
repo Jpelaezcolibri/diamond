@@ -66,7 +66,7 @@ test("si el puente revienta, el mensaje igual queda guardado", async (t) => {
 test("historialDe pide senal_id a la base (sin eso el 'una sola vez' no funciona)", async () => {
   let columnas = null;
   const q = {
-    select(c) { columnas = c; return q; }, eq() { return q; }, order() { return q; }, limit() { return q; },
+    select(c) { columnas = c; return q; }, eq() { return q; }, neq() { return q; }, order() { return q; }, limit() { return q; },
     then(resolve) { resolve({ data: [], error: null }); },
   };
   const rutaSupabase = path.resolve(__dirname, "../src/data/supabase.js");
