@@ -68,3 +68,24 @@ test("el prompt distingue las PLANTAS de una casa del nivel de un edificio", () 
   const { SISTEMA } = require("../src/groups/classify");
   assert.match(SISTEMA, /plantas?/i);
 });
+
+// "PISO ALTO" SIN NUMERO (Juan, 2026-10-21). En produccion el clasificador lo
+// marcaba en 2 de 21 pedidos: el modelo razonaba "no hay banda numerica, asi
+// que piso_min queda en 0", porque la descripcion del campo no lo nombraba y
+// ningun ejemplo resuelto lo mostraba. Y "parte alta" casi siempre es el
+// sector ("Poblado parte alta", "Escobero parte alta"), no el nivel.
+test("la descripcion de piso_min nombra 'piso alto' como piso 4", () => {
+  assert.match(props.piso_min.description, /piso alto/i);
+  assert.match(props.piso_min.description, /\b4\b/);
+});
+
+test("un ejemplo resuelto muestra 'piso alto' -> piso_min 4", () => {
+  const { SISTEMA } = require("../src/groups/classify");
+  assert.match(SISTEMA, /piso alto[^\n]*\n\s*→[^\n]*piso_min 4/i);
+});
+
+test("'parte alta' no se lee como piso: es el sector", () => {
+  const { SISTEMA } = require("../src/groups/classify");
+  assert.doesNotMatch(SISTEMA, /"piso alto", "parte alta"/i);
+  assert.match(SISTEMA, /parte alta[^\n]{0,160}(sector|zona)/i);
+});

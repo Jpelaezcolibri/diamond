@@ -115,7 +115,9 @@ const ESQUEMA = {
           // piso minimo. Enteros y no texto por la misma razon que el resto de
           // los numeros del esquema: 0 significa "no lo pidio".
           piso_max: { type: "integer", description: "Piso mas alto que acepta el pedido. 0 si no se especifica" },
-          piso_min: { type: "integer", description: "Piso mas bajo que acepta el pedido. 0 si no se especifica" },
+          // "Piso alto" sin numero (2026-10-21): sin nombrarlo aca, el modelo
+          // lo dejaba en 0 ("no hay banda numerica") en 19 de 21 pedidos.
+          piso_min: { type: "integer", description: "Piso mas bajo que acepta el pedido. 'Piso alto' exigido sin numero = 4. 0 si no se especifica o si es solo un deseo" },
           contacto: { type: "string", description: "Telefono o nombre si el mensaje lo trae. Vacio si no" },
           notas: { type: "string", description: "Detalle relevante en pocas palabras" },
           // Juan, 2026-08-20 (auditoria del veredicto de Sofi): "depende de si
@@ -208,7 +210,8 @@ Reglas de extracción:
 - \`amoblado\`: 'si' cuando el pedido pide amoblado o amueblado ("busco amoblado en Sabaneta", "apartamento amoblado en el poblado"). 'no' cuando lo RECHAZA explícitamente — "SIN muebles", "sin amoblar", "vacío", "no amoblado". '' si no lo menciona. Los tres valores son distintos y no se pueden mezclar: '' significa que al colega le da igual, 'no' significa que no lo quiere.
 - \`piso_max\` y \`piso_min\`: el NIVEL del edificio en el que está el inmueble. Medido sobre los pedidos reales, el piso casi nunca es un número exacto: es un techo, un piso mínimo o un rango. Extraelo como BANDA y no como número exacto, porque un rango leído como exacto borra propiedades que el colega sí acepta.
   · Techo (lo más común): "Sólo hasta 3° piso", "máximo piso 7", "piso máximo 2", "menos del piso 10", "del 10 para abajo", "no más del 4" → piso_max 3, 7, 2, 9, 10, 4. Ojo con el borde, porque son dos cosas distintas: \"hasta el 10\", \"máximo 10\", \"del 10 para abajo\" y \"no más del 10\" INCLUYEN el 10 → piso_max 10. \"Menos del piso 10\" y \"por debajo del 10\" lo EXCLUYEN → piso_max 9. En los dos casos un piso 9 sirve, que es lo que no puede fallar: un \"menos de 10\" leído como piso exacto 10 borraría todos los pisos de abajo.
-  · Piso mínimo: "del piso 6 hacia arriba", "piso 5 en adelante", "del 4 para arriba", "más del 3", "piso alto", "parte alta" → piso_min 6, 5, 4, 3, 4, 4.
+  · Piso mínimo: "del piso 6 hacia arriba", "piso 5 en adelante", "del 4 para arriba", "más del 3", "piso alto" → piso_min 6, 5, 4, 3, 4. "Piso alto" no trae número y aun así es una exigencia: va piso_min 4, no 0 (salvo que sea un deseo, ver abajo).
+  · "Parte alta" NO es el piso: en estos grupos es el sector ("Poblado parte alta", "Escobero parte alta", "parte alta desde La Calera") y va en la zona, con piso_min 0.
   · Rango, que llena LOS DOS: "Piso 2 al 11" → piso_min 2 y piso_max 11. "entre un 4 a un piso 8" → 4 y 8. "solo 1 al 3 piso" → 1 y 3. "Piso 1 ó 2" → 1 y 2. "Piso 2 o 3" → 2 y 3.
   · Sin ascensor: "sin ascensor máximo segundo piso" → piso_max 2. Si el pedido da dos topes según haya ascensor ("sin ascensor máximo 2, hasta el 5 con ascensor"), tomá el más amplio: piso_max 5.
   · "Primer piso" o "piso bajo" (adultos mayores, mascotas, un local) → piso_max 2.
@@ -251,6 +254,9 @@ Ejemplos resueltos. Son mensajes inventados con la forma real de los grupos (nom
 
 10. "Apartamento en Laureles, piso 2 al 11, obligatorio con ascensor, 2 alcobas"
    → demanda · venta · zonas ["Laureles"] · habitaciones 2 · piso_min 2 · piso_max 11. El rango llena los dos campos; un piso 9 sirve.
+
+11. "BUSCO APARTAMENTO EN ENVIGADO • 2 ALCOBAS • MODERNO • PISO ALTO • 2 PARQUEADEROS • PRESUPUESTO $1000 MILLONES"
+   → demanda · venta · apartamento · zonas ["Envigado"] · habitaciones 2 · garajes 2 · precio_max 1000000000 · piso_min 4 · piso_max 0. "Piso alto" sin número es piso_min 4, no 0. Pero "de ser posible piso alto" u "ojalá piso alto" siguen siendo un deseo: piso_min 0.
 
 7. "Busco local comercial en Itagüí o La Estrella, arriendo hasta 6 millones, mínimo 120 metros"
    → demanda · arriendo · local · zonas ["Itagüí","La Estrella"] · precio_max 6000000 · area_min 120.

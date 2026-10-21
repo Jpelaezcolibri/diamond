@@ -29,6 +29,15 @@ const CASOS = [
   ["Busco apartamento en Laureles 👉🏻 2 o 3 alcobas 👉🏻 ojalá piso 1 👉🏻 Presupuesto: $600 millones", { piso_max: 0, piso_min: 0 }],
   ["Busco casa en Envigado * 3 baños en adelante * Máximo 2 pisos * Área 160m2 en adelante, 1.200 millones", { piso_max: 0, piso_min: 0 }],
   ["BUSCO APARTAMENTO PISO ALTO EN EL POBLADO PARTE ALTA, 3 alcobas, hasta 1.500 millones", { piso_min: 4, piso_max: 0 }],
+  // "Piso alto" sin numero (Juan, 2026-10-21): el modelo lo dejaba en 0 porque
+  // "no hay banda numerica". Frases reales de group_signals del 25-sep al 21-oct.
+  ["BUSCO APARTAMENTO EN ENVIGADO • INDISPENSABLE 2 ALCOBAS CADA UNA CON BAÑO INTERNO • MODERNO • COCINA ABIERTA • PISO ALTO • 2 PARQUEADEROS • PRESUPUESTO $1000 MILLONES", { piso_min: 4, piso_max: 0 }],
+  ["Busco Urgente Pago de contado Con vista a la ciudad Piso alto 400 millones Máximo 10 años de construcción Solo calasanz", { piso_min: 4, piso_max: 0 }],
+  ["Apartamento hasta 800 millones en el sur Moderno Piso alto con vista Unidad completa Envigado o sabaneta", { piso_min: 4, piso_max: 0 }],
+  ["Busco apartamento en Envigado, 3 alcobas, de ser posible piso alto, hasta 600 millones", { piso_min: 0, piso_max: 0 }],
+  // "Parte alta" es casi siempre el SECTOR, no el nivel del edificio.
+  ["Busca casa Escobero parte alta Hasta 2200 mll Lote mínimo de 1800 Mtrs", { piso_min: 0, piso_max: 0 }],
+  ["Buenos días Requiero PARA ARRIENDO Disponibilidad inmediata POBLADO PARTE ALTA DESDE LA CALERA a ISA, 3 alcobas, hasta 8 millones", { piso_min: 0, piso_max: 0 }],
 ];
 
 (async () => {
