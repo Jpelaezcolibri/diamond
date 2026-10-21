@@ -28,7 +28,34 @@ Equipo: 1 dev (Juan) + Claude Code. Idioma de la app: español (Colombia).
 Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
 `docs:`, `config:`).
 
-## 2. Estado actual (2026-10-19)
+## 2. Estado actual (2026-10-20)
+
+- **Publicaciones y respuestas (rama `modulo-publicaciones`, 2026-10-20, SIN
+  desplegar).** Spec
+  `docs/superpowers/specs/2026-10-20-publicaciones-y-respuestas-design.md`,
+  plan y mockup en `docs/superpowers/`.
+  - Cada respuesta de un colega a un post nuestro queda en
+    `respuestas_publicacion` (una fila por colega y ref). Llega por tres vías:
+    Sofi ("vi en un grupo la Ref N"), la línea de Daiana (ref nombrada o grupo
+    con post en 48 h) y la cita al post en el grupo (también en grupos con
+    `publica` que el radar no escucha).
+  - "Atendida" = Daiana le escribe desde su celular. Eso exige que la sesión
+    de WAHA esté suscrita a `message.any` (`waha.actualizarEventos`, **sin
+    aplicar en producción**). Los envíos del sistema se reconocen por wamid.
+  - Recordatorios (`src/scheduler/respuestas-publicacion.js`, interruptor
+    `RADAR_RESPUESTAS_POST`, **apagado**): a Daiana por la campana a las 2 h,
+    link a Sofi al colega a las 3 h y seguimiento 24 h después de lo último
+    (también si Daiana ya atendió). Solo respuestas de las últimas 48 h,
+    un intento por mensaje, tope 20 DM/día y 10 avisos por tick.
+  - El resumen de 12 m./5 p. m. suma "Respuestas sin atender". CRM:
+    pestaña `/publicaciones`.
+  - Los posts muestran primero las características que venden y guardan su
+    texto en `grupo_publicaciones.texto`.
+  - **Migraciones corridas por Juan y verificadas por REST el 2026-10-20:**
+    `2026-10-20_respuestas_publicacion.sql` y `2026-10-20_publicacion_texto.sql`.
+  - **Antes de encender:** actualizar los eventos de la sesión `DaianaDiamond`
+    y leer en el log un `message.any` real de Daiana y una respuesta citada
+    con `replyToId`; hasta hoy la forma del payload es una suposición.
 
 - **Sofi publica la propiedad de un asesor (rama `sofi-publica-asesor`,
   2026-10-19, SIN desplegar).** Spec
@@ -427,7 +454,7 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
   `2026-10-07_asesor_alias_y_citas.sql` (alias público, rotación de citas,
   código del DM al colega) corrida por Juan y **verificada por REST** el
   2026-10-07: las 7 columnas responden y el filtro por `codigo_colega` también.
-  **Pendientes (verificado por REST 2026-10-19: las columnas no existen):**
+  **Antes pendientes, corridas el 2026-10-19:**
   `2026-10-19_propiedades_asesor.sql` y `2026-10-19_periodo_precio.sql`.
   Regla: antes de declarar una migración "pendiente" acá, verificarla con un
   `select` por REST — esta lista estuvo desactualizada del 2026-08-18 al
