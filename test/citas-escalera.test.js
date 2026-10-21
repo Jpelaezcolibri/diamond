@@ -1,6 +1,6 @@
 // La escalera de una cita por confirmar (Juan, 2026-10-07): cada hora pasa al
 // siguiente asesor del ciclo, hasta que alguien confirme; de noche se pausa;
-// 4 h antes de la visita se cancela.
+// al llegar el corte (la visita menos 12 h, en horario habil) se cancela.
 const { test, beforeEach } = require("node:test");
 const assert = require("node:assert");
 const memory = require("../src/data/memory");

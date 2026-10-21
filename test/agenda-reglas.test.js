@@ -39,8 +39,46 @@ test("silencio de 20:00 a 08:00 en Bogotá", () => {
   assert.strictEqual(r.enSilencio(new Date("2026-10-08T13:00:00Z")), false); // 08:00
 });
 
-test("el corte es 4 h antes de la visita", () => {
-  assert.strictEqual(r.corteDe("2026-10-09T20:00:00Z"), "2026-10-09T16:00:00.000Z");
+// El plazo para confirmar con el propietario (Juan, 2026-10-21): la visita
+// menos 12 h, llevado a horario habil (20:00 de la vispera si cae de noche),
+// nunca antes de 2 h despues del pedido.
+const MIE_10 = new Date("2026-10-21T15:00:00Z"); // miercoles 21, 10:00 Bogota
+test("corte: 12 h antes cuando cae de día", () => {
+  // Visita (hipotetica) jueves 22:00 -> jueves 10:00.
+  assert.strictEqual(r.corteDe("2026-10-23T03:00:00Z", { ahora: MIE_10 }), "2026-10-22T15:00:00.000Z");
+  // Visita viernes 08:00 -> jueves 20:00 justo.
+  assert.strictEqual(r.corteDe("2026-10-24T13:00:00Z", { ahora: MIE_10 }), "2026-10-24T01:00:00.000Z");
+});
+
+test("corte: si 12 h antes cae de noche, pasa a las 20:00 de la víspera", () => {
+  // Visita jueves 10:00 -> 22:00 del miercoles -> miercoles 20:00.
+  assert.strictEqual(r.corteDe("2026-10-23T15:00:00Z", { ahora: MIE_10 }), "2026-10-23T01:00:00.000Z");
+  // Visita jueves 16:00 -> 04:00 del jueves -> miercoles 20:00.
+  assert.strictEqual(r.corteDe("2026-10-23T21:00:00Z", { ahora: MIE_10 }), "2026-10-23T01:00:00.000Z");
+  // Visita jueves 19:30 -> 07:30 -> miercoles 20:00.
+  assert.strictEqual(r.corteDe("2026-10-24T00:30:00Z", { ahora: MIE_10 }), "2026-10-23T01:00:00.000Z");
+});
+
+test("corte: nunca antes de 2 h después del pedido, y si eso cae de noche pasa a las 08:00", () => {
+  // Pedido miercoles 15:00, visita jueves 15:00: mie 20:00 sirve (pedido + 2 h = 17:00).
+  assert.strictEqual(r.corteDe("2026-10-23T20:00:00Z", { ahora: new Date("2026-10-22T20:00:00Z") }), "2026-10-23T01:00:00.000Z");
+  // Pedido miercoles 19:00, visita jueves 19:30: mie 20:00 es antes de 21:00
+  // (pedido + 2 h), y 21:00 es de noche -> jueves 08:00.
+  assert.strictEqual(r.corteDe("2026-10-24T00:30:00Z", { ahora: new Date("2026-10-23T00:00:00Z") }), "2026-10-23T13:00:00.000Z");
+  // Pedido a las 06:00 (madrugada) para el dia siguiente a las 08:00: la regla da
+  // la vispera 20:00 = hoy 20:00, sin tocar el minimo.
+  assert.strictEqual(r.corteDe("2026-10-23T13:00:00Z", { ahora: new Date("2026-10-22T11:00:00Z") }), "2026-10-23T01:00:00.000Z");
+});
+
+test("corte: CITAS_CORTE_HORAS_ANTES por defecto 12", () => {
+  assert.strictEqual(r.CORTE_HORAS_ANTES, 12);
+});
+
+test("corte en palabras: hoy, mañana o el día con fecha", () => {
+  assert.strictEqual(r.corteEnPalabras("2026-10-22T01:00:00.000Z", { ahora: MIE_10 }), "hoy a las 8:00 p. m.");
+  assert.strictEqual(r.corteEnPalabras("2026-10-22T13:00:00.000Z", { ahora: MIE_10 }), "mañana a las 8:00 a. m.");
+  assert.strictEqual(r.corteEnPalabras("2026-10-23T01:00:00.000Z", { ahora: MIE_10 }), "mañana a las 8:00 p. m.");
+  assert.strictEqual(r.corteEnPalabras("2026-10-24T01:00:00.000Z", { ahora: MIE_10 }), "el viernes 23 de octubre a las 8:00 p. m.");
 });
 
 // --- espaciar: las opciones ofrecidas quedan en distinta franja o dia ---

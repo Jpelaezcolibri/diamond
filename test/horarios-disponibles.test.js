@@ -1,7 +1,8 @@
-// Horarios ofrecidos y anticipacion por operacion (spec
-// 2026-10-21-sofi-super-agente §2.1-2.2): Sofi ofrece dos espacios libres de
-// verdad en vez de preguntar "¿que dia y hora te sirve?", y el arriendo pide
-// 6 h de anticipacion en vez de 24.
+// Horarios ofrecidos (spec 2026-10-21-sofi-super-agente §2.1): Sofi ofrece dos
+// espacios libres de verdad en vez de preguntar "¿que dia y hora te sirve?".
+// Anticipacion (Juan, 2026-10-21, reemplaza §2.2): 24 h para toda visita,
+// venta o arriendo, para confirmar con el propietario; lo ofrecido lleva 2 h
+// de colchon encima (>= 26 h).
 const { test, beforeEach } = require("node:test");
 const assert = require("node:assert");
 const memory = require("../src/data/memory");
@@ -13,24 +14,25 @@ const { buildSystemPrompt } = require("../src/agent/prompts");
 const AHORA = new Date("2026-10-07T15:00:00Z"); // martes 10:00 Bogotá
 const H = { dias: [0, 1, 2, 3, 4, 5, 6], desde: "08:00", hasta: "18:00" };
 
-test("anticipación por operación: venta 24 h, arriendo 6 h, sin operación como siempre", () => {
+test("anticipación: 24 h para venta y para arriendo (la operación ya no la baja)", () => {
   const iso = "2026-10-07T22:00:00Z"; // martes 17:00 Bogotá, 7 h despues
-  assert.strictEqual(r.validarHora({ fechaHoraIso: iso, ahora: AHORA, horario: { ...H, hasta: "19:00" }, operacion: "arriendo" }).ok, true);
-  assert.strictEqual(r.validarHora({ fechaHoraIso: iso, ahora: AHORA, horario: { ...H, hasta: "19:00" }, operacion: "venta" }).motivo, "anticipacion");
-  assert.strictEqual(r.validarHora({ fechaHoraIso: iso, ahora: AHORA, horario: { ...H, hasta: "19:00" } }).motivo, "anticipacion");
-  // A 5 h ni el arriendo.
-  assert.strictEqual(r.validarHora({ fechaHoraIso: "2026-10-07T20:00:00Z", ahora: AHORA, horario: H, operacion: "Arriendo" }).motivo, "anticipacion");
-  assert.strictEqual(r.anticipacionMin("alquiler"), 6 * 60);
+  const h19 = { ...H, hasta: "19:00" };
+  assert.strictEqual(r.validarHora({ fechaHoraIso: iso, ahora: AHORA, horario: h19, operacion: "arriendo" }).motivo, "anticipacion");
+  assert.strictEqual(r.validarHora({ fechaHoraIso: iso, ahora: AHORA, horario: h19 }).motivo, "anticipacion");
+  // 23 h 30 tampoco; 24 h si.
+  assert.strictEqual(r.validarHora({ fechaHoraIso: "2026-10-08T14:30:00Z", ahora: AHORA, horario: H, operacion: "arriendo" }).motivo, "anticipacion");
+  assert.deepStrictEqual(r.validarHora({ fechaHoraIso: "2026-10-08T15:00:00Z", ahora: AHORA, horario: H, operacion: "arriendo" }), { ok: true });
+  assert.strictEqual(r.anticipacionMin("alquiler"), 24 * 60);
   assert.strictEqual(r.anticipacionMin("Venta"), 24 * 60);
   assert.strictEqual(r.anticipacionMin(null), 24 * 60);
+  assert.strictEqual(r.ANTICIPACION_ARRIENDO_MIN, undefined, "ya no hay regla de arriendo");
 });
 
-test("alternativas de arriendo arrancan a las 6 h; las de venta a las 24 h", () => {
+test("alternativas de arriendo y de venta arrancan las dos a las 24 h", () => {
   const arr = r.alternativas({ ahora: AHORA, horario: H, operacion: "arriendo" });
-  assert.strictEqual(arr[0], "2026-10-07T21:00:00.000Z"); // 16:00 Bogotá
-  const ven = r.alternativas({ ahora: AHORA, horario: H, operacion: "venta" });
+  const ven = r.alternativas({ ahora: AHORA, horario: H });
   assert.strictEqual(ven[0], "2026-10-08T15:00:00.000Z");
-  assert.deepStrictEqual(r.alternativas({ ahora: AHORA, horario: H }), ven);
+  assert.deepStrictEqual(arr, ven);
 });
 
 // --- La tool ---------------------------------------------------------------
@@ -71,45 +73,35 @@ test("devuelve 3 horarios libres, con texto en español y hora de Bogotá, respe
   }
 });
 
-test("arriendo por la ref: el primer horario puede caer a menos de 24 h", async () => {
+test("arriendo por la ref, por lead.categoria o sin nada: todos desde 26 h (24 + 2 de colchón)", async () => {
+  const casos = [
+    await horarios({ ref: "ARR1" }),
+    await horarios({}, ctx({ categoria: "alquiler" })),
+    await horarios({}, ctx()),
+    await horarios({ ref: "VEN1" }),
+  ];
+  const esperado = r.alternativas({ ahora: conColchon(), horario: H })[0];
+  for (const out of casos) {
+    assert.strictEqual(out.horarios.length, 3);
+    for (const h of out.horarios) assert.ok(new Date(h.iso).getTime() - Date.now() >= 26 * 3600 * 1000 - 1000, "24 h + 2 h de colchon");
+    assert.strictEqual(out.horarios[0].iso, esperado);
+  }
+});
+
+test("la tool le recuerda a Sofi que es desde el día siguiente por el propietario", async () => {
   const out = await horarios({ ref: "ARR1" });
-  assert.strictEqual(out.horarios.length, 3);
-  const primero = new Date(out.horarios[0].iso).getTime() - Date.now();
-  assert.ok(primero >= 8 * 3600 * 1000 - 1000, "6 h de anticipacion + 2 h de colchon");
-  // Lo mismo que calcula la regla pura con la operacion de arriendo.
-  const esperado = r.alternativas({ ahora: conColchon(), horario: H, operacion: "arriendo" })[0];
-  assert.strictEqual(out.horarios[0].iso, esperado);
-});
-
-test("sin ref, la operación sale de lead.categoria (alquiler → arriendo)", async () => {
-  const conCategoria = await horarios({}, ctx({ categoria: "alquiler" }));
-  assert.strictEqual(conCategoria.horarios[0].iso, r.alternativas({ ahora: conColchon(), horario: H, operacion: "arriendo" })[0]);
-  const sinNada = await horarios({}, ctx());
-  assert.strictEqual(sinNada.horarios[0].iso, r.alternativas({ ahora: conColchon(), horario: H })[0]);
-});
-
-test("el modelo no baja la anticipacion: operacion arriendo con una ref de venta sigue en 24 h", async () => {
-  const out = await horarios({ ref: "VEN1", operacion: "arriendo" });
-  for (const h of out.horarios) assert.ok(new Date(h.iso).getTime() - Date.now() >= 24 * 3600 * 1000, "venta: 24 h");
-});
-
-test("sin ref, categoria compra y el modelo dice arriendo: 24 h", async () => {
-  const out = await horarios({ operacion: "arriendo" }, ctx({ categoria: "compra" }));
-  for (const h of out.horarios) assert.ok(new Date(h.iso).getTime() - Date.now() >= 24 * 3600 * 1000, "venta: 24 h");
-  const solo = await horarios({ operacion: "arriendo" }, ctx());
-  for (const h of solo.horarios) assert.ok(new Date(h.iso).getTime() - Date.now() >= 24 * 3600 * 1000, "sin respaldo: 24 h");
-});
-
-test("propertyInteres de venta gana sobre el arriendo del modelo", async () => {
-  const c = { ...ctx(), propertyInteres: { operacion: "Venta" } };
-  const out = await horarios({ operacion: "arriendo" }, c);
-  for (const h of out.horarios) assert.ok(new Date(h.iso).getTime() - Date.now() >= 24 * 3600 * 1000);
+  assert.match(out.nota, /dia siguiente/);
+  assert.match(out.nota, /confirmar la visita con el propietario/);
+  const tool = TOOL_DEFINITIONS.find((x) => x.name === "horarios_disponibles");
+  assert.match(tool.description, /24 h, venta o arriendo, para confirmar con el propietario/);
+  assert.strictEqual(tool.input_schema.properties.operacion, undefined);
+  assert.strictEqual(TOOL_DEFINITIONS.find((x) => x.name === "agendar_cita").input_schema.properties.operacion, undefined);
 });
 
 test("el primer horario ofrecido tiene colchon: sigue valido 40 min despues", async () => {
   const out = await horarios({ ref: "VEN1" });
   const despues = new Date(Date.now() + 40 * 60 * 1000);
-  const v = r.validarHora({ fechaHoraIso: out.horarios[0].iso, ahora: despues, horario: H, ocupadas: [], operacion: "venta" });
+  const v = r.validarHora({ fechaHoraIso: out.horarios[0].iso, ahora: despues, horario: H, ocupadas: [] });
   assert.deepStrictEqual(v, { ok: true });
   assert.ok(new Date(out.horarios[0].iso).getTime() - Date.now() >= (24 * 60 + 120) * 60 * 1000 - 1000);
 });
@@ -155,7 +147,7 @@ test("sin espacios en 14 días: lista vacía y un motivo", async () => {
   assert.match(out.motivo, /14 dias/);
 });
 
-// --- agendar_cita con la operacion -----------------------------------------
+// --- agendar_cita: 24 h para todos ---------------------------------------
 
 // La hora de 8 h adelante cae fuera del horario segun a que hora corra el
 // test; con un horario de 24 h el unico filtro que cuenta es la anticipacion.
@@ -163,45 +155,44 @@ function horario24h() {
   memory.advisors.forEach((a) => (a.horario = { dias: [0, 1, 2, 3, 4, 5, 6], desde: "00:00", hasta: "23:59" }));
 }
 
-test("agendar_cita: arriendo a 8 h sale; venta a 8 h no", async () => {
+test("agendar_cita: arriendo a 8 h ya no sale, igual que venta, y dice 24 horas por el propietario", async () => {
   horario24h();
   const iso = new Date(Math.ceil(enHoras(8).getTime() / 1800000) * 1800000).toISOString();
-
-  const arr = ctx();
-  const outArr = await executeTool("agendar_cita", { descripcion: "visita", tipo: "visita", fecha_hora_iso: iso, ref: "ARR1" }, arr);
-  assert.match(outArr, /SOLICITADA/);
-  assert.strictEqual(arr.lead.cita.operacion, "arriendo", "queda en la cita para la escalera");
-  assert.doesNotMatch(outArr, /queda confirmada/i);
-
-  memory.leads.length = 0;
-  const ven = ctx({ id: "l2" });
-  const outVen = await executeTool("agendar_cita", { descripcion: "visita", tipo: "visita", fecha_hora_iso: iso, ref: "VEN1" }, ven);
-  assert.match(outVen, /No se pudo agendar: necesitamos al menos 24 horas/);
-  assert.strictEqual(ven.lead.cita, undefined);
+  for (const [id, input, lead] of [["l1", { ref: "ARR1" }, {}], ["l2", { ref: "VEN1" }, {}], ["l3", {}, { categoria: "alquiler" }]]) {
+    memory.leads.length = 0;
+    const c = ctx({ id, ...lead });
+    const out = await executeTool("agendar_cita", { descripcion: "visita", tipo: "visita", fecha_hora_iso: iso, ...input }, c);
+    assert.match(out, /No se pudo agendar: necesitamos al menos 24 horas de anticipación para confirmarla con el propietario/, id);
+    assert.strictEqual(c.lead.cita, undefined, id);
+  }
 });
 
-test("agendar_cita de arriendo a 5 h: no sale y dice 6 horas", async () => {
+test("agendar_cita de arriendo a 25 h sale, con corte y sin guardar operación", async () => {
   horario24h();
   const c = ctx({ categoria: "alquiler" });
-  const out = await executeTool("agendar_cita", { descripcion: "visita", tipo: "visita", fecha_hora_iso: enHoras(5).toISOString() }, c);
-  assert.match(out, /al menos 6 horas/);
-  assert.strictEqual(c.lead.cita, undefined);
-});
-
-test("agendar_cita de venta en 72 h sigue igual y guarda la operación", async () => {
-  const c = ctx();
-  await executeTool("agendar_cita", { descripcion: "visita", tipo: "visita", fecha_hora_iso: aLas10(enHoras(72)), ref: "VEN1" }, c);
+  const iso = new Date(Math.ceil(enHoras(25).getTime() / 1800000) * 1800000).toISOString();
+  const out = await executeTool("agendar_cita", { descripcion: "visita", tipo: "visita", fecha_hora_iso: iso, ref: "ARR1" }, c);
   assert.strictEqual(c.lead.cita.estado, "propuesta");
-  assert.strictEqual(c.lead.cita.operacion, "venta");
+  assert.strictEqual(c.lead.cita.operacion, undefined);
+  assert.ok(c.lead.cita.corte_at, "con plazo para confirmar");
+  assert.ok(new Date(c.lead.cita.corte_at).getTime() >= Date.now() + 2 * 3600 * 1000 - 5000, "nunca antes de 2 h despues del pedido");
+  assert.ok(new Date(c.lead.cita.corte_at).getTime() < new Date(iso).getTime());
+  assert.match(out, /SOLICITADA/);
+  assert.match(out, /con el propietario/);
+  assert.match(out, /a más tardar (hoy|mañana|el )/);
+  assert.doesNotMatch(out, /qued[oó] confirmada|queda confirmada/i);
 });
 
-test("la escalera rota una cita de arriendo con la regla de arriendo", () => {
-  const rotacion = require("../src/data/rotacion-citas");
-  const creada = new Date("2026-10-07T13:00:00Z"); // 08:00 Bogota
-  const fecha = "2026-10-07T21:00:00Z"; // 16:00, 8 h despues
-  const ciclo = [{ ...A1 }, { ...A2 }];
-  assert.strictEqual(rotacion.siguiente({ ciclo, actualId: "a1", citasOrg: [], fechaHoraIso: fecha, ahora: creada, operacion: "arriendo" }).id, "a2");
-  assert.strictEqual(rotacion.siguiente({ ciclo, actualId: "a1", citasOrg: [], fechaHoraIso: fecha, ahora: creada }).id, "a1", "con la de venta nadie mas podria");
+test("la escalera rota una cita de arriendo vieja (creada con 6 h): la anticipación se midió al crearla", () => {
+  const { pasoDeEscalera } = require("../src/scheduler/citas-escalera");
+  const creada = "2026-10-07T13:00:00Z"; // 08:00 Bogota
+  const lead = {
+    id: "lv",
+    cita: { estado: "propuesta", asesor_id: "a1", creada_at: creada, asignada_at: creada, fecha_hora: "2026-10-07T21:00:00Z", corte_at: "2026-10-07T17:00:00Z", operacion: "arriendo" },
+  };
+  const p = pasoDeEscalera({ lead, ciclo: [{ ...A1 }, { ...A2 }], citasOrg: [], ahora: new Date("2026-10-07T14:30:00Z") });
+  assert.strictEqual(p.accion, "rotar");
+  assert.strictEqual(p.nuevo.id, "a2");
 });
 
 // --- El prompt -------------------------------------------------------------
@@ -220,6 +211,13 @@ test("el prompt ofrece dos horarios de horarios_disponibles y ya no pide que la 
   assert.match(cliente, /34-A\. .*Nunca conviertas una franja en una hora que el no dijo/);
   assert.match(cliente, /36\. Registrar la cita NO la confirma: queda SOLICITADA/);
   assert.doesNotMatch(cliente, /preguntale que dia y a que hora le sirve\. Vos no escoges/);
+  // Juan, 2026-10-21: desde el dia siguiente porque se confirma con el propietario.
+  for (const [quien, p] of [["cliente", cliente], ["colega", colega]]) {
+    assert.match(p, /necesitamos confirmar con el propietario, por eso te propongo desde mañana/, quien);
+    assert.match(p, /ahora confirmamos la disponibilidad con el propietario/, quien);
+    assert.match(p, /a mas tardar en el plazo que te devuelve agendar_cita/, quien);
+  }
+  assert.match(cliente, /36\. Registrar la cita NO la confirma: queda SOLICITADA\. .*propietario/);
 });
 
 test("la descripción de agendar_cita ya no dice que Sofi no ofrece horarios", () => {

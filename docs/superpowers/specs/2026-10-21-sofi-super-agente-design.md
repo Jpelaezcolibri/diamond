@@ -45,6 +45,12 @@ Reglas vigentes que se respetan:
 - `agendar_cita` y `horarios_disponibles` sacan la operación de la propiedad (`ref`). Si no hay ref, usan la `categoria` del lead (alquiler → arriendo).
 - El corte de 4 h antes y la escalera de rotación no cambian. Una cita de arriendo con 6 h de anticipación tiene 2 h de escalera.
 
+> **Actualización 2026-10-21 (Juan): esta sección queda reemplazada.** "Necesito que las citas solo las hagas mínimo con 24 horas para la confirmación con el dueño de la propiedad". Ahora:
+> - **24 h para toda visita**, venta o arriendo (`CITAS_ANTICIPACION_MIN_H`). Se quitó `CITAS_ANTICIPACION_ARRIENDO_H`; la operación ya no cambia la anticipación y `agendar_cita` / `horarios_disponibles` ya no la reciben. Con el colchón de 2 h, el primer horario ofrecido queda a ≥ 26 h: el día siguiente o después.
+> - **Plazo para confirmar con el propietario** (`corte_at`, `agenda-reglas.corteDe`): la visita menos `CITAS_CORTE_HORAS_ANTES` (12 h). Si eso cae entre las 20:00 y las 08:00 de Bogotá, pasa a las 20:00 de la víspera (visita jueves 10:00 → miércoles 20:00; jueves 16:00 → miércoles 20:00). Nunca antes de 2 h después del pedido; si ese mínimo cae de noche, pasa a las 08:00 siguientes. Las citas ya creadas conservan su `corte_at`.
+> - **Que se entienda que estamos confirmando:** Sofi dice que la visita quedó SOLICITADA, que "ahora confirmamos la disponibilidad con el propietario" y "te confirmamos a más tardar {hoy a las 8:00 p. m. / mañana a las 8:00 a. m. / el miércoles 22 …}". Al ofrecer horarios explica, si hace falta, que son desde mañana porque "necesitamos confirmar con el propietario". La asesora ve "Confirmar con el propietario antes de …".
+> - La escalera rota una cita vieja de arriendo (creada con 6 h) midiendo la anticipación como si se hubiera creado 24 h antes de la visita.
+
 ### 2.3 Recordatorio y mensaje después de la visita
 
 Nuevo scheduler `src/scheduler/visita-cliente.js`, cada 10 min, de 8 a. m. a 8 p. m. Trabaja solo sobre citas **confirmadas** (`leads.cita.estado = 'confirmada'`) de tipo visita.

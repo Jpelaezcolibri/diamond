@@ -3,7 +3,7 @@
 // pasa al siguiente asesor del ciclo (1 -> 2 -> 3 -> 1...) con su aviso por
 // plantilla, y al anterior se le dice que ya la tiene otro. Sigue asi hasta
 // que alguien la confirme. De 20:00 a 08:00 (Bogota) se pausa. Si llega el
-// corte (4 h antes de la visita) sin confirmar, se cancela y Sofi le ofrece
+// corte (la visita menos 12 h, en horario habil: agenda-reglas.corteDe) sin confirmar, se cancela y Sofi le ofrece
 // otro horario al cliente/colega. Reemplaza, para estas citas, al recordatorio
 // unico de citas-recordatorio.js (que ignora las que tienen asesor_id).
 const leads = require("../data/leads");
@@ -20,6 +20,12 @@ const PASO_MIN = Number(process.env.ESCALERA_PASO_MIN || 60);
 const REAVISO_MIN = Number(process.env.ESCALERA_REAVISO_MIN || 15);
 const INTERVALO_MIN = Number(process.env.ESCALERA_INTERVALO_MIN || 5);
 
+function comoSiCreada(c) {
+  const creada = new Date(c.creada_at || c.asignada_at).getTime();
+  const tope = new Date(c.fecha_hora).getTime() - reglas.ANTICIPACION_MIN * 60 * 1000;
+  return new Date(isNaN(tope) ? creada : Math.min(creada, tope));
+}
+
 // Que le toca a esta cita ahora: "nada", "rotar" (con el nuevo asesor) o
 // "cortar". Pura: la decision se prueba sin base ni WhatsApp.
 function pasoDeEscalera({ lead, ciclo, citasOrg, ahora = new Date() }) {
@@ -30,16 +36,16 @@ function pasoDeEscalera({ lead, ciclo, citasOrg, ahora = new Date() }) {
   const desde = new Date(c.asignada_at || c.creada_at || 0).getTime();
   if (isNaN(desde) || ahora.getTime() - desde < PASO_MIN * 60 * 1000) return { accion: "nada" };
   // La anticipacion de 24 h se midio al crearla: para elegir al siguiente solo
-  // cuentan horario y choque, asi que se evalua "como si fuera" creada_at.
+  // cuentan horario y choque, asi que se evalua "como si fuera" creada_at (o
+  // 24 h antes de la visita, si fue antes: una de arriendo vieja se creo con
+  // 6 h y con la regla de hoy nadie mas "podria").
   const nuevo = rotacion.siguiente({
     ciclo,
     actualId: c.asesor_id,
     citasOrg,
     fechaHoraIso: c.fecha_hora,
-    ahora: new Date(c.creada_at || c.asignada_at),
+    ahora: comoSiCreada(c),
     excluirLeadId: lead.id,
-    // Una de arriendo se creo con 6 h: con la de venta nadie mas "podria".
-    operacion: c.operacion || null,
   });
   if (!nuevo || nuevo.id === c.asesor_id) return { accion: "nada" };
   return { accion: "rotar", nuevo };
@@ -143,7 +149,7 @@ async function reavisar({ org, lead, ciclo, ahora, c }) {
     .reaviso({
       org, advisor: actual, motivo: "visita", lead,
       titulo: `Sigue pendiente: visita por confirmar (${refCuando(cita)})`,
-      cuerpo: `${quien}${corte ? ` · confírmala antes de ${corte.fecha}, ${corte.hora}` : ""}`,
+      cuerpo: `${quien}${corte ? ` · confírmala con el propietario antes de ${corte.fecha}, ${corte.hora}` : ""}`,
     })
     .catch((e) => console.warn("[citas-escalera] aviso repetido:", e.message));
   console.log(`[citas-escalera] lead ${lead.id}: aviso repetido a ${actual.name}`);

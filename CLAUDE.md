@@ -37,8 +37,15 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
     reales, en distinta franja o día, con 2 h de colchón); Sofi ofrece DOS en
     un mensaje (regla 34-B) y la cita sigue quedando SOLICITADA. Un "sí" a la
     ficha lleva a horarios, no a transferir.
-  - **Anticipación:** venta 24 h; arriendo `CITAS_ANTICIPACION_ARRIENDO_H`=6.
-    La operación la decide la propiedad (el modelo no puede bajarla).
+  - **Anticipación (Juan, 2026-10-21, reemplaza las 6 h de arriendo):** 24 h
+    para TODA visita, venta o arriendo (`CITAS_ANTICIPACION_MIN_H`), para
+    confirmar con el propietario; lo ofrecido arranca a ≥ 26 h (día siguiente).
+    **Plazo para confirmar** (`corte_at`, `agenda-reglas.corteDe`): visita −
+    `CITAS_CORTE_HORAS_ANTES` (12 h); si cae entre 20:00 y 08:00 pasa a las
+    20:00 de la víspera; nunca antes de pedido + 2 h (de noche → 08:00). Las
+    citas viejas conservan su corte. Sofi dice "ahora confirmamos con el
+    propietario, te confirmamos a más tardar {plazo}"; la asesora ve
+    "Confirmar con el propietario antes de …".
   - **Ficha que vende:** gancho con datos de la ficha, `precio_m2` calculado en
     código (venta), cierre "¿Te la muestro? Te propongo dos horarios."
   - **Visitas confirmadas:** `src/scheduler/visita-cliente.js` recuerda 2 h

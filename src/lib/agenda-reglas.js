@@ -5,11 +5,15 @@
 // poder probarlas y reusarlas desde agendar_cita y la escalera.
 const { partesBogota, DEFAULT_HORARIO } = require("../data/appointments");
 
+// 24 h para TODA visita, venta o arriendo (Juan, 2026-10-21: "las citas solo
+// las hagas minimo con 24 horas para la confirmacion con el dueño de la
+// propiedad"). Reemplaza las 6 h de arriendo de la spec 2026-10-21 §2.2: la
+// operacion ya no cambia la anticipacion.
 const ANTICIPACION_MIN = Number(process.env.CITAS_ANTICIPACION_MIN_H || 24) * 60;
-// Arriendo con menos colchon (spec 2026-10-21-sofi-super-agente §2.2): quien
-// arrienda decide rapido y 24 h lo enfriaban. El corte de 4 h y la escalera no
-// cambian: una cita de arriendo a 6 h tiene 2 h de escalera.
-const ANTICIPACION_ARRIENDO_MIN = Number(process.env.CITAS_ANTICIPACION_ARRIENDO_H || 6) * 60;
+// Plazo para confirmar con el propietario: la visita menos 12 h, llevado a
+// horario habil (ver corteDe).
+const CORTE_HORAS_ANTES = Number(process.env.CITAS_CORTE_HORAS_ANTES || 12);
+const CORTE_MIN_DESDE_PEDIDO_H = 2;
 const DURACION_MIN = Number(process.env.CITAS_DURACION_MIN || 60);
 const TRASLADO_MIN = Number(process.env.CITAS_TRASLADO_MIN || 90);
 const BLOQUE_MIN = DURACION_MIN + TRASLADO_MIN;
@@ -29,9 +33,9 @@ function normalizarOperacion(op) {
   return null;
 }
 
-// Sin operacion se comporta como siempre (la de venta).
-function anticipacionMin(operacion) {
-  return normalizarOperacion(operacion) === "arriendo" ? ANTICIPACION_ARRIENDO_MIN : ANTICIPACION_MIN;
+// Igual para venta y arriendo desde 2026-10-21.
+function anticipacionMin() {
+  return ANTICIPACION_MIN;
 }
 
 function dentroDeHorario(horario, iso) {
@@ -43,10 +47,10 @@ function dentroDeHorario(horario, iso) {
   return p.minutos >= aMin(h.desde || DEFAULT_HORARIO.desde) && p.minutos + DURACION_MIN <= aMin(h.hasta || DEFAULT_HORARIO.hasta);
 }
 
-function validarHora({ fechaHoraIso, ahora = new Date(), horario = null, ocupadas = [], operacion = null }) {
+function validarHora({ fechaHoraIso, ahora = new Date(), horario = null, ocupadas = [] }) {
   const t = new Date(fechaHoraIso).getTime();
   if (isNaN(t)) return { ok: false, motivo: "fecha_invalida" };
-  if (t - ahora.getTime() < anticipacionMin(operacion) * MIN) return { ok: false, motivo: "anticipacion" };
+  if (t - ahora.getTime() < ANTICIPACION_MIN * MIN) return { ok: false, motivo: "anticipacion" };
   if (!dentroDeHorario(horario, fechaHoraIso)) return { ok: false, motivo: "fuera_de_horario" };
   const choca = (ocupadas || []).some((o) => {
     const u = new Date(o).getTime();
@@ -55,14 +59,14 @@ function validarHora({ fechaHoraIso, ahora = new Date(), horario = null, ocupada
   return choca ? { ok: false, motivo: "choque" } : { ok: true };
 }
 
-function alternativas({ ahora = new Date(), horario = null, ocupadas = [], n = 3, pasoMin = 30, horizonteDias = 14, operacion = null }) {
+function alternativas({ ahora = new Date(), horario = null, ocupadas = [], n = 3, pasoMin = 30, horizonteDias = 14 }) {
   const paso = pasoMin * MIN;
-  let ms = Math.ceil((ahora.getTime() + anticipacionMin(operacion) * MIN) / paso) * paso;
+  let ms = Math.ceil((ahora.getTime() + ANTICIPACION_MIN * MIN) / paso) * paso;
   const limite = ahora.getTime() + horizonteDias * 24 * 60 * MIN;
   const out = [];
   while (ms <= limite && out.length < n) {
     const iso = new Date(ms).toISOString();
-    if (validarHora({ fechaHoraIso: iso, ahora, horario, ocupadas, operacion }).ok) out.push(iso);
+    if (validarHora({ fechaHoraIso: iso, ahora, horario, ocupadas }).ok) out.push(iso);
     ms += paso;
   }
   return out;
@@ -95,8 +99,52 @@ function enSilencio(fecha = new Date()) {
   return !p || p.minutos >= 20 * 60 || p.minutos < 8 * 60;
 }
 
-function corteDe(fechaHoraIso) {
-  return new Date(new Date(fechaHoraIso).getTime() - 4 * 60 * MIN).toISOString();
+// PLAZO PARA CONFIRMAR CON EL PROPIETARIO (Juan, 2026-10-21: "calcula un buen
+// tiempo para la confirmacion"). Antes: la visita menos 4 h. Ahora:
+// 1) la visita menos CORTE_HORAS_ANTES (12 h);
+// 2) si eso cae de noche en Bogota (despues de las 20:00 o antes de las 08:00),
+//    se adelanta a las 20:00 de esa noche (visita jueves 10:00 -> miercoles
+//    20:00; jueves 16:00 = 04:00 -> miercoles 20:00);
+// 3) nunca antes de 2 h despues del pedido; si ese minimo cae de noche, pasa a
+//    las 08:00 siguientes;
+// 4) y nunca a menos de 2 h de la visita.
+// Las citas viejas conservan el corte_at que ya tienen guardado.
+// Bogota no tiene horario de verano: UTC-5 fijo.
+const BOGOTA_MS = 5 * 60 * MIN;
+const DIA_MS = 24 * 60 * MIN;
+// Medianoche (en ms UTC) del dia de Bogota que contiene `ms`.
+const inicioDiaBogota = (ms) => Math.floor((ms - BOGOTA_MS) / DIA_MS) * DIA_MS + BOGOTA_MS;
+const minutosBogota = (ms) => (ms - inicioDiaBogota(ms)) / MIN;
+function corteDe(fechaHoraIso, { ahora = new Date() } = {}) {
+  const visita = new Date(fechaHoraIso).getTime();
+  if (isNaN(visita)) return null;
+  let corte = visita - CORTE_HORAS_ANTES * 60 * MIN;
+  const m = minutosBogota(corte);
+  if (m > 20 * 60) corte = inicioDiaBogota(corte) + 20 * 60 * MIN;
+  else if (m < 8 * 60) corte = inicioDiaBogota(corte) - DIA_MS + 20 * 60 * MIN;
+  const minimo = ahora.getTime() + CORTE_MIN_DESDE_PEDIDO_H * 60 * MIN;
+  if (corte < minimo) {
+    corte = minimo;
+    const mm = minutosBogota(corte);
+    if (mm > 20 * 60) corte = inicioDiaBogota(corte) + DIA_MS + 8 * 60 * MIN;
+    else if (mm < 8 * 60) corte = inicioDiaBogota(corte) + 8 * 60 * MIN;
+  }
+  corte = Math.min(corte, visita - 2 * 60 * MIN);
+  return new Date(corte).toISOString();
 }
 
-module.exports = { ANTICIPACION_MIN, ANTICIPACION_ARRIENDO_MIN, anticipacionMin, normalizarOperacion, DURACION_MIN, TRASLADO_MIN, BLOQUE_MIN, validarHora, alternativas, espaciar, enSilencio, corteDe, dentroDeHorario };
+// El corte en palabras, para que Sofi lo diga: "hoy a las 8:00 p. m.",
+// "mañana a las 8:00 a. m." o "el miércoles 22 de octubre a las 8:00 p. m.".
+function corteEnPalabras(corteIso, { ahora = new Date() } = {}) {
+  const t = new Date(corteIso).getTime();
+  if (isNaN(t)) return null;
+  const { formatCitaFechaHora } = require("../notifications/advisor");
+  const fh = formatCitaFechaHora(corteIso);
+  if (!fh) return null;
+  const dias = Math.round((inicioDiaBogota(t) - inicioDiaBogota(ahora.getTime())) / DIA_MS);
+  if (dias === 0) return `hoy a las ${fh.hora}`;
+  if (dias === 1) return `mañana a las ${fh.hora}`;
+  return `el ${fh.fecha.replace(",", "")} a las ${fh.hora}`;
+}
+
+module.exports = { ANTICIPACION_MIN, CORTE_HORAS_ANTES, anticipacionMin, normalizarOperacion, DURACION_MIN, TRASLADO_MIN, BLOQUE_MIN, validarHora, alternativas, espaciar, enSilencio, corteDe, corteEnPalabras, dentroDeHorario };

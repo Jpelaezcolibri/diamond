@@ -19,7 +19,7 @@ test("la visita se avisa con motivo visita y los datos van a la app, no al Whats
   assert.strictEqual(llamadas[0].motivo, "visita");
   assert.strictEqual(llamadas[0].advisor, ADV);
   assert.strictEqual(llamadas[0].lead, LEAD);
-  assert.match(llamadas[0].cuerpo, /Ref 10012722 .* Laura \(colega\) · confirmá antes de/);
+  assert.match(llamadas[0].cuerpo, /Ref 10012722 .* Laura \(colega\) · Confirmar con el propietario antes de viernes, 9 de octubre/);
 });
 
 test("si avisar falla, lo informa sin lanzar", async () => {

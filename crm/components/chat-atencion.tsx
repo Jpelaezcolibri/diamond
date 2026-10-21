@@ -97,7 +97,7 @@ export default function ChatAtencion({
             {fmt(cita.fecha_hora)}
             {cita.ref ? ` · ref ${cita.ref}` : ""}
           </div>
-          {cita.corte_at && <div className="text-xs text-slate-300">Confirmá antes de {fmt(cita.corte_at)} o se cancela sola.</div>}
+          {cita.corte_at && <div className="text-xs text-slate-300">Confirmá con el propietario antes de {fmt(cita.corte_at)} o se cancela sola.</div>}
           <TiempoCita cita={cita} oscuro />
           <div className="mt-2 flex flex-wrap gap-2">
             <button

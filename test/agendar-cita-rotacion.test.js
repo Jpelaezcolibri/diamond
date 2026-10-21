@@ -37,12 +37,17 @@ test("con 24 h y hora libre: queda propuesta, de un asesor del ciclo, con corte 
   const cita = c.lead.cita;
   assert.strictEqual(cita.estado, "propuesta");
   assert.ok(["a1", "a2"].includes(cita.asesor_id));
-  assert.strictEqual(cita.corte_at, new Date(new Date(iso).getTime() - 4 * 3600 * 1000).toISOString());
+  // Visita 10:00 -> 12 h antes son las 22:00, de noche -> 20:00 de la vispera.
+  assert.strictEqual(cita.corte_at, new Date(new Date(iso).getTime() - 14 * 3600 * 1000).toISOString());
   assert.strictEqual(cita.historial.length, 1);
   assert.strictEqual(cita.historial[0].asesor_id, cita.asesor_id);
   assert.strictEqual(c.appointmentAlert.porPlantilla, true);
   assert.match(out, /SOLICITADA/);
   assert.doesNotMatch(out, /573011880668|573000008113|Daiana|Claudia/);
+  // Que quede claro que estamos confirmando con el propietario, y hasta cuando.
+  assert.match(out, /ahora confirmamos la disponibilidad con el propietario/);
+  assert.match(out, /a más tardar el [a-záéíóú]+ \d{1,2} de [a-z]+ a las 8:00 p\. m\./);
+  assert.doesNotMatch(out, /qued[oó] confirmada|queda confirmada/i);
 });
 
 test("si un asesor ya tiene esa hora, la cita va al otro", async () => {
