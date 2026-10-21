@@ -22,7 +22,7 @@ config.metaAppSecret = null;
 const organizations = require("../src/data/organizations");
 const engine = require("../src/agent/engine");
 const mensajeAsesor = require("../src/lib/mensaje-asesor");
-const avisar = require("../src/notifications/avisar-asesor");
+const notificarMod = require("../src/notifications/notificar");
 const alertaSaldo = require("../src/lib/alerta-saldo");
 const router = require("../src/channels/whatsapp");
 
@@ -52,7 +52,11 @@ async function entregar(req) {
   await new Promise((r) => setTimeout(r, 50));
 }
 
-function preparar(t, appointmentAlert) {
+// Se usa el avisarAsesor REAL (revision 2026-10-21: el mock anterior
+// reimplementaba la regla). Solo se cortan los bordes: la campana
+// (notificar.js) y Graph (fetch). `asesoraRecibe=false` hace que Meta rechace
+// todo lo que va al celular de la asesora (plantilla y texto).
+function preparar(t, appointmentAlert, { asesoraRecibe = true } = {}) {
   t.mock.method(organizations, "findByWhatsappPhoneId", async () => ORG);
   t.mock.method(organizations, "getDefault", async () => ORG);
   t.mock.method(engine, "procesarMensaje", async () => ({
@@ -61,26 +65,34 @@ function preparar(t, appointmentAlert) {
     appointmentAlert,
     assistantMessageId: null,
   }));
-  t.mock.method(globalThis, "fetch", async () => ({ ok: true, status: 200, json: async () => ({ messages: [{ id: "wamid.SALE" }] }) }));
+  const alAsesora = [];
+  t.mock.method(globalThis, "fetch", async (url, opts) => {
+    const body = JSON.parse((opts && opts.body) || "{}");
+    if (body.to === PRINCIPAL) {
+      alAsesora.push(body);
+      if (!asesoraRecibe) return { ok: false, status: 400, json: async () => ({ error: { message: "template not approved" } }) };
+    }
+    return { ok: true, status: 200, json: async () => ({ messages: [{ id: "wamid.SALE" }] }) };
+  });
   const textosLibres = [];
   t.mock.method(mensajeAsesor, "enviarYRegistrar", async (org, tel, texto) => {
     textosLibres.push({ tel, texto });
     return { ok: true };
   });
   const campanas = [];
-  t.mock.method(avisar, "avisarAsesor", async (args) => {
-    campanas.push(args);
-    return args.advisor && args.advisor.id ? { ok: true, whatsapp: true } : { ok: false, error: "sin asesora con usuario" };
+  t.mock.method(notificarMod, "notificar", async (n) => {
+    campanas.push(n);
+    return { ok: true, push: 0 };
   });
   const alertas = [];
   t.mock.method(alertaSaldo, "enviarAlertaTecnica", async (resumen, detalle) => {
     alertas.push(`${resumen} ${detalle}`);
   });
-  return { textosLibres, campanas, alertas };
+  return { textosLibres, campanas, alertas, alAsesora };
 }
 
 test("la cita fuera de la rotacion va por la campana del CRM, con el detalle adentro y sin texto libre", async (t) => {
-  const { textosLibres, campanas, alertas } = preparar(t, {
+  const { textosLibres, campanas, alertas, alAsesora } = preparar(t, {
     advisor: DAIANA,
     advisorPhone: PRINCIPAL,
     advisorName: DAIANA.name,
@@ -91,9 +103,12 @@ test("la cita fuera de la rotacion va por la campana del CRM, con el detalle ade
 
   assert.strictEqual(campanas.length, 1);
   assert.strictEqual(campanas[0].advisor.id, DAIANA.id);
-  assert.strictEqual(campanas[0].motivo, "visita");
+  assert.strictEqual(campanas[0].tipo, "cita_por_confirmar");
   assert.match(campanas[0].cuerpo, /Nueva cita PROPUESTA/, "el detalle queda en la campana (dentro del CRM)");
   assert.strictEqual(textosLibres.length, 0, "nada sale como texto libre con datos del cliente");
+  assert.strictEqual(alAsesora.length, 1);
+  assert.strictEqual(alAsesora[0].template.name, "aviso_app", "por WhatsApp solo la plantilla sin datos");
+  assert.doesNotMatch(JSON.stringify(alAsesora), /3023980359|Sebastian/);
   assert.strictEqual(alertas.length, 0);
 });
 
@@ -110,4 +125,19 @@ test("cita sin asesora con usuario: alerta tecnica a Juan, sin el telefono del c
   assert.strictEqual(alertas.length, 1);
   assert.match(alertas[0], /lead-1/);
   assert.doesNotMatch(alertas[0], /3023980359/);
+});
+
+test("cita que queda solo en la campana (Meta rechaza aviso_app y el texto): alerta tecnica a Juan sin datos del cliente", async (t) => {
+  const { campanas, alertas, alAsesora } = preparar(
+    t,
+    { advisor: DAIANA, advisorPhone: PRINCIPAL, advisorName: DAIANA.name, advisorId: DAIANA.id, advisorAlert: "📅 Nueva cita PROPUESTA · Sebastian +573023980359" },
+    { asesoraRecibe: false }
+  );
+  await entregar(webhookMeta("wamid.CITA3"));
+
+  assert.strictEqual(campanas.length, 1, "la campana si quedo");
+  assert.strictEqual(alAsesora.length, 2, "se intento la plantilla y el texto corto");
+  assert.strictEqual(alertas.length, 1);
+  assert.match(alertas[0], /Aviso de cita sin entregar: lead lead-1/);
+  assert.doesNotMatch(alertas[0], /3023980359|Sebastian/);
 });

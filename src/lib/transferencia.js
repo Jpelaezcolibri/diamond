@@ -9,10 +9,12 @@
 //   - Con asesora (fila de advisors con id): campana del CRM + aviso_app
 //     (avisarAsesor) y la conversacion pasa a modo "humano": Sofi deja de
 //     contestar. La asesora la sigue desde el CRM y puede devolverla a Sofi
-//     con "Devolver a Sofi", como siempre. Si el cliente queda esperando, el
-//     vigilante src/scheduler/lead-esperando.js le avisa a la duena por la
-//     campana a los 15 min.
-//   - Sin asesora (respaldo de la org sin id, o el aviso fallo): alerta tecnica
+//     con "Devolver a Sofi", como siempre. La pausa queda marcada
+//     (src/lib/pausa-transferencia.js): a los 30 min habiles sin que la
+//     asesora escriba se le repite el aviso, y a las 2 h habiles Sofi vuelve a
+//     contestar y Juan recibe una alerta tecnica.
+//   - Sin asesora (respaldo de la org sin id), o el aviso no le llego EN
+//     TIEMPO REAL (ni push ni WhatsApp; la campana sola no cuenta): alerta tecnica
 //     a Juan (ALERTA_TECNICA_TO) sin el telefono del cliente, el chat queda
 //     marcado en "Para atender" y Sofi NO se pausa: si nadie lo va a atender,
 //     que por lo menos ella siga contestando.
@@ -26,6 +28,7 @@ function depsPorDefecto() {
     nota: (...a) => require("../data/conversations").appendMessage(...a),
     actualizarLead: (...a) => require("../data/leads").update(...a),
     alertaTecnica: (...a) => require("./alerta-saldo").enviarAlertaTecnica(...a),
+    marcarPausa: (...a) => require("./pausa-transferencia").marcar(...a),
   };
 }
 
@@ -33,7 +36,7 @@ function depsPorDefecto() {
  * @returns {Promise<{ok: boolean, pausada: boolean, error: string|null}>}
  */
 async function cerrarTransferencia({ org, transfer, lead, telefonoCliente = null }, deps = null) {
-  const d = deps || depsPorDefecto();
+  const d = deps ? { ...depsPorDefecto(), ...deps } : depsPorDefecto();
   const advisor = transfer && transfer.advisor;
   const convId = transfer && transfer.conversationId;
 
@@ -60,6 +63,11 @@ async function cerrarTransferencia({ org, transfer, lead, telefonoCliente = null
       try {
         await d.setModo(convId, "humano");
         pausada = true;
+        if (lead && lead.id) {
+          await Promise.resolve(d.marcarPausa({ orgId: org && org.id, leadId: lead.id, convId, advisorId: advisor.id })).catch((e) =>
+            console.warn("[transferencia] No se pudo marcar la pausa (sin salida automatica):", e.message)
+          );
+        }
         await d
           .nota(convId, "system", `Sofi quedó en pausa: ${advisor.name || "la asesora"} sigue la conversación desde el CRM. Para que Sofi vuelva a contestar, «Devolver a Sofi».`)
           .catch(() => {});
@@ -71,7 +79,9 @@ async function cerrarTransferencia({ org, transfer, lead, telefonoCliente = null
   }
 
   const error = (r && r.error) || "error desconocido";
-  console.error(`[transferencia] Transferencia sin asesora (lead ${lead && lead.id}):`, error);
+  // Con asesora pero sin entrega en tiempo real (avisarAsesor ya respondio).
+  const sinEntrega = Boolean(r && "campana" in r);
+  console.error(`[transferencia] Transferencia ${sinEntrega ? "sin entregar" : "sin asesora"} (lead ${lead && lead.id}):`, error);
   if (lead && lead.id) {
     await d
       .actualizarLead(lead.id, { atencion_pendiente: "transferido", atencion_desde: new Date().toISOString() })
@@ -79,13 +89,19 @@ async function cerrarTransferencia({ org, transfer, lead, telefonoCliente = null
   }
   if (convId) {
     await d
-      .nota(convId, "system", `⚠️ Esta transferencia no le llegó a ninguna asesora (${error}). Sofi sigue contestando; el chat quedó en "Para atender".`)
+      .nota(
+        convId,
+        "system",
+        sinEntrega
+          ? `⚠️ El aviso de esta transferencia no le llegó a ${advisor.name || "la asesora"} en tiempo real (${error}). Sofi sigue contestando; el chat quedó en "Para atender".`
+          : `⚠️ Esta transferencia no le llegó a ninguna asesora (${error}). Sofi sigue contestando; el chat quedó en "Para atender".`
+      )
       .catch(() => {});
   }
   // Sin telefono ni nombre del cliente: solo lo necesario para encontrarlo en el CRM.
   await Promise.resolve(
     d.alertaTecnica(
-      `Transferencia sin asesora: lead ${(lead && lead.id) || "?"} (${(transfer && transfer.especialidad) || "sin especialidad"}).`,
+      `Transferencia ${sinEntrega ? "sin entregar" : "sin asesora"}: lead ${(lead && lead.id) || "?"} (${(transfer && transfer.especialidad) || "sin especialidad"}).`,
       `${error}. Quedó en "Para atender" del CRM ${(org && org.name) || ""}.`
     )
   ).catch(() => {});

@@ -8,10 +8,14 @@
 //     hasta que no quede ningun cliente esperando (Sofi volvio a contestar).
 //   - Modo humano: notificacion por la campana a la asesora duena, una vez por
 //     mensaje (leads.seguimiento.espera_alertada_msg_id). Nunca por WhatsApp.
+//   - Pausa por transferencia (leads.seguimiento.pausa_transferencia): aviso
+//     repetido a la duena a los 30 min habiles y vuelta a Sofi a las 2 h
+//     habiles, con alerta a Juan. Vive en src/lib/pausa-transferencia.js.
 // Interruptor: SOFI_ALERTA_ESPERA (encendido salvo "false").
 
 const { enviarAlertaTecnica } = require("../lib/alerta-saldo");
 const { hourInBogota, inQuietHours } = require("./followups");
+const { marcaDe } = require("../lib/pausa-transferencia");
 
 const MIN = 60 * 1000;
 const H = 60 * MIN;
@@ -101,7 +105,7 @@ async function cargarCandidatos(org, ahora) {
   const desde = new Date(ahora.getTime() - VENTANA_MS).toISOString();
   const { data: convs, error } = await supabase
     .from("conversations")
-    .select("id, modo, leads!inner(*)")
+    .select("id, modo, whatsapp_phone_id, leads!inner(*)")
     .eq("org_id", org.id)
     .eq("estado", "activa")
     .gte("last_activity_at", desde)
@@ -110,6 +114,8 @@ async function cargarCandidatos(org, ahora) {
   if (error) throw error;
   if (!convs || !convs.length) return [];
   const ultimoDe = new Map();
+  const ultimoClienteDe = new Map();
+  const ultimoAsistenteDe = new Map();
   for (const ids of trozos(convs.map((c) => c.id), CHUNK)) {
     const { data: msgs, error: e2 } = await supabase
       .from("messages")
@@ -120,9 +126,21 @@ async function cargarCandidatos(org, ahora) {
       .order("created_at", { ascending: false })
       .limit(3000);
     if (e2) throw e2;
-    for (const m of msgs || []) if (!ultimoDe.has(m.conversation_id)) ultimoDe.set(m.conversation_id, m);
+    for (const m of msgs || []) {
+      if (!ultimoDe.has(m.conversation_id)) ultimoDe.set(m.conversation_id, m);
+      const porRol = m.role === "user" ? ultimoClienteDe : ultimoAsistenteDe;
+      if (!porRol.has(m.conversation_id)) porRol.set(m.conversation_id, m);
+    }
   }
-  return convs.map((c) => ({ id: c.id, modo: c.modo, lead: c.leads, ultimo: ultimoDe.get(c.id) || null }));
+  return convs.map((c) => ({
+    id: c.id,
+    modo: c.modo,
+    whatsapp_phone_id: c.whatsapp_phone_id || null,
+    lead: c.leads,
+    ultimo: ultimoDe.get(c.id) || null,
+    ultimoCliente: ultimoClienteDe.get(c.id) || null,
+    ultimoAsistente: ultimoAsistenteDe.get(c.id) || null,
+  }));
 }
 
 async function runOnce({ ahora = new Date(), deps = null } = {}) {
@@ -138,7 +156,23 @@ async function runOnce({ ahora = new Date(), deps = null } = {}) {
       console.error(`[lead-esperando] ${org.name}: no se pudo consultar:`, e.message);
       continue; // sin datos no se alerta ni se da por resuelto el episodio
     }
-    const esperando = (candidatos || []).filter((c) => estaEsperando(c, ahora));
+    // Pausas por transferencia: primero, porque pueden devolver el chat a Sofi.
+    const atendidas = new Set();
+    const pausa = d.pausa || ((args) => require("../lib/pausa-transferencia").atenderPausa(args));
+    for (const c of candidatos || []) {
+      if (!marcaDe(c.lead)) continue;
+      try {
+        const r = await pausa({ org, c, ahora });
+        if (r === "reaviso" || r === "devuelta") {
+          atendidas.add(c.id);
+          out[r === "reaviso" ? "pausaReaviso" : "pausaDevuelta"] = (out[r === "reaviso" ? "pausaReaviso" : "pausaDevuelta"] || 0) + 1;
+        }
+      } catch (e) {
+        console.warn(`[lead-esperando] pausa por transferencia (lead ${c.lead && c.lead.id}):`, e.message);
+      }
+    }
+    // Lo que acaba de volver a Sofi o recibio el aviso repetido no suma otra alerta en esta vuelta.
+    const esperando = (candidatos || []).filter((c) => !atendidas.has(c.id) && estaEsperando(c, ahora));
     const enBot = esperando.filter((c) => c.modo !== "humano");
     out.bot += enBot.length;
     if (!enBot.length) alertadoBot.delete(org.id);

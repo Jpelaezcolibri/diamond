@@ -13,6 +13,7 @@ const conversations = require("../src/data/conversations");
 const engine = require("../src/agent/engine");
 const avisar = require("../src/notifications/avisar-asesor");
 const alertaSaldo = require("../src/lib/alerta-saldo");
+const pausaTransferencia = require("../src/lib/pausa-transferencia");
 const router = require("../src/channels/whatsapp");
 
 const ORG = { id: "org-1", name: "Diamond", whatsapp_token: "tok", whatsapp_phone_id: "PID" };
@@ -32,7 +33,7 @@ async function entregar(wamid) {
   await new Promise((r) => setTimeout(r, 50));
 }
 
-function preparar(t, salida) {
+function preparar(t, salida, aviso = { ok: true, campana: true, push: 0, whatsapp: true }) {
   const orden = [];
   const graph = [];
   t.mock.method(organizations, "findByWhatsappPhoneId", async () => ORG);
@@ -48,7 +49,13 @@ function preparar(t, salida) {
   t.mock.method(avisar, "avisarAsesor", async (a) => {
     orden.push(`campana:${a.motivo}`);
     campanas.push(a);
-    return { ok: true, whatsapp: true };
+    return aviso;
+  });
+  const pausas = [];
+  t.mock.method(pausaTransferencia, "marcar", async (m) => {
+    orden.push("marca-pausa");
+    pausas.push(m);
+    return true;
   });
   t.mock.method(conversations, "setModo", async (id, modo) => {
     orden.push(`modo:${modo}`);
@@ -56,16 +63,27 @@ function preparar(t, salida) {
   });
   t.mock.method(conversations, "appendMessage", async () => ({ id: "m" }));
   t.mock.method(alertaSaldo, "enviarAlertaTecnica", async () => orden.push("alerta"));
-  return { orden, graph, campanas };
+  return { orden, graph, campanas, pausas };
 }
 
 test("transferencia: despedida, campana y despues Sofi en pausa", async (t) => {
-  const { orden, campanas } = preparar(t, {
+  const { orden, campanas, pausas } = preparar(t, {
     transfer: { advisor: DAIANA, advisorName: DAIANA.name, advisorPhone: DAIANA.phone, motivo: "calificado", especialidad: "venta", advisorAlert: "Nuevo lead", conversationId: "conv-1" },
   });
   await entregar("wamid.T1");
-  assert.deepStrictEqual(orden, ["despedida", "campana:transferido", "modo:humano"]);
+  assert.deepStrictEqual(orden, ["despedida", "campana:transferido", "modo:humano", "marca-pausa"]);
   assert.strictEqual(campanas[0].advisor.id, DAIANA.id);
+  assert.deepStrictEqual(pausas, [{ orgId: ORG.id, leadId: "lead-1", convId: "conv-1", advisorId: DAIANA.id }]);
+});
+
+test("transferencia cuyo aviso quedo solo en la campana: Sofi NO se pausa y Juan recibe la alerta", async (t) => {
+  const { orden } = preparar(
+    t,
+    { transfer: { advisor: DAIANA, advisorName: DAIANA.name, advisorPhone: DAIANA.phone, motivo: "calificado", especialidad: "venta", advisorAlert: "Nuevo lead", conversationId: "conv-1" } },
+    { ok: false, campana: true, push: 0, whatsapp: false, error: "no le llegó por push ni por WhatsApp" }
+  );
+  await entregar("wamid.T3");
+  assert.deepStrictEqual(orden, ["despedida", "campana:transferido", "alerta"]);
 });
 
 test("captador y aliado: por la campana con el detalle, ningun texto libre a la asesora", async (t) => {

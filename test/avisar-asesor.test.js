@@ -67,15 +67,45 @@ test("sin asesor no hace nada", async () => {
   assert.strictEqual(log.notas.length, 0);
 });
 
-test("la transferencia del webhook va por avisarAsesor y no por un texto al celular", () => {
-  const fuente = require("node:fs").readFileSync(require("node:path").join(__dirname, "..", "src", "channels", "whatsapp.js"), "utf8");
-  const i = fuente.indexOf("if (transfer) {");
-  const bloque = fuente.slice(i, i + 1500);
-  // Desde 2026-10-21 el cierre (aviso + pausa + alerta sin asesora) vive en src/lib/transferencia.js.
-  assert.match(bloque, /cerrarTransferencia\(/);
-  assert.doesNotMatch(bloque, /sendWhatsApp\(org, transfer\.advisorPhone, transfer\.advisorAlert/);
-  const cierre = require("node:fs").readFileSync(require("node:path").join(__dirname, "..", "src", "lib", "transferencia.js"), "utf8");
-  assert.match(cierre, /avisarAsesor\(/);
-  assert.match(cierre, /motivo: "transferido"/);
-  assert.doesNotMatch(fuente, /sendWhatsApp\(org, (allyAlert|captadorAlert)\.advisorPhone/, "ningun aviso a la asesora sale como texto libre");
+// El cableado del webhook (transferencia, captador, aliado por la campana) lo
+// prueban de verdad test/transferencia-webhook.test.js y
+// test/aviso-cita-respaldo.test.js; aca no se hace grep sobre el fuente.
+
+// ── Que le llego de verdad (revision 2026-10-21) ──────────────────────────
+
+test("ok solo si le llego en tiempo real: plantilla aviso_app", async () => {
+  const { d } = deps({ notificar: async () => ({ ok: true, push: 0 }) });
+  const r = await avisarAsesor({ org: ORG, advisor: ADV, motivo: "transferido", lead: LEAD, titulo: "x" }, d);
+  assert.deepStrictEqual(r, { ok: true, campana: true, push: 0, whatsapp: true });
+});
+
+test("ok con push aunque el WhatsApp falle", async () => {
+  const { d } = deps({
+    notificar: async () => ({ ok: true, push: 2 }),
+    plantilla: async () => ({ ok: false, error: "no aprobada" }),
+    texto: async () => ({ ok: false, error: "fuera de la ventana" }),
+  });
+  const r = await avisarAsesor({ org: ORG, advisor: ADV, motivo: "transferido", lead: LEAD, titulo: "x" }, d);
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(r.push, 2);
+  assert.strictEqual(r.whatsapp, false);
+});
+
+test("solo la campana NO cuenta: sin push y sin WhatsApp, ok es false y lo dice", async () => {
+  const { d } = deps({
+    notificar: async () => ({ ok: true, push: 0 }),
+    plantilla: async () => ({ ok: false, error: "no aprobada" }),
+    texto: async () => ({ ok: false, error: "fuera de la ventana" }),
+  });
+  const r = await avisarAsesor({ org: ORG, advisor: ADV, motivo: "transferido", lead: LEAD, titulo: "x" }, d);
+  assert.strictEqual(r.ok, false);
+  assert.strictEqual(r.campana, true);
+  assert.strictEqual(r.whatsapp, false);
+  assert.match(r.error, /solo en la campana/);
+});
+
+test("si la campana se cae (lanza) y no hay telefono, nada llego", async () => {
+  const { d } = deps({ notificar: async () => { throw new Error("db caida"); } });
+  const r = await avisarAsesor({ org: ORG, advisor: { ...ADV, phone: "" }, motivo: "aviso", lead: LEAD, titulo: "x" }, d);
+  assert.deepStrictEqual({ ok: r.ok, campana: r.campana, push: r.push, whatsapp: r.whatsapp }, { ok: false, campana: false, push: 0, whatsapp: false });
 });

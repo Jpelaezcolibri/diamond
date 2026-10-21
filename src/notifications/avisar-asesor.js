@@ -47,9 +47,11 @@ async function avisarAsesor({ org, advisor, motivo, lead, titulo, cuerpo = null 
   }
 
   const convId = lead && lead.id ? await d.conversacion(org.id, lead.id).catch(() => null) : null;
-  await d
+  const n = await d
     .notificar({ orgId: org.id, advisor, tipo: m.tipo, titulo, cuerpo, link: convId ? `/inbox/${convId}` : "/pendientes", leadId: lead ? lead.id : null })
-    .catch(() => {});
+    .catch((e) => ({ ok: false, push: 0, error: e.message }));
+  const campana = Boolean(n && n.ok);
+  const push = (n && Number(n.push)) || 0;
 
   const tel = String(advisor.phone || "").replace(/\D/g, "");
   let whatsapp = false;
@@ -63,7 +65,14 @@ async function avisarAsesor({ org, advisor, motivo, lead, titulo, cuerpo = null 
       whatsapp = Boolean(t && t.ok);
     }
   }
-  return { ok: true, whatsapp };
+  // `ok` = le llego algo EN TIEMPO REAL (revision 2026-10-21): push a por lo
+  // menos un dispositivo o el WhatsApp. La campana sola no cuenta: solo la ve
+  // quien tenga el CRM abierto (Daiana y Catherine tienen 0 dispositivos de
+  // push), y con ese `ok` Sofi se pausaba sin que nadie se enterara.
+  const ok = push > 0 || whatsapp;
+  const r = { ok, campana, push, whatsapp };
+  if (!ok) r.error = `no le llegó por push ni por WhatsApp${campana ? " (quedó solo en la campana del CRM)" : " (ni siquiera quedó en la campana)"}`;
+  return r;
 }
 
 // Envoltorio para los avisos que arma tools.js ({advisor, advisorAlert, ...}):
@@ -71,8 +80,8 @@ async function avisarAsesor({ org, advisor, motivo, lead, titulo, cuerpo = null 
 // Antes salian como texto libre por WhatsApp con los datos del cliente; ahora
 // el texto completo va al cuerpo de la campana (dentro del CRM) y por WhatsApp
 // solo sale aviso_app. Nunca lanza. Con `alertaTecnicaSiFalla` (la cita), si no
-// hay asesora con id a quien avisar, Juan recibe una alerta tecnica sin datos
-// del cliente.
+// hay asesora con id a quien avisar o el aviso no le llego en tiempo real (ni
+// push ni WhatsApp), Juan recibe una alerta tecnica sin datos del cliente.
 async function avisarPorCampana({ org, alerta, motivo, lead, titulo, que = "aviso", alertaTecnicaSiFalla = false }, deps = null) {
   if (!alerta) return { ok: false };
   const advisor = alerta.advisor || (alerta.advisorId ? { id: alerta.advisorId, name: alerta.advisorName || null, phone: alerta.advisorPhone || null } : null);
@@ -82,11 +91,18 @@ async function avisarPorCampana({ org, alerta, motivo, lead, titulo, que = "avis
   }));
   if (r && r.ok) return r;
   const quien = (advisor && (advisor.name || advisor.id)) || "nadie";
-  console.error(`[avisar-asesor] Aviso de ${que} a ${quien} NO se pudo dejar en el CRM:`, (r && r.error) || "sin asesora con usuario");
+  const error = (r && r.error) || "sin asesora con usuario";
+  console.error(`[avisar-asesor] Aviso de ${que} a ${quien} NO le llegó en tiempo real:`, error);
   if (alertaTecnicaSiFalla) {
     const alertaTecnica = (deps && deps.alertaTecnica) || require("../lib/alerta-saldo").enviarAlertaTecnica;
+    const conAsesora = Boolean(advisor && advisor.id && r && "campana" in r);
     await Promise.resolve(
-      alertaTecnica(`Aviso de ${que} sin asesora: lead ${(lead && lead.id) || "?"}.`, `No hay asesora activa a quien avisarle. Revisar "Para atender" del CRM ${(org && org.name) || ""}.`)
+      alertaTecnica(
+        conAsesora ? `Aviso de ${que} sin entregar: lead ${(lead && lead.id) || "?"}.` : `Aviso de ${que} sin asesora: lead ${(lead && lead.id) || "?"}.`,
+        conAsesora
+          ? `${error}. Revisar "Para atender" del CRM ${(org && org.name) || ""}.`
+          : `No hay asesora activa a quien avisarle. Revisar "Para atender" del CRM ${(org && org.name) || ""}.`
+      )
     ).catch(() => {});
   }
   return r || { ok: false };

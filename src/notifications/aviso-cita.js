@@ -19,7 +19,9 @@ async function avisarCitaPorConfirmar({ org, advisor, lead, cita, deps = {} }) {
     ok: false,
     error: e.message,
   }));
-  return r && r.ok ? { ok: true, via: "app" } : { ok: false, via: "app", error: r && r.error };
+  // `ok` = le llego en tiempo real (push o WhatsApp); `campana` = quedo en el CRM.
+  const campana = Boolean(r && r.campana);
+  return r && r.ok ? { ok: true, via: "app", campana } : { ok: false, via: "app", campana, error: r && r.error };
 }
 
 module.exports = { avisarCitaPorConfirmar };

@@ -13,9 +13,9 @@ test("la visita se avisa con motivo visita y los datos van a la app, no al Whats
   const llamadas = [];
   const r = await avisarCitaPorConfirmar({
     org: ORG, advisor: ADV, lead: LEAD, cita: CITA,
-    deps: { avisar: async (args) => { llamadas.push(args); return { ok: true }; } },
+    deps: { avisar: async (args) => { llamadas.push(args); return { ok: true, campana: true, push: 0, whatsapp: true }; } },
   });
-  assert.deepStrictEqual(r, { ok: true, via: "app" });
+  assert.deepStrictEqual(r, { ok: true, via: "app", campana: true });
   assert.strictEqual(llamadas[0].motivo, "visita");
   assert.strictEqual(llamadas[0].advisor, ADV);
   assert.strictEqual(llamadas[0].lead, LEAD);
@@ -25,4 +25,13 @@ test("la visita se avisa con motivo visita y los datos van a la app, no al Whats
 test("si avisar falla, lo informa sin lanzar", async () => {
   const r = await avisarCitaPorConfirmar({ org: ORG, advisor: ADV, lead: LEAD, cita: CITA, deps: { avisar: async () => { throw new Error("x"); } } });
   assert.strictEqual(r.ok, false);
+});
+
+test("si solo quedo en la campana (sin push ni WhatsApp), no se da por avisada", async () => {
+  const r = await avisarCitaPorConfirmar({
+    org: ORG, advisor: ADV, lead: LEAD, cita: CITA,
+    deps: { avisar: async () => ({ ok: false, campana: true, push: 0, whatsapp: false, error: "no le llegó por push ni por WhatsApp" }) },
+  });
+  assert.strictEqual(r.ok, false);
+  assert.strictEqual(r.campana, true);
 });

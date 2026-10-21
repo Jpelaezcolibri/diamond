@@ -12,7 +12,7 @@ const { entregarConRespaldo } = require("../src/lib/entrega-asesor");
 const { instruccionTransferencia } = require("../src/lib/identidad-publica");
 const { cerrarTransferencia } = require("../src/lib/transferencia");
 const { avisarAsesor, avisarPorCampana } = require("../src/notifications/avisar-asesor");
-const { executeTool } = require("../src/agent/tools");
+const { executeTool, maybeCaptadorAlert } = require("../src/agent/tools");
 
 const ORG = { id: "org-th", name: "Diamond" };
 // Las filas reales de produccion (2026-10-21), con telefonos de prueba.
@@ -98,14 +98,21 @@ test("avisarAsesor no le avisa a un asesor dado de baja", async () => {
 // ── 2 y 3. Pausa al transferir / alerta si no hay asesora ─────────────────
 
 function depsCierre(avisoOk = true) {
-  const log = { avisos: [], modos: [], notas: [], leads: [], alertas: [] };
+  const log = { avisos: [], modos: [], notas: [], leads: [], alertas: [], pausas: [] };
+  const resultado =
+    avisoOk === true
+      ? { ok: true, campana: true, push: 0, whatsapp: true }
+      : avisoOk === "solo-campana"
+        ? { ok: false, campana: true, push: 0, whatsapp: false, error: "no le llegó por push ni por WhatsApp (quedó solo en la campana del CRM)" }
+        : { ok: false, error: "falló" };
   return {
     log,
     d: {
       avisarAsesor: async (a) => {
         log.avisos.push(a);
-        return avisoOk ? { ok: true } : { ok: false, error: "falló" };
+        return resultado;
       },
+      marcarPausa: async (m) => log.pausas.push(m),
       setModo: async (id, modo) => log.modos.push({ id, modo }),
       nota: async (id, role, texto) => log.notas.push({ id, role, texto }),
       actualizarLead: async (id, patch) => log.leads.push({ id, patch }),
@@ -125,6 +132,22 @@ test("transferencia con asesora: campana con el resumen y Sofi en pausa (modo hu
   assert.deepStrictEqual(log.modos, [{ id: "conv-1", modo: "humano" }]);
   assert.match(log.notas[0].texto, /pausa/);
   assert.strictEqual(log.alertas.length, 0);
+  assert.deepStrictEqual(log.pausas, [{ orgId: ORG.id, leadId: LEAD.id, convId: "conv-1", advisorId: DAIANA.id }], "la pausa queda marcada para tener salida");
+});
+
+test("si el aviso quedo SOLO en la campana (sin push ni WhatsApp): no hay pausa y Juan recibe la alerta sin datos del cliente", async () => {
+  const { log, d } = depsCierre("solo-campana");
+  const transfer = { advisor: DAIANA, especialidad: "venta", advisorAlert: "Nuevo lead … +573125550000", conversationId: "conv-3" };
+  const r = await cerrarTransferencia({ org: ORG, transfer, lead: LEAD, telefonoCliente: LEAD.phone }, d);
+  assert.strictEqual(r.ok, false);
+  assert.strictEqual(r.pausada, false);
+  assert.strictEqual(log.modos.length, 0, "Sofi sigue contestando");
+  assert.strictEqual(log.pausas.length, 0);
+  assert.strictEqual(log.leads[0].patch.atencion_pendiente, "transferido");
+  assert.match(log.notas[0].texto, /no le llegó a Daiana en tiempo real/);
+  assert.strictEqual(log.alertas.length, 1);
+  assert.match(log.alertas[0], /Transferencia sin entregar: lead lead-7/);
+  assert.doesNotMatch(log.alertas[0], /3125550000|Laura/);
 });
 
 test("transferencia sin asesora (respaldo de la org sin id): alerta a Juan sin telefono, Para atender, Sofi sigue", async () => {
@@ -197,10 +220,45 @@ test("avisarPorCampana: el detalle va en el cuerpo de la campana y la cita sin a
   assert.strictEqual(alertas.length, 1);
 });
 
-test("los avisos de captador, aliado y cita de colega llevan la fila del asesor para la campana", () => {
-  const fuente = require("node:fs").readFileSync(require("node:path").join(__dirname, "..", "src", "agent", "tools.js"), "utf8");
-  assert.match(fuente, /ctx\.captadorAlert = \{ advisor, /);
-  assert.match(fuente, /ctx\.allyAlert = \{ advisor, /);
-  const i = fuente.indexOf("async function armarAvisoCitaColega");
-  assert.match(fuente.slice(i, i + 900), /return \{ advisor, /);
+test("avisarPorCampana: la cita que quedo solo en la campana (sin push ni WhatsApp) tambien alerta a Juan", async () => {
+  const alertas = [];
+  const deps = {
+    avisar: {
+      actualizarLead: async () => {},
+      conversacion: async () => "conv-9",
+      notificar: async () => ({ ok: true, push: 0 }),
+      plantilla: async () => ({ ok: false, error: "no aprobada" }),
+      texto: async () => ({ ok: false, error: "fuera de la ventana" }),
+    },
+    alertaTecnica: async (r, det) => alertas.push(`${r} ${det}`),
+  };
+  const r = await avisarPorCampana({ org: ORG, alerta: { advisor: DAIANA, advisorAlert: "Cita de Laura +573125550000" }, motivo: "visita", lead: LEAD, titulo: "Visita", que: "cita", alertaTecnicaSiFalla: true }, deps);
+  assert.strictEqual(r.ok, false);
+  assert.strictEqual(r.campana, true);
+  assert.strictEqual(alertas.length, 1);
+  assert.match(alertas[0], /Aviso de cita sin entregar: lead lead-7/);
+  assert.doesNotMatch(alertas[0], /3125550000|Laura/);
+});
+
+test("el aviso al captador lleva la fila del asesor para la campana", async (t) => {
+  const propertyOwnerAlerts = require("../src/data/property-owner-alerts");
+  t.mock.method(propertyOwnerAlerts, "registerAlert", async () => true);
+  t.mock.method(advisors, "findById", async () => DAIANA);
+  const ctx = { org: ORG, lead: { id: "lead-1", nombre: "Laura", phone: "573125550000" }, captadorAlert: null, colega: null };
+  await maybeCaptadorAlert(ctx, { id: "p1", ref: "10207832", captador_id: DAIANA.id, titulo: "Apto Laureles" });
+  assert.ok(ctx.captadorAlert);
+  assert.strictEqual(ctx.captadorAlert.advisor, DAIANA, "avisarPorCampana necesita la fila (id) para la campana");
+  assert.ok(ctx.captadorAlert.advisorAlert);
+});
+
+test("el aviso al captador no sale para un asesor dado de baja ni para un colega", async (t) => {
+  const propertyOwnerAlerts = require("../src/data/property-owner-alerts");
+  t.mock.method(propertyOwnerAlerts, "registerAlert", async () => true);
+  t.mock.method(advisors, "findById", async () => NATALIA);
+  const ctx = { org: ORG, lead: { id: "lead-1" }, captadorAlert: null, colega: null };
+  await maybeCaptadorAlert(ctx, { id: "p1", captador_id: NATALIA.id });
+  assert.strictEqual(ctx.captadorAlert, null);
+  const ctxColega = { org: ORG, lead: { id: "lead-2" }, captadorAlert: null, colega: { nombre: "X" } };
+  await maybeCaptadorAlert(ctxColega, { id: "p1", captador_id: DAIANA.id });
+  assert.strictEqual(ctxColega.captadorAlert, null);
 });

@@ -180,3 +180,68 @@ test("cargarCandidatos parte los ids en trozos de 100", async () => {
     if (previo) require.cache[key] = previo; else delete require.cache[key];
   }
 });
+
+// ── Pausa por transferencia (revision 2026-10-21) ─────────────────────────
+
+test("pausa por transferencia: el paso corre para el chat marcado y, si actuo, no suma la campana de 15 min", async () => {
+  const marcado = cand("1", "humano", u("m1", 40), { seguimiento: { pausa_transferencia: { at: hace(40) } } });
+  const otro = cand("2", "humano", u("m2", 20));
+  const { deps, calls } = mk([marcado, otro]);
+  const pausas = [];
+  deps.pausa = async ({ c }) => { pausas.push(c.id); return "reaviso"; };
+  const r = await le.runOnce({ ahora: AHORA, deps });
+  assert.deepEqual(pausas, ["1"], "solo el chat con la marca");
+  assert.equal(r.pausaReaviso, 1);
+  assert.deepEqual(calls.notifs.map((n) => n.link), ["/inbox/2"], "el reavisado no recibe ademas la campana de espera");
+});
+
+test("pausa por transferencia: si el paso falla, el resto del vigilante sigue", async () => {
+  const marcado = cand("1", "humano", u("m1", 40), { seguimiento: { pausa_transferencia: { at: hace(40) } } });
+  const { deps, calls } = mk([marcado]);
+  deps.pausa = async () => { throw new Error("db"); };
+  await le.runOnce({ ahora: AHORA, deps });
+  assert.equal(calls.notifs.length, 1);
+});
+
+test("pausa por transferencia: de noche no corre (los relojes solo cuentan de 8 a 20)", async () => {
+  const marcado = cand("1", "humano", u("m1", 40), { seguimiento: { pausa_transferencia: { at: hace(40) } } });
+  const { deps } = mk([marcado]);
+  let llamadas = 0;
+  deps.pausa = async () => { llamadas++; return "nada"; };
+  await le.runOnce({ ahora: new Date("2026-10-22T03:00:00Z"), deps }); // 22:00 Bogota
+  assert.equal(llamadas, 0);
+});
+
+test("cargarCandidatos trae el ultimo mensaje del cliente y el ultimo de la asesora/Sofi", async () => {
+  const fake = {
+    from(t) {
+      const q = {
+        select() { return q; }, eq() { return q; }, gte() { return q; }, order() { return q; }, in() { return q; },
+        limit() {
+          if (t === "conversations") return Promise.resolve({ data: [{ id: "c1", modo: "humano", whatsapp_phone_id: "PID", leads: { id: "l1" } }], error: null });
+          return Promise.resolve({
+            data: [
+              { id: "m3", conversation_id: "c1", role: "user", created_at: hace(5) },
+              { id: "m2", conversation_id: "c1", role: "assistant", created_at: hace(10) },
+              { id: "m1", conversation_id: "c1", role: "user", created_at: hace(15) },
+            ],
+            error: null,
+          });
+        },
+      };
+      return q;
+    },
+  };
+  const key = require.resolve("../src/data/supabase");
+  const previo = require.cache[key];
+  require.cache[key] = { id: key, filename: key, loaded: true, exports: fake };
+  try {
+    const [c] = await le.cargarCandidatos(org, AHORA);
+    assert.equal(c.ultimo.id, "m3");
+    assert.equal(c.ultimoCliente.id, "m3");
+    assert.equal(c.ultimoAsistente.id, "m2");
+    assert.equal(c.whatsapp_phone_id, "PID");
+  } finally {
+    if (previo) require.cache[key] = previo; else delete require.cache[key];
+  }
+});

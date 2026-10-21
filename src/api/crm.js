@@ -22,6 +22,7 @@ router.use("/api", (req, res, next) => {
 
 // ── Grupos de WhatsApp ──────────────────────────────────────────────────
 const organizations = require("../data/organizations");
+const pausaTransferencia = require("../lib/pausa-transferencia");
 const whatsappGroups = require("../data/whatsapp-groups");
 const waha = require("../lib/waha");
 const directorio = require("../groups/directorio");
@@ -958,7 +959,7 @@ router.post("/api/conversations/:id/send", async (req, res) => {
     // Desde 2026-10-21 la transferencia deja la conversacion en modo humano sin
     // que nadie toque "Tomar control": el pendiente se da por atendido cuando
     // la asesora le escribe al cliente.
-    if (ok) await limpiarPendienteAtendido(conv.lead_id);
+    if (ok) await asesoraAtendio(conv);
 
     res.json({ ok: true, delivery: ok ? "sent" : "failed" });
   } catch (e) {
@@ -1016,6 +1017,9 @@ router.post("/api/conversations/:id/media", upload.single("file"), async (req, r
       .from("conversations")
       .update({ last_activity_at: new Date().toISOString() })
       .eq("id", conv.id);
+    // Una imagen o nota de voz de la asesora tambien atiende el pendiente.
+    // (sendWhatsAppMedia lanza si Meta no lo acepta: llegar aca es que salio.)
+    await asesoraAtendio(conv);
 
     res.json({ ok: true });
   } catch (e) {
@@ -1036,6 +1040,15 @@ async function limpiarPendienteAtendido(leadId) {
     .then(({ error }) => error && console.warn("[api] No se pudo limpiar atencion_pendiente:", error.message));
 }
 
+// La asesora le escribio al cliente o tomo el control: el pendiente
+// (transferido / pide asesor) queda atendido y la pausa por transferencia deja
+// de correr (src/lib/pausa-transferencia.js). Best-effort, nunca lanza.
+async function asesoraAtendio(conv) {
+  if (!conv || !conv.lead_id) return;
+  await limpiarPendienteAtendido(conv.lead_id).catch(() => {});
+  await pausaTransferencia.limpiar({ orgId: conv.org_id, leadId: conv.lead_id }).catch(() => {});
+}
+
 // Tomar control (humano) o devolverselo a Sofi (bot)
 router.post("/api/conversations/:id/modo", async (req, res) => {
   try {
@@ -1046,7 +1059,9 @@ router.post("/api/conversations/:id/modo", async (req, res) => {
     const conv = await conversations.setModo(req.params.id, modo);
     // Tomar el control ATIENDE el pendiente del chat (pide asesor, transferido;
     // la visita se limpia al confirmarla o cancelarla) — plan 6, 2026-10-07.
-    if (modo === "humano" && conv && conv.lead_id) await limpiarPendienteAtendido(conv.lead_id);
+    // La pausa por transferencia se borra aca; si la devuelven a Sofi, el
+    // vigilante la borra solo (ya no esta en modo humano).
+    if (modo === "humano" && conv && conv.lead_id) await asesoraAtendio(conv);
     res.json({ ok: true, modo: conv.modo });
   } catch (e) {
     console.error("[api] Error en modo:", e);
