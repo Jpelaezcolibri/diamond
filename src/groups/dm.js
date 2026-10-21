@@ -161,6 +161,13 @@ async function procesarMensaje(org, mensaje, { ahora = new Date() } = {}) {
   if (duplicado) return { resultado: "duplicado" };
   if (!guardado) return { resultado: "sin_tabla" };
 
+  // Respuesta a una publicacion nuestra (spec 2026-10-20-publicaciones-y-respuestas).
+  // Falla abierta: nunca corta el camino del mensaje.
+  try {
+    await require("./respuestas-publicacion")
+      .deLinea(org, { texto: mensaje.texto, senalId: señal ? señal.id : null, identidad, nombre: mensaje.remitenteNombre });
+  } catch (_) { /* falla abierta */ }
+
   // Puente a Sofi (Juan, 2026-10-17): la linea no conversa, pero a la primera
   // respuesta de un colega a un DM del radar le pasa el link a Sofi con su
   // pregunta y avisa en la app. Ver src/groups/puente-sofi.js. Falla abierta:

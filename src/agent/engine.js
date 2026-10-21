@@ -57,6 +57,13 @@ const REF_PATTERN = /\b([A-Z]{2}\d{3}|D\d{4,}|\d{6,8})\b/;
 // (Click-to-WhatsApp Ads) — permite separar en el CRM los leads que llegaron
 // por un anuncio pago de los organicos, sin tocar `source` (canal).
 // Devuelve { reply, lead, transfer } — transfer: { motivo, advisorAlert } si aplico.
+async function registrarRespuestaSofi(org, lead, phone, text) {
+  try {
+    await require("../groups/respuestas-publicacion")
+      .deSofi(org, { texto: text, telefono: phone, nombre: (lead && lead.nombre) || null, leadId: lead ? lead.id : null });
+  } catch (_) { /* falla abierta */ }
+}
+
 async function procesarMensaje({ org, phone, text, source = "whatsapp", messageExtras = {}, phoneNumberId = null, adReferral = null, radarSignalId = null }) {
   const client = getClient();
 
@@ -149,6 +156,9 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
       }
     }
   }
+  // Respuesta a una publicacion en grupos (spec 2026-10-20): cuenta para
+  // clientes y para colegas. Falla abierta.
+  await registrarRespuestaSofi(org, lead, phone, text);
   // De aca para abajo, EXCLUSIVO de un cliente final (ver el razonamiento
   // arriba): origen de anuncio, kanban, categoria de tablero. Un colega
   // nunca pasa por esto.
@@ -471,4 +481,4 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
   return { reply, lead, transfer, allyAlert, appointmentAlert, captadorAlert, assistantMessageId: assistantMsg?.id || null };
 }
 
-module.exports = { procesarMensaje, REF_PATTERN };
+module.exports = { procesarMensaje, registrarRespuestaSofi, REF_PATTERN };
