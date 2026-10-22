@@ -172,11 +172,24 @@ async function procesarMensaje(org, mensaje, { ahora = new Date() } = {}) {
   // respuesta de un colega a un DM del radar le pasa el link a Sofi con su
   // pregunta y avisa en la app. Ver src/groups/puente-sofi.js. Falla abierta:
   // si revienta, el mensaje ya quedo guardado y el resto sigue igual.
-  const puente = await require("./puente-sofi")
-    .tenderPuente(org, { mensaje, señal, identidad, dmId: guardado.id })
-    .catch((e) => ({ resultado: "error", error: e.message }));
-  if (puente.resultado !== "sin_senal" && puente.resultado !== "apagado") {
-    console.log(`[puente-sofi] ${puente.resultado}${puente.error ? ` (${puente.error})` : ""} — señal ${señal ? señal.id : "-"}`);
+  //
+  // Sofi en la linea (Juan, 2026-10-21): con RADAR_SOFI_LINEA encendido,
+  // Sofi contesta hasta 3 mensajes y calla si escribio una persona. Apagado,
+  // o sin la columna linea_dm.autor, sigue el puente. Ver src/groups/sofi-linea.js.
+  const sofiLinea = require("./sofi-linea");
+  const sofi = sofiLinea.activo()
+    ? await sofiLinea.responder(org, { mensaje, señal, identidad }).catch((e) => ({ resultado: "error", error: e.message }))
+    : { resultado: "apagado" };
+  if (sofi.resultado !== "sin_senal" && sofi.resultado !== "apagado") {
+    console.log(`[sofi-linea] ${sofi.resultado}${sofi.error ? ` (${sofi.error})` : ""} — señal ${señal ? señal.id : "-"}`);
+  }
+  if (sofi.resultado === "apagado" || sofi.resultado === "falta_autor") {
+    const puente = await require("./puente-sofi")
+      .tenderPuente(org, { mensaje, señal, identidad, dmId: guardado.id })
+      .catch((e) => ({ resultado: "error", error: e.message }));
+    if (puente.resultado !== "sin_senal" && puente.resultado !== "apagado") {
+      console.log(`[puente-sofi] ${puente.resultado}${puente.error ? ` (${puente.error})` : ""} — señal ${señal ? señal.id : "-"}`);
+    }
   }
 
   // Fase 1 (Juan, 2026-09-08): leer, no interpretar. Se corta ACA, despues
