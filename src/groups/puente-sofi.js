@@ -120,4 +120,4 @@ async function tenderPuente(org, { mensaje, señal, identidad, dmId }, deps = nu
   return { resultado: "tendido" };
 }
 
-module.exports = { tenderPuente, activo, textoPuente };
+module.exports = { tenderPuente, activo, textoPuente, SALUDA_A_SOFI };
