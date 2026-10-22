@@ -95,10 +95,12 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
     **Resuelto el 2026-10-22 a las 11:56 a. m.:** el bot quedó en `830fad9`
     (26 commits de golpe: super agente, transferencias sin huecos, citas 24 h,
     mapa de demanda, Sofi en la línea del radar apagada, puente que calla si
-    piden una persona). DMAP sigue en `fbde7a9` (no cambió). **Pendiente:
-    rotar TODAS las claves** (lista por orden: Supabase, Anthropic, WhatsApp,
+    piden una persona). DMAP sigue en `fbde7a9` (no cambió). **Claves: Juan
+    decidió NO rotarlas por ahora (2026-10-22).** Se rotan si Railway
+    confirma por correo que la cuenta fue afectada o si aparece consumo raro
+    en Anthropic/OpenAI. Orden cuando toque: Supabase, Anthropic, WhatsApp,
     Meta app secret, WAHA, BOT/DMAP api keys, Redis, DMAP_ENCRYPTION_KEY y
-    después token de Wasi y reconectar Meta).
+    después token de Wasi y reconectar Meta.
   - **Transferencias sin huecos (2026-10-21, SIN desplegar; Juan: "corrige:
     número de Natalia, Sofi en pausa al transferir, alerta si no hay asesora,
     avisos por la campana del CRM y notas viejas").**
