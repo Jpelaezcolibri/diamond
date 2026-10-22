@@ -48,6 +48,13 @@ function avisarFaltaDireccion() {
   console.warn("[linea-dm] Falta la columna linea_dm.direccion — no se guardan los mensajes de salida de la linea.");
 }
 
+let faltaAutor = false;
+function avisarFaltaAutor() {
+  if (faltaAutor) return;
+  faltaAutor = true;
+  console.warn("[linea-dm] Falta correr db/migrations/2026-10-21_linea_dm_autor.sql — Sofi no contesta en la linea del radar (sale el puente de siempre).");
+}
+
 let faltaTabla = false;
 function avisarFaltaTabla() {
   if (faltaTabla) return;
@@ -94,6 +101,9 @@ async function create(orgId, fields) {
     senal_id: fields.senalId || null,
     direccion: fields.direccion === "salida" ? "salida" : "entrada",
   };
+  // autor (2026-10-21_linea_dm_autor): quien escribio una salida, 'sofi' o
+  // 'humano'. Solo va si viene, para no tocar el insert de lo de siempre.
+  if (fields.autor === "sofi" || fields.autor === "humano") row.autor = fields.autor;
 
   if (!supabase) {
     memory.lineaDm = memory.lineaDm || [];
@@ -105,6 +115,16 @@ async function create(orgId, fields) {
   }
 
   let { data, error } = await supabase.from("linea_dm").insert(row).select().single();
+
+  // Falta la columna autor: lo de Sofi NO se guarda (sin autor se leeria como
+  // una persona y Sofi se callaria sola); lo demas se guarda sin ella.
+  if (error && esColumnaFaltante(error) && /autor/i.test(error.message || "")) {
+    avisarFaltaAutor();
+    if (row.autor === "sofi") return { mensaje: null, duplicado: false };
+    const sinAutor = { ...row };
+    delete sinAutor.autor;
+    ({ data, error } = await supabase.from("linea_dm").insert(sinAutor).select().single());
+  }
 
   // Falta la columna direccion: una fila de entrada se guarda sin ella (igual
   // que antes); una de salida se descarta, porque sin la columna se leeria como
@@ -185,6 +205,44 @@ async function historialDe(orgId, identidad, { limite = 10 } = {}) {
   return (data || []).reverse();
 }
 
+// Estado del chat con un colega para Sofi en la linea del radar (Juan,
+// 2026-10-21): cuantas veces contesto Sofi desde `desdeIso` y si alguna vez
+// escribio una persona. Una salida sin autor es de una persona: antes de la
+// columna, la linea solo guardaba lo que se escribia a mano.
+async function estadoConversacion(orgId, identidad, { desdeIso } = {}) {
+  const vacio = { faltaAutor: false, humano: false, respuestasSofi: 0, hilo: [] };
+  const filtro = columnaDeIdentidad(identidad);
+  if (!filtro) return vacio;
+  let filas;
+  if (!supabase) {
+    filas = (memory.lineaDm || [])
+      .filter((m) => m.org_id === orgId && m[filtro.columna] === filtro.valor)
+      .slice(-50)
+      .map((m) => ({ direccion: m.direccion || "entrada", autor: m.autor || null, texto: m.texto, created_at: m.created_at }));
+  } else {
+    const { data, error } = await supabase
+      .from("linea_dm")
+      .select("direccion, autor, texto, created_at")
+      .eq("org_id", orgId)
+      .eq(filtro.columna, filtro.valor)
+      .order("created_at", { ascending: false })
+      .limit(50);
+    if (error) {
+      if (esColumnaFaltante(error)) { avisarFaltaAutor(); return { ...vacio, faltaAutor: true }; }
+      if (esTablaFaltante(error)) { avisarFaltaTabla(); return { ...vacio, faltaAutor: true }; }
+      throw error;
+    }
+    filas = (data || []).reverse();
+  }
+  const salidas = filas.filter((m) => m.direccion === "salida");
+  return {
+    faltaAutor: false,
+    humano: salidas.some((m) => m.autor !== "sofi"),
+    respuestasSofi: salidas.filter((m) => m.autor === "sofi" && (!desdeIso || m.created_at >= desdeIso)).length,
+    hilo: filas.slice(-10),
+  };
+}
+
 async function guardarClasificacion(orgId, id, { tieneCita, avanceTipo = null, fechaHoraIso = null, confianza = null }) {
   if (!supabase) {
     const m = (memory.lineaDm || []).find((x) => x.id === id && x.org_id === orgId);
@@ -262,4 +320,4 @@ async function ultimaCitaAlertada(orgId, identidad) {
   return clave(data);
 }
 
-module.exports = { create, historialDe, guardarClasificacion, marcarAlertado, ultimaCitaAlertada, columnaDeIdentidad, faltaColumnaLid };
+module.exports = { create, historialDe, estadoConversacion, guardarClasificacion, marcarAlertado, ultimaCitaAlertada, columnaDeIdentidad, faltaColumnaLid };

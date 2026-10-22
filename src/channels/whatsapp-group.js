@@ -445,7 +445,7 @@ router.post("/webhook/grupos", async (req, res) => {
         if (esAnteriorAlCorte(ev.tsMs, sesionSalida, null)) return;
         const quien = identidadDM(ev.chatId);
         const identidad = { telefono: quien.telefono, lid: quien.lid };
-        await lineaDm.create(org.id, { sesion: ev.sesion, waMessageId: ev.waMessageId, remitenteTelefono: identidad.telefono, remitenteLid: identidad.lid, remitenteNombre: null, texto: ev.texto, fechaMensaje: ev.tsMs ? new Date(ev.tsMs).toISOString() : null, senalId: null, direccion: "salida" }).catch(() => null);
+        await lineaDm.create(org.id, { sesion: ev.sesion, waMessageId: ev.waMessageId, remitenteTelefono: identidad.telefono, remitenteLid: identidad.lid, remitenteNombre: null, texto: ev.texto, fechaMensaje: ev.tsMs ? new Date(ev.tsMs).toISOString() : null, senalId: null, direccion: "salida", autor: "humano" }).catch(() => null);
         await require("../groups/respuestas-publicacion").atendidaPorLinea(org, identidad).catch(() => 0);
         return;
       }
