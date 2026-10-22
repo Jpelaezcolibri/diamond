@@ -46,6 +46,14 @@ Decide en este orden:
 3. **Persona en el chat.** Si `linea_dm` tiene alguna fila `direccion =
    'salida'` con `autor = 'humano'` para esa identidad (cualquier fecha) →
    no contesta; campana a la asesora como hoy. Resultado `humano_atiende`.
+3a. **Respuesta automática** de otra inmobiliaria ("Gracias por comunicarte
+   con…", "horario de atención") → no contesta ni avisa (`autorespuesta`).
+   Medido el 2026-10-21: 20 de 594 mensajes reales de colegas; sin esto,
+   dos bots quedarían conversando.
+3b. **Pide una persona o rechaza el bot** (caso Propiedades Carva: "no
+   entiendo esta máquina, si de pronto un asesor se comunica"), en este
+   mensaje o antes en el hilo → no contesta; aviso urgente por la campana
+   (`asesor_solicitado`). Resultado `pide_persona`.
 4. **Tope.** Si Sofi ya contestó 3 veces a esa identidad en los últimos 7 días
    (`autor = 'sofi'`) → no contesta; campana a la asesora: "Sofi ya le
    contestó 3 veces a {nombre}; te toca" con el último mensaje. Resultado

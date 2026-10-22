@@ -76,6 +76,28 @@ function nombreParaSaludo(remitenteNombre, texto) {
   return primerNombre(remitenteNombre);
 }
 
+// PIDE UNA PERSONA (Juan, 2026-10-21, caso Propiedades Carva: "no entiendo
+// esta maquina la verdad, si de pronto un asesor se comunica"). Rechazar el
+// bot, o pedir que un asesor o una persona llame, escriba o atienda: Sofi no
+// contesta y la asesora recibe un aviso urgente.
+const RECHAZA_BOT = /\b(m[aá]quina|robot|bot|contestadora?|autom[aá]tic[oa]s?)\b/i;
+const QUIEN = /\b(asesor[a]?|una persona|un humano|ser humano|alguien)\b/i;
+const QUE_HAGA = /\b(comuni\w*|llam\w*|habl\w*|escrib\w*|atiend\w*|contact\w*)\b/i;
+const LLAMAME = /\bll[aá]m(ame|enme|arme|eme)\b/i;
+
+// RESPUESTA AUTOMATICA de otra inmobiliaria (Fenix, Colpropiedades, la misma
+// Propiedades Carva): Sofi no le contesta a otro bot, que quedarian en loop.
+const AUTORESPUESTA = /gracias por (contactar|contactarnos|comunicarte|comunicarse|escribir|escribirnos|tu mensaje|su mensaje)|horario de atenci[oó]n|mensaje autom[aá]tico|respuesta autom[aá]tica|en breve (te|le) (atender|responder|contactar)/i;
+
+function esAutorespuesta(texto) {
+  return AUTORESPUESTA.test(String(texto || ""));
+}
+
+function pidePersona(texto) {
+  const t = String(texto || "");
+  return RECHAZA_BOT.test(t) || LLAMAME.test(t) || (QUIEN.test(t) && QUE_HAGA.test(t));
+}
+
 // El link a la linea oficial con el codigo del pedido. NO lleva el texto del
 // colega: en el caso de Luz Amparo el link repetia su saludo entero.
 function linkOficial(org, codigo) {
@@ -165,7 +187,7 @@ function recortar(texto, max) {
 }
 
 /**
- * @returns {{ resultado: "apagado"|"sin_senal"|"falta_autor"|"humano_atiende"|"tope"|"respondido"|"respondido_fijo"|"envio_fallido"|"error", error? }}
+ * @returns {{ resultado: "apagado"|"sin_senal"|"falta_autor"|"humano_atiende"|"autorespuesta"|"pide_persona"|"tope"|"respondido"|"respondido_fijo"|"envio_fallido"|"error", error? }}
  * Con "apagado" o "falta_autor", quien llama sigue con el puente de siempre.
  */
 async function responder(org, { mensaje, señal, identidad }, deps = null, { ahora = new Date() } = {}) {
@@ -192,6 +214,19 @@ async function responder(org, { mensaje, señal, identidad }, deps = null, { aho
     if (estado.humano) {
       await avisar(`Respondió un colega: ${nombreAviso}`, `${dijo} · ya lo atiende una persona; Sofi no contesta en este chat.`);
       return { resultado: "humano_atiende" };
+    }
+    if (esAutorespuesta(mensaje.texto)) return { resultado: "autorespuesta" };
+
+    // Lo pidio ahora o antes en este chat: Sofi sigue callada.
+    const entradas = [mensaje.texto, ...(estado.hilo || []).filter((m) => m.direccion !== "salida").map((m) => m.texto)];
+    if (entradas.some(pidePersona)) {
+      const asesor = await d.asesor(org).catch(() => null);
+      if (asesor) {
+        await d
+          .notificar({ orgId: org.id, advisor: asesor, tipo: "asesor_solicitado", titulo: `🔴 ${nombreAviso} pide hablar con una persona`, cuerpo: `${dijo} · Sofi no le contesta; escríbele tú por la línea del radar.`, link: "/grupos" })
+          .catch(() => {});
+      }
+      return { resultado: "pide_persona" };
     }
     if (estado.respuestasSofi >= MAX_RESPUESTAS) {
       await avisar(`${nombreAviso} sigue escribiendo: te toca`, `Sofi ya le contestó ${MAX_RESPUESTAS} veces por la línea del radar. Último mensaje: ${dijo}`);
@@ -243,4 +278,4 @@ async function responder(org, { mensaje, señal, identidad }, deps = null, { aho
   }
 }
 
-module.exports = { responder, activo, nombreParaSaludo, linkOficial, textoFijo, redactarConIA, SISTEMA, MAX_RESPUESTAS };
+module.exports = { responder, activo, nombreParaSaludo, pidePersona, esAutorespuesta, linkOficial, textoFijo, redactarConIA, SISTEMA, MAX_RESPUESTAS };

@@ -167,3 +167,66 @@ test("el prompt y el texto fijo: tuteo, asistente virtual y sin nombres de aseso
     assert.doesNotMatch(t, /Daiana|Claudia|Catherine|Natalia/);
   }
 });
+
+// PIDE UNA PERSONA (Juan, 2026-10-21, caso Propiedades Carva): "Buen dia no
+// entiendo esta maquina la verdad, si de pronto un asesor se comunica mil
+// gracias". Le contesto el puente con OTRO link a Sofi. Si pide una persona o
+// rechaza el bot, Sofi no contesta (ni ahora ni despues en ese chat) y la
+// asesora recibe un aviso urgente.
+test("reconoce cuando piden una persona o rechazan el bot", () => {
+  for (const t of [
+    "Buen día no entiendo está maquina la verdad, si de pronto un asesor se comunica mil gracias",
+    "Enviame los link Sin explicación automáticas Cada uno separado",
+    "Quiero hablar con una persona por favor",
+    "Me puede llamar la asesora?",
+    "llámame al 3001234567",
+    "esto es un robot?",
+  ]) assert.strictEqual(sofiLinea.pidePersona(t), true, t);
+  for (const t of [
+    "¿La de Laureles tiene parqueadero cubierto?",
+    "Cordial saludo, soy Luz Amparo. Cuál es tu nombre",
+    "Mucho gusto",
+    "cuánto es la administración?",
+  ]) assert.strictEqual(sofiLinea.pidePersona(t), false, t);
+});
+
+test("si pide una persona, Sofi no contesta y avisa urgente a la asesora", async () => {
+  const { d, ll } = deps();
+  const r = await sofiLinea.responder(ORG, { mensaje: mensaje({ texto: "no entiendo esta maquina, si de pronto un asesor se comunica" }), señal: señal(), identidad }, d);
+  assert.strictEqual(r.resultado, "pide_persona");
+  assert.strictEqual(ll.enviados.length, 0);
+  assert.strictEqual(ll.avisos.length, 1);
+  assert.strictEqual(ll.avisos[0].tipo, "asesor_solicitado");
+  assert.match(ll.avisos[0].titulo, /persona|asesor/i);
+});
+
+test("si ya lo pidio antes en el chat, Sofi sigue callada", async () => {
+  const hilo = [{ direccion: "entrada", texto: "prefiero que me llame un asesor" }, { direccion: "entrada", texto: "es para hoy" }];
+  const { d, ll } = deps({ estado: async () => ({ faltaAutor: false, humano: false, respuestasSofi: 1, hilo }) });
+  const r = await sofiLinea.responder(ORG, { mensaje: mensaje({ texto: "es para hoy" }), señal: señal(), identidad }, d);
+  assert.strictEqual(r.resultado, "pide_persona");
+  assert.strictEqual(ll.enviados.length, 0);
+});
+
+// RESPUESTAS AUTOMATICAS (2026-10-21, medido sobre los 594 mensajes reales de
+// colegas en la linea): Fenix, Colpropiedades y la misma Propiedades Carva
+// tienen contestador. Sofi no le contesta a otro bot (dos robots en loop) y no
+// es una urgencia para la asesora.
+test("reconoce la respuesta automatica de otra inmobiliaria", () => {
+  for (const t of [
+    "👋 ¡Hola! Gracias por contactar a Fénix Inmobiliaria 🏡 Con gusto te ayudamos a encontrar la propiedad ideal. Para atenderte mejor, cuéntanos",
+    "¡Hola! Gracias por comunicarte. Soy Melissa Asesora Comercial de Colpropiedades, Estamos listos para ayudarte",
+    "¡Gracias por contactarnos! Le informamos que en este momento no nos encontramos en nuestro horario de atención.",
+  ]) assert.strictEqual(sofiLinea.esAutorespuesta(t), true, t);
+  for (const t of ["Gracias, muy amable", "Buen día no entiendo está maquina la verdad, si de pronto un asesor se comunica"]) {
+    assert.strictEqual(sofiLinea.esAutorespuesta(t), false, t);
+  }
+});
+
+test("a una respuesta automatica Sofi no contesta ni manda aviso urgente", async () => {
+  const { d, ll } = deps();
+  const r = await sofiLinea.responder(ORG, { mensaje: mensaje({ texto: "¡Hola! Gracias por comunicarte. Soy Melissa Asesora Comercial de Colpropiedades" }), señal: señal(), identidad }, d);
+  assert.strictEqual(r.resultado, "autorespuesta");
+  assert.strictEqual(ll.enviados.length, 0);
+  assert.strictEqual(ll.avisos.length, 0);
+});
