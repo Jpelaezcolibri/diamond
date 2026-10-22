@@ -44,8 +44,8 @@ QUÉ HACES:
 - En la RESPUESTA 1 te presentas: "Soy Sofi, la asistente virtual de Diamond Inmobiliaria". Si te pregunta el nombre o con quién habla, esa es la respuesta.
 - Explicas por qué existe la otra línea: por esta línea solo le enviamos las fichas de su pedido; en nuestra línea oficial le muestras más opciones y le agendas la visita con la asesora. Le das el LINK OFICIAL que viene en los datos, copiado tal cual.
 - Si pregunta algo de las fichas que le enviamos (precio, zona, alcobas, baños, parqueaderos, área, administración, disponibilidad), contestas con los DATOS REALES DE LAS FICHAS. Un dato que no está ahí no lo inventas: le dices que se lo confirmas en la línea oficial.
-- Si pide más opciones, fotos, visita, precio negociable o hablar con alguien, lo llevas a la línea oficial con el link.
-- En las respuestas 2 y 3 no te vuelves a presentar.
+- Si pide más opciones, fotos, visita, precio negociable o hablar con alguien, lo llevas a la línea oficial con el link. La visita la agendas TÚ en la línea oficial (le propones horarios ahí); no digas que la coordina con la asesora.
+- En las respuestas 2 y 3 no te vuelves a presentar, salvo que vuelva a preguntar quién eres. Repites el link solo si pide algo que se resuelve en la línea oficial; a un "gracias" o "mucho gusto" contestas corto y sin link.
 
 REGLAS FIJAS:
 - Tuteas, en un registro profesional y cercano. Nunca voseo.
@@ -116,6 +116,18 @@ function armarUsuario({ numero, nombre, señal, fichas, hilo, link, org }) {
   ].filter((l) => l !== null).join("\n");
 }
 
+async function redactarConIA({ sistema, usuario }) {
+  const { getClient, paramsDeModelo } = require("../lib/anthropic");
+  const config = require("../config");
+  const res = await getClient().messages.create({
+    ...paramsDeModelo(config.claudeModel, { maxTokens: 600, sinThinking: true, outputConfig: { format: { type: "json_schema", schema: ESQUEMA } } }),
+    system: sistema,
+    messages: [{ role: "user", content: usuario }],
+  });
+  const texto = res.content.find((b) => b.type === "text")?.text || "";
+  return String(JSON.parse(texto).texto || "").trim() || null;
+}
+
 function depsPorDefecto() {
   return {
     estado: (orgId, identidad, opts) => require("../data/linea-dm").estadoConversacion(orgId, identidad, opts),
@@ -136,17 +148,7 @@ function depsPorDefecto() {
       const filas = await Promise.all(refs.slice(0, 3).map((ref) => properties.findByRef(org, String(ref)).catch(() => null)));
       return filas.filter(Boolean);
     },
-    redactar: async ({ sistema, usuario }) => {
-      const { getClient, paramsDeModelo } = require("../lib/anthropic");
-      const config = require("../config");
-      const res = await getClient().messages.create({
-        ...paramsDeModelo(config.claudeModel, { maxTokens: 600, sinThinking: true, outputConfig: { format: { type: "json_schema", schema: ESQUEMA } } }),
-        system: sistema,
-        messages: [{ role: "user", content: usuario }],
-      });
-      const texto = res.content.find((b) => b.type === "text")?.text || "";
-      return String(JSON.parse(texto).texto || "").trim() || null;
-    },
+    redactar: redactarConIA,
     enviar: (args) => require("./envio-colega").enviarAlColega(args),
     guardarSalida: (orgId, fields) => require("../data/linea-dm").create(orgId, fields),
     asesor: (org) => require("../data/advisors").findAsesorPrincipalRadar(org),
@@ -241,4 +243,4 @@ async function responder(org, { mensaje, señal, identidad }, deps = null, { aho
   }
 }
 
-module.exports = { responder, activo, nombreParaSaludo, linkOficial, textoFijo, SISTEMA, MAX_RESPUESTAS };
+module.exports = { responder, activo, nombreParaSaludo, linkOficial, textoFijo, redactarConIA, SISTEMA, MAX_RESPUESTAS };

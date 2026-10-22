@@ -77,6 +77,20 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
     `SOFI_POSTVISITA_PLANTILLA` y `SOFI_CITA_CONFIRMADA_PLANTILLA` en Railway.
   - **Pendiente encender** (Juan, en Railway): `SOFI_RECORDATORIO_VISITA`,
     `SOFI_POSTVISITA` y `RADAR_SEGUIMIENTO_CON_OPCION`.
+  - **Sofi contesta en la línea del radar (2026-10-21, SIN desplegar,
+    interruptor `RADAR_SOFI_LINEA` apagado).** Caso Luz Amparo (Projency):
+    preguntó "¿cuál es tu nombre?" y recibió solo el link. Ahora Sofi se
+    presenta como "asistente virtual", contesta hasta 3 mensajes por colega en
+    7 días con el pedido y las fichas reales, y lleva a la línea oficial para
+    agendar; calla para siempre si una persona escribió en el chat
+    (`src/groups/sofi-linea.js`, spec `2026-10-21-sofi-en-linea-radar-design.md`).
+    **Antes de encender:** migración `2026-10-21_linea_dm_autor.sql` (Juan),
+    `message.any` en la sesión `DaianaDiamond` y ver una salida humana en el
+    log. Prueba en seco: `railway run --service diamond node scripts/sofi-linea-en-seco.js`.
+  - **Despliegue pausado (2026-10-21):** Railway pausó todos los builds por un
+    incidente de seguridad (variables de entorno expuestas). Producción quedó
+    en `fbde7a9`; todo lo de abajo marcado "desplegado 2026-10-21" después de
+    las 2 a. m. está en `main` pero NO en producción. Rotar claves al volver.
   - **Transferencias sin huecos (2026-10-21, SIN desplegar; Juan: "corrige:
     número de Natalia, Sofi en pausa al transferir, alerta si no hay asesora,
     avisos por la campana del CRM y notas viejas").**
