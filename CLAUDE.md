@@ -90,10 +90,15 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
     `2026-10-21_linea_dm_autor.sql` **corrida por Juan y verificada por REST
     el 2026-10-21**. **Antes de encender:** `message.any` en la sesión
     `DaianaDiamond`, ver una salida humana en el log y desplegar. Prueba en seco: `railway run --service diamond node scripts/sofi-linea-en-seco.js`.
-  - **Despliegue pausado (2026-10-21):** Railway pausó todos los builds por un
-    incidente de seguridad (variables de entorno expuestas). Producción quedó
-    en `fbde7a9`; todo lo de abajo marcado "desplegado 2026-10-21" después de
-    las 2 a. m. está en `main` pero NO en producción. Rotar claves al volver.
+  - **Incidente de Railway (2026-10-21/22):** Railway pausó todos los builds
+    ~34 h por un incidente de seguridad (variables de entorno expuestas).
+    **Resuelto el 2026-10-22 a las 11:56 a. m.:** el bot quedó en `830fad9`
+    (26 commits de golpe: super agente, transferencias sin huecos, citas 24 h,
+    mapa de demanda, Sofi en la línea del radar apagada, puente que calla si
+    piden una persona). DMAP sigue en `fbde7a9` (no cambió). **Pendiente:
+    rotar TODAS las claves** (lista por orden: Supabase, Anthropic, WhatsApp,
+    Meta app secret, WAHA, BOT/DMAP api keys, Redis, DMAP_ENCRYPTION_KEY y
+    después token de Wasi y reconectar Meta).
   - **Transferencias sin huecos (2026-10-21, SIN desplegar; Juan: "corrige:
     número de Natalia, Sofi en pausa al transferir, alerta si no hay asesora,
     avisos por la campana del CRM y notas viejas").**
