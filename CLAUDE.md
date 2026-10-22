@@ -84,9 +84,12 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
     7 días con el pedido y las fichas reales, y lleva a la línea oficial para
     agendar; calla para siempre si una persona escribió en el chat
     (`src/groups/sofi-linea.js`, spec `2026-10-21-sofi-en-linea-radar-design.md`).
-    **Antes de encender:** migración `2026-10-21_linea_dm_autor.sql` (Juan),
-    `message.any` en la sesión `DaianaDiamond` y ver una salida humana en el
-    log. Prueba en seco: `railway run --service diamond node scripts/sofi-linea-en-seco.js`.
+    Calla si piden una persona (aviso urgente `asesor_solicitado`, caso
+    Propiedades Carva) y no le contesta a respuestas automáticas de otras
+    inmobiliarias (20 de 594 mensajes reales). Migración
+    `2026-10-21_linea_dm_autor.sql` **corrida por Juan y verificada por REST
+    el 2026-10-21**. **Antes de encender:** `message.any` en la sesión
+    `DaianaDiamond`, ver una salida humana en el log y desplegar. Prueba en seco: `railway run --service diamond node scripts/sofi-linea-en-seco.js`.
   - **Despliegue pausado (2026-10-21):** Railway pausó todos los builds por un
     incidente de seguridad (variables de entorno expuestas). Producción quedó
     en `fbde7a9`; todo lo de abajo marcado "desplegado 2026-10-21" después de
