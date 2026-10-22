@@ -19,6 +19,7 @@
 
 const { linkContactoOficial } = require("../lib/contacto");
 const { primerNombre } = require("./redactar");
+const { pidePersona, esAutorespuesta } = require("./rechaza-bot");
 
 const VALORES_APAGADO = new Set(["false", "0", "no", "off"]);
 const MAX_PREGUNTA = 300;
@@ -82,8 +83,27 @@ async function tenderPuente(org, { mensaje, señal, identidad, dmId }, deps = nu
   const leHablaASofi = SALUDA_A_SOFI.test(String(mensaje.texto || ""));
   if (!señal && !colega && !leHablaASofi) return { resultado: "sin_senal" };
 
+  // Respuesta automatica de otra inmobiliaria: dos bots en loop. Ni puente ni aviso.
+  if (esAutorespuesta(mensaje.texto)) return { resultado: "autorespuesta" };
+
   const historial = await d.historial(org.id, identidad).catch(() => []);
   const otros = historial.filter((m) => m.id !== dmId);
+
+  // RECHAZA LO AUTOMATICO O PIDE UNA PERSONA (Juan, 2026-10-21, caso Alberto
+  // Posada: "Enviame los link sin explicacion automaticas" y el puente le
+  // contesto con otro mensaje automatico). Si lo dice ahora, aviso urgente a
+  // la asesora; si lo dijo antes en el chat, el puente calla sin avisar de nuevo.
+  const loPideAhora = pidePersona(mensaje.texto);
+  if (loPideAhora || otros.some((m) => pidePersona(m.texto))) {
+    const asesor = loPideAhora ? await d.asesor(org).catch(() => null) : null;
+    if (asesor) {
+      const quien = mensaje.remitenteNombre || (señal && señal.autor_nombre) || "Un colega";
+      await d
+        .notificar({ orgId: org.id, advisor: asesor, tipo: "asesor_solicitado", titulo: `🔴 ${quien} pide hablar con una persona`, cuerpo: `"${recortar(mensaje.texto, 200)}" · no le mandamos el link a Sofi; escríbele tú por la línea del radar.`, link: "/grupos" })
+        .catch(() => {});
+    }
+    return { resultado: "pide_persona" };
+  }
   if (señal && otros.some((m) => m.senal_id === señal.id)) return { resultado: "ya_tendido" };
   if (!señal && otros.some((m) => Date.now() - new Date(m.created_at).getTime() < SEMANA_MS)) return { resultado: "ya_tendido" };
 

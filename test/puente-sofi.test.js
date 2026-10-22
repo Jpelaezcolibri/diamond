@@ -176,3 +176,42 @@ test("un mensaje que solo NOMBRA a Sofi (los resumenes que Sofi le manda a Daian
   assert.strictEqual(r.resultado, "sin_senal");
   assert.strictEqual(llamadas.enviados.length, 0);
 });
+
+// QUIEN RECHAZA LO AUTOMATICO NO RECIBE EL PUENTE (Juan, 2026-10-21, caso
+// Alberto Posada). Respondio el DM con "Enviame los link sin explicacion
+// automaticas" y el puente le contesto con otro mensaje automatico. Un mes
+// antes habia escrito "Su sistema de IA esta fallando". Vale aunque
+// RADAR_SOFI_LINEA este apagado: la regla es del puente, no de Sofi.
+test("si rechaza lo automatico, no sale el puente y la asesora recibe aviso urgente", async () => {
+  const { d, llamadas } = deps();
+  const r = await puente.tenderPuente(ORG, {
+    mensaje: mensaje({ remitenteNombre: "Alberto Posada", texto: "Enviame los link\nSin explicación automáticas\nCada uno separado\nY con nombre unidad" }),
+    señal: señal(), identidad, dmId: "dm-1",
+  }, d);
+  assert.strictEqual(r.resultado, "pide_persona");
+  assert.strictEqual(llamadas.enviados.length, 0);
+  assert.strictEqual(llamadas.avisos.length, 1);
+  assert.strictEqual(llamadas.avisos[0].tipo, "asesor_solicitado");
+});
+
+test("si lo rechazo antes en el chat, tampoco sale el puente con un pedido nuevo", async () => {
+  const { d, llamadas } = deps({
+    historial: async () => [
+      { id: "dm-viejo", senal_id: "sig-viejo", texto: "Su sistema de IA Está fallando Exitos" },
+      { id: "dm-1", senal_id: "sig-1", texto: "Gracias" },
+    ],
+  });
+  const r = await puente.tenderPuente(ORG, { mensaje: mensaje({ texto: "Gracias" }), señal: señal(), identidad, dmId: "dm-1" }, d);
+  assert.strictEqual(r.resultado, "pide_persona");
+  assert.strictEqual(llamadas.enviados.length, 0);
+});
+
+test("a la respuesta automatica de otra inmobiliaria no se le tiende el puente ni se avisa", async () => {
+  const { d, llamadas } = deps();
+  const r = await puente.tenderPuente(ORG, {
+    mensaje: mensaje({ texto: "Gracias por comunicarte con RyR Inmobiliaria. ¿Cómo podemos ayudarte?" }), señal: señal(), identidad, dmId: "dm-1",
+  }, d);
+  assert.strictEqual(r.resultado, "autorespuesta");
+  assert.strictEqual(llamadas.enviados.length, 0);
+  assert.strictEqual(llamadas.avisos.length, 0);
+});

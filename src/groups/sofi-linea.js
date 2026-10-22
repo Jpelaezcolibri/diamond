@@ -76,27 +76,9 @@ function nombreParaSaludo(remitenteNombre, texto) {
   return primerNombre(remitenteNombre);
 }
 
-// PIDE UNA PERSONA (Juan, 2026-10-21, caso Propiedades Carva: "no entiendo
-// esta maquina la verdad, si de pronto un asesor se comunica"). Rechazar el
-// bot, o pedir que un asesor o una persona llame, escriba o atienda: Sofi no
-// contesta y la asesora recibe un aviso urgente.
-const RECHAZA_BOT = /\b(m[aá]quina|robot|bot|contestadora?|autom[aá]tic[oa]s?)\b/i;
-const QUIEN = /\b(asesor[a]?|una persona|un humano|ser humano|alguien)\b/i;
-const QUE_HAGA = /\b(comuni\w*|llam\w*|habl\w*|escrib\w*|atiend\w*|contact\w*)\b/i;
-const LLAMAME = /\bll[aá]m(ame|enme|arme|eme)\b/i;
-
-// RESPUESTA AUTOMATICA de otra inmobiliaria (Fenix, Colpropiedades, la misma
-// Propiedades Carva): Sofi no le contesta a otro bot, que quedarian en loop.
-const AUTORESPUESTA = /gracias por (contactar|contactarnos|comunicarte|comunicarse|escribir|escribirnos|tu mensaje|su mensaje)|horario de atenci[oó]n|mensaje autom[aá]tico|respuesta autom[aá]tica|en breve (te|le) (atender|responder|contactar)/i;
-
-function esAutorespuesta(texto) {
-  return AUTORESPUESTA.test(String(texto || ""));
-}
-
-function pidePersona(texto) {
-  const t = String(texto || "");
-  return RECHAZA_BOT.test(t) || LLAMAME.test(t) || (QUIEN.test(t) && QUE_HAGA.test(t));
-}
+// Pide una persona o es la respuesta automatica de otra inmobiliaria: Sofi no
+// contesta. Ver rechaza-bot.js.
+const { pidePersona, esAutorespuesta } = require("./rechaza-bot");
 
 // El link a la linea oficial con el codigo del pedido. NO lleva el texto del
 // colega: en el caso de Luz Amparo el link repetia su saludo entero.
