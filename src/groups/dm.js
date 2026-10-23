@@ -25,6 +25,7 @@
 
 const groupSignals = require("../data/group-signals");
 const lineaDm = require("../data/linea-dm");
+const ecoSofi = require("./eco-sofi");
 const { getClient } = require("../lib/anthropic");
 
 const { sinThinking } = require("./classify");
@@ -141,6 +142,15 @@ function construirAlerta(mensaje, veredicto, señal, nombreLinea = null) {
  */
 async function procesarMensaje(org, mensaje, { ahora = new Date() } = {}) {
   const identidad = { telefono: mensaje.remitenteTelefono || null, lid: mensaje.remitenteLid || null };
+
+  // Eco de la propia Sofi (2026-10-23): lo que Sofi le manda a Daiana por la
+  // linea oficial entra aca como un DM de un contacto "Diamond". No es de
+  // ningun colega: no se guarda, no se atribuye a una publicacion, no se
+  // contesta. Ver ./eco-sofi.js (el bucle de respuestas_publicacion).
+  if (await ecoSofi.esEcoDeSofi(org, { texto: mensaje.texto, lid: identidad.lid, telefono: identidad.telefono, ahora })) {
+    console.log("[linea-dm] eco de la linea oficial de Sofi: no se registra");
+    return { resultado: "eco_sofi" };
+  }
 
   // El pedido que origino el DM: por lid si vino por lid (es lo que
   // marcarRespondida guardo en respuesta_destino_lid), por telefono si no.
