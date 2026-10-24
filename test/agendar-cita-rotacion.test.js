@@ -44,8 +44,9 @@ test("con 24 h y hora libre: queda propuesta, de un asesor del ciclo, con corte 
   assert.strictEqual(c.appointmentAlert.porPlantilla, true);
   assert.match(out, /SOLICITADA/);
   assert.doesNotMatch(out, /573011880668|573000008113|Daiana|Claudia/);
-  // Que quede claro que estamos confirmando con el propietario, y hasta cuando.
-  assert.match(out, /ahora confirmamos la disponibilidad con el propietario/);
+  // Que quede claro que el asesor la esta confirmando, y hasta cuando.
+  assert.match(out, /ahora el asesor confirma la disponibilidad/);
+  assert.doesNotMatch(out, /propietario/);
   assert.match(out, /a más tardar el [a-záéíóú]+ \d{1,2} de [a-z]+ a las 8:00 p\. m\./);
   assert.doesNotMatch(out, /qued[oó] confirmada|queda confirmada/i);
 });

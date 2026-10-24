@@ -69,7 +69,7 @@ test("agendar_cita: a un colega tambien le queda propuesta, y el texto de retorn
 
   assert.strictEqual(ctx.cita.estado, "propuesta");
   // Identidad publica (2026-10-07): el alias, nunca el nombre real ni el celular.
-  assert.match(r, /confirmamos la disponibilidad con el propietario y que Asesor 1 le escribe para confirmarla/);
+  assert.match(r, /que Asesor 1 revisa la disponibilidad y le escribe para confirmarla/);
   assert.doesNotMatch(r, /Daiana|573011880668/);
 });
 

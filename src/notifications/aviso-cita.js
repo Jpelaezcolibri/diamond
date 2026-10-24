@@ -14,7 +14,7 @@ function cuando(iso) {
 async function avisarCitaPorConfirmar({ org, advisor, lead, cita, deps = {} }) {
   const avisar = deps.avisar || ((...a) => require("./avisar-asesor").avisarAsesor(...a));
   const quien = `${lead.nombre || `+${lead.phone}`}${lead.source === "colega" ? " (colega)" : ""}`;
-  const cuerpo = `Ref ${cita.ref || "sin ref"} · ${cuando(cita.fecha_hora)} · ${quien} · Confirmar con el propietario antes de ${cuando(cita.corte_at)}`;
+  const cuerpo = `Ref ${cita.ref || "sin ref"} · ${cuando(cita.fecha_hora)} · ${quien} · Confirmar antes de ${cuando(cita.corte_at)}`;
   const r = await avisar({ org, advisor, motivo: "visita", lead, titulo: "Nueva visita por confirmar", cuerpo }).catch((e) => ({
     ok: false,
     error: e.message,

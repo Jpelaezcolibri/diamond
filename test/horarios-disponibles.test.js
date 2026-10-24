@@ -88,12 +88,14 @@ test("arriendo por la ref, por lead.categoria o sin nada: todos desde 26 h (24 +
   }
 });
 
-test("la tool le recuerda a Sofi que es desde el día siguiente por el propietario", async () => {
+test("la tool le recuerda a Sofi que es desde el día siguiente porque el asesor la confirma", async () => {
   const out = await horarios({ ref: "ARR1" });
   assert.match(out.nota, /dia siguiente/);
-  assert.match(out.nota, /confirmar la visita con el propietario/);
+  assert.match(out.nota, /el asesor necesita confirmar la visita/);
+  assert.doesNotMatch(out.nota, /propietario/);
   const tool = TOOL_DEFINITIONS.find((x) => x.name === "horarios_disponibles");
-  assert.match(tool.description, /24 h, venta o arriendo, para confirmar con el propietario/);
+  assert.match(tool.description, /24 h, venta o arriendo, para que el asesor la confirme/);
+  assert.doesNotMatch(tool.description, /propietario/);
   assert.strictEqual(tool.input_schema.properties.operacion, undefined);
   assert.strictEqual(TOOL_DEFINITIONS.find((x) => x.name === "agendar_cita").input_schema.properties.operacion, undefined);
 });
@@ -155,14 +157,14 @@ function horario24h() {
   memory.advisors.forEach((a) => (a.horario = { dias: [0, 1, 2, 3, 4, 5, 6], desde: "00:00", hasta: "23:59" }));
 }
 
-test("agendar_cita: arriendo a 8 h ya no sale, igual que venta, y dice 24 horas por el propietario", async () => {
+test("agendar_cita: arriendo a 8 h ya no sale, igual que venta, y dice 24 horas para que el asesor la confirme", async () => {
   horario24h();
   const iso = new Date(Math.ceil(enHoras(8).getTime() / 1800000) * 1800000).toISOString();
   for (const [id, input, lead] of [["l1", { ref: "ARR1" }, {}], ["l2", { ref: "VEN1" }, {}], ["l3", {}, { categoria: "alquiler" }]]) {
     memory.leads.length = 0;
     const c = ctx({ id, ...lead });
     const out = await executeTool("agendar_cita", { descripcion: "visita", tipo: "visita", fecha_hora_iso: iso, ...input }, c);
-    assert.match(out, /No se pudo agendar: necesitamos al menos 24 horas de anticipación para confirmarla con el propietario/, id);
+    assert.match(out, /No se pudo agendar: necesitamos al menos 24 horas de anticipación para que el asesor la confirme/, id);
     assert.strictEqual(c.lead.cita, undefined, id);
   }
 });
@@ -178,7 +180,8 @@ test("agendar_cita de arriendo a 25 h sale, con corte y sin guardar operación",
   assert.ok(new Date(c.lead.cita.corte_at).getTime() >= Date.now() + 2 * 3600 * 1000 - 5000, "nunca antes de 2 h despues del pedido");
   assert.ok(new Date(c.lead.cita.corte_at).getTime() < new Date(iso).getTime());
   assert.match(out, /SOLICITADA/);
-  assert.match(out, /con el propietario/);
+  assert.match(out, /ahora el asesor confirma la disponibilidad/);
+  assert.doesNotMatch(out, /propietario/);
   assert.match(out, /a más tardar (hoy|mañana|el )/);
   assert.doesNotMatch(out, /qued[oó] confirmada|queda confirmada/i);
 });
@@ -211,13 +214,14 @@ test("el prompt ofrece dos horarios de horarios_disponibles y ya no pide que la 
   assert.match(cliente, /34-A\. .*Nunca conviertas una franja en una hora que el no dijo/);
   assert.match(cliente, /36\. Registrar la cita NO la confirma: queda SOLICITADA/);
   assert.doesNotMatch(cliente, /preguntale que dia y a que hora le sirve\. Vos no escoges/);
-  // Juan, 2026-10-21: desde el dia siguiente porque se confirma con el propietario.
+  // Juan, 2026-10-24: la visita la confirma el asesor, no el propietario.
   for (const [quien, p] of [["cliente", cliente], ["colega", colega]]) {
-    assert.match(p, /necesitamos confirmar con el propietario, por eso te propongo desde mañana/, quien);
-    assert.match(p, /ahora confirmamos la disponibilidad con el propietario/, quien);
+    assert.match(p, /el asesor necesita confirmarla, por eso te propongo desde mañana/, quien);
+    assert.match(p, /ahora el asesor confirma la disponibilidad/, quien);
+    assert.doesNotMatch(p, /confirm[a-z]* (la disponibilidad )?con el propietario/, quien);
     assert.match(p, /a mas tardar en el plazo que te devuelve agendar_cita/, quien);
   }
-  assert.match(cliente, /36\. Registrar la cita NO la confirma: queda SOLICITADA\. .*propietario/);
+  assert.match(cliente, /36\. Registrar la cita NO la confirma: queda SOLICITADA\. .*el asesor confirma la disponibilidad/);
 });
 
 test("la descripción de agendar_cita ya no dice que Sofi no ofrece horarios", () => {

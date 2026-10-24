@@ -149,7 +149,7 @@ async function reavisar({ org, lead, ciclo, ahora, c }) {
     .reaviso({
       org, advisor: actual, motivo: "visita", lead,
       titulo: `Sigue pendiente: visita por confirmar (${refCuando(cita)})`,
-      cuerpo: `${quien}${corte ? ` · confírmala con el propietario antes de ${corte.fecha}, ${corte.hora}` : ""}`,
+      cuerpo: `${quien}${corte ? ` · confírmala antes de ${corte.fecha}, ${corte.hora}` : ""}`,
     })
     .catch((e) => console.warn("[citas-escalera] aviso repetido:", e.message));
   console.log(`[citas-escalera] lead ${lead.id}: aviso repetido a ${actual.name}`);

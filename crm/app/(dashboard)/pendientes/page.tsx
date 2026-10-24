@@ -159,7 +159,7 @@ export default async function PendientesPage() {
                   {fmt(l.cita?.fecha_hora)}
                   {l.cita?.ref ? ` · ref ${l.cita.ref}` : ""}
                 </div>
-                {l.cita?.corte_at && <div className="mt-1 text-xs text-amber-800">Confirmá con el propietario antes de {fmt(l.cita.corte_at)} o se cancela</div>}
+                {l.cita?.corte_at && <div className="mt-1 text-xs text-amber-800">Confírmala antes de {fmt(l.cita.corte_at)} o se cancela</div>}
                 <TiempoCita cita={l.cita} />
                 <div className="mt-1 text-xs text-slate-500">Se confirma con el botón del WhatsApp o escribiéndole “OK CONFIRMADA” a Sofi.</div>
               </li>

@@ -10,7 +10,7 @@ const { partesBogota, DEFAULT_HORARIO } = require("../data/appointments");
 // propiedad"). Reemplaza las 6 h de arriendo de la spec 2026-10-21 §2.2: la
 // operacion ya no cambia la anticipacion.
 const ANTICIPACION_MIN = Number(process.env.CITAS_ANTICIPACION_MIN_H || 24) * 60;
-// Plazo para confirmar con el propietario: la visita menos 12 h, llevado a
+// Plazo para que el asesor confirme la visita: la visita menos 12 h, llevado a
 // horario habil (ver corteDe).
 const CORTE_HORAS_ANTES = Number(process.env.CITAS_CORTE_HORAS_ANTES || 12);
 const CORTE_MIN_DESDE_PEDIDO_H = 2;

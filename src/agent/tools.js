@@ -392,7 +392,7 @@ const TOOL_DEFINITIONS = [
   {
     name: "horarios_disponibles",
     description:
-      "Devuelve los proximos horarios LIBRES de verdad para una visita (agenda de los asesores, su horario y la anticipacion minima de 24 h, venta o arriendo, para confirmar con el propietario: el primero cae desde el dia siguiente). Usala cuando la persona quiera visitar o pregunte cuando se puede ver, ANTES de agendar_cita, para ofrecerle dos opciones concretas. Ofrecer estos horarios no confirma nada: la visita queda SOLICITADA cuando la registras con agendar_cita.",
+      "Devuelve los proximos horarios LIBRES de verdad para una visita (agenda de los asesores, su horario y la anticipacion minima de 24 h, venta o arriendo, para que el asesor la confirme: el primero cae desde el dia siguiente). Usala cuando la persona quiera visitar o pregunte cuando se puede ver, ANTES de agendar_cita, para ofrecerle dos opciones concretas. Ofrecer estos horarios no confirma nada: la visita queda SOLICITADA cuando la registras con agendar_cita.",
     input_schema: {
       type: "object",
       properties: {
@@ -485,7 +485,7 @@ async function resolveLeadAdvisor(ctx, especialidad) {
 // Hasta 3 espacios libres bien separados (primero, otra media jornada, otro dia) entre los asesores que pueden recibir la
 // visita, con las mismas reglas que agendar_cita (agenda-reglas.alternativas):
 // 24 h + el colchon, asi que el primero cae desde el dia siguiente (Juan,
-// 2026-10-21: el tiempo es para confirmar con el propietario).
+// 2026-10-21; desde 2026-10-24 la visita la confirma el asesor, no el propietario).
 // Lo ofrecido lleva un colchon (COLCHON_OFERTA_MIN) sobre la anticipacion para
 // que siga siendo valido cuando la persona conteste; agendar_cita acepta desde
 // la anticipacion simple.
@@ -535,7 +535,7 @@ async function horariosDisponibles(input, ctx, { ahora = new Date() } = {}) {
   }
   return JSON.stringify({
     horarios: libres.map((iso) => ({ iso, texto: horarioLegible(iso) })),
-    nota: "Son desde el dia siguiente porque necesitamos confirmar la visita con el propietario: si te pregunta por algo antes, decíselo así, corto.",
+    nota: "Son desde el dia siguiente porque el asesor necesita confirmar la visita: si te pregunta por algo antes, decíselo así, corto.",
   });
 }
 
@@ -556,7 +556,7 @@ async function agendarEnRotacion(ctx, cita, ciclo) {
     const v = reglas.validarHora({ fechaHoraIso: cita.fecha_hora, ahora, horario: ciclo[0].horario, ocupadas: [] });
     const motivo =
       v.motivo === "anticipacion"
-        ? `necesitamos al menos ${horas} horas de anticipación para confirmarla con el propietario`
+        ? `necesitamos al menos ${horas} horas de anticipación para que el asesor la confirme`
         : v.motivo === "fuera_de_horario"
           ? "ese horario está fuera del horario de visitas"
           : "a esa hora no hay ningún asesor libre";
@@ -592,11 +592,11 @@ async function agendarEnRotacion(ctx, cita, ciclo) {
   }
 
   // QUE SE ENTIENDA QUE ESTAMOS CONFIRMANDO (Juan, 2026-10-21): la visita
-  // queda pedida, se confirma con el propietario y se le dice hasta cuando.
+  // queda pedida, la confirma el asesor (Juan, 2026-10-24) y se le dice hasta cuando.
   const corte = reglas.corteEnPalabras(cita.corte_at, { ahora }) || "antes de la visita";
   const visita = horarioLegible(cita.fecha_hora);
   const quien = ctx.colega ? "al colega" : "al cliente";
-  return `Cita registrada como PROPUESTA (${cita.fecha_hora}), todavía SIN confirmar. Ya se le avisó al equipo. Decile ${quien}, corto y con tus palabras, tres cosas: 1) que la visita quedó SOLICITADA para el ${visita}; 2) que ahora confirmamos la disponibilidad con el propietario; 3) que le confirmamos a más tardar ${corte}. Ej: "Listo, te dejo la visita solicitada para el ${visita}. Ahora confirmamos la disponibilidad con el propietario y te confirmamos a más tardar ${corte}." NO le des ningún número ni nombre de persona. Nunca le digas que ya está en firme ni uses las palabras "confirmada" o "agendada".`;
+  return `Cita registrada como PROPUESTA (${cita.fecha_hora}), todavía SIN confirmar. Ya se le avisó al equipo. Decile ${quien}, corto y con tus palabras, tres cosas: 1) que la visita quedó SOLICITADA para el ${visita}; 2) que ahora el asesor confirma la disponibilidad; 3) que le confirmamos a más tardar ${corte}. Ej: "Listo, te dejo la visita solicitada para el ${visita}. Ahora el asesor confirma la disponibilidad y te confirmamos a más tardar ${corte}." NO le des ningún número ni nombre de persona. Nunca le digas que ya está en firme ni uses las palabras "confirmada" o "agendada".`;
 }
 
 async function armarAvisoCitaColega(ctx, advisor, cita, ref) {
@@ -943,7 +943,7 @@ async function executeTool(name, input, ctx) {
     // guarda solo si vino, para no cambiarle el shape a las citas de siempre.
     if (input.ref) cita.ref = String(input.ref).trim();
     // La operacion ya no cambia la anticipacion (Juan, 2026-10-21: 24 h para
-    // toda visita, para confirmar con el propietario).
+    // toda visita, para que el asesor la confirme).
 
     // ROTACION (Juan, 2026-10-07; spec 2026-10-07-sofi-vendedora-y-agenda §4):
     // si hay asesores con recibe_citas, la cita respeta 24 h de anticipacion y
@@ -1042,10 +1042,10 @@ async function executeTool(name, input, ctx) {
       ? " El asesor ya fue notificado, pero TODAVIA NO CONFIRMO la cita."
       : " Cuando transfieras al asesor la vera en la alerta.";
     const comoDecirlo = ctx.colega
-      ? `Decile al colega que la visita quedo SOLICITADA${cita.fecha_hora ? ` para ${cita.fecha_hora}` : ""}, que ahora confirmamos la disponibilidad con el propietario y que ${
+      ? `Decile al colega que la visita quedo SOLICITADA${cita.fecha_hora ? ` para ${cita.fecha_hora}` : ""}, que ${
           aliasPublico(coordinador, ctx.org)
-        } le escribe para confirmarla. NO le des ningún número. Nunca digas "confirmada".${plazoTxt}`
-      : `Decile al cliente que la visita quedo SOLICITADA${cita.fecha_hora ? ` para ${cita.fecha_hora}` : ""}, que ahora confirmamos la disponibilidad con el propietario y que el asesor le escribe para confirmarla. Nunca digas que ya quedo en firme ni que "queda lista": todavia falta que el asesor la revise.${plazoTxt}`;
+        } revisa la disponibilidad y le escribe para confirmarla. NO le des ningún número. Nunca digas "confirmada".${plazoTxt}`
+      : `Decile al cliente que la visita quedo SOLICITADA${cita.fecha_hora ? ` para ${cita.fecha_hora}` : ""}, que el asesor revisa la disponibilidad y le escribe para confirmarla. Nunca digas que ya quedo en firme ni que "queda lista": todavia falta que el asesor la revise.${plazoTxt}`;
     return `Cita registrada: ${cita.descripcion}${cita.fecha_hora ? ` (${cita.fecha_hora})` : ""} — tipo ${cita.tipo}.${notificado} ${comoDecirlo}`;
   }
 
