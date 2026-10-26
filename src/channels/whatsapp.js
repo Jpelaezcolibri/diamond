@@ -394,10 +394,8 @@ router.post("/webhook", async (req, res) => {
           const señal = await groupSignals.findByWamid(org.id, message.context.id).catch(() => null);
           radarSignalId = señal?.id || null;
         }
-        if (!replyToId && !radarSignalId && require("../lib/pregunta-asesor").activo()) {
-          const p = await require("../data/preguntas-asesor").porWamid(message.context.id).catch(() => null);
-          preguntaId = p?.id || null;
-        }
+        // El aviso al asesor queda en messages (replyToId puesto): la pregunta se busca aparte.
+        preguntaId = await require("../lib/pregunta-asesor").preguntaCitada(message.context.id);
       }
 
       // Normalizar el contenido segun el tipo

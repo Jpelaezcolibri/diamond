@@ -192,4 +192,15 @@ async function hayPorEntregar(leadId) {
   return filas.length > 0;
 }
 
-module.exports = { activo, TIPOS, registrar, avisar, responder, descartar, textoRespuesta, entregarRespuesta, entregarPendientesDe, contextoAsesor, hayPorEntregar };
+// Id de la pregunta pendiente cuyo aviso citó el asesor (swipe-to-reply), o null.
+async function preguntaCitada(contextId) {
+  if (!activo() || !contextId) return null;
+  try {
+    const p = await require("../data/preguntas-asesor").porWamid(contextId);
+    return p && p.estado === "pendiente" ? p.id : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+module.exports = { preguntaCitada, activo, TIPOS, registrar, avisar, responder, descartar, textoRespuesta, entregarRespuesta, entregarPendientesDe, contextoAsesor, hayPorEntregar };
