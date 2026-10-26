@@ -78,7 +78,7 @@ colega ──► Sofi (engine, prompt colega/cliente)
 | `src/scheduler/preguntas-escalera.js` | Tick de 5 min: aplica `pasoDePregunta` a cada pendiente | lib, data, rotacion-citas |
 | `src/agent/tools.js` | Tools `preguntar_al_asesor` (colega/cliente) y `responder_pregunta` (asesor) | lib |
 | `src/agent/prompts.js` | Regla nueva en colega y cliente; bloque "PREGUNTAS PENDIENTES" en el prompt del asesor | — |
-| `src/channels/whatsapp.js` | Respuesta citada: `context.id` = `wamid_aviso` de una pregunta → se la pasa al engine | data |
+| `src/channels/whatsapp.js` | Respuesta citada: `context.id` está en `wamids_aviso` de una pregunta → se la pasa al engine | data |
 | `src/api/crm.js` | `POST /api/preguntas/responder` y `POST /api/preguntas/descartar` | lib |
 | `src/scheduler/citas-escalera.js` | Nuevo final con `CITAS_SIN_CORTE` (§6) | — |
 | CRM: `pendientes/page.tsx`, componente nuevo `pregunta-pendiente.tsx`, ruta `app/api/preguntas/route.ts` | Tarjeta con la pregunta, "Responder a Sofi", "Descartar" | `crm/lib/bot.ts` |
@@ -98,7 +98,7 @@ create table if not exists preguntas_asesor (
   asesor_id uuid references advisors(id),   -- asesor de turno
   asignada_at timestamptz not null default now(),
   reaviso_at timestamptz,
-  wamid_aviso text,               -- wamid del WhatsApp al asesor (para la respuesta citada)
+  wamids_aviso text[] not null default '{}', -- todos los wamid de los avisos al asesor (respuesta citada)
   respuesta text,
   respondida_por text,            -- nombre real del asesor (hacia adentro)
   respondida_via text check (respondida_via in ('crm','whatsapp')),
@@ -109,7 +109,7 @@ create table if not exists preguntas_asesor (
   created_at timestamptz not null default now()
 );
 create index if not exists preguntas_asesor_pendientes on preguntas_asesor (org_id, estado);
-create index if not exists preguntas_asesor_wamid on preguntas_asesor (wamid_aviso);
+create index if not exists preguntas_asesor_wamids on preguntas_asesor using gin (wamids_aviso);
 create index if not exists preguntas_asesor_lead on preguntas_asesor (lead_id, estado);
 alter table preguntas_asesor enable row level security;
 ```
@@ -152,7 +152,7 @@ citas) que esté activo. Después:
    Si la ventana del asesor está cerrada (`VENTANA_CERRADA`) y existe `SOFI_PREGUNTA_ASESOR_PLANTILLA`,
    va por esa plantilla (`pregunta_asesor`: `{{1}}` ref, `{{2}}` pregunta). Si no hay plantilla, queda
    solo la campana (el aviso `aviso_app` de `avisarAsesor` ya le avisa que mire el CRM).
-   El `wamid` que se logre guardar va a `wamid_aviso`.
+   Cada `wamid` que se logre se AGREGA a `wamids_aviso` (avisos, reavisos y rotaciones; nunca se borra), para que citar un aviso viejo también funcione.
    **Sin datos del cliente** en el WhatsApp: ni nombre ni teléfono del colega (opción b de Juan).
 
 ### 5.3 La escalera (`pasoDePregunta`, pura)
@@ -161,8 +161,8 @@ Para cada fila `pendiente`:
 
 - `enPausa(ahora)` (8 p. m.–8 a. m. y domingos) → `nada`.
 - Pasaron ≥ 60 min (`PREGUNTA_PASO_MIN`) desde `asignada_at` y hay otro asesor activo en el ciclo
-  → `rotar` al siguiente (orden del ciclo, circular). Se reinician `asignada_at`, `reaviso_at` y
-  `wamid_aviso`, y se repite §5.2 con el nuevo. Al anterior le llega por la campana "ya la tiene {nombre}".
+  → `rotar` al siguiente (orden del ciclo, circular). Se reinician `asignada_at` y `reaviso_at` (los
+  `wamids_aviso` no se borran), y se repite §5.2 con el nuevo. Al anterior le llega por la campana "ya la tiene {nombre}".
 - Pasaron ≥ 15 min (`PREGUNTA_REAVISO_MIN`) desde `asignada_at`, y `reaviso_at` es null o anterior a
   `asignada_at` → `reaviso`: campana "Sigue pendiente: pregunta de {quien}" y el mismo WhatsApp otra vez.
 - Si el ciclo tiene un solo asesor, `rotar` no aplica: se le repite cada 60 min (reaviso por paso).
@@ -180,7 +180,7 @@ El bot exige un asesor activo (mismo criterio que `/api/citas/accion`); descarta
 un admin.
 
 **Por WhatsApp:** el asesor le escribe a Sofi.
-- Si **cita** el aviso: `whatsapp.js` busca `preguntas_asesor.wamid_aviso = context.id` y le pasa al engine
+- Si **cita** el aviso: `whatsapp.js` busca la pregunta con `context.id` dentro de `wamids_aviso` (en cualquier estado: si ya está cerrada, Sofi se lo dice al asesor y no la usa para otra) y le pasa al engine
   `preguntaId`. El prompt del asesor lleva: `RESPONDE LA PREGUNTA {id}: {pregunta}`.
 - Si no cita: el prompt del asesor lleva el bloque "PREGUNTAS PENDIENTES" (todas las de la org, porque
   cualquiera del ciclo puede contestar, igual que con las citas), numeradas y con ref. Con una sola
@@ -273,7 +273,7 @@ Sin plantillas, todo funciona por la campana del CRM y dentro de las ventanas ab
    la ventana cerrada; sin plantilla, solo campana.
 4. `responder`: CRM y WhatsApp; la segunda respuesta no pisa; limpia `atencion_pendiente` solo si no queda otra.
 5. `entregarRespuesta`: texto literal y sin alias ni celular; ventana cerrada con y sin plantilla; solo llamada.
-6. `whatsapp.js`: una respuesta citada a `wamid_aviso` llega al engine con `preguntaId`.
+6. `whatsapp.js`: una respuesta citada a uno de los `wamids_aviso` llega al engine con `preguntaId`.
 7. Prompts: la regla está en colega y cliente; no hay voseo en los textos nuevos (el test de tuteo existente);
    con el interruptor apagado no aparece la tool.
 8. `citas-escalera` con `CITAS_SIN_CORTE`: en el corte no cancela y avisa una sola vez; a 2 h cancela aunque sea

@@ -8,6 +8,8 @@
 
 **Tech Stack:** Node.js (CommonJS), `node:test`, Supabase, Express (`src/api/crm.js`), Next.js 16 + React 19 + Tailwind 4 (CRM).
 
+> **Nota (2026-10-26):** después de la revisión final, `wamid_aviso` pasó a `wamids_aviso text[]` (se agregan, no se pisan), las respuestas entregadas quedan en el chat y las `ventana_cerrada` se entregan con el siguiente mensaje. El código y la spec mandan sobre este plan.
+
 **Spec:** `docs/superpowers/specs/2026-10-25-sofi-pregunta-al-asesor-design.md`
 
 ## Global Constraints
