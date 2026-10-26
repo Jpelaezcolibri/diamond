@@ -19,6 +19,13 @@ const PASO_MIN = Number(process.env.ESCALERA_PASO_MIN || 60);
 // citas-avisos §3, Juan 2026-10-21). Uno por asignacion: al rotar se reinicia.
 const REAVISO_MIN = Number(process.env.ESCALERA_REAVISO_MIN || 15);
 const INTERVALO_MIN = Number(process.env.ESCALERA_INTERVALO_MIN || 5);
+// Nuevo final (Juan, 2026-10-25; spec 2026-10-25-sofi-pregunta-al-asesor §6):
+// en el plazo ya no se cancela; se avisa una vez "seguimos confirmando" y el
+// corte pasa a CITAS_CANCELAR_HORAS_ANTES (2) antes de la visita.
+const CANCELAR_HORAS_ANTES = Number(process.env.CITAS_CANCELAR_HORAS_ANTES || 2);
+function citasSinCorte() {
+  return /^(true|1|si|sí|on)$/i.test(String(process.env.CITAS_SIN_CORTE || ""));
+}
 
 function comoSiCreada(c) {
   const creada = new Date(c.creada_at || c.asignada_at).getTime();
@@ -31,7 +38,13 @@ function comoSiCreada(c) {
 function pasoDeEscalera({ lead, ciclo, citasOrg, ahora = new Date() }) {
   const c = lead && lead.cita;
   if (!c) return { accion: "nada" };
-  if (c.corte_at && ahora.getTime() >= new Date(c.corte_at).getTime()) return { accion: "cortar" };
+  if (c.corte_at && ahora.getTime() >= new Date(c.corte_at).getTime()) {
+    if (citasSinCorte() && !c.aviso_espera_at) {
+      const limite = new Date(c.fecha_hora).getTime() - CANCELAR_HORAS_ANTES * 3600 * 1000;
+      if (!isNaN(limite) && limite > ahora.getTime()) return { accion: "extender", nuevoCorte: new Date(limite).toISOString() };
+    }
+    return { accion: "cortar" };
+  }
   if (reglas.enPausa(ahora)) return { accion: "nada" };
   const desde = new Date(c.asignada_at || c.creada_at || 0).getTime();
   if (isNaN(desde) || ahora.getTime() - desde < PASO_MIN * 60 * 1000) return { accion: "nada" };
@@ -75,6 +88,7 @@ function canal(deps) {
     notificar: deps.notificar || ((...a) => require("../notifications/notificar").notificar(...a)),
     reaviso: deps.reaviso || ((...a) => require("../notifications/avisar-asesor").avisarAsesor(...a)),
     vencidas: deps.vencidas || ((args) => require("../lib/citas-vencidas").marcarVencidas(args)),
+    soloLlamada: deps.soloLlamada || ((orgId, tel) => require("../data/colegas").esSoloLlamada(orgId, { telefono: tel })),
   };
 }
 
@@ -129,6 +143,20 @@ async function cortar({ org, lead, ciclo, ahora, c }) {
     }).catch(() => {});
   }
   console.log(`[citas-escalera] lead ${lead.id}: cancelada por falta de confirmacion`);
+}
+
+async function extender({ org, lead, nuevoCorte, ahora, c }) {
+  const cita = { ...lead.cita, corte_original_at: lead.cita.corte_at, corte_at: nuevoCorte, aviso_espera_at: ahora.toISOString() };
+  await leads.update(lead.id, { cita });
+  lead.cita = cita;
+  const solo = lead.source === "colega" ? await c.soloLlamada(org.id, lead.phone).catch(() => null) : false;
+  if (solo === false) {
+    // Con la ventana cerrada no sale nada: no hay plantilla para esto (spec §6).
+    await c
+      .texto(org, lead.phone, `Seguimos confirmando tu visita ${cuandoDe(cita)} con el asesor. Te aviso apenas la confirme.`)
+      .catch((e) => console.warn("[citas-escalera] aviso de espera:", e.message));
+  }
+  console.log(`[citas-escalera] lead ${lead.id}: plazo extendido hasta ${nuevoCorte}`);
 }
 
 function refCuando(cita) {
@@ -192,6 +220,8 @@ async function runOnce({ ahora = new Date(), deps = {} } = {}) {
         if (paso.accion === "rotar") {
           await rotar({ org, lead, ciclo, nuevo: paso.nuevo, ahora, c });
           rotadas++;
+        } else if (paso.accion === "extender") {
+          await extender({ org, lead, nuevoCorte: paso.nuevoCorte, ahora, c });
         } else if (paso.accion === "cortar") {
           await cortar({ org, lead, ciclo, ahora, c });
           cortadas++;
@@ -225,4 +255,4 @@ function stop() {
   timer = null;
 }
 
-module.exports = { pasoDeEscalera, tocaReaviso, runOnce, start, stop, REAVISO_MIN };
+module.exports = { citasSinCorte, pasoDeEscalera, tocaReaviso, runOnce, start, stop, REAVISO_MIN };
