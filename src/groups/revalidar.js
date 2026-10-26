@@ -461,9 +461,9 @@ function formatearCandidatas(matches) {
 // Los cortos CONOCIDOS de una candidata, tal como los escribe el motor: cada
 // razon con "(pediste N)" o "dentro del margen" es un dato real que no alcanza.
 // Es la misma cuenta que se le muestra a Sofi en la ficha (formatearCandidatas).
-function cortosDe(m) {
-  return (m && Array.isArray(m.razones) ? m.razones : []).filter((r) => /\(pediste |dentro del margen/.test(String(r)));
-}
+// Vive en publicable.js (2026-10-26) porque la aclaracion de las dudosas del
+// DM tambien la usa; una sola definicion de "corto".
+const { cortosDe } = require("./publicable");
 
 // LA REGLA LA APLICA EL CODIGO (auditoria 2026-09-05, paso 5). Sofi declara
 // por que cada dudosa es dudosa (dudosas_motivo). Si el motivo es la cuenta de

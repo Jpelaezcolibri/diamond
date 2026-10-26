@@ -335,10 +335,16 @@ const TEXTO_DUDOSA = {
 };
 const DUDOSA_GENERICA = "no calza en todo lo que pediste: revísala antes de pasarla";
 
+// Los cortos CONOCIDOS de una candidata, tal como los escribe el motor
+// (match.js): cada razon con "(pediste N)" o "dentro del margen" es un dato
+// real que no alcanza. revalidar.js la usa para la cuenta de las dudosas.
+function cortosDe(m) {
+  return (m && Array.isArray(m.razones) ? m.razones : []).filter((r) => /\(pediste |dentro del margen/.test(String(r)));
+}
+
 function dudosasParaDm(veredicto, matches) {
   const refs = veredicto && Array.isArray(veredicto.refs_dudosas) ? veredicto.refs_dudosas.map(String) : [];
   if (!refs.length) return { matches: [], leFalta: [] };
-  const { cortosDe } = require("./revalidar");
   const motivoDe = new Map(
     (Array.isArray(veredicto.dudosas_motivo) ? veredicto.dudosas_motivo : [])
       .filter((x) => x && x.ref)
@@ -760,6 +766,7 @@ module.exports = {
   dmZonaCercanaActivo,
   dmDudosasActivo,
   dudosasParaDm,
+  cortosDe,
   notasParaDm,
   salvedadDeLasFichas,
 };

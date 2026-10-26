@@ -1463,3 +1463,111 @@ test("interruptor apagado: la ficha con el piso sin confirmar NO sale, igual que
   assert.strictEqual(enviosDm.length, 0);
   assert.strictEqual(politicasGuardadas[0].motivo, "piso_sin_confirmar");
 });
+
+// ── DM amplio (Juan, 2026-10-26) ───────────────────────────────────────────
+// RADAR_DM_ZONA_CERCANA y RADAR_DM_DUDOSAS, apagados por defecto. Ver
+// test/dm-amplio.test.js para la compuerta y el texto.
+function conEnv(vars, fn) {
+  return async () => {
+    const previos = {};
+    for (const [k, v] of Object.entries(vars)) {
+      previos[k] = process.env[k];
+      process.env[k] = v;
+    }
+    try {
+      await fn();
+    } finally {
+      for (const k of Object.keys(vars)) {
+        if (previos[k] === undefined) delete process.env[k];
+        else process.env[k] = previos[k];
+      }
+    }
+  };
+}
+
+const SOLO_DUDOSA = {
+  ...APRUEBA,
+  refs_utiles: [],
+  refs_dudosas: ["9780079"],
+  dudosas_motivo: [{ ref: "9780079", motivo: "dos_o_mas_incumplimientos_conocidos" }],
+  por_que: "Decidí vos: tiene 2 alcobas y pidió 3, y el área se queda corta.",
+};
+
+test("dudosas: con RADAR_DM_DUDOSAS y solo dudosas, sale el DM con la razon de Sofi y la traza lo dice", conEnv({ RADAR_DM_DUDOSAS: "true" }, async () => {
+  telefonoColegaResuelto = "573001234567";
+  matchesDevueltos = [match({ habitaciones: 2, razones: ["Zona: Laureles", "2 alcobas (pediste 3)"] })];
+  veredictoDeSofi = { ...SOLO_DUDOSA };
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+
+  assert.strictEqual(r.resultado, "dm_enviado");
+  assert.strictEqual(enviosDm.length, 2);
+  assert.match(enviosDm[1].texto, /Ref 9780079[\s\S]*Aclaración: 2 alcobas y pediste 3/);
+  assert.doesNotMatch(textoDm(), /Decidí vos|pidió 3/, "el por_que de la asesora no sale al colega");
+  assert.deepStrictEqual(marcadasRespondidas[0].refs, ["9780079"]);
+  const ultima = politicasGuardadas[politicasGuardadas.length - 1];
+  assert.strictEqual(ultima.motivo, "dm_con_aclaracion");
+  assert.ok(ultima.traza.includes("dudosa:9780079"), JSON.stringify(ultima.traza));
+  assert.ok(!ultima.traza.includes("NO:solo_dudosas"));
+  assert.ok(
+    !enviadosPorSofi.some((e) => /quedó sin mandar/.test(e.texto)),
+    "la dudosa que salio no se le reporta a la asesora como pendiente"
+  );
+}));
+
+test("dudosas: apagado, solo dudosas sigue siendo solo_dudosas y no sale DM", async () => {
+  telefonoColegaResuelto = "573001234567";
+  veredictoDeSofi = { ...SOLO_DUDOSA };
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+  assert.notStrictEqual(r.resultado, "dm_enviado");
+  assert.strictEqual(enviosDm.length, 0);
+  assert.strictEqual(politicasGuardadas[politicasGuardadas.length - 1].motivo, "solo_dudosas");
+});
+
+test("dudosas: una dudosa que no pasa la compuerta dura no sale; queda solo_dudosas", conEnv({ RADAR_DM_DUDOSAS: "true" }, async () => {
+  telefonoColegaResuelto = "573001234567";
+  matchesDevueltos = [match({ precio: "$0" }), match({ ref: "ALIADO", fuente: "aliado" })];
+  veredictoDeSofi = { ...SOLO_DUDOSA, refs_dudosas: ["9780079", "ALIADO"] };
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+  assert.notStrictEqual(r.resultado, "dm_enviado");
+  assert.strictEqual(enviosDm.length, 0);
+  assert.strictEqual(politicasGuardadas[politicasGuardadas.length - 1].motivo, "solo_dudosas");
+}));
+
+test("dudosas: si Sofi aprobo alguna util, las dudosas no se suman al DM", conEnv({ RADAR_DM_DUDOSAS: "true" }, async () => {
+  telefonoColegaResuelto = "573001234567";
+  matchesDevueltos = [match(), match({ ref: "DUD" })];
+  veredictoDeSofi = { ...APRUEBA, refs_dudosas: ["DUD"] };
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+  assert.strictEqual(r.resultado, "dm_enviado");
+  assert.deepStrictEqual(marcadasRespondidas[0].refs, ["9780079"]);
+}));
+
+test("zona cercana: con RADAR_DM_ZONA_CERCANA, una vecina aprobada sale con 'No es en ...: queda en ..., cerca'", conEnv({ RADAR_DM_ZONA_CERCANA: "true" }, async () => {
+  telefonoColegaResuelto = "573001234567";
+  extraClasificado = { zona: "Laureles" };
+  matchesDevueltos = [match({ ubicacion: "vecina", zona: "Belén" })];
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+
+  assert.strictEqual(r.resultado, "dm_enviado");
+  assert.match(enviosDm[1].texto, /Aclaración: No es en Laureles: queda en Belén, cerca/);
+  const ultima = politicasGuardadas[politicasGuardadas.length - 1];
+  assert.strictEqual(ultima.motivo, "dm_con_aclaracion");
+  assert.ok(ultima.traza.includes("zona_cercana:9780079"), JSON.stringify(ultima.traza));
+}));
+
+test("zona cercana: con una exacta aprobada, la vecina no sale", conEnv({ RADAR_DM_ZONA_CERCANA: "true" }, async () => {
+  telefonoColegaResuelto = "573001234567";
+  matchesDevueltos = [match({ ref: "VEC", ubicacion: "vecina", zona: "Belén", puntaje: 99 }), match()];
+  veredictoDeSofi = { ...APRUEBA, refs_utiles: ["VEC", "9780079"] };
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+  assert.strictEqual(r.resultado, "dm_enviado");
+  assert.deepStrictEqual(marcadasRespondidas[0].refs, ["9780079"]);
+}));
+
+test("zona cercana apagada: la vecina aprobada sigue frenada por zona_vecina", async () => {
+  telefonoColegaResuelto = "573001234567";
+  matchesDevueltos = [match({ ubicacion: "vecina", zona: "Belén" })];
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+  assert.notStrictEqual(r.resultado, "dm_enviado");
+  assert.strictEqual(politicasGuardadas[politicasGuardadas.length - 1].motivo, "zona_vecina");
+});

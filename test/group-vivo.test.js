@@ -1793,3 +1793,28 @@ test("prepararAviso: apagado, la misma señal queda sin borrador, como hoy", asy
   assert.strictEqual(r.aprobada, false);
   assert.strictEqual(r.mensaje, null);
 });
+
+// ── Zona cercana en los caminos manuales (Juan, 2026-10-26) ───────────────
+// Misma regla y mismo interruptor (RADAR_DM_ZONA_CERCANA) que el DM automatico.
+test("responderPorDmManual: con zona cercana, la vecina sale sin exactas y la traza lo dice", async () => {
+  process.env.RADAR_DM_ZONA_CERCANA = "true";
+  try {
+    señalParaAprobar = señalCallada({ zona: "Envigado", matches: [matchBueno({ ubicacion: "vecina", zona: "Itagüí" })] });
+    grupoParaAprobar = grupoHabilitado();
+    telefonoColegaManual = "573001234567";
+    const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
+    assert.strictEqual(r.resultado, "dm_enviado");
+    assert.match(enviosDmManual[1].texto, /Aclaración: No es en Envigado: queda en Itagüí, cerca/);
+    assert.ok(politicasGuardadas[politicasGuardadas.length - 1].traza.includes("zona_cercana:AP004"));
+  } finally {
+    delete process.env.RADAR_DM_ZONA_CERCANA;
+  }
+});
+
+test("responderPorDmManual: sin el interruptor, la vecina sigue sin salir", async () => {
+  señalParaAprobar = señalCallada({ zona: "Envigado", matches: [matchBueno({ ubicacion: "vecina", zona: "Itagüí" })] });
+  grupoParaAprobar = grupoHabilitado();
+  telefonoColegaManual = "573001234567";
+  const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
+  assert.strictEqual(r.resultado, "sin_propiedades_publicables");
+});

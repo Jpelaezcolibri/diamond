@@ -444,9 +444,15 @@ function refsConAclaracion(aclaraciones, refsEnviadas) {
 
 // En los caminos manuales el motivo sigue diciendo QUIEN lo mando
 // (dm_manual / aprobacion_manual); que salio con aclaracion queda en la traza.
+// Las de zona cercana (2026-10-26) llevan ademas su propia marca, para medir
+// cuantos pedidos rescata esa excepcion por separado.
 function trazaConAclaracion(aclaraciones, refsEnviadas) {
   const refs = refsConAclaracion(aclaraciones, refsEnviadas);
-  return refs.length ? [`con_aclaracion:${refs.join(",")}`] : [];
+  const cercanas = refsConAclaracion((aclaraciones || []).filter((a) => a && a.zonaCercana), refsEnviadas);
+  return [
+    ...(refs.length ? [`con_aclaracion:${refs.join(",")}`] : []),
+    ...(cercanas.length ? [`zona_cercana:${cercanas.join(",")}`] : []),
+  ];
 }
 
 // Guarda en la señal por que el pedido no salio. Fail-open: un error de base de
@@ -568,11 +574,29 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
   // precio) sale despues de las exactas, con la aclaracion en la ficha. Ver
   // publicable.js#MOTIVOS_ACLARABLES. Apagado, `aclaracionesDm` sale vacio y
   // todo lo de abajo queda como antes.
-  const { publicables: utilesLimpias, descartados: descartadosDm, aclaraciones: aclaracionesDm = [] } = publicable.filtrar(utilesSegunSofi, {
-    syncFresco: inventarioDm.fresco,
-    umbral: 0,
-    conAclaracion: publicable.dmConAclaracionActivo(),
-  });
+  //
+  // DUDOSAS (Juan, 2026-10-26; RADAR_DM_DUDOSAS): si Sofi no aprobo ninguna
+  // pero marco dudosas, esas pasan por esta MISMA compuerta (las barreras de
+  // dato y seguridad no cambian) y salen con la razon de Sofi como aclaracion
+  // de la ficha (publicable.dudosasParaDm). Si ninguna pasa, el pedido queda
+  // `solo_dudosas` como siempre, mas abajo.
+  //
+  // ZONA CERCANA (RADAR_DM_ZONA_CERCANA): la vecina sale al final y solo sin
+  // exactas; ver publicable.js#dmZonaCercanaActivo.
+  const dudosasDm =
+    utilesSegunSofi.length === 0 && publicable.dmDudosasActivo()
+      ? publicable.dudosasParaDm(veredicto, matches)
+      : { matches: [], leFalta: [] };
+  const porDudosas = dudosasDm.matches.length > 0;
+  const { publicables: utilesLimpias, descartados: descartadosDm, aclaraciones: aclaracionesDm = [] } = publicable.filtrar(
+    porDudosas ? dudosasDm.matches : utilesSegunSofi,
+    {
+      syncFresco: inventarioDm.fresco,
+      umbral: 0,
+      conAclaracion: publicable.dmConAclaracionActivo(),
+      zonaCercana: publicable.dmZonaCercanaActivo(),
+    }
+  );
   const { verificadas: utiles, rotas: rotasDm } = await verificarLink.verificar(utilesLimpias);
   for (const r of rotasDm) descartadosDm.push({ ref: r.ref, motivos: ["link_no_abre"] });
   if (utilesSegunSofi.length > 0 && utiles.length === 0) {
@@ -664,7 +688,9 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
   // Sofi solo marco dudosas (ninguna util): decidirDm no mira eso y dice "ok",
   // asi que el pedido quedaba guardado como si hubiera salido bien. El motivo
   // real: no hay nada seguro para mandarle al colega, va a la asesora.
-  if (utilesSegunSofi.length === 0 && decisionDm.motivo === "ok") {
+  // Con RADAR_DM_DUDOSAS, si alguna dudosa paso la compuerta (`utiles`), hay
+  // algo para mandar y el motivo sigue "ok".
+  if (utilesSegunSofi.length === 0 && utiles.length === 0 && decisionDm.motivo === "ok") {
     decisionDm.motivo = "solo_dudosas";
     decisionDm.traza = [...decisionDm.traza, "NO:solo_dudosas"];
   }
@@ -734,7 +760,18 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
     // de a una propiedad Link Que se pueda pasar al posible cliente"). Primero
     // un mensaje para el colega y despues una ficha por propiedad, cada una con
     // su link de Wasi. Ver redactar.mensajesAlColega y envio-colega.js.
-    const notasDm = notasDelVeredicto(veredicto, aclaracionesDm, utilesDm.slice(0, redactar.MAX_POR_DM));
+    // Las dudosas llevan la razon de Sofi en su ficha (le_falta de esa ref).
+    const refsDudosasDm = new Set(dudosasDm.matches.map((m) => String(m.ref)));
+    const veredictoDm = porDudosas
+      ? {
+          ...veredicto,
+          le_falta: [
+            ...((veredicto && veredicto.le_falta) || []).filter((f) => !(f && refsDudosasDm.has(String(f.ref)))),
+            ...dudosasDm.leFalta,
+          ],
+        }
+      : veredicto;
+    const notasDm = notasDelVeredicto(veredictoDm, aclaracionesDm, utilesDm.slice(0, redactar.MAX_POR_DM));
     const armado = redactar.mensajesAlColega({ autor_nombre: mensaje.autor }, utilesDm, {
       org,
       codigo: await codigoColega.asignarCodigo(org.id, signal.id),
@@ -771,24 +808,35 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
           destinoTelefono: telefonoColega || null,
           destinoLid: mensaje.autorId || mensaje.autorTelefono || null,
         });
-        const aclaradasEnviadas = refsConAclaracion(aclaracionesDm, envio.refsEnviadas);
+        // Lo que salio con aclaracion, de zona cercana o por dudosa
+        // (2026-10-26) queda en la traza, para medir cada regla por separado.
+        const dudosasEnviadas = porDudosas ? (envio.refsEnviadas || []).map(String) : [];
+        const trazaAmplia = [
+          ...trazaConAclaracion(aclaracionesDm, envio.refsEnviadas),
+          ...(dudosasEnviadas.length ? [`dudosa:${dudosasEnviadas.join(",")}`] : []),
+        ];
         if (!envio.completo) {
           await groupSignals
             .guardarPolitica(org.id, signal.id, {
               motivo: "dm_parcial",
-              traza: [...decisionDm.traza, `dm_parcial:salieron:${envio.refsEnviadas.join(",")}`, `faltaron:${envio.faltantes.join(",")}`, `error:${envio.error}`],
+              traza: [...decisionDm.traza, `dm_parcial:salieron:${envio.refsEnviadas.join(",")}`, `faltaron:${envio.faltantes.join(",")}`, `error:${envio.error}`, ...trazaAmplia],
             })
             .catch(() => {});
-        } else if (aclaradasEnviadas.length) {
-          // Salio con al menos una ficha con aclaracion: queda dicho en la
-          // señal, para poder medir cuantos pedidos rescata esta regla.
+        } else if (trazaAmplia.length) {
+          // Salio con al menos una ficha con aclaracion (las dudosas siempre
+          // llevan la suya): queda dicho en la señal, para poder medir cuantos
+          // pedidos rescata esta regla.
           await groupSignals
             .guardarPolitica(org.id, signal.id, {
               motivo: "dm_con_aclaracion",
-              traza: [...decisionDm.traza, `con_aclaracion:${aclaradasEnviadas.join(",")}`],
+              traza: [...decisionDm.traza, ...trazaAmplia],
             })
             .catch(() => {});
         }
+        // Una dudosa que ya le llego al colega no es "pendiente" para la asesora.
+        const veredictoPostDm = dudosasEnviadas.length
+          ? { ...veredicto, refs_dudosas: ((veredicto && veredicto.refs_dudosas) || []).filter((r) => !dudosasEnviadas.includes(String(r))) }
+          : veredicto;
 
         // Aviso post-DM (Juan, 2026-09-01): "no tiene nada que hacer" solo es
         // cierto si no queda nada pendiente. Sale si el pedido tenia dudosas o
@@ -806,7 +854,7 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
         if (asesor && asesor.phone && !soloVisitas.frena("aviso post-DM")) {
           avisoPostDm = alertaAsesor.construirAvisoPostDm(
             senalParaAviso(c, mensaje, grupo),
-            veredicto,
+            veredictoPostDm,
             matches,
             envio.refsEnviadas,
             telefonoColega,
@@ -821,7 +869,7 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
             // hace menos de VENTANA_MIN, queda en la cola en memoria y la
             // bandeja de salida lo entrega junto con lo demas (ver
             // src/groups/cola-post-dm.js: por que no va a la base).
-            const dudosasConFicha = ((veredicto && veredicto.refs_dudosas) || []).filter((ref) =>
+            const dudosasConFicha = ((veredictoPostDm && veredictoPostDm.refs_dudosas) || []).filter((ref) =>
               (matches || []).some((m) => String(m.ref) === String(ref))
             );
             colaPostDm.encolar(org.id, asesor.id, {
@@ -1248,6 +1296,7 @@ async function aprobarManual(org, signalId) {
     syncFresco: inventario.fresco,
     umbral: 0,
     conAclaracion: publicable.dmConAclaracionActivo(),
+    zonaCercana: publicable.dmZonaCercanaActivo(),
   });
   const { verificadas: publicables, rotas } = await verificarLink.verificar(candidatas);
   for (const r of rotas) descartados.push({ ref: r.ref, motivos: ["link_no_abre"] });
@@ -1499,6 +1548,7 @@ async function responderPorDmManual(org, signalId, { sesion = null, refs = null 
     syncFresco: inventario.fresco,
     umbral: 0,
     conAclaracion: publicable.dmConAclaracionActivo(),
+    zonaCercana: publicable.dmZonaCercanaActivo(),
   });
   const { verificadas: publicables, rotas } = await verificarLink.verificar(candidatas);
   for (const r of rotas) descartados.push({ ref: r.ref, motivos: ["link_no_abre"] });
@@ -1788,6 +1838,7 @@ async function prepararAviso(org, signalId, { sesion = null } = {}) {
     syncFresco: inventario.fresco,
     umbral: 0,
     conAclaracion: publicable.dmConAclaracionActivo(),
+    zonaCercana: publicable.dmZonaCercanaActivo(),
   });
   const { verificadas: utiles, rotas } = await verificarLink
     .verificar(candidatas)
