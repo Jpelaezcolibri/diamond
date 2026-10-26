@@ -1818,3 +1818,24 @@ test("responderPorDmManual: sin el interruptor, la vecina sigue sin salir", asyn
   const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
   assert.strictEqual(r.resultado, "sin_propiedades_publicables");
 });
+
+// I2 (revision 2026-10-26): una señal vieja guardo la 10012896 (La Mota) como
+// 'vecina' de Belen, antes de c70dc38. El camino manual recalcula el grado con
+// las zonas de hoy y no le dice al colega "No es en Belén: queda en La Mota".
+test("responderPorDmManual y prepararAviso: el grado de zona viejo no imprime una nota de zona falsa", async () => {
+  process.env.RADAR_DM_ZONA_CERCANA = "true";
+  try {
+    const vieja = matchBueno({ ref: "10012896", ubicacion: "vecina", zona: "La Mota", titulo: "Casa en venta en Belén cerca Arkadia" });
+    señalParaAprobar = señalCallada({ zona: "Belén", zonas: ["Belén", "Envigado"], matches: [vieja], revalidacion: { refs_utiles: ["10012896"], sin_confirmar: [] } });
+    grupoParaAprobar = grupoHabilitado();
+    telefonoColegaManual = "573001234567";
+    const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
+    assert.strictEqual(r.resultado, "sin_propiedades_publicables");
+    assert.ok(!enviosDmManual.some((e) => /No es en/.test(e.texto)));
+
+    const aviso = await vivo.prepararAviso({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
+    assert.doesNotMatch(JSON.stringify(aviso.mensajes || aviso.mensaje || ""), /No es en/);
+  } finally {
+    delete process.env.RADAR_DM_ZONA_CERCANA;
+  }
+});

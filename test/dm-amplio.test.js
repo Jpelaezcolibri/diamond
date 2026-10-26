@@ -363,3 +363,27 @@ test("I1: zonaCercanaPara apaga la zona cercana para el colega tajante, aunque e
   assert.strictEqual(publicable.zonaCercanaPara({ texto: "Busco apto en Laureles" }, env), true);
   assert.strictEqual(publicable.zonaCercanaPara({ texto: "Busco apto en Laureles" }, { RADAR_DM_ZONA_CERCANA: "false" }), false);
 });
+
+// ── I2: el grado de zona guardado en una señal vieja se recalcula ──────────
+// fdf36fe9/ef35207f: la 10012896 (La Mota) se guardo 'vecina' antes del
+// arreglo de Belen (c70dc38). Con el grado congelado, los caminos manuales
+// decian "No es en Belén: queda en La Mota, cerca". Con `pedido`, filtrar
+// recalcula el grado con las zonas de hoy: si ya no es vecina, no sale como
+// zona cercana.
+test("I2: filtrar con `pedido` no saca como zona cercana una vecina guardada que hoy ya no lo es", () => {
+  const vieja = ficha({ ref: "10012896", ubicacion: "vecina", zona: "La Mota", titulo: "Casa en venta en Belén cerca Arkadia" });
+  const r = publicable.filtrar([vieja], { ...ON, pedido: { zonas: ["Belén", "Envigado"], zona: "Belén" } });
+  assert.deepStrictEqual(r.publicables, []);
+  assert.deepStrictEqual(r.descartados, [{ ref: "10012896", motivos: ["zona_vecina"] }]);
+});
+
+test("I2: la vecina de verdad sigue saliendo con `pedido` (Envigado -> Itagüí)", () => {
+  const r = publicable.filtrar([ficha({ ubicacion: "vecina", zona: "Itagüí" })], { ...ON, pedido: { zonas: ["Envigado"], zona: "Envigado" } });
+  assert.strictEqual(r.publicables.length, 1);
+  assert.strictEqual(r.aclaraciones[0].zonaCercana, true);
+});
+
+test("I2: una vecina guardada por la vecindad de la zona madre (Zúñiga -> Envigado) tampoco sale", () => {
+  const r = publicable.filtrar([ficha({ ubicacion: "vecina", zona: "Envigado" })], { ...ON, pedido: { zonas: ["Zúñiga"], zona: "Zúñiga" } });
+  assert.deepStrictEqual(r.publicables, []);
+});

@@ -269,6 +269,7 @@ async function planificar(org, s, deps, { ahora, aplicar = false, yaPlaneadas = 
     syncFresco: Boolean(inventario && inventario.fresco),
     conAclaracion: true,
     zonaCercana: publicable.zonaCercanaPara({ texto: s.texto_original, veredicto: rev }),
+    pedido: s,
   });
   const { verificadas, rotas } = await deps.verificarLinks(candidatas);
   for (const r of rotas || []) descartados.push({ ref: r.ref, motivos: ["link_no_abre"] });

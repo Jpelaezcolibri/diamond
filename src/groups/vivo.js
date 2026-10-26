@@ -599,6 +599,8 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
       umbral: 0,
       conAclaracion: publicable.dmConAclaracionActivo(),
       zonaCercana: publicable.zonaCercanaPara({ texto: mensaje.texto, veredicto }),
+      // El grado de zona se recalcula contra el pedido (ver publicable.js#gradoDeHoy).
+      pedido: c,
     }
   );
   const { verificadas: utiles, rotas: rotasDm } = await verificarLink.verificar(utilesLimpias);
@@ -1301,6 +1303,8 @@ async function aprobarManual(org, signalId) {
     umbral: 0,
     conAclaracion: publicable.dmConAclaracionActivo(),
     zonaCercana: publicable.zonaCercanaPara({ texto: signal.texto_original, veredicto: signal.revalidacion }),
+    // El grado guardado en la señal puede ser viejo: se recalcula (I2).
+    pedido: signal,
   });
   const { verificadas: publicables, rotas } = await verificarLink.verificar(candidatas);
   for (const r of rotas) descartados.push({ ref: r.ref, motivos: ["link_no_abre"] });
@@ -1553,6 +1557,8 @@ async function responderPorDmManual(org, signalId, { sesion = null, refs = null 
     umbral: 0,
     conAclaracion: publicable.dmConAclaracionActivo(),
     zonaCercana: publicable.zonaCercanaPara({ texto: signal.texto_original, veredicto: signal.revalidacion }),
+    // El grado guardado en la señal puede ser viejo: se recalcula (I2).
+    pedido: signal,
   });
   const { verificadas: publicables, rotas } = await verificarLink.verificar(candidatas);
   for (const r of rotas) descartados.push({ ref: r.ref, motivos: ["link_no_abre"] });
@@ -1843,6 +1849,8 @@ async function prepararAviso(org, signalId, { sesion = null } = {}) {
     umbral: 0,
     conAclaracion: publicable.dmConAclaracionActivo(),
     zonaCercana: publicable.zonaCercanaPara({ texto: signal.texto_original, veredicto: rev }),
+    // El grado guardado en la señal puede ser viejo: se recalcula (I2).
+    pedido: signal,
   });
   const { verificadas: utiles, rotas } = await verificarLink
     .verificar(candidatas)

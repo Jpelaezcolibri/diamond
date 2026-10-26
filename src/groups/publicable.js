@@ -19,6 +19,7 @@
 // no la protege ninguna linea desechable.
 
 const formato = require("../lib/formato");
+const ubicacion = require("./ubicacion");
 
 // Score minimo para publicar. Ojo con leer este numero como un porcentaje: la
 // escala de match.js NO va de 0 a 100, va de 55 a 100. Un match ya pasó TODAS
@@ -312,7 +313,21 @@ function zonaCercanaPara({ texto = null, veredicto = null } = {}, env = process.
 
 // Devuelve la marca que viaja en la copia del match ({ tipo: "vecina" } o
 // { tipo: "barrio", barrio }) o null si la ficha no es una zona cercana.
-function zonaCercanaDe(motivos, match, { conAclaracion = false } = {}) {
+//
+// EL GRADO SE RECALCULA CON LAS ZONAS DE HOY (revision 2026-10-26, I2). Los
+// caminos manuales del CRM filtran los matches GUARDADOS en la señal, con su
+// `ubicacion` congelada: la 10012896 (La Mota) quedo 'vecina' de Belen antes
+// del arreglo c70dc38, y el borrador decia "No es en Belén: queda en La Mota,
+// cerca". Con `pedido`, el grado se vuelve a calcular con ubicacion.js (la
+// misma funcion del motor) sobre la zona y el titulo de la ficha; si hoy ya no
+// es vecina (o barrio nombrado), no sale como zona cercana. El match guardado
+// no trae la descripcion, asi que ante la duda la ficha no sale por aca.
+function gradoDeHoy(match, pedido) {
+  const g = ubicacion.ubicacionCoincide({ zona: match.zona || "", ciudad: "", titulo: match.titulo || "", descripcion: "" }, pedido);
+  return g ? g.grado : null;
+}
+
+function zonaCercanaDe(motivos, match, { conAclaracion = false, pedido = null } = {}) {
   if (!match || !Array.isArray(motivos)) return null;
   let motivoZona;
   let marca;
@@ -324,6 +339,11 @@ function zonaCercanaDe(motivos, match, { conAclaracion = false } = {}) {
     marca = { tipo: "barrio", barrio: nombreDeBarrio(match.barrio_en_ficha[0], match) };
   } else {
     return null;
+  }
+  if (pedido) {
+    const hoy = gradoDeHoy(match, pedido);
+    if (marca.tipo === "vecina" && hoy !== "vecina") return null;
+    if (marca.tipo === "barrio" && hoy !== "zona_general") return null;
   }
   const resto = motivos.filter((m) => m !== motivoZona);
   if (resto.length === 0) return marca;
@@ -421,6 +441,8 @@ function dudosasParaDm(veredicto, matches) {
 // confirmar no cuentan como exactas). Salen como COPIA del match con
 // `zona_cercana` (la marca que lee redactar.js#desvios) y su aclaracion lleva
 // `zonaCercana: true`. Si hay exactas, van a `descartados` como siempre.
+// `pedido` (opcional, revision 2026-10-26): con el, el grado de zona de cada
+// candidata a zona cercana se recalcula con las zonas de hoy (gradoDeHoy).
 function filtrar(matches, opciones = {}) {
   const limite = opciones.limite || Infinity;
   const conAclaracion = opciones.conAclaracion === true;
@@ -435,7 +457,7 @@ function filtrar(matches, opciones = {}) {
     let marca = null;
     if (veredicto.ok) publicables.push(m);
     else if (conAclaracion && soloAclarables(veredicto.motivos, m)) conDatoPorConfirmar.push({ m, motivos: veredicto.motivos });
-    else if (zonaCercana && (marca = zonaCercanaDe(veredicto.motivos, m, { conAclaracion }))) {
+    else if (zonaCercana && (marca = zonaCercanaDe(veredicto.motivos, m, { conAclaracion, pedido: opciones.pedido || null }))) {
       cercanas.push({ m: { ...m, zona_cercana: marca }, original: m, motivos: veredicto.motivos });
     } else descartados.push({ ref: m && m.ref, motivos: veredicto.motivos });
   }
