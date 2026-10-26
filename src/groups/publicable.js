@@ -352,12 +352,15 @@ function zonaCercanaDe(motivos, match, { conAclaracion = false, pedido = null } 
 
 // El barrio llega normalizado ("antillas"); se busca como lo escribe la ficha
 // para no imprimir "antillas" ni perder la tilde ("Trianón").
+// Puede traer dos palabras ("country club", barrio.js#lugaresNombrados).
 function nombreDeBarrio(token, match) {
-  const clave = normalizarTexto(token);
   const palabras = `${(match && match.titulo) || ""} ${(match && match.caracteristicas) || ""}`.split(/[^\p{L}]+/u);
-  const tal = palabras.find((p) => p && normalizarTexto(p) === clave);
-  if (tal) return tal.charAt(0).toUpperCase() + tal.slice(1).toLowerCase();
-  return clave.charAt(0).toUpperCase() + clave.slice(1);
+  return String(token || "").split(/\s+/).filter(Boolean).map((parte) => {
+    const clave = normalizarTexto(parte);
+    const tal = palabras.find((p) => p && normalizarTexto(p) === clave);
+    if (tal) return tal.charAt(0).toUpperCase() + tal.slice(1).toLowerCase();
+    return clave.charAt(0).toUpperCase() + clave.slice(1);
+  }).join(" ");
 }
 
 // FICHAS DUDOSAS (Juan, 2026-10-26; RADAR_DM_DUDOSAS). Cuando Sofi no aprobo

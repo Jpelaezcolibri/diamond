@@ -88,10 +88,30 @@ function patronDe(ks) {
 }
 
 // ¿La ficha dice que la propiedad esta en `sector`?
+//
+// "EN LAS PALMAS" Y "POBLADO-PALMAS" (segunda revision del DM amplio, N1,
+// 2026-10-26). La 9856842 dice "CASA DE LUJO EN VENTA EN LAS PALMAS – SECTOR
+// COUNTRY CLUB" y la 10447697 "Apartamento en el Poblado-Palmas": ninguna
+// trae un INTRO delante de "palmas", asi que graduaban `zona_general` y
+// salian con "el barrio exacto no lo tengo registrado", que es falso. Un
+// nombre de UNA palabra que no es de todos los dias (PALABRAS_COMUNES) tambien
+// cuenta despues de "en" o pegado a la zona registrada de la ficha. "en la
+// mesa", "en el tesoro" siguen sin contar.
+function patronesDe(ks, p) {
+  const patrones = [patronDe(ks)];
+  if (ks.length !== 1 || PALABRAS_COMUNES.has(ks[0])) return patrones;
+  patrones.push(` en(?: (?:el|la|los|las))? ${ks[0]}\\b`);
+  for (const z of claves(String(p.zona || ""))) {
+    if (z !== ks[0]) patrones.push(` ${z} ${ks[0]}\\b`);
+  }
+  return patrones;
+}
+
 function nombra(p, sector) {
   const ks = claves(sector);
   if (!ks.length) return false;
-  return aparece(textoDe(p), patronDe(ks));
+  const texto = textoDe(p);
+  return patronesDe(ks, p).some((patron) => aparece(texto, patron));
 }
 
 // Barrios conocidos del municipio de la propiedad que su ficha nombra y que el
@@ -124,17 +144,55 @@ const PALABRAS_COMUNES = new Set([
   "abadia", "marcos", "cumbres", "rodeo",
 ]);
 
+// "SECTOR X" TAMBIEN DICE DONDE QUEDA (segunda revision del DM amplio, N1,
+// 2026-10-26). La 10410315 dice "Apartamento remodelado poblado sector
+// campestre"; "campestre" no es hija de El Poblado en SUBZONA_DE, asi que no
+// se detectaba y un pedido de Las Palmas/Balsos/San Lucas la recibia con "el
+// barrio exacto no lo tengo registrado". Si ningun barrio conocido aparece,
+// el nombre que presenta "sector"/"barrio"/"urbanizacion" cuenta como el
+// lugar de la ficha, salvo que sea lo pedido, la zona misma o una palabra de
+// las que acompanan a "sector" sin nombrar nada ("sector tranquilo", "sector
+// sin pico y placa", "urbanizacion privada"). Equivocarse aca es el lado
+// seguro: la ficha no sale con "no lo tengo registrado" y queda con la
+// asesora (o como zona cercana).
+const NO_ES_LUGAR = new Set([
+  "tranquilo", "tranquila", "residencial", "exclusivo", "exclusiva", "comercial", "privilegiado", "privilegiada",
+  "sin", "con", "muy", "seguro", "segura", "central", "centrico", "centrica", "estrategico", "estrategica",
+  "cerrado", "cerrada", "privado", "privada", "familiar", "valorizado", "valorizada", "valorizacion", "alta", "alto",
+  "excelente", "reconocido", "reconocida", "popular", "cercano", "cercana", "mas", "que", "donde", "ideal",
+  "hermoso", "hermosa", "agradable", "unico", "unica", "apetecido", "apetecida", "consolidado", "consolidada",
+  "nuevo", "nueva", "moderno", "moderna", "estrato", "bonito", "bonita", "precioso", "preciosa", "lindo", "linda",
+  "silencioso", "silenciosa", "comodo", "comoda", "verde", "verdes", "norte", "sur", "oriente", "occidente",
+  "completa", "completo", "campestres", "como", "para", "por", "este", "esta", "ese", "esa", "excepcional",
+]);
+const LUGAR = / (?:sector|barrio|urbanizacion|urb)(?: (?:el|la|los|las|de|del)){0,2} ([a-z]{4,})( club)?\b/g;
+
+function lugaresNombrados(p, pedidos) {
+  const propios = new Set([...claves(String(p.zona || "")), ...claves(String(p.ciudad || ""))]);
+  const texto = textoDe(p);
+  const vistos = [];
+  for (let m = LUGAR.exec(texto); m; m = LUGAR.exec(texto)) {
+    const nombre = m[1];
+    if (NO_ES_LUGAR.has(nombre) || DESCRIPTIVAS.has(nombre) || pedidos.has(nombre) || propios.has(nombre)) continue;
+    const lugar = `${nombre}${m[2] || ""}`;
+    if (!vistos.includes(lugar)) vistos.push(lugar);
+  }
+  LUGAR.lastIndex = 0;
+  return vistos;
+}
+
 function mencionaOtroBarrio(p, sectoresPedidos = []) {
   const ubic = String(p.zona || "").trim() || String(p.ciudad || "").trim();
   const hijas = zonas.hijasDe(zonas.zonaTokens(ubic));
   if (!hijas.length) return [];
   const pedidos = new Set(sectoresPedidos.flatMap(claves));
   const texto = textoDe(p);
-  return hijas.filter((h) => {
+  const conocidos = hijas.filter((h) => {
     if (pedidos.has(h)) return false;
     const patron = PALABRAS_COMUNES.has(h) ? ` ${INTRO} ${h}\\b` : ` ${h}\\b`;
     return new RegExp(patron).test(texto);
   });
+  return conocidos.length ? conocidos : lugaresNombrados(p, pedidos);
 }
 
 module.exports = { nombra, otrosBarrios, mencionaOtroBarrio, normalizar };
