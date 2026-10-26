@@ -51,3 +51,15 @@ test("asesor: la citada ya cerrada se lo dice al modelo y prohibe reusar el mens
   const d = asesor({ pendientes: [], citada: null, cerrada: { id: "x", estado: "descartada" } });
   assert.match(d, /descartada/);
 });
+
+// Caso Juan, 2026-10-26: con un asesor, Sofi ofrecio "¿quieres que le pregunte
+// al asesor?" y despues dijo que no podia; y mando a corregir el precio en el CRM.
+test("asesor: no se ofrece a preguntarle al asesor y los datos se corrigen en Wasi", () => {
+  for (const encendido of [false, true]) {
+    if (encendido) process.env.SOFI_PREGUNTA_ASESOR = "true";
+    const p = asesor({ pendientes: [], citada: null });
+    assert.match(p, /NUNCA le ofrezcas preguntarle al asesor/);
+    assert.match(p, /se corrigen en Wasi/);
+    assert.doesNotMatch(p, /corregir(lo|la)? en el CRM/i);
+  }
+});
