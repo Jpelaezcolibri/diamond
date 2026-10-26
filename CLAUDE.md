@@ -42,11 +42,14 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
   - **Faltan los 3 grupos que más pedidos traían** (Pedidos Poblado/Envigado,
     PEDIDOS - BUSCANDO, PEDIDOS -Buscando PEDIDOS): eran de Natalia, Daiana no
     está y no hay link de invitación guardado.
-  - **Diseño pendiente de aprobar:** Sofi le pregunta al asesor hasta tener la
-    respuesta (visitas sin cancelar en el plazo + preguntas del colega como
-    precio final, unidad, administración). Respuestas de Juan: contesta en el
-    CRM o por WhatsApp, insistencia como la escalera, la visita sigue hasta
-    2 h antes. Sin spec escrita todavía.
+  - **Sofi le pregunta al asesor (rama `sofi-pregunta-al-asesor`, SIN desplegar).**
+    Spec `docs/superpowers/specs/2026-10-25-sofi-pregunta-al-asesor-design.md`,
+    plan en `docs/superpowers/plans/`. Tabla `preguntas_asesor` (migración
+    `2026-10-25_preguntas_asesor.sql`, **pendiente: Juan**), escalera sin límite
+    (15 min / 60 min, pausa noche y domingo), respuesta por CRM o WhatsApp
+    citando el aviso, entrega literal al colega. Interruptores apagados:
+    `SOFI_PREGUNTA_ASESOR`, `CITAS_SIN_CORTE`. Plantillas por crear en Meta:
+    `pregunta_asesor` y `respuesta_lista`. El CRM muestra las preguntas en "Para atender" (Responder a Sofi / Descartar / Ya le respondí) y `CITAS_SIN_CORTE` corre el plazo a 2 h antes de la visita.
   - Borradores para 4 colegas con cliente: `Claude outputs/visitas-borradores-2026-10-24.md`.
 
 - **Sofi super agente (desplegado 2026-10-21, rama `sofi-super-agente`).**
