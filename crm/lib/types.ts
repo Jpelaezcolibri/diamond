@@ -28,7 +28,7 @@ export type Lead = {
   closed_at?: string | null;
   valor_cierre?: number | null;
   motivo_perdida?: string | null;
-  /** Por que el chat espera a un asesor (plan 6, 2026-10-07): pide_asesor | visita | transferido. */
+  /** Por que el chat espera a un asesor (plan 6, 2026-10-07): pide_asesor | visita | transferido | pregunta. */
   atencion_pendiente?: string | null;
   atencion_desde?: string | null;
   /** La cita del lead (jsonb leads.cita). */

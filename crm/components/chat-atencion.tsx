@@ -23,6 +23,7 @@ const MOTIVO: Record<string, string> = {
   pide_asesor: "🙋 Pidió hablar con un asesor",
   transferido: "🔁 Sofi te lo transfirió",
   visita: "📅 Tiene una visita por confirmar",
+  pregunta: "❓ Sofi le preguntó algo al asesor y espera la respuesta",
 };
 
 export default function ChatAtencion({

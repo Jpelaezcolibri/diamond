@@ -111,7 +111,7 @@ export default async function PendientesPage() {
       .from("preguntas_asesor")
       .select(columnasPregunta)
       .eq("estado", "respondida")
-      .neq("entrega_error", "esperando_ventana")
+      .or("entrega_error.is.null,entrega_error.neq.esperando_ventana")
       .order("respondida_at", { ascending: false })
       .limit(20),
   ]);
