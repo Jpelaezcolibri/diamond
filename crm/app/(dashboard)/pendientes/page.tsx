@@ -102,12 +102,20 @@ export default async function PendientesPage() {
   // Preguntas de colegas al asesor (spec 2026-10-25): pendientes, y las
   // respondidas que no se pudieron entregar (menos las que esperan la ventana).
   // Si la tabla aun no existe, la consulta falla y la seccion no se pinta.
-  const { data: filasPreguntas } = await supabase
-    .from("preguntas_asesor")
-    .select("id, ref, pregunta, estado, asignada_at, created_at, respuesta, respondida_por, entrega_error, asesor_id, lead:leads(id, nombre, phone, source)")
-    .or("estado.eq.pendiente,and(estado.eq.respondida,entrega_error.neq.esperando_ventana)")
-    .order("created_at", { ascending: true })
-    .limit(50);
+  // Dos consultas: las pendientes van primero y las respondidas sin entregar
+  // (las mas recientes) no las pueden sacar de las primeras 50.
+  const columnasPregunta = "id, ref, pregunta, estado, asignada_at, created_at, respuesta, respondida_por, entrega_error, asesor_id, lead:leads(id, nombre, phone, source)";
+  const [{ data: filasPend }, { data: filasSinEntregar }] = await Promise.all([
+    supabase.from("preguntas_asesor").select(columnasPregunta).eq("estado", "pendiente").order("created_at", { ascending: true }).limit(50),
+    supabase
+      .from("preguntas_asesor")
+      .select(columnasPregunta)
+      .eq("estado", "respondida")
+      .neq("entrega_error", "esperando_ventana")
+      .order("respondida_at", { ascending: false })
+      .limit(20),
+  ]);
+  const filasPreguntas = [...((filasPend as unknown[]) || []), ...((filasSinEntregar as unknown[]) || [])];
   type FilaPregunta = Omit<Pregunta, "asesor" | "fichaUrl" | "chatId"> & { asesor_id: string | null };
   const filas = (filasPreguntas as unknown as FilaPregunta[]) || [];
   let preguntas: Pregunta[] = [];

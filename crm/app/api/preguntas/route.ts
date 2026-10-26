@@ -18,13 +18,13 @@ export async function POST(request: Request) {
     preguntaId?: string;
     respuesta?: string;
   };
-  if (!preguntaId || (accion !== "responder" && accion !== "descartar")) return NextResponse.json({ error: "Faltan datos" }, { status: 400 });
+  if (!preguntaId || (accion !== "responder" && accion !== "descartar" && accion !== "entregada")) return NextResponse.json({ error: "Faltan datos" }, { status: 400 });
   if (accion === "responder" && !String(respuesta || "").trim()) return NextResponse.json({ error: "Escribe la respuesta" }, { status: 400 });
 
   const r =
     accion === "responder"
       ? await callBot<{ ok: boolean; texto?: string }>("/api/preguntas/responder", { preguntaId, respuesta, authUserId: user.id })
-      : await callBot<{ ok: boolean }>("/api/preguntas/descartar", { preguntaId, authUserId: user.id, esAdmin: isAdmin(user) });
+      : await callBot<{ ok: boolean }>(accion === "entregada" ? "/api/preguntas/entregada" : "/api/preguntas/descartar", { preguntaId, authUserId: user.id, esAdmin: isAdmin(user) });
   if (!r.ok) {
     const status = [400, 403, 404, 409].includes(r.status) ? r.status : 502;
     return NextResponse.json({ error: r.timeout ? "El bot tardó en responder: revisa en un momento si quedó." : r.error || "El bot no respondió" }, { status });

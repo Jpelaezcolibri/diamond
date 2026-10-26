@@ -166,6 +166,17 @@ async function descartar({ org, preguntaId, por, deps }) {
   return { ok: true };
 }
 
+// Respondida pero sin entregar (solo llamada, ventana cerrada, error): la
+// asesora ya le dio la respuesta por fuera y cierra la tarjeta a mano.
+async function marcarEntregadaAMano({ org, preguntaId, por, deps }) {
+  const d = conDeps(deps);
+  const p = await d.datos.porId(preguntaId);
+  if (!p || p.org_id !== org.id) return { ok: false, codigo: 404, error: "No encontré esa pregunta." };
+  if (p.estado !== "respondida") return { ok: false, codigo: 409, error: "Esa pregunta no está esperando entrega." };
+  await d.datos.actualizar(p.id, { estado: "entregada", entregada_at: new Date().toISOString(), entrega_error: "a_mano" });
+  return { ok: true };
+}
+
 async function entregarPendientesDe({ org, lead, deps }) {
   const d = conDeps(deps);
   const filas = await d.datos.porEntregarDe(lead.id).catch(() => []);
@@ -203,4 +214,4 @@ async function preguntaCitada(contextId) {
   }
 }
 
-module.exports = { preguntaCitada, activo, TIPOS, registrar, avisar, responder, descartar, textoRespuesta, entregarRespuesta, entregarPendientesDe, contextoAsesor, hayPorEntregar };
+module.exports = { preguntaCitada, activo, TIPOS, registrar, avisar, responder, descartar, marcarEntregadaAMano, textoRespuesta, entregarRespuesta, entregarPendientesDe, contextoAsesor, hayPorEntregar };

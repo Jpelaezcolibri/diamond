@@ -52,12 +52,12 @@ function Cabecera({ p, quien }: { p: Pregunta; quien: string }) {
 export default function PreguntaPendiente({ p }: { p: Pregunta }) {
   const router = useRouter();
   const [respuesta, setRespuesta] = useState("");
-  const [enviando, setEnviando] = useState<"responder" | "descartar" | null>(null);
+  const [enviando, setEnviando] = useState<"responder" | "descartar" | "entregada" | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const quien = p.lead ? p.lead.nombre || `+${p.lead.phone}` : "Alguien";
 
-  async function enviar(accion: "responder" | "descartar") {
+  async function enviar(accion: "responder" | "descartar" | "entregada") {
     setEnviando(accion);
     setError(null);
     try {
@@ -68,7 +68,7 @@ export default function PreguntaPendiente({ p }: { p: Pregunta }) {
       });
       const body = await r.json().catch(() => ({}));
       if (r.ok) {
-        setMensaje(accion === "responder" ? body.texto || "Listo." : "Descartada.");
+        setMensaje(accion === "responder" ? body.texto || "Listo." : accion === "entregada" ? "Cerrada." : "Descartada.");
         router.refresh();
       } else setError(body.error || "No se pudo, intenta de nuevo.");
     } catch {
@@ -82,18 +82,30 @@ export default function PreguntaPendiente({ p }: { p: Pregunta }) {
       <li className="rounded-xl border border-amber-200 bg-amber-50 p-4">
         <Cabecera p={p} quien={quien} />
         <div className="mt-1.5 break-words text-sm text-slate-800">
-          Respondida por {p.respondida_por}: <span className="italic">«{p.respuesta}»</span>
+          Respondida por {p.respondida_por || "el equipo"}: <span className="italic">«{p.respuesta}»</span>
         </div>
         <div className="mt-1.5 text-[12.5px] font-semibold text-amber-800">
           {p.entrega_error === "solo_llamada" ? "Pidió solo llamada: llámalo y dale la respuesta." : "No le pude pasar la respuesta: escríbele desde el chat."}
         </div>
-        {p.chatId && (
-          <div className="mt-2">
-            <Link href={`/inbox/${p.chatId}`} className="inline-block rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-[13px] font-bold text-slate-700 hover:bg-slate-50">
-              Abrir chat
-            </Link>
+        {mensaje ? (
+          <div className="mt-2 text-[13.5px] font-semibold text-emerald-700">✓ {mensaje}</div>
+        ) : (
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            {p.chatId && (
+              <Link href={`/inbox/${p.chatId}`} className="inline-block rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-[13px] font-bold text-slate-700 hover:bg-slate-50">
+                Abrir chat
+              </Link>
+            )}
+            <button
+              disabled={enviando !== null}
+              onClick={() => enviar("entregada")}
+              className="rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-[13px] font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+            >
+              {enviando === "entregada" ? "Cerrando…" : "Ya le respondí"}
+            </button>
           </div>
         )}
+        {error && <div className="mt-1.5 text-xs text-red-600">{error}</div>}
       </li>
     );
   }

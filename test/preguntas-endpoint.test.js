@@ -32,6 +32,7 @@ beforeEach(() => {
   organizations.getDefault = async () => ORG;
   advisors.findByAuthUserId = async (_o, id) => (id === "u1" ? { id: "a1", name: "Daiana Zea", activo: true } : null);
   pa.responder = async (a) => { llamadas.push(["responder", a.preguntaId, a.respuesta, a.via]); return { ok: true, texto: "Listo: ya le pasé la respuesta." }; };
+  pa.marcarEntregadaAMano = async (a) => { llamadas.push(["entregada", a.preguntaId, a.por]); return { ok: true }; };
   pa.descartar = async (a) => { llamadas.push(["descartar", a.preguntaId, a.por]); return { ok: true }; };
 });
 
@@ -54,4 +55,11 @@ test("descartar: lo puede hacer un admin sin fila de asesor", async () => {
   const r = await llamar("/api/preguntas/descartar", { preguntaId: "p1", authUserId: "zz", esAdmin: true });
   assert.strictEqual(r.codigo, 200);
   assert.deepStrictEqual(llamadas[0], ["descartar", "p1", "admin"]);
+});
+
+test("entregada: 403 sin asesor ni admin, 200 para admin con por admin", async () => {
+  assert.strictEqual((await llamar("/api/preguntas/entregada", { preguntaId: "p1", authUserId: "zz" })).codigo, 403);
+  const r = await llamar("/api/preguntas/entregada", { preguntaId: "p1", authUserId: "zz", esAdmin: true });
+  assert.strictEqual(r.codigo, 200);
+  assert.deepStrictEqual(llamadas[0], ["entregada", "p1", "admin"]);
 });

@@ -1147,6 +1147,25 @@ router.post("/api/preguntas/descartar", async (req, res) => {
   }
 });
 
+// Respondida que no se pudo entregar: la asesora ya le dio la respuesta por
+// fuera ("Ya le respondí"). Misma regla que descartar.
+router.post("/api/preguntas/entregada", async (req, res) => {
+  try {
+    const { preguntaId, authUserId, esAdmin } = req.body || {};
+    if (!preguntaId || !authUserId) return res.status(400).json({ error: "faltan preguntaId o authUserId" });
+    const org = await organizations.getDefault();
+    const advisor = await require("../data/advisors").findByAuthUserId(org.id, authUserId);
+    const asesorActivo = advisor && advisor.activo !== false;
+    if (!asesorActivo && esAdmin !== true) return res.status(403).json({ error: "tu usuario no está ligado a un asesor activo" });
+    const r = await require("../lib/pregunta-asesor").marcarEntregadaAMano({ org, preguntaId, por: asesorActivo ? advisor.name : "admin" });
+    if (!r.ok) return res.status(r.codigo || 500).json({ error: r.error });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("[api] Error en preguntas/entregada:", e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // "Marcar atendida" de la pestaña Publicaciones del CRM (spec
 // 2026-10-20-publicaciones-y-respuestas §6). Solo el equipo: un asesor activo
 // o un admin del CRM (el CRM manda esAdmin, leido del app_metadata del usuario

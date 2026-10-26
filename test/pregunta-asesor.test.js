@@ -178,3 +178,23 @@ test("responder no limpia un pendiente ajeno (pide_asesor)", async () => {
   await pa.responder({ org: ORG, preguntaId: memory.preguntasAsesor[0].id, respuesta: "450", advisor: A1, via: "crm", deps: deps({ lead: async () => ({ ...LEAD, atencion_pendiente: "pide_asesor" }) }) });
   assert.ok(!envios.some((e) => e.leadPatch));
 });
+
+test("marcarEntregadaAMano: una respondida sin entregar pasa a entregada con a_mano", async () => {
+  await pa.registrar({ ctx: ctx(), input, deps: deps() });
+  Object.assign(memory.preguntasAsesor[0], { estado: "respondida", entrega_error: "solo_llamada" });
+  const r = await pa.marcarEntregadaAMano({ org: ORG, preguntaId: memory.preguntasAsesor[0].id, por: "Daiana", deps: deps() });
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(memory.preguntasAsesor[0].estado, "entregada");
+  assert.strictEqual(memory.preguntasAsesor[0].entrega_error, "a_mano");
+  assert.ok(memory.preguntasAsesor[0].entregada_at);
+});
+
+test("marcarEntregadaAMano: una pendiente da 409 y otra org da 404", async () => {
+  await pa.registrar({ ctx: ctx(), input, deps: deps() });
+  const id = memory.preguntasAsesor[0].id;
+  const r1 = await pa.marcarEntregadaAMano({ org: ORG, preguntaId: id, por: "Daiana", deps: deps() });
+  assert.deepStrictEqual([r1.ok, r1.codigo], [false, 409]);
+  assert.strictEqual(memory.preguntasAsesor[0].estado, "pendiente");
+  const r2 = await pa.marcarEntregadaAMano({ org: { id: "otra" }, preguntaId: id, por: "Daiana", deps: deps() });
+  assert.deepStrictEqual([r2.ok, r2.codigo], [false, 404]);
+});
