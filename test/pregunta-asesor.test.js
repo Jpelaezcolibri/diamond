@@ -57,6 +57,16 @@ test("registrar no duplica ni vuelve a avisar", async () => {
   assert.strictEqual(envios.length, 0);
 });
 
+test("registrar con la respuesta ya lista no dice que sigue esperando", async () => {
+  await pa.registrar({ ctx: ctx(), input, deps: deps() });
+  Object.assign(memory.preguntasAsesor[0], { estado: "respondida", respuesta: "450", entrega_error: "ventana_cerrada" });
+  envios = [];
+  const out = await pa.registrar({ ctx: ctx(), input, deps: deps() });
+  assert.match(out, /Ya tengo la respuesta del asesor/);
+  assert.doesNotMatch(out, /sigues esperando/);
+  assert.strictEqual(envios.length, 0);
+});
+
 test("con la ventana del asesor cerrada usa la plantilla si existe; si no, queda la campana", async () => {
   const cerrada = { mensaje: async () => ({ ok: false, error: "Re-engagement message (131047)" }) };
   process.env.SOFI_PREGUNTA_ASESOR_PLANTILLA = "pregunta_asesor";

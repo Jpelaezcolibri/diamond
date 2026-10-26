@@ -81,6 +81,11 @@ async function registrar({ ctx, input, deps }) {
     else console.error("[preguntas] no se pudo registrar:", e.message);
     return "No pude registrar la pregunta. Dile que lo consultas con el equipo y le escribes, sin prometer hora.";
   }
+  // Ya respondida pero sin entregar (ventana cerrada): se le manda justo
+  // despues del mensaje de Sofi (entregarPendientesDe en whatsapp.js).
+  if (!creada.nueva && creada.pregunta.estado === "respondida") {
+    return "Ya tengo la respuesta del asesor: el sistema se la manda justo después de tu mensaje. No la repitas ni le digas que todavía falta el dato.";
+  }
   if (!creada.nueva) return "Esa pregunta ya está con el asesor. Dile que sigues esperando la respuesta y le escribes apenas llegue. No prometas hora.";
   if (!(ctx.lead.atencion_pendiente)) {
     await d
