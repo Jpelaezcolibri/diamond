@@ -400,7 +400,42 @@ const TOOL_DEFINITIONS = [
       },
     },
   },
+  {
+    name: "preguntar_al_asesor",
+    description:
+      "Para colegas y clientes. Usala cuando te pregunten un dato de una propiedad que NO está en la ficha ni en tus herramientas (precio final o si negocian, nombre de la unidad o si es unidad cerrada, administración, otro dato de la propiedad). Registra la pregunta y el equipo le insiste al asesor hasta tener la respuesta; cuando llega, se la pasamos a la persona. NO la uses para comisiones ni condiciones: eso se confirma con el asesor.",
+    input_schema: {
+      type: "object",
+      properties: {
+        pregunta: { type: "string", description: "La pregunta corta y concreta, con la ref si la hay. Ej: \"¿Precio final de la ref 10013037?\"" },
+        ref: { type: "string", description: "Ref de la propiedad, si la pregunta es por una." },
+        tipo: { type: "string", enum: ["precio", "unidad", "administracion", "otro"] },
+      },
+      required: ["pregunta", "tipo"],
+    },
+  },
+  {
+    name: "responder_pregunta",
+    description:
+      "SOLO para un asesor de la casa (ctx.advisor) contestando una pregunta pendiente de un colega o cliente. En respuesta van LAS PALABRAS DEL ASESOR, tal cual, sin reescribirlas ni completarlas: se le pasan literal a la persona.",
+    input_schema: {
+      type: "object",
+      properties: {
+        pregunta_id: { type: "string", description: "El id de la pregunta, de PREGUNTAS PENDIENTES. Si el asesor citó el aviso, puede omitirse." },
+        respuesta: { type: "string", description: "Lo que dijo el asesor, literal." },
+      },
+      required: ["respuesta"],
+    },
+  },
 ];
+
+// Las tools de preguntas al asesor solo existen con SOFI_PREGUNTA_ASESOR
+// (interruptor sin excepciones: apagado, el modelo ni las ve).
+const TOOLS_PREGUNTA = ["preguntar_al_asesor", "responder_pregunta"];
+function toolsActivas() {
+  if (require("../lib/pregunta-asesor").activo()) return TOOL_DEFINITIONS;
+  return TOOL_DEFINITIONS.filter((t) => !TOOLS_PREGUNTA.includes(t.name));
+}
 
 // Si la propiedad de interes tiene captador, arma el aviso inmediato para su
 // asesor (una sola vez por lead+propiedad). Best-effort: si la migracion del
@@ -740,6 +775,19 @@ async function executeTool(name, input, ctx) {
   if (name === "confirmar_publicacion") return require("./publicar-asesor").confirmar(input, ctx);
   if (name === "actualizar_vigencia") return require("./publicar-asesor").actualizarVigencia(input, ctx);
   if (name === "horarios_disponibles") return horariosDisponibles(input || {}, ctx);
+  if (name === "preguntar_al_asesor" || name === "responder_pregunta") {
+    const pa = require("../lib/pregunta-asesor");
+    if (!pa.activo()) return "Esta herramienta está apagada. Si no tienes el dato, dile que lo consultas con el equipo, sin prometer hora.";
+    if (name === "preguntar_al_asesor") {
+      if (ctx.advisor) return "Esta herramienta es para colegas y clientes, no para un asesor de la casa.";
+      return pa.registrar({ ctx, input: input || {} });
+    }
+    if (!ctx.advisor) return "Esta herramienta es solo para un asesor de la casa.";
+    const preguntaId = (input && input.pregunta_id) || ctx.preguntaId || null;
+    if (!preguntaId) return "No sé a qué pregunta responde. Pregúntale cuál de las PREGUNTAS PENDIENTES es.";
+    const r = await pa.responder({ org: ctx.org, preguntaId, respuesta: input && input.respuesta, advisor: ctx.advisor, via: "whatsapp" });
+    return r.ok ? r.texto : r.error;
+  }
   if (name === "buscar_propiedades") {
     let results;
     if (input.ref) {
@@ -1945,7 +1993,7 @@ function _resetPedidosContacto() {
 }
 
 module.exports = {
-  TOOL_DEFINITIONS, executeTool, maybeCaptadorAlert, registrarDemandaColega, consultarRadarGrupos,
+  TOOL_DEFINITIONS, toolsActivas, executeTool, maybeCaptadorAlert, registrarDemandaColega, consultarRadarGrupos,
   registrarResultadoRadar, registrarResultadosCierre, aprobarPedidoRadar, rechazarPedidoRadar, registrarMandatoCompra,
   marcarColegaSoloLlamada, pedirContactoAsesora, _resetPedidosContacto, avisarDemandaColegaInmediata,
   _resetAvisosDemandaColega,

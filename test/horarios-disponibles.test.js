@@ -60,7 +60,9 @@ beforeEach(() => {
 const horarios = async (input, c = ctx()) => JSON.parse(await executeTool("horarios_disponibles", input, c));
 
 test("la tool está declarada al final de la lista, sin desordenar las demás", () => {
-  assert.strictEqual(TOOL_DEFINITIONS[TOOL_DEFINITIONS.length - 1].name, "horarios_disponibles");
+  // Las tools de preguntas al asesor van después (se agregan siempre al final).
+  const sinPreguntas = TOOL_DEFINITIONS.filter((t) => t.name !== "preguntar_al_asesor" && t.name !== "responder_pregunta");
+  assert.strictEqual(sinPreguntas[sinPreguntas.length - 1].name, "horarios_disponibles");
   assert.strictEqual(TOOL_DEFINITIONS[0].name, "buscar_propiedades");
 });
 

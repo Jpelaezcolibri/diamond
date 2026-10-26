@@ -6,7 +6,7 @@ const advisors = require("../data/advisors");
 const directorio = require("../groups/directorio");
 const groupSignals = require("../data/group-signals");
 const { buildSystemPrompt } = require("./prompts");
-const { TOOL_DEFINITIONS, executeTool, maybeCaptadorAlert } = require("./tools");
+const { executeTool, maybeCaptadorAlert, toolsActivas } = require("./tools");
 const { isQualified } = require("./qualification");
 const { buildAdvisorAlert, formatCitaFechaHora } = require("../notifications/advisor");
 const { detectSellerIntent, intencionDeDuenoEnTurno, detectClientLanguage } = require("./intent");
@@ -353,7 +353,7 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
     ...paramsDeModelo(config.claudeModel, { maxTokens: 2048 }),
     system,
     messages,
-    tools: TOOL_DEFINITIONS,
+    tools: toolsActivas(),
   });
   registrarUso("engine", response.usage);
 
@@ -389,7 +389,7 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
       ...paramsDeModelo(config.claudeModel, { maxTokens: 2048 }),
       system,
       messages,
-      tools: TOOL_DEFINITIONS,
+      tools: toolsActivas(),
     });
     // Cada vuelta reenvia el historial COMPLETO, incluido el tool_result de
     // buscar_propiedades: es la llamada mas cara del sistema y la que hay que
@@ -407,7 +407,7 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
   // se cierra la promesa con una salida honesta.
   if (!finalText && iterations > 0 && response.stop_reason !== "tool_use") {
     console.warn("[engine] Sin respuesta final despues de usar herramientas — reintentando");
-    response = await client.messages.create({ ...paramsDeModelo(config.claudeModel, { maxTokens: 2048 }), system, messages, tools: TOOL_DEFINITIONS });
+    response = await client.messages.create({ ...paramsDeModelo(config.claudeModel, { maxTokens: 2048 }), system, messages, tools: toolsActivas() });
     registrarUso("engine:reintento_final", response.usage);
     const reintento = extractText(response);
     textParts.push(
@@ -425,7 +425,7 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
       ...paramsDeModelo(config.claudeModel, { maxTokens: 2048 }),
       system,
       messages,
-      tools: TOOL_DEFINITIONS,
+      tools: toolsActivas(),
     });
     registrarUso("engine:reintento", response.usage);
     reply = extractText(response);
