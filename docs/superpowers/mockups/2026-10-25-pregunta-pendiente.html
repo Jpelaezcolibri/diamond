@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Preguntas de colegas</title>
+<style>
+  :root {
+    --navy: #0b1526; --gold: #c9a24b; --bg: #eef1f5; --card: #fff; --ink: #0f172a;
+    --muted: #64748b; --line: #e2e8f0; --sky: #0284c7; --skybg: #f0f9ff; --skyline: #bae6fd;
+    --amber: #d97706; --amberbg: #fffbeb; --amberline: #fde68a; --wa: #16a34a;
+  }
+  * { box-sizing: border-box; }
+  html, body { overflow-x: hidden; }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--ink); }
+  .note { background: #fff7ed; border-bottom: 1px solid #fed7aa; color: #9a3412; font-size: 13px; padding: 8px 24px; }
+  .topnav { background: var(--navy); color: #cbd5e1; display: flex; gap: 22px; align-items: center; padding: 10px 24px; font-size: 14px; border-bottom: 1px solid rgba(201,162,75,.3); overflow-x: auto; white-space: nowrap; }
+  .topnav b { color: var(--gold); letter-spacing: .08em; margin-right: 10px; }
+  .topnav .on { background: rgba(201,162,75,.18); color: var(--gold); padding: 5px 10px; border-radius: 8px; }
+  .lado { display: grid; grid-template-columns: minmax(0, 1fr) 375px; gap: 28px; max-width: 1280px; margin: 0 auto; padding: 18px 16px 48px; align-items: start; }
+  .etq { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 8px; font-weight: 600; }
+  h1 { font-size: 20px; margin: 0 0 14px; }
+  h2 { margin: 18px 0 8px; font-size: 12.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+  .card { border-radius: 14px; padding: 14px 16px; border: 1px solid var(--line); background: var(--card); }
+  .preg { background: var(--skybg); border-color: var(--skyline); }
+  .sinent { background: var(--amberbg); border-color: var(--amberline); }
+  .visita { background: var(--amberbg); border-color: var(--amberline); }
+  .quien { font-weight: 600; } .quien small { color: var(--muted); font-weight: 400; }
+  .ref { color: #475569; font-size: 14px; } .ref a { color: var(--sky); text-decoration: none; margin-left: 4px; font-size: 13px; }
+  .q { margin-top: 6px; font-size: 15px; line-height: 1.4; }
+  .meta { margin-top: 6px; font-size: 12px; color: var(--muted); display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .pill { background: #e0f2fe; color: #075985; border-radius: 999px; padding: 2px 8px; font-weight: 600; }
+  .pill.rojo { background: #fee2e2; color: #991b1b; }
+  textarea { margin-top: 10px; width: 100%; min-height: 64px; border: 1px solid #cbd5e1; border-radius: 10px; padding: 9px 10px; font: inherit; font-size: 14px; resize: vertical; background: #fff; }
+  .acc { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .btn { border: 0; border-radius: 9px; padding: 8px 14px; font-size: 13px; font-weight: 700; cursor: pointer; }
+  .prim { background: var(--navy); color: #fff; } .prim span { color: var(--gold); }
+  .sec { background: #fff; color: #334155; border: 1px solid #cbd5e1; }
+  .ayuda { font-size: 12px; color: var(--muted); }
+  .resp { margin-top: 6px; font-size: 14px; } .resp q { font-style: italic; }
+  .alerta { margin-top: 6px; font-size: 12.5px; color: #92400e; font-weight: 600; }
+  .ok { margin-top: 8px; font-size: 13.5px; color: #047857; font-weight: 600; }
+  .phone { border: 10px solid #111827; border-radius: 34px; background: var(--bg); overflow: hidden; box-shadow: 0 20px 40px rgba(15,23,42,.18); }
+  .phone .barra { background: var(--navy); color: var(--gold); font-weight: 700; letter-spacing: .08em; font-size: 13px; padding: 12px 14px; }
+  .phone .cont { padding: 12px; }
+  .phone h1 { font-size: 17px; }
+  .phone .q { font-size: 14.5px; }
+  @media (max-width: 900px) { .lado { grid-template-columns: 1fr; } .phone { max-width: 375px; margin: 0 auto; } }
+</style>
+</head>
+<body>
+<div class="note">Mockup para aprobar · "Para atender" del CRM con la sección nueva <b>Preguntas de colegas</b>. Datos de ejemplo (casos reales del 22-oct). No hay código todavía.</div>
+<div class="topnav"><b>DIAMOND</b><span>Inbox</span><span class="on">Para atender</span><span>Leads</span><span>Grupos</span><span>Calendario</span><span>Publicaciones</span></div>
+
+<div class="lado">
+  <section>
+    <p class="etq">Escritorio</p>
+    <h1>Para atender</h1>
+
+    <h2>Preguntas de colegas (2)</h2>
+    <ul>
+      <li class="card preg">
+        <div class="quien">Andrea Strauch <small>(colega)</small> <span class="ref">· Ref 10013037 <a href="#">ver ficha ↗</a></span></div>
+        <div class="q">¿Precio final de la ref 10013037? Tiene 2 clientes interesados.</div>
+        <div class="meta"><span class="pill rojo">Espera hace 1 h 20 min</span> la tiene Claudia · ya pasó por Daiana</div>
+        <textarea placeholder="Escribe el dato tal cual: se lo pasamos literal al colega">450 es el precio final, el propietario negocia poco.</textarea>
+        <div class="acc">
+          <button class="btn prim">Enviar respuesta <span>→</span></button>
+          <button class="btn sec">Descartar</button>
+          <span class="ayuda">También puedes responder el WhatsApp de Sofi citando el aviso.</span>
+        </div>
+      </li>
+
+      <li class="card sinent">
+        <div class="quien">Alberto Posada <small>(colega)</small> <span class="ref">· Ref 10229646 <a href="#">ver ficha ↗</a></span></div>
+        <div class="resp">Respondida por Daiana: <q>Es unidad cerrada, se llama Mirador de La Manuela.</q></div>
+        <div class="alerta">No le pude pasar la respuesta (pasaron más de 24 h): escríbele desde el chat.</div>
+        <div class="acc"><button class="btn sec">Abrir chat</button></div>
+      </li>
+    </ul>
+
+    <h2>Visitas por confirmar (1)</h2>
+    <ul>
+      <li class="card visita">
+        <div class="quien">Jorge Luis Cardona <small>(colega)</small></div>
+        <div class="ref">martes 27 de octubre, 10:00 a. m. · ref 9944723</div>
+        <div class="alerta">Confírmala antes de lunes 26 de octubre, 8:00 p. m. o se cancela</div>
+        <div class="ayuda" style="margin-top:4px">Se confirma con el botón del WhatsApp o escribiéndole "OK CONFIRMADA" a Sofi.</div>
+      </li>
+    </ul>
+  </section>
+
+  <section>
+    <p class="etq">Celular (375 px)</p>
+    <div class="phone">
+      <div class="barra">DIAMOND · Para atender</div>
+      <div class="cont">
+        <h2 style="margin-top:4px">Preguntas de colegas (2)</h2>
+        <ul>
+          <li class="card preg">
+            <div class="quien">Andrea Strauch <small>(colega)</small></div>
+            <div class="ref">Ref 10013037 <a href="#">ver ficha ↗</a></div>
+            <div class="q">¿Precio final de la ref 10013037? Tiene 2 clientes interesados.</div>
+            <div class="meta"><span class="pill rojo">1 h 20 min</span> la tiene Claudia</div>
+            <textarea placeholder="Escribe el dato tal cual: se lo pasamos literal al colega"></textarea>
+            <div class="acc">
+              <button class="btn prim">Enviar respuesta <span>→</span></button>
+              <button class="btn sec">Descartar</button>
+            </div>
+          </li>
+          <li class="card preg">
+            <div class="quien">Andrea Strauch <small>(colega)</small></div>
+            <div class="ref">Ref 10013037</div>
+            <div class="ok">✓ Listo: ya le pasé la respuesta.</div>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </section>
+</div>
+</body>
+</html>
