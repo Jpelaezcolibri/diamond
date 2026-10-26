@@ -307,8 +307,53 @@ function colegaTajante({ texto = null, veredicto = null } = {}) {
 
 // Lo que pasan los caminos del DM a filtrar(): el interruptor, salvo colega
 // tajante.
-function zonaCercanaPara({ texto = null, veredicto = null } = {}, env = process.env) {
-  return dmZonaCercanaActivo(env) && !colegaTajante({ texto, veredicto });
+//
+// TAJANTE POR COLEGA, NO POR PEDIDO (segunda revision, N2, 2026-10-26).
+// Alberto Posada escribio "No enviar inmuebles que no cumplan con todo" en
+// ca3ae1cd y tres dias despues publico be41c4a8 sin la frase: mirando solo el
+// pedido, le habrian salido 3 fichas de Guayabal y Los Colores. `historial`
+// son los textos de sus pedidos recientes (vivo.js#zonaCercanaDelColega, 90
+// dias): si alguno es tajante, el colega lo es. `null` = no se pudo leer, y
+// ante la duda no hay zona cercana. Sin `historial` (undefined) solo se mira
+// el pedido, como antes (lo usan las simulaciones).
+function zonaCercanaPara({ texto = null, veredicto = null, historial } = {}, env = process.env) {
+  if (!dmZonaCercanaActivo(env) || colegaTajante({ texto, veredicto })) return false;
+  if (historial === undefined) return true;
+  if (!Array.isArray(historial)) return false;
+  return !historial.some((t) => colegaTajante({ texto: t }));
+}
+
+// UN INCUMPLIMIENTO CONOCIDO APAGA LA ZONA CERCANA (segunda revision, N2).
+// En be41c4a8 la 10311038 (Los Colores) llevaba "está registrada como
+// urbanización cerrada y pediste que no sea unidad cerrada": otra zona MAS
+// algo que se sabe que no cumple es demasiado para la ultima opcion. Cuenta:
+//   · lo que Sofi escribio en `le_falta` para esa ref, salvo que cada parte
+//     diga que el dato NO lo tenemos ("no tengo confirmado", "no está
+//     registrado"...): ante la duda, es un incumplimiento;
+//   · los cortos del motor (cortosDe: "2 alcobas (pediste 3)", precio sobre
+//     el tope dentro del margen);
+//   · con `pedido`, menos alcobas o menos area que lo pedido (redactar.js#
+//     desvios los escribe aunque el match guardado no traiga la razon).
+const NO_LO_SABEMOS = /\bno\s+(?:lo\s+|la\s+)?(?:tengo|tenemos|est[aá]n?|hay|aparece|figura)\s+(?:\S+\s+){0,3}?(?:confirmad|registrad|cargad)|\bsin\s+(?:confirmar|dato|registrar)|\bpor\s+confirmar|\bno\s+(?:lo\s+|la\s+)?(?:dice|registra|trae|menciona|especifica|indica)\b|\bno\s+(?:se\s+sabe|s[eé]\b)|\bno\s+tengo\s+(?:el\s+)?dato/i;
+
+function partesDeNota(detalle) {
+  return String(detalle || "").split(/\s*(?:[·;]|\.\s+)\s*/).map((p) => p.trim()).filter(Boolean);
+}
+
+function incumplimientoConocido(match, { leFalta = null, pedido = null } = {}) {
+  if (cortosDe(match).length) return true;
+  const ref = String(match && match.ref);
+  const notas = (Array.isArray(leFalta) ? leFalta : []).filter((f) => f && String(f.ref) === ref);
+  if (notas.some((f) => partesDeNota(f.detalle).some((p) => !NO_LO_SABEMOS.test(p)))) return true;
+  if (pedido) {
+    const pide = Number(pedido.habitaciones) || 0;
+    const tiene = Number(match.habitaciones) || 0;
+    if (pide > 0 && tiene > 0 && tiene < pide) return true;
+    const areaMin = Number(pedido.areaMin || pedido.area_min) || 0;
+    const area = formato.parsearArea(match.area) || 0;
+    if (areaMin > 0 && area > 0 && area < areaMin) return true;
+  }
+  return false;
 }
 
 // Devuelve la marca que viaja en la copia del match ({ tipo: "vecina" } o
@@ -327,7 +372,7 @@ function gradoDeHoy(match, pedido) {
   return g ? g.grado : null;
 }
 
-function zonaCercanaDe(motivos, match, { conAclaracion = false, pedido = null } = {}) {
+function zonaCercanaDe(motivos, match, { conAclaracion = false, pedido = null, leFalta = null } = {}) {
   if (!match || !Array.isArray(motivos)) return null;
   let motivoZona;
   let marca;
@@ -345,6 +390,7 @@ function zonaCercanaDe(motivos, match, { conAclaracion = false, pedido = null } 
     if (marca.tipo === "vecina" && hoy !== "vecina") return null;
     if (marca.tipo === "barrio" && hoy !== "zona_general") return null;
   }
+  if (incumplimientoConocido(match, { leFalta, pedido })) return null;
   const resto = motivos.filter((m) => m !== motivoZona);
   if (resto.length === 0) return marca;
   return conAclaracion && soloAclarables(resto, match) ? marca : null;
@@ -476,7 +522,7 @@ function filtrar(matches, opciones = {}) {
     let marca = null;
     if (veredicto.ok) publicables.push(m);
     else if (conAclaracion && soloAclarables(veredicto.motivos, m)) conDatoPorConfirmar.push({ m, motivos: veredicto.motivos });
-    else if (zonaCercana && (marca = zonaCercanaDe(veredicto.motivos, m, { conAclaracion, pedido: opciones.pedido || null }))) {
+    else if (zonaCercana && (marca = zonaCercanaDe(veredicto.motivos, m, { conAclaracion, pedido: opciones.pedido || null, leFalta: opciones.leFalta || null }))) {
       cercanas.push({ m: { ...m, zona_cercana: marca }, original: m, motivos: veredicto.motivos });
     } else descartados.push({ ref: m && m.ref, motivos: veredicto.motivos });
   }

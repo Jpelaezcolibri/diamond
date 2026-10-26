@@ -1015,6 +1015,59 @@ async function refsYaEnviadas(orgId, { lid = null, telefono = null } = {}, desde
   return new Set((data || []).flatMap((r) => (r.respuesta_refs || []).map(String)));
 }
 
+// Los textos de los pedidos recientes de un colega (segunda revision del DM
+// amplio, N2, 2026-10-26). Alberto Posada escribio "No enviar inmuebles que
+// no cumplan con todo" en un pedido y tres dias despues publico otro sin la
+// frase: la zona cercana lo miraba por pedido y le habria mandado tres fichas
+// de otra zona. publicable.js#zonaCercanaPara revisa estos textos con la misma
+// deteccion de "colega tajante". Sin migracion: se lee texto_original.
+//
+// Mismas llaves que refsYaEnviadas: los digitos del lid (autor_telefono o
+// respuesta_destino_lid, con y sin sufijo) y el telefono (autor_telefono o
+// respuesta_destino_telefono). Devuelve un array de textos, o null si la
+// consulta fallo o no hay con que identificar al colega: quien llama falla
+// cerrado (sin zona cercana).
+async function textosRecientesColega(orgId, { lid = null, telefono = null } = {}, desdeIso, limite = 30) {
+  const digitosLid = String(lid || "").replace(/@.*$/, "").replace(/\D/g, "");
+  const digitosTel = String(telefono || "").replace(/\D/g, "");
+  const lids = digitosLid.length >= 10 ? [`${digitosLid}@lid`, digitosLid] : [];
+  const autores = [...new Set([digitosLid, digitosTel].filter((d) => d.length >= 10))];
+  const telefonos = digitosTel.length >= 10 ? [digitosTel] : [];
+  if (!autores.length) return null;
+
+  if (!supabase) {
+    return (memory.groupSignals || [])
+      .filter(
+        (s) =>
+          s.org_id === orgId &&
+          String(s.created_at || "") >= desdeIso &&
+          (lids.includes(s.respuesta_destino_lid) || autores.includes(s.autor_telefono) || telefonos.includes(s.respuesta_destino_telefono))
+      )
+      .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
+      .slice(0, limite)
+      .map((s) => s.texto_original || "");
+  }
+
+  const condiciones = [
+    ...lids.map((l) => `respuesta_destino_lid.eq.${l}`),
+    ...autores.map((a) => `autor_telefono.eq.${a}`),
+    ...telefonos.map((t) => `respuesta_destino_telefono.eq.${t}`),
+  ];
+  const { data, error } = await supabase
+    .from("group_signals")
+    .select("texto_original")
+    .eq("org_id", orgId)
+    .gte("created_at", desdeIso)
+    .or(condiciones.join(","))
+    .order("created_at", { ascending: false })
+    .limit(limite);
+  if (error) {
+    console.error("[grupos] No se pudo leer los pedidos recientes del colega:", error.message);
+    return null;
+  }
+  return (data || []).map((r) => r.texto_original || "");
+}
+
 async function dmsHoyLinea(orgId, desdeIso) {
   if (!supabase) return 0;
   const { data, error } = await supabase
@@ -1223,7 +1276,7 @@ module.exports = {
   pedidosDirectosSinAvisar,
   findByWamid, pendientesDeAviso, candidatosRecordatorio, claimRecordatorio,
   candidatosEscaladoSilencio, claimEscaladoSilencio,
-  dmsHoyPorColega, dmsHoyLinea, refsYaEnviadas,
+  dmsHoyPorColega, dmsHoyLinea, refsYaEnviadas, textosRecientesColega,
   CLASES, ORIGENES, MODOS_RESPUESTA, COLUMNAS_NUEVAS, _resetBlindaje,
 };
 

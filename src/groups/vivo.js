@@ -426,6 +426,27 @@ async function quitarYaEnviadas(org, { lid = null, telefono = null } = {}, propi
   return { quedan: propiedades.filter((m) => !repetidas.includes(m)), repetidas: repetidas.map((m) => String(m.ref)) };
 }
 
+// ZONA CERCANA, MIRANDO AL COLEGA Y NO SOLO AL PEDIDO (segunda revision del
+// DM amplio, N2, 2026-10-26). Lo que pasan los 4 caminos del DM a
+// publicable.filtrar: el interruptor, salvo que este pedido o cualquiera de
+// los del mismo colega en los ultimos 90 dias sea tajante ("No enviar
+// inmuebles que no cumplan", "solo en X"). Con el interruptor apagado no se
+// consulta nada. Si la consulta falla, no hay zona cercana (falla cerrado):
+// el pedido cae a la asesora como antes del DM amplio.
+const HISTORIAL_COLEGA_DIAS = 90;
+
+async function zonaCercanaDelColega(orgId, { lid = null, telefono = null, texto = null, veredicto = null } = {}, ahora = new Date()) {
+  if (!publicable.zonaCercanaPara({ texto, veredicto })) return false;
+  const desdeIso = new Date(ahora.getTime() - HISTORIAL_COLEGA_DIAS * 24 * 3600 * 1000).toISOString();
+  let historial = null;
+  try {
+    historial = await groupSignals.textosRecientesColega(orgId, { lid, telefono }, desdeIso);
+  } catch (e) {
+    console.warn("[radar] No se pudo leer el historial del colega; la zona cercana queda apagada:", e.message);
+  }
+  return publicable.zonaCercanaPara({ texto, veredicto, historial });
+}
+
 // Las notas de Sofi (salvedad y le_falta) con las aclaraciones de las fichas
 // que salen con un dato por confirmar (ver publicable.js#notasParaDm). Sin
 // aclaraciones son las notas de Sofi tal cual.
@@ -598,9 +619,15 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
       syncFresco: inventarioDm.fresco,
       umbral: 0,
       conAclaracion: publicable.dmConAclaracionActivo(),
-      zonaCercana: publicable.zonaCercanaPara({ texto: mensaje.texto, veredicto }),
+      zonaCercana: await zonaCercanaDelColega(
+        org.id,
+        { lid: mensaje.autorTelefono || null, telefono: telefonoColega, texto: mensaje.texto, veredicto },
+        ahora || new Date()
+      ),
       // El grado de zona se recalcula contra el pedido (ver publicable.js#gradoDeHoy).
       pedido: c,
+      // Lo que Sofi sabe que no cumple apaga la zona cercana de esa ref (N2).
+      leFalta: [...((veredicto && veredicto.le_falta) || []), ...dudosasDm.leFalta],
     }
   );
   const { verificadas: utiles, rotas: rotasDm } = await verificarLink.verificar(utilesLimpias);
@@ -1304,9 +1331,15 @@ async function aprobarManual(org, signalId) {
     syncFresco: inventario.fresco,
     umbral: 0,
     conAclaracion: publicable.dmConAclaracionActivo(),
-    zonaCercana: publicable.zonaCercanaPara({ texto: signal.texto_original, veredicto: signal.revalidacion }),
+    zonaCercana: await zonaCercanaDelColega(org.id, {
+      lid: signal.autor_telefono || null,
+      telefono: signal.respuesta_destino_telefono || null,
+      texto: signal.texto_original,
+      veredicto: signal.revalidacion,
+    }),
     // El grado guardado en la señal puede ser viejo: se recalcula (I2).
     pedido: signal,
+    leFalta: (signal.revalidacion && signal.revalidacion.le_falta) || [],
   });
   const { verificadas: publicables, rotas } = await verificarLink.verificar(candidatas);
   for (const r of rotas) descartados.push({ ref: r.ref, motivos: ["link_no_abre"] });
@@ -1558,9 +1591,15 @@ async function responderPorDmManual(org, signalId, { sesion = null, refs = null 
     syncFresco: inventario.fresco,
     umbral: 0,
     conAclaracion: publicable.dmConAclaracionActivo(),
-    zonaCercana: publicable.zonaCercanaPara({ texto: signal.texto_original, veredicto: signal.revalidacion }),
+    zonaCercana: await zonaCercanaDelColega(org.id, {
+      lid: signal.autor_telefono || null,
+      telefono: signal.respuesta_destino_telefono || null,
+      texto: signal.texto_original,
+      veredicto: signal.revalidacion,
+    }),
     // El grado guardado en la señal puede ser viejo: se recalcula (I2).
     pedido: signal,
+    leFalta: (signal.revalidacion && signal.revalidacion.le_falta) || [],
   });
   const { verificadas: publicables, rotas } = await verificarLink.verificar(candidatas);
   for (const r of rotas) descartados.push({ ref: r.ref, motivos: ["link_no_abre"] });
@@ -1850,9 +1889,15 @@ async function prepararAviso(org, signalId, { sesion = null } = {}) {
     syncFresco: inventario.fresco,
     umbral: 0,
     conAclaracion: publicable.dmConAclaracionActivo(),
-    zonaCercana: publicable.zonaCercanaPara({ texto: signal.texto_original, veredicto: rev }),
+    zonaCercana: await zonaCercanaDelColega(org.id, {
+      lid: signal.autor_telefono || null,
+      telefono: signal.respuesta_destino_telefono || null,
+      texto: signal.texto_original,
+      veredicto: rev,
+    }),
     // El grado guardado en la señal puede ser viejo: se recalcula (I2).
     pedido: signal,
+    leFalta: rev.le_falta || [],
   });
   const { verificadas: utiles, rotas } = await verificarLink
     .verificar(candidatas)

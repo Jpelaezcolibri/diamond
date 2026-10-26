@@ -45,6 +45,10 @@ let dmsHoyLineaMock = 0;
 let enviosDm = [];
 let envioDmResultado = { ok: true, wamid: "wm-dm-1" };
 let refsYaEnviadasMock = new Set();
+// N2 (2026-10-26): los pedidos recientes del colega (texto_original).
+let historialColegaMock = [];
+let historialColegaFalla = false;
+let consultasHistorial = [];
 let extraClasificado = {};
 // ── Escalado inmediato marca la señal, para que radar-silencio no la reintente ──
 let claimsEscaladoSilencio = [];
@@ -110,6 +114,11 @@ function instalar() {
       dmsHoyPorColega: async () => dmsHoyColegaMock,
       dmsHoyLinea: async () => dmsHoyLineaMock,
       refsYaEnviadas: async () => refsYaEnviadasMock,
+      textosRecientesColega: async (orgId, ids, desdeIso) => {
+        consultasHistorial.push({ orgId, ids, desdeIso });
+        if (historialColegaFalla) throw new Error("supabase caido");
+        return historialColegaMock;
+      },
       claimEscaladoSilencio: async (orgId, signalId) => {
         claimsEscaladoSilencio.push({ orgId, signalId });
         return true;
@@ -270,6 +279,9 @@ beforeEach(() => {
   enviosDm = [];
   envioDmResultado = { ok: true, wamid: "wm-dm-1" };
   refsYaEnviadasMock = new Set();
+  historialColegaMock = [];
+  historialColegaFalla = false;
+  consultasHistorial = [];
   extraClasificado = {};
   claimsEscaladoSilencio = [];
   operacionDevuelta = "venta";
@@ -1617,3 +1629,53 @@ test("dudosas: la ficha no lleva 'revísala' ni jerga del motor; el aviso va en 
   assert.match(enviosDm[1].texto, /cuesta \$950M y pediste hasta \$900M/);
   assert.match(enviosDm[0].texto, /Revisa la aclaración de cada ficha antes de pasársela a tu cliente/);
 }));
+
+// N2 (segunda revision, 2026-10-26): el colega tajante lo es en TODOS sus
+// pedidos. be41c4a8 (Alberto Posada, 24-oct) no trae la frase; su ca3ae1cd
+// (21-oct) decia "No enviar inmuebles que no cumplan con todo".
+const ALBERTO_BE41C4A8 = "Busco apto \nDos alcobas \nParqueadero \nAscensor al piso \nBalcón necesario \nPiso 5 hacia arriba \nNo en unidad cerrada \n\nValor máximo \n600.000.000\nLaureles \nCastellana \nConquistadores\nSan Joaquín \nBelén alameda \nBelén Malibú \nBelén rosales \nNo último piso \n\nCliente directo comprando ya efectivo \nAlberto posada \n3113345468 \n\nCódigo cliente \n21899";
+const ALBERTO_CA3AE1CD = "Quien con apto el laureles \nConquistadores \nBelén rosales \nSan Joaquín \n\nDel 5 piso hacia arriba \nAscensor al piso \nValor \nMáximo \n600.000.000\nDos alcobas \nGaraje \nÚtil \n\nCliente comprando ya mismo \nNo enviar inmuebles que no cumplan con todo \nGracias\nAlberto posada \n3113345468 \n\nNo calle de ruido";
+
+test("N2: be41c4a8 sin la frase, pero el colega ya la escribio antes: no recibe zona cercana", conEnv({ RADAR_DM_ZONA_CERCANA: "true" }, async () => {
+  telefonoColegaResuelto = "573113345468";
+  extraClasificado = { zona: "Laureles" };
+  matchesDevueltos = [match({ ubicacion: "vecina", zona: "Belén" })];
+  historialColegaMock = [ALBERTO_BE41C4A8, ALBERTO_CA3AE1CD];
+  const m = mensaje();
+  m.texto = ALBERTO_BE41C4A8;
+  const r = await vivo.procesarMensaje(ORG, m, { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+  assert.notStrictEqual(r.resultado, "dm_enviado");
+  assert.strictEqual(enviosDm.length, 0);
+  assert.strictEqual(politicasGuardadas[politicasGuardadas.length - 1].motivo, "zona_vecina");
+  assert.strictEqual(consultasHistorial.length, 1);
+  assert.strictEqual(consultasHistorial[0].ids.telefono, "573113345468");
+  const dias = (Date.now() - Date.parse(consultasHistorial[0].desdeIso)) / 864e5;
+  assert.ok(dias > 89 && dias < 91, "mira 90 dias");
+}));
+
+test("N2: el mismo pedido de un colega sin historial tajante si recibe la zona cercana", conEnv({ RADAR_DM_ZONA_CERCANA: "true" }, async () => {
+  telefonoColegaResuelto = "573113345468";
+  extraClasificado = { zona: "Laureles" };
+  matchesDevueltos = [match({ ubicacion: "vecina", zona: "Belén" })];
+  historialColegaMock = [ALBERTO_BE41C4A8];
+  const m = mensaje();
+  m.texto = ALBERTO_BE41C4A8;
+  const r = await vivo.procesarMensaje(ORG, m, { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+  assert.strictEqual(r.resultado, "dm_enviado");
+}));
+
+test("N2: si el historial del colega no se puede leer, no sale zona cercana (falla cerrado)", conEnv({ RADAR_DM_ZONA_CERCANA: "true" }, async () => {
+  telefonoColegaResuelto = "573113345468";
+  extraClasificado = { zona: "Laureles" };
+  matchesDevueltos = [match({ ubicacion: "vecina", zona: "Belén" })];
+  historialColegaFalla = true;
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+  assert.notStrictEqual(r.resultado, "dm_enviado");
+  assert.strictEqual(enviosDm.length, 0);
+}));
+
+test("N2: con la zona cercana apagada no se consulta el historial", async () => {
+  telefonoColegaResuelto = "573113345468";
+  await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+  assert.strictEqual(consultasHistorial.length, 0);
+});

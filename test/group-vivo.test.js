@@ -57,6 +57,9 @@ let operacionDevuelta = "venta";
 let telefonoColegaManual = null;
 let enviosDmManual = [];
 let refsYaEnviadasManualMock = new Set();
+// N2 (2026-10-26): los pedidos recientes del colega (texto_original).
+let historialColegaManualMock = [];
+let consultasHistorialManual = [];
 let envioDmManualResultado = { ok: true, wamid: "wm-dm-manual" };
 let dmsHoyColegaManualMock = 0;
 let dmsHoyLineaManualMock = 0;
@@ -145,6 +148,10 @@ function instalarDobles() {
       dmsHoyPorColega: async () => dmsHoyColegaManualMock,
       dmsHoyLinea: async () => dmsHoyLineaManualMock,
       refsYaEnviadas: async () => refsYaEnviadasManualMock,
+      textosRecientesColega: async (orgId, ids, desdeIso) => {
+        consultasHistorialManual.push({ orgId, ids, desdeIso });
+        return historialColegaManualMock;
+      },
     },
   };
   require.cache[RUTA("data/whatsapp-groups.js")] = {
@@ -285,6 +292,8 @@ beforeEach(() => {
   telefonoColegaManual = null;
   enviosDmManual = [];
   refsYaEnviadasManualMock = new Set();
+  historialColegaManualMock = [];
+  consultasHistorialManual = [];
   envioDmManualResultado = { ok: true, wamid: "wm-dm-manual" };
   dmsHoyColegaManualMock = 0;
   dmsHoyLineaManualMock = 0;
@@ -1836,6 +1845,26 @@ test("responderPorDmManual y prepararAviso: el grado de zona viejo no imprime un
 
     const aviso = await vivo.prepararAviso({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
     assert.doesNotMatch(JSON.stringify(aviso.mensajes || aviso.mensaje || ""), /No es en/);
+  } finally {
+    process.env.RADAR_DM_ZONA_CERCANA = "false"; // el valor fijo de helpers/interruptores-dm.js
+  }
+});
+
+// N2 (segunda revision, 2026-10-26): el camino manual tambien mira el
+// historial del colega. Alberto Posada ya escribio "No enviar inmuebles que
+// no cumplan con todo" en otro pedido: no recibe la vecina aunque este pedido
+// no lo diga.
+test("responderPorDmManual: el colega que fue tajante en otro pedido no recibe zona cercana", async () => {
+  process.env.RADAR_DM_ZONA_CERCANA = "true";
+  try {
+    señalParaAprobar = señalCallada({ zona: "Envigado", autor_telefono: "272245326893071", matches: [matchBueno({ ubicacion: "vecina", zona: "Itagüí" })] });
+    grupoParaAprobar = grupoHabilitado();
+    telefonoColegaManual = "573113345468";
+    historialColegaManualMock = ["Apto en Envigado, cliente comprando ya mismo \nNo enviar inmuebles que no cumplan con todo"];
+    const r = await vivo.responderPorDmManual({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
+    assert.strictEqual(r.resultado, "sin_propiedades_publicables");
+    assert.strictEqual(enviosDmManual.length, 0);
+    assert.strictEqual(consultasHistorialManual[0].ids.lid, "272245326893071");
   } finally {
     process.env.RADAR_DM_ZONA_CERCANA = "false"; // el valor fijo de helpers/interruptores-dm.js
   }

@@ -433,3 +433,62 @@ test("I2: una vecina guardada por la vecindad de la zona madre (Zúñiga -> Envi
   const r = publicable.filtrar([ficha({ ubicacion: "vecina", zona: "Envigado" })], { ...ON, pedido: { zonas: ["Zúñiga"], zona: "Zúñiga" } });
   assert.deepStrictEqual(r.publicables, []);
 });
+
+// ── N2: el colega tajante lo es en TODOS sus pedidos ───────────────────────
+// Alberto Posada escribio "No enviar inmuebles que no cumplan con todo" en
+// ca3ae1cd (21-oct). Tres dias despues publico be41c4a8 sin esa frase y la
+// zona cercana le habria mandado 3 fichas de Guayabal y Los Colores. Textos
+// reales de group_signals (SELECT, 2026-10-26).
+const ALBERTO_CA3AE1CD = "Quien con apto el laureles \nConquistadores \nBelén rosales \nSan Joaquín \n\nDel 5 piso hacia arriba \nAscensor al piso \nValor \nMáximo \n600.000.000\nDos alcobas \nGaraje \nÚtil \n\nCliente comprando ya mismo \nNo enviar inmuebles que no cumplan con todo \nGracias\nAlberto posada \n3113345468 \n\nNo calle de ruido";
+const ALBERTO_BE41C4A8 = "Busco apto \nDos alcobas \nParqueadero \nAscensor al piso \nBalcón necesario \nPiso 5 hacia arriba \nNo en unidad cerrada \n\nValor máximo \n600.000.000\nLaureles \nCastellana \nConquistadores\nSan Joaquín \nBelén alameda \nBelén Malibú \nBelén rosales \nNo último piso \n\nCliente directo comprando ya efectivo \nAlberto posada \n3113345468 \n\nCódigo cliente \n21899";
+
+test("N2: zonaCercanaPara mira el historial del colega: be41c4a8 no es tajante, pero su ca3ae1cd si", () => {
+  const env = { RADAR_DM_ZONA_CERCANA: "true" };
+  assert.strictEqual(publicable.colegaTajante({ texto: ALBERTO_BE41C4A8 }), false, "el pedido solo no lo dice");
+  assert.strictEqual(publicable.zonaCercanaPara({ texto: ALBERTO_BE41C4A8, historial: [] }, env), true);
+  assert.strictEqual(publicable.zonaCercanaPara({ texto: ALBERTO_BE41C4A8, historial: [ALBERTO_BE41C4A8, ALBERTO_CA3AE1CD] }, env), false);
+});
+
+test("N2: si el historial no se pudo leer (null), la zona cercana se apaga (falla cerrado)", () => {
+  const env = { RADAR_DM_ZONA_CERCANA: "true" };
+  assert.strictEqual(publicable.zonaCercanaPara({ texto: "Busco apto en Laureles", historial: null }, env), false);
+});
+
+// La 10311038 de be41c4a8: Sofi escribio en le_falta "está registrada como
+// urbanización cerrada y pediste que no sea unidad cerrada". Es un
+// incumplimiento CONOCIDO: como zona cercana no sale.
+const VECINA_10311038 = () => ficha({ ref: "10311038", ubicacion: "vecina", zona: "Los Colores", habitaciones: 2, razones: ["Los Colores (vecina de lo pedido)", "$450M dentro de $600M", "2 alcobas", "piso 5"] });
+const LE_FALTA_BE41C4A8 = [{ ref: "10311038", detalle: "está registrada como urbanización cerrada y pediste que no sea unidad cerrada" }];
+
+test("N2: una zona cercana con un incumplimiento conocido de Sofi (le_falta) no sale", () => {
+  const r = publicable.filtrar([VECINA_10311038()], { ...ON, leFalta: LE_FALTA_BE41C4A8 });
+  assert.deepStrictEqual(r.publicables, []);
+  assert.deepStrictEqual(r.descartados, [{ ref: "10311038", motivos: ["zona_vecina"] }]);
+});
+
+test("N2: lo que Sofi dice que NO sabe no es un incumplimiento; el le_falta de otra ref no cuenta", () => {
+  for (const leFalta of [
+    [{ ref: "10311038", detalle: "no tengo confirmado si tiene ascensor" }],
+    [{ ref: "10311038", detalle: "el piso no está registrado en la ficha" }],
+    [{ ref: "OTRA", detalle: "pediste que no sea unidad cerrada" }],
+    [],
+  ]) {
+    const r = publicable.filtrar([VECINA_10311038()], { ...ON, leFalta });
+    assert.strictEqual(r.publicables.length, 1, JSON.stringify(leFalta));
+  }
+});
+
+test("N2: una zona cercana con un corto conocido del motor (alcobas, area, precio sobre el tope) no sale", () => {
+  for (const razones of [["Itagüí (vecina de lo pedido)", "2 alcobas (pediste 3)"], ["$470M — 4% sobre $450M, dentro del margen"]]) {
+    const r = publicable.filtrar([ficha({ ubicacion: "vecina", zona: "Itagüí", razones })], ON);
+    assert.deepStrictEqual(r.publicables, [], razones.join(" | "));
+  }
+  const pedido = { zonas: ["Envigado"], zona: "Envigado", habitaciones: 3 };
+  const r = publicable.filtrar([ficha({ ubicacion: "vecina", zona: "Itagüí", habitaciones: 2 })], { ...ON, pedido });
+  assert.deepStrictEqual(r.publicables, [], "2 alcobas contra 3 pedidas, aunque la razon no lo diga");
+});
+
+test("N2: el incumplimiento conocido solo frena la zona cercana, no a una exacta ni a una aclarable de dato", () => {
+  const r = publicable.filtrar([ficha({ ref: "10311038" })], { ...ON, leFalta: LE_FALTA_BE41C4A8 });
+  assert.deepStrictEqual(r.publicables.map((m) => m.ref), ["10311038"]);
+});
