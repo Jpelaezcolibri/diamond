@@ -43,6 +43,7 @@ test("runOnce: extiende, avisa una sola vez al colega y no cancela", async () =>
   const l = lead();
   memory.leads.push(l);
   const enviados = [];
+  const guardados = [];
   const deps = {
     aviso: async () => ({ ok: true }),
     texto: async (_o, to, t) => { enviados.push({ to, t }); return { ok: true }; },
@@ -52,8 +53,12 @@ test("runOnce: extiende, avisa una sola vez al colega y no cancela", async () =>
     reaviso: async () => ({ ok: true }),
     vencidas: async () => ({ vencidas: 0 }),
     soloLlamada: async () => false,
+    registrar: async (_o, l, t) => { guardados.push({ lead: l.id, t }); return {}; },
   };
   await escalera.runOnce({ ahora: new Date("2026-10-09T16:00:00Z"), deps });
+  assert.strictEqual(guardados.length, 1, "I1: el seguimos confirmando queda en la conversacion");
+  assert.strictEqual(guardados[0].lead, "l1");
+  assert.match(guardados[0].t, /^Seguimos confirmando tu visita/);
   assert.strictEqual(memory.leads[0].cita.estado, "propuesta");
   assert.strictEqual(memory.leads[0].cita.corte_at, "2026-10-09T18:00:00.000Z");
   assert.strictEqual(memory.leads[0].cita.corte_original_at, "2026-10-09T16:00:00Z");
@@ -62,4 +67,21 @@ test("runOnce: extiende, avisa una sola vez al colega y no cancela", async () =>
   assert.ok(!enviados.some((e) => e.plantilla));
   await escalera.runOnce({ ahora: new Date("2026-10-09T16:05:00Z"), deps });
   assert.strictEqual(enviados.length, 1, "el aviso de espera sale una sola vez");
+});
+
+test("I1: si guardar el seguimiento falla, el aviso igual salio y el plazo queda extendido", async () => {
+  memory.leads.length = 0;
+  memory.advisors.length = 0;
+  memory.advisors.push({ ...A1 }, { ...A2 });
+  memory.leads.push(lead());
+  const enviados = [];
+  const deps = {
+    aviso: async () => ({ ok: true }), texto: async (_o, to, t) => { enviados.push(t); return { ok: true }; },
+    plantilla: async () => ({ ok: true }), org: async () => ({ id: "org-1", name: "Diamond" }),
+    notificar: async () => ({ ok: true }), reaviso: async () => ({ ok: true }), vencidas: async () => ({ vencidas: 0 }),
+    soloLlamada: async () => false, registrar: async () => { throw new Error("db caida"); },
+  };
+  await escalera.runOnce({ ahora: new Date("2026-10-09T16:00:00Z"), deps });
+  assert.strictEqual(enviados.length, 1);
+  assert.strictEqual(memory.leads[0].cita.corte_at, "2026-10-09T18:00:00.000Z");
 });

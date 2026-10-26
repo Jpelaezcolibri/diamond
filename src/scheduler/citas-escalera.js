@@ -88,6 +88,7 @@ function canal(deps) {
     notificar: deps.notificar || ((...a) => require("../notifications/notificar").notificar(...a)),
     reaviso: deps.reaviso || ((...a) => require("../notifications/avisar-asesor").avisarAsesor(...a)),
     vencidas: deps.vencidas || ((args) => require("../lib/citas-vencidas").marcarVencidas(args)),
+    registrar: deps.registrar || ((...a) => require("../lib/registrar-saliente").registrarSaliente(...a)),
     soloLlamada: deps.soloLlamada || ((orgId, tel) => require("../data/colegas").esSoloLlamada(orgId, { telefono: tel })),
   };
 }
@@ -152,9 +153,17 @@ async function extender({ org, lead, nuevoCorte, ahora, c }) {
   const solo = lead.source === "colega" ? await c.soloLlamada(org.id, lead.phone).catch(() => null) : false;
   if (solo === false) {
     // Con la ventana cerrada no sale nada: no hay plantilla para esto (spec §6).
-    await c
-      .texto(org, lead.phone, `Seguimos confirmando tu visita ${cuandoDe(cita)} con el asesor. Te aviso apenas la confirme.`)
-      .catch((e) => console.warn("[citas-escalera] aviso de espera:", e.message));
+    const texto = `Seguimos confirmando tu visita ${cuandoDe(cita)} con el asesor. Te aviso apenas la confirme.`;
+    const r = await c.texto(org, lead.phone, texto).catch((e) => {
+      console.warn("[citas-escalera] aviso de espera:", e.message);
+      return null;
+    });
+    // Queda en el chat (CRM + historial de Sofi); si guardar falla, el envio ya salio.
+    if (r && r.ok) {
+      await Promise.resolve()
+        .then(() => c.registrar(org, lead, texto, r.wamid || null))
+        .catch((e) => console.warn("[citas-escalera] no se pudo guardar el aviso de espera:", e.message));
+    }
   }
   console.log(`[citas-escalera] lead ${lead.id}: plazo extendido hasta ${nuevoCorte}`);
 }
