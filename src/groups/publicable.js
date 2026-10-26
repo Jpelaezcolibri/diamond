@@ -391,7 +391,7 @@ const DUDOSAS_QUE_NO_SALEN = new Set(["zona_vecina_y_colega_tajante", "aliado"])
 // va en el PRIMER mensaje (avisoColega), nunca en la ficha; y los cortos del
 // motor se dicen como los dice la ficha ("cuesta $470M y pediste hasta
 // $450M"), sin su jerga ("4% sobre $450M, dentro del margen").
-const AVISO_DUDOSAS = "Ninguna opción calza en todo lo que pediste: te paso las más cercanas: revísalas antes de pasárselas a tu cliente.";
+const AVISO_DUDOSAS = "Ojo: no encontré una opción que calce en todo lo que pediste. Revisa la aclaración de cada ficha antes de pasársela a tu cliente.";
 const PARA_EL_COLEGA = /rev[ií]sal|antes de pas|no estoy segur|asesor|decid[ií]/i;
 
 function cortoParaFicha(razon) {

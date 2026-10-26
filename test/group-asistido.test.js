@@ -1615,5 +1615,5 @@ test("dudosas: la ficha no lleva 'revísala' ni jerga del motor; el aviso va en 
     assert.doesNotMatch(e.texto, /rev[ií]sal|antes de pasar|no estoy seguro|no calza en todo|dentro del margen|% sobre/i, e.texto);
   }
   assert.match(enviosDm[1].texto, /cuesta \$950M y pediste hasta \$900M/);
-  assert.match(enviosDm[0].texto, /revísalas antes de pasárselas a tu cliente/);
+  assert.match(enviosDm[0].texto, /Revisa la aclaración de cada ficha antes de pasársela a tu cliente/);
 }));

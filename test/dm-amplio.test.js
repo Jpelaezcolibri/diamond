@@ -240,7 +240,7 @@ test("dudosas: la razon de Sofi va como aclaracion de la ficha, en tuteo y sin d
 test("dudosas: sin dato concreto la ficha no lleva nota; el aviso va para el colega", () => {
   const r = publicable.dudosasParaDm({ refs_dudosas: ["D1"] }, [ficha({ ref: "D1" })]);
   assert.deepStrictEqual(r.leFalta, []);
-  assert.match(r.avisoColega, /revísalas antes de pasárselas a tu cliente/);
+  assert.match(r.avisoColega, /Revisa la aclaración de cada ficha antes de pasársela a tu cliente/);
   assert.doesNotMatch(r.avisoColega, VOSEO);
 });
 
@@ -274,7 +274,7 @@ test("I3: la ficha de la dudosa no lleva texto para el colega ni jerga; el prime
   }
   assert.match(fichas[0], /2 alcobas y pediste 3/);
   assert.match(fichas[0], /cuesta \$470M y pediste hasta \$450M/);
-  assert.match(primero, /revísalas antes de pasárselas a tu cliente/);
+  assert.match(primero, /Revisa la aclaración de cada ficha antes de pasársela a tu cliente/);
   assert.doesNotMatch(primero, VOSEO);
 });
 
@@ -283,7 +283,7 @@ test("I3: sin aviso, el primer mensaje queda igual que siempre", () => {
   const a = redactar.mensajesAlColega({ autor_nombre: "Ana" }, props, { pedido: { zonas: ["Envigado"] } });
   const b = redactar.mensajesAlColega({ autor_nombre: "Ana" }, props, { pedido: { zonas: ["Envigado"] }, avisoAlColega: null });
   assert.strictEqual(a.mensajes[0].texto, b.mensajes[0].texto);
-  assert.doesNotMatch(a.mensajes[0].texto, /revísalas/);
+  assert.doesNotMatch(a.mensajes[0].texto, /Revisa la aclaración/);
 });
 
 test("dudosas: sin dudosas no devuelve nada", () => {

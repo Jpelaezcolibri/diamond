@@ -590,7 +590,7 @@ function mensajesAlColega(
       : lineasCierre(org);
 
   // `avisoAlColega` (revision 2026-10-26, I3): lo que es para el colega y no
-  // para su cliente ("revísalas antes de pasárselas") va aca, nunca en la
+  // para su cliente ("revisa la aclaración de cada ficha antes de pasársela") va aca, nunca en la
   // ficha, que se reenvia tal cual. Sin aviso, el mensaje es el de siempre.
   const aviso = String(avisoAlColega || "").trim();
   const primero = [presentacion, ...(aviso ? [aviso] : []), ...(salvedad ? [salvedad] : []), "", ...cierre].join("\n");
