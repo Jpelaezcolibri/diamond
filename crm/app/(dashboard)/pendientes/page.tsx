@@ -18,6 +18,8 @@ import { formatearPrecio } from "@/lib/formato";
 import { vencidaSinConfirmar } from "@/lib/cita-tiempo";
 import TiempoCita from "@/components/tiempo-cita";
 import DescartarCita from "@/components/descartar-cita";
+import PreguntaPendiente, { type Pregunta } from "@/components/pregunta-pendiente";
+import { enlazarWasiPublico } from "@/lib/wasi-link";
 
 export const dynamic = "force-dynamic";
 
@@ -97,6 +99,37 @@ export default async function PendientesPage() {
     .sort(porFecha);
   const vencidas = citas.filter((l) => l.cita && vencidaSinConfirmar(l.cita, ahora) && esMia(l.cita)).sort(porFecha);
 
+  // Preguntas de colegas al asesor (spec 2026-10-25): pendientes, y las
+  // respondidas que no se pudieron entregar (menos las que esperan la ventana).
+  // Si la tabla aun no existe, la consulta falla y la seccion no se pinta.
+  const { data: filasPreguntas } = await supabase
+    .from("preguntas_asesor")
+    .select("id, ref, pregunta, estado, asignada_at, created_at, respuesta, respondida_por, entrega_error, asesor_id, lead:leads(id, nombre, phone, source)")
+    .or("estado.eq.pendiente,and(estado.eq.respondida,entrega_error.neq.esperando_ventana)")
+    .order("created_at", { ascending: true })
+    .limit(50);
+  type FilaPregunta = Omit<Pregunta, "asesor" | "fichaUrl" | "chatId"> & { asesor_id: string | null };
+  const filas = (filasPreguntas as unknown as FilaPregunta[]) || [];
+  let preguntas: Pregunta[] = [];
+  if (filas.length > 0) {
+    const refs = [...new Set(filas.map((f) => f.ref).filter((r): r is string => Boolean(r)))];
+    const leadIds = [...new Set(filas.map((f) => f.lead?.id).filter((r): r is string => Boolean(r)))];
+    const [{ data: asesoresTodos }, { data: props }, { data: convs }] = await Promise.all([
+      supabase.from("advisors").select("id, name"),
+      refs.length ? supabase.from("properties").select("ref, link").in("ref", refs) : Promise.resolve({ data: [] }),
+      leadIds.length ? supabase.from("conversations").select("id, lead_id").in("lead_id", leadIds) : Promise.resolve({ data: [] }),
+    ]);
+    const nombreAsesor = new Map(((asesoresTodos as { id: string; name: string }[]) || []).map((a) => [a.id, a.name]));
+    const linkDe = new Map(((props as { ref: string; link: string | null }[]) || []).map((x) => [x.ref, enlazarWasiPublico(x.link)]));
+    const chatDe = new Map(((convs as { id: string; lead_id: string }[]) || []).map((c) => [c.lead_id, c.id]));
+    preguntas = filas.map((f) => ({
+      ...f,
+      asesor: f.asesor_id ? nombreAsesor.get(f.asesor_id) || null : null,
+      fichaUrl: f.ref ? linkDe.get(f.ref) || null : null,
+      chatId: f.lead?.id ? chatDe.get(f.lead.id) || null : null,
+    }));
+  }
+
   const { data: notas } = asesor
     ? await supabase
         .from("notificaciones")
@@ -122,7 +155,7 @@ export default async function PendientesPage() {
     quietos = (data as LeadQuieto[]) || [];
   }
 
-  const vacio = porRenovar.length === 0 && porConfirmar.length === 0 && (notas || []).length === 0 && quietos.length === 0;
+  const vacio = porRenovar.length === 0 && preguntas.length === 0 && porConfirmar.length === 0 && (notas || []).length === 0 && quietos.length === 0;
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-4 sm:p-6">
@@ -141,6 +174,17 @@ export default async function PendientesPage() {
           <ul className="space-y-2">
             {porRenovar.map((p) => (
               <RenovarPropiedad key={p.ref} p={p} />
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {preguntas.length > 0 && (
+        <section>
+          <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">Preguntas de colegas ({preguntas.length})</h2>
+          <ul className="space-y-2">
+            {preguntas.map((p) => (
+              <PreguntaPendiente key={p.id} p={p} />
             ))}
           </ul>
         </section>
