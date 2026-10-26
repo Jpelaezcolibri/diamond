@@ -720,6 +720,13 @@ function evaluarCandidata(p, c, fuente) {
     // final". Sin presupuesto o con el texto fuera de margen, sigue bloqueada.
     precio_texto_en_margen: fuente === "diamond" && precioInconsistente(p) && Boolean(techo)
       && precioTextoDe(p) <= techoConMargen && (!piso || precioTextoDe(p) >= piso),
+    // DM amplio (Juan, 2026-10-26): basta con que el precio de WASI quepa en
+    // el presupuesto (el de la descripcion puede no caber) para que la ficha
+    // salga con "te confirmo el precio final". Si el match existe con
+    // presupuesto, el de Wasi ya paso la banda de arriba; sin presupuesto no
+    // hay contra que medirlo y sigue bloqueada.
+    precio_wasi_en_margen: fuente === "diamond" && precioInconsistente(p) && Boolean(techo) && Boolean(precio)
+      && precio <= techoConMargen && (!piso || precio >= piso),
     // El castigo se resta DESPUES del tope (ver CASTIGO_CORTO arriba): es lo
     // que hace que 100 vuelva a significar "cumple todo lo que se pudo
     // verificar". Piso en 0 porque una zona muy castigada mas dos huecos

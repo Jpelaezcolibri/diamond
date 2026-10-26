@@ -212,7 +212,8 @@ function esPublicable(match, { umbral = UMBRAL_DEFAULT, syncFresco = true, refsB
 // no cuadra entre Wasi y la descripcion. Con RADAR_DM_CON_ACLARACION=true una
 // ficha cuyos motivos son TODOS de esta lista sale al DM del colega con la
 // aclaracion en la ficha ("no tengo registrado en qué piso está..."). Ningun
-// otro motivo entra: la zona vecina nunca sale, y lo que se SABE y no cumple
+// otro motivo entra: la zona vecina no sale por aca (solo por la excepcion de
+// zona cercana, ver dmZonaCercanaActivo, y sin exactas), y lo que se SABE y no cumple
 // (piso 9 para quien pidio maximo 2, un parqueadero de menos) ni siquiera
 // llega hasta aca -- lo descarta match.js.
 //
@@ -234,13 +235,22 @@ function dmConAclaracionActivo(env = process.env) {
   return String((env && env.RADAR_DM_CON_ACLARACION) || "").trim().toLowerCase() === "true";
 }
 
-// El precio por confirmar solo es aclarable si LOS DOS precios (Wasi y
-// descripcion) caben en el presupuesto del pedido; si no, el colega abriria el
-// link y veria un precio fuera de lo que pidio.
+// El precio por confirmar es aclarable si el precio de WASI cabe en el
+// presupuesto del pedido (Juan, 2026-10-26: antes se exigia que cupieran LOS
+// DOS, Wasi y descripcion, y 3 pedidos en 30 dias se quedaron sin DM por eso).
+// La ficha sale con "te confirmo el precio final". Nunca si el de Wasi no
+// cabe (`precio_wasi_en_margen === false`). Un match guardado antes de esa
+// marca decide con la regla vieja (`precio_texto_en_margen`).
+function precioAclarable(match) {
+  if (!match) return false;
+  if (match.precio_wasi_en_margen === false) return false;
+  return match.precio_wasi_en_margen === true || match.precio_texto_en_margen === true;
+}
+
 function soloAclarables(motivos, match) {
   if (!Array.isArray(motivos) || motivos.length === 0) return false;
   if (!motivos.every((m) => MOTIVOS_ACLARABLES.has(m))) return false;
-  if (motivos.includes("precio_sin_confirmar") && !(match && match.precio_texto_en_margen === true)) return false;
+  if (motivos.includes("precio_sin_confirmar") && !precioAclarable(match)) return false;
   // El barrio solo es aclarable si de verdad no se sabe: si la ficha nombra
   // otro barrio conocido del municipio (match.js#barrio_en_ficha), decirle al
   // colega "el barrio exacto no lo tengo registrado" seria falso. Revision
@@ -248,6 +258,106 @@ function soloAclarables(motivos, match) {
   // de Dorado/La Paz, 8989725 "Poblado Palmas" para San Lucas/Zuniga.
   if (motivos.includes("sector_sin_confirmar") && match && Array.isArray(match.barrio_en_ficha) && match.barrio_en_ficha.length) return false;
   return true;
+}
+
+// ZONA CERCANA (Juan, 2026-10-26: "necesito que hagamos todas las respuestas
+// automaticas"). EXCEPCION a la regla literal del 2026-09-18 (ver la nota de
+// `zona_vecina` en esPublicable), SOLO para el DM y SOLO cuando no quedo
+// ninguna ficha exacta: si hay al menos una que encaja, la vecina no sale. Con
+// RADAR_DM_ZONA_CERCANA=true una ficha cuyos motivos son `zona_vecina` (y, con
+// RADAR_DM_CON_ACLARACION, ademas solo datos aclarables) sale DESPUES de todo
+// lo demas, con "No es en {pedido}: queda en {zona}, cerca" por delante en la
+// ficha (redactar.js#desvios). El caso del 18-sep ("Me dice Itagui y solo
+// quiere Envigado") fue una vecina que salia AUNQUE habia exactas y con un
+// texto que la vendia como si fuera lo pedido; esto la deja como ultima
+// opcion, dicha de frente.
+//
+// Mismo trato para el barrio que la ficha nombra (sector_sin_confirmar con
+// match.js#barrio_en_ficha): no se le puede decir "el barrio exacto no lo
+// tengo registrado" (seria falso), asi que sale como zona cercana con el
+// barrio nombrado: "queda en Antillas, Envigado".
+//
+// La zona lejana (`zona_no_publicable`) nunca entra aca.
+function dmZonaCercanaActivo(env = process.env) {
+  return String((env && env.RADAR_DM_ZONA_CERCANA) || "").trim().toLowerCase() === "true";
+}
+
+// Devuelve la marca que viaja en la copia del match ({ tipo: "vecina" } o
+// { tipo: "barrio", barrio }) o null si la ficha no es una zona cercana.
+function zonaCercanaDe(motivos, match, { conAclaracion = false } = {}) {
+  if (!match || !Array.isArray(motivos)) return null;
+  let motivoZona;
+  let marca;
+  if (motivos.includes("zona_vecina")) {
+    motivoZona = "zona_vecina";
+    marca = { tipo: "vecina" };
+  } else if (motivos.includes("sector_sin_confirmar") && Array.isArray(match.barrio_en_ficha) && match.barrio_en_ficha.length) {
+    motivoZona = "sector_sin_confirmar";
+    marca = { tipo: "barrio", barrio: nombreDeBarrio(match.barrio_en_ficha[0], match) };
+  } else {
+    return null;
+  }
+  const resto = motivos.filter((m) => m !== motivoZona);
+  if (resto.length === 0) return marca;
+  return conAclaracion && soloAclarables(resto, match) ? marca : null;
+}
+
+// El barrio llega normalizado ("antillas"); se busca como lo escribe la ficha
+// para no imprimir "antillas" ni perder la tilde ("Trianón").
+function nombreDeBarrio(token, match) {
+  const clave = normalizarTexto(token);
+  const palabras = `${(match && match.titulo) || ""} ${(match && match.caracteristicas) || ""}`.split(/[^\p{L}]+/u);
+  const tal = palabras.find((p) => p && normalizarTexto(p) === clave);
+  if (tal) return tal.charAt(0).toUpperCase() + tal.slice(1).toLowerCase();
+  return clave.charAt(0).toUpperCase() + clave.slice(1);
+}
+
+// FICHAS DUDOSAS (Juan, 2026-10-26; RADAR_DM_DUDOSAS). Cuando Sofi no aprobo
+// ninguna pero marco dudosas, esas pasan por la MISMA filtrar() que las utiles
+// (link, precio, sync, ref bloqueada... siguen duras) y salen al DM con la
+// razon de Sofi como aclaracion de la ficha. 25 pedidos en 30 dias se quedaban
+// sin DM por `solo_dudosas`.
+//
+// La razon se arma con lo que es POR REF y se puede decir al colega:
+//   · lo que Sofi escribio en `le_falta` para esa ref (si escribio algo);
+//   · los cortos del motor ("2 alcobas y pediste 3"), que es lo que hace a una
+//     ref dudosa por cuenta (revalidar.js#cortosDe);
+//   · el motivo tipado de `dudosas_motivo`, en tuteo.
+// NUNCA `por_que`: lo escribe Sofi para la asesora, es del lote entero y puede
+// traer voseo o nombres del equipo.
+function dmDudosasActivo(env = process.env) {
+  return String((env && env.RADAR_DM_DUDOSAS) || "").trim().toLowerCase() === "true";
+}
+
+const TEXTO_DUDOSA = {
+  zona_vecina_y_colega_tajante: "sé que pediste solo esa zona: te la paso por si te sirve",
+  de_fondo_dudoso: "no estoy seguro de que calce con todo lo que pediste: revísala antes de pasarla",
+};
+const DUDOSA_GENERICA = "no calza en todo lo que pediste: revísala antes de pasarla";
+
+function dudosasParaDm(veredicto, matches) {
+  const refs = veredicto && Array.isArray(veredicto.refs_dudosas) ? veredicto.refs_dudosas.map(String) : [];
+  if (!refs.length) return { matches: [], leFalta: [] };
+  const { cortosDe } = require("./revalidar");
+  const motivoDe = new Map(
+    (Array.isArray(veredicto.dudosas_motivo) ? veredicto.dudosas_motivo : [])
+      .filter((x) => x && x.ref)
+      .map((x) => [String(x.ref), x.motivo])
+  );
+  const deSofi = Array.isArray(veredicto.le_falta) ? veredicto.le_falta : [];
+  const salida = [];
+  const leFalta = [];
+  for (const ref of [...new Set(refs)]) {
+    const m = (matches || []).find((x) => x && String(x.ref) === ref);
+    if (!m) continue;
+    salida.push(m);
+    const escrito = deSofi.filter((f) => f && String(f.ref) === ref && f.detalle).map((f) => String(f.detalle));
+    const cortos = cortosDe(m).map((r) => String(r).replace(/\s*\(pediste (\d+)\)/, " y pediste $1").replace(/ — /, ": "));
+    const tipado = TEXTO_DUDOSA[motivoDe.get(ref)] || null;
+    const partes = [...new Set([...escrito, ...cortos, tipado].filter(Boolean))];
+    leFalta.push({ ref, detalle: (partes.length ? partes : [DUDOSA_GENERICA]).join(" · ") });
+  }
+  return { matches: salida, leFalta };
 }
 
 // Filtra una lista de matches y devuelve los publicables (ya ordenados por
@@ -266,27 +376,50 @@ function soloAclarables(motivos, match) {
 // (cada grupo por puntaje), y `aclaraciones` dice cuales son, con sus motivos
 // y el texto para el colega. Sin la opcion, el resultado es el de siempre y
 // `aclaraciones` sale vacio.
+//
+// `zonaCercana` (2026-10-26, ver dmZonaCercanaActivo): las fichas de zona
+// cercana pasan AL FINAL y solo si no quedo ninguna exacta (las de dato por
+// confirmar no cuentan como exactas). Salen como COPIA del match con
+// `zona_cercana` (la marca que lee redactar.js#desvios) y su aclaracion lleva
+// `zonaCercana: true`. Si hay exactas, van a `descartados` como siempre.
 function filtrar(matches, opciones = {}) {
   const limite = opciones.limite || Infinity;
   const conAclaracion = opciones.conAclaracion === true;
+  const zonaCercana = opciones.zonaCercana === true;
   const publicables = [];
   const conDatoPorConfirmar = [];
+  const cercanas = [];
   const descartados = [];
 
   for (const m of matches || []) {
     const veredicto = esPublicable(m, opciones);
+    let marca = null;
     if (veredicto.ok) publicables.push(m);
     else if (conAclaracion && soloAclarables(veredicto.motivos, m)) conDatoPorConfirmar.push({ m, motivos: veredicto.motivos });
-    else descartados.push({ ref: m && m.ref, motivos: veredicto.motivos });
+    else if (zonaCercana && (marca = zonaCercanaDe(veredicto.motivos, m, { conAclaracion }))) {
+      cercanas.push({ m: { ...m, zona_cercana: marca }, original: m, motivos: veredicto.motivos });
+    } else descartados.push({ ref: m && m.ref, motivos: veredicto.motivos });
+  }
+
+  // Con al menos una exacta, la zona cercana no sale.
+  if (publicables.length > 0) {
+    for (const x of cercanas) descartados.push({ ref: x.original && x.original.ref, motivos: x.motivos });
+    cercanas.length = 0;
   }
 
   const porPuntaje = (a, b) => Number(b.puntaje) - Number(a.puntaje);
   publicables.sort(porPuntaje);
   conDatoPorConfirmar.sort((a, b) => porPuntaje(a.m, b.m));
-  const todas = [...publicables, ...conDatoPorConfirmar.map((x) => x.m)].slice(0, limite);
-  const aclaraciones = conDatoPorConfirmar
-    .filter((x) => todas.includes(x.m))
-    .map((x) => ({ ref: String(x.m.ref), motivos: x.motivos, detalle: aclaracionParaColega(x.motivos) }));
+  cercanas.sort((a, b) => porPuntaje(a.m, b.m));
+  const todas = [...publicables, ...conDatoPorConfirmar.map((x) => x.m), ...cercanas.map((x) => x.m)].slice(0, limite);
+  const aclaraciones = [
+    ...conDatoPorConfirmar
+      .filter((x) => todas.includes(x.m))
+      .map((x) => ({ ref: String(x.m.ref), motivos: x.motivos, detalle: aclaracionParaColega(x.motivos) })),
+    ...cercanas
+      .filter((x) => todas.includes(x.m))
+      .map((x) => ({ ref: String(x.m.ref), motivos: x.motivos, detalle: aclaracionParaColega(x.motivos), zonaCercana: true })),
+  ];
   return { publicables: todas, descartados, aclaraciones };
 }
 
@@ -505,6 +638,9 @@ function aclaracionParaColega(motivos) {
 // las fichas que van (salvedadDeLasFichas), tambien con el interruptor apagado.
 const TEMA_DEL_MOTIVO = {
   sector_sin_confirmar: /barrio|sector/i,
+  // Zona cercana (2026-10-26): la ficha ya dice donde queda; la salvedad del
+  // primer mensaje no puede hablar de barrio o zona sin contradecirla.
+  zona_vecina: /barrio|sector|\bzonas?\b|ubicaci/i,
   piso_sin_confirmar: /\bpisos?\b/i,
   garajes_sin_dato: /parqueader|garaje|parqueo/i,
   precio_sin_confirmar: /\bprecio/i,
@@ -621,6 +757,9 @@ module.exports = {
   aclaracionParaColega,
   MOTIVOS_ACLARABLES,
   dmConAclaracionActivo,
+  dmZonaCercanaActivo,
+  dmDudosasActivo,
+  dudosasParaDm,
   notasParaDm,
   salvedadDeLasFichas,
 };

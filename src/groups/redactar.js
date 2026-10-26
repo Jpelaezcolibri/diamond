@@ -294,7 +294,16 @@ function desvios(match, pedido) {
     // Zona general (2026-09-14): "queda en Envigado" es cierto y no es un
     // desvio; lo que falta es el barrio, y eso se dice como un dato que no
     // tenemos, no como una objecion.
-    if (grado === "zona_general") salida.push(`queda en ${zonaProp}; el barrio exacto no lo tengo registrado`);
+    // ZONA CERCANA (Juan, 2026-10-26): la ficha salio al DM por
+    // publicable.js#zonaCercanaDe (no habia ninguna exacta). Se dice de
+    // frente y primero: "No es en Envigado: queda en Itagüí, cerca". El
+    // barrio que la ficha nombra se dice con su nombre ("queda en Antillas,
+    // Envigado"): decir que no lo tenemos registrado seria falso. Sin la
+    // marca (aviso a la asesora, grupo) todo sigue como antes.
+    const cercana = match.zona_cercana;
+    if (cercana && cercana.tipo === "barrio" && cercana.barrio) salida.push(`queda en ${cercana.barrio}, ${zonaProp}`);
+    else if (cercana && cercana.tipo === "vecina" && grado !== "exacta") salida.push(`No es en ${pedidas}: queda en ${zonaProp}, cerca`);
+    else if (grado === "zona_general") salida.push(`queda en ${zonaProp}; el barrio exacto no lo tengo registrado`);
     else if (grado === "vecina") salida.push(`queda en ${zonaProp}, vecina de ${zonasPedidas.join(" y ")}`);
     else if (grado !== "exacta") salida.push(`queda en ${zonaProp}, no en ${pedidas}`);
   }

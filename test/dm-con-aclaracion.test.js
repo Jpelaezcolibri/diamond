@@ -190,7 +190,9 @@ test("el texto nuevo va en tuteo, sin voseo", () => {
   }
 });
 
-// ── Precio por confirmar: solo si los DOS precios caben en el presupuesto ──
+// ── Precio por confirmar: basta con que quepa el de Wasi (2026-10-26) ─────
+// Hasta el 2026-10-26 se exigia que cupieran LOS DOS precios; ver
+// test/dm-amplio.test.js.
 const pedidoPrecio = (extra = {}) => ({
   operacion: "venta", tipo: "apartamento", zona: "Envigado",
   precio_min: 0, precio_max: 450000000, habitaciones: 3,
@@ -204,13 +206,16 @@ const aptoPrecio = (descripcion) => ({
   linkWasi: "https://info.wasi.co/apartamento-venta-envigado/10416693",
 });
 
-test("precio: Wasi $450M y descripcion $650M contra tope $450M: bloqueada", () => {
+test("precio: Wasi $450M y descripcion $650M contra tope $450M: sale con 'te confirmo el precio final' (Wasi cabe)", () => {
   const m = evaluarCandidata(aptoPrecio("Precio de venta: $650.000.000"), pedidoPrecio(), "diamond");
   assert.strictEqual(m.precio_sin_confirmar, true);
   assert.strictEqual(m.precio_texto_en_margen, false);
+  assert.strictEqual(m.precio_wasi_en_margen, true);
   const r = publicable.filtrar([m], { umbral: 0, conAclaracion: true });
-  assert.deepStrictEqual(r.publicables, []);
-  assert.ok(r.descartados[0].motivos.includes("precio_sin_confirmar"));
+  assert.strictEqual(r.publicables.length, 1);
+  assert.match(r.aclaraciones[0].detalle, /te confirmo el precio final/);
+  const apagado = publicable.filtrar([m], { umbral: 0 });
+  assert.ok(apagado.descartados[0].motivos.includes("precio_sin_confirmar"), "con la aclaracion apagada sigue bloqueada");
 });
 
 test("precio: Wasi $450M y descripcion $480M contra tope $450M: sale con 'te confirmo el precio final'", () => {
