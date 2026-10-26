@@ -34,3 +34,11 @@ test("lo realmente vecino sigue vecino (no sale como zona_general)", () => {
   assert.strictEqual(grado("El Poblado", "Envigado"), "vecina");
   assert.strictEqual(grado("Envigado", "El Poblado"), "vecina");
 });
+
+// 2026-10-26: La Mota es Belén. Con el DM de zona cercana, la 10012896 habría
+// salido diciendo "No es en Belén".
+test("los barrios de Belén son Belén, no vecinos", () => {
+  for (const b of ["mota", "rosales", "malibu", "alameda", "fatima", "alpes", "bernal", "hondonada"]) assert.deepStrictEqual(zonas.madresDe([b]), ["belen"], b);
+  assert.notStrictEqual(grado("Belén", "La Mota"), "vecina");
+  assert.notStrictEqual(grado("Belén", "La Mota"), undefined);
+});

@@ -282,6 +282,11 @@ const SUBZONA_DE = new Map([
     "conquistadores", "teresita", "bolivariana", "castellana", "lorena", "velodromo",
     "suramericana", "naranjal",
   ].map((barrio) => [barrio, "laureles"]),
+  // BARRIOS DE BELEN (2026-10-26, DM con zona cercana). La 10012896 (La Mota)
+  // iba a salir diciendo "No es en Belén" cuando La Mota ES Belén (comuna 16).
+  // Solo tokens que no chocan: fuera granada (municipio), gloria, mercedes,
+  // playas (genericos o de otra comuna).
+  ...["mota", "rosales", "malibu", "alameda", "fatima", "alpes", "bernal", "hondonada"].map((barrio) => [barrio, "belen"]),
   // VEREDAS DE LAS FINCAS EN ARRIENDO (Juan, 2026-10-21). El sync trajo de
   // Wasi la vereda como zona y la ficha dejo de caer a la ciudad: un pedido de
   // "Copacabana" ya no encontraba la 10479033 (Vereda Las Canoas). Santa Fe de
