@@ -450,3 +450,88 @@ test("insertarPublicacion: sin columna texto u origen, registra sin ellas", asyn
   assert.equal(intentos.length, 2);
   assert.deepEqual(intentos[1], { property_ref: "1", origen: "auto", estado: "enviado" });
 });
+
+// --- publicador mixto: scheduler (spec 2026-10-26) ---
+
+const A_LAS = (h, m = 0) => new Date(`2026-10-19T${String(h + 5).padStart(2, "0")}:${String(m).padStart(2, "0")}:00Z`);
+
+test("porGrupo(): solo 1 o 2; cualquier otro valor es 1", () => {
+  const previoPG = process.env.RADAR_PUBLICAR_POR_GRUPO;
+  try {
+    delete process.env.RADAR_PUBLICAR_POR_GRUPO;
+    assert.equal(scheduler.porGrupo(), 1);
+    process.env.RADAR_PUBLICAR_POR_GRUPO = "";
+    assert.equal(scheduler.porGrupo(), 1);
+    process.env.RADAR_PUBLICAR_POR_GRUPO = "3";
+    assert.equal(scheduler.porGrupo(), 1);
+    process.env.RADAR_PUBLICAR_POR_GRUPO = "2";
+    assert.equal(scheduler.porGrupo(), 2);
+  } finally {
+    if (previoPG === undefined) delete process.env.RADAR_PUBLICAR_POR_GRUPO;
+    else process.env.RADAR_PUBLICAR_POR_GRUPO = previoPG;
+  }
+});
+
+test("con 2 por grupo: a las 3 p. m. publica el segundo; a la 1 p. m. no (entre_franjas)", async () => {
+  const previoPG = process.env.RADAR_PUBLICAR_POR_GRUPO;
+  process.env.RADAR_PUBLICAR_POR_GRUPO = "2";
+  try {
+    const manana = [{ group_id: "g1", property_ref: "1", estado: "enviado", created_at: A_LAS(9).toISOString() }];
+    const { d, log } = deps({ grupos: async () => [G1], historial: async () => manana });
+    const [r1] = await scheduler.runOnce({ ahora: A_LAS(13), deps: d });
+    assert.equal(r1.resultado, "entre_franjas");
+    const [r2] = await scheduler.runOnce({ ahora: A_LAS(15), deps: d });
+    assert.equal(r2.resultado, "enviado");
+    assert.equal(log.enviados.length, 1);
+  } finally {
+    if (previoPG === undefined) delete process.env.RADAR_PUBLICAR_POR_GRUPO;
+    else process.env.RADAR_PUBLICAR_POR_GRUPO = previoPG;
+  }
+});
+
+test("espaciado de 15 a 30 min segun el azar", async () => {
+  for (const [azar, min] of [[0, 15], [1, 30]]) {
+    scheduler._reset();
+    const { d } = deps({ azar: () => azar });
+    const [r] = await scheduler.runOnce({ ahora: LUNES_10AM, deps: d });
+    assert.equal(r.resultado, "enviado");
+    const justo = await scheduler.runOnce({ ahora: new Date(LUNES_10AM.getTime() + (min - 1) * MIN), deps: d });
+    assert.equal(justo[0].resultado, "espaciado");
+    const luego = await scheduler.runOnce({ ahora: new Date(LUNES_10AM.getTime() + (min + 1) * MIN), deps: d });
+    assert.notEqual(luego[0].resultado, "espaciado");
+  }
+});
+
+test("tras un reinicio espera 15 min desde el ultimo post", async () => {
+  const { d } = deps({ historial: async () => [{ group_id: "g1", property_ref: "1", estado: "enviado", created_at: hace(16) }] });
+  const [r] = await scheduler.runOnce({ ahora: LUNES_10AM, deps: d });
+  assert.notEqual(r.resultado, "espaciado");
+});
+
+test("un grupo que publica pero esta en modo ignorar avisa una sola vez por dia", async () => {
+  const sordo = { ...G1, modo: "ignorar" };
+  const { d, log } = deps({ grupos: async () => [sordo, G2] });
+  await scheduler.runOnce({ ahora: LUNES_10AM, deps: d });
+  await scheduler.runOnce({ ahora: new Date(LUNES_10AM.getTime() + 30 * MIN), deps: d });
+  const avisos = log.alertas.filter((a) => /no escucha/.test(a));
+  assert.equal(avisos.length, 1);
+  assert.match(avisos[0], /Arriendos amoblados/);
+  // Al dia siguiente vuelve a avisar.
+  await scheduler.runOnce({ ahora: new Date(LUNES_10AM.getTime() + 24 * 60 * MIN), deps: d });
+  assert.equal(log.alertas.filter((a) => /no escucha/.test(a)).length, 2);
+});
+
+test("los pedidos del grupo ordenan: sale primero la venta que calza con ellos", async () => {
+  const GENERAL = { id: "go", jid: "o@g.us", nombre: "Ofertas general", publica: "ofertas" };
+  const props = [ventaWasi("V-ENV", "Envigado"), ventaWasi("V-LAU", "Laureles")];
+  const demanda = new Map([["envigado", 100]]);
+  const pedidos = new Map([["go", [{ operacion: "venta", zona: "Laureles", zonas: ["Laureles"] }]]]);
+  const { d, log } = deps({
+    grupos: async () => [GENERAL], propiedades: async () => props, demanda: async () => demanda,
+    pedidosPorGrupo: async () => pedidos,
+  });
+  const [r] = await scheduler.runOnce({ ahora: LUNES_10AM, deps: d });
+  assert.equal(r.resultado, "enviado");
+  assert.equal(r.ref, "V-LAU");
+  assert.equal(log.enviados.length, 1);
+});

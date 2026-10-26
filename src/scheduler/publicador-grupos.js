@@ -14,15 +14,16 @@
 //   baneo de julio empezo con un 503; insistir es lo peor que se puede hacer.
 
 const publicador = require("../groups/publicador");
+const { perfilDe } = require("../groups/perfil-grupo");
 
 const VALORES_ENCENDIDO = new Set(["true", "1", "si", "sí", "on"]);
-const ESPACIO_MIN = 20;
-const ESPACIO_MAX = 40;
+const ESPACIO_MIN = 15;
+const ESPACIO_MAX = 30;
 const TICK_MS = 5 * 60 * 1000;
 const DIA_MS = 86400000;
 const LINK_ROTO_ASESOR_MIN = 60;
 
-const estado = { noAntesDe: null, pausadoDia: null, avisoSesionDia: null, linkRoto: new Map() };
+const estado = { noAntesDe: null, pausadoDia: null, avisoSesionDia: null, avisoSordosDia: null, linkRoto: new Map() };
 
 function activo() {
   return VALORES_ENCENDIDO.has(String(process.env.RADAR_PUBLICAR_ACTIVO ?? "").trim().toLowerCase());
@@ -31,6 +32,12 @@ function activo() {
 function maxDia() {
   const n = Number(process.env.RADAR_PUBLICAR_MAX_DIA || 8);
   return Number.isFinite(n) && n > 0 ? n : 8;
+}
+
+// Posts por grupo y dia: solo 1 o 2 (con 2, manana y tarde). Otro valor = 1.
+function porGrupo() {
+  const n = Number(process.env.RADAR_PUBLICAR_POR_GRUPO || 1);
+  return n === 2 ? 2 : 1;
 }
 
 // zona normalizada -> pedidos que la nombran (una vez por pedido).
@@ -56,9 +63,36 @@ function depsPorDefecto() {
     orgs: () => organizations.listActive(),
     inventarioFresco: async (org) => (await syncEstado.estadoDelInventario(org.id)).fresco,
     grupos: async (org) => {
-      const { data, error } = await supabase.from("whatsapp_groups").select("id, jid, nombre, publica").eq("org_id", org.id).not("publica", "is", null);
+      const consulta = (cols) => supabase.from("whatsapp_groups").select(cols).eq("org_id", org.id).not("publica", "is", null);
+      let { data, error } = await consulta("id, jid, nombre, publica, modo, perfil");
+      // Antes de la migracion del perfil la columna no existe: se lee sin ella.
+      if (error && /perfil/.test(`${error.message} ${error.code}`)) ({ data, error } = await consulta("id, jid, nombre, publica, modo"));
       if (error) throw error;
       return data || [];
+    },
+    // Pedidos de demanda por grupo, ultimos 30 dias: ordenan lo que se publica
+    // en cada grupo. Falla abierta: sin el dato, orden por rotacion.
+    pedidosPorGrupo: async (org, ids) => {
+      const mapa = new Map();
+      if (!ids.length) return mapa;
+      const desde = new Date(Date.now() - 30 * DIA_MS).toISOString();
+      const { data, error } = await supabase
+        .from("group_signals")
+        .select("group_id, operacion, tipo, zona, zonas, precio_max")
+        .eq("org_id", org.id)
+        .eq("clase", "demanda")
+        .in("group_id", ids)
+        .gte("created_at", desde)
+        .limit(5000);
+      if (error) {
+        console.warn("[publicador] No se pudo leer los pedidos por grupo:", error.message);
+        return mapa;
+      }
+      for (const f of data || []) {
+        if (!mapa.has(f.group_id)) mapa.set(f.group_id, []);
+        mapa.get(f.group_id).push(f);
+      }
+      return mapa;
     },
     // null = la tabla no existe o no se pudo leer: falla cerrado.
     historial: async (org, desdeIso) => {
@@ -160,7 +194,7 @@ async function runParaOrg(org, d, ahora) {
   if (historial === null) return { resultado: "sin_tabla" };
   if (!(await d.inventarioFresco(org))) return { resultado: "inventario_viejo" };
 
-  // Tras un reinicio no hay espaciado en memoria: 20 min desde el ultimo post.
+  // Tras un reinicio no hay espaciado en memoria: 15 min desde el ultimo post.
   let noAntesDe = estado.noAntesDe;
   if (!noAntesDe && historial.length) {
     const ultimo = Math.max(...historial.map((h) => new Date(h.created_at).getTime()));
@@ -175,7 +209,19 @@ async function runParaOrg(org, d, ahora) {
   );
   const [grupos, propiedades] = await Promise.all([d.grupos(org), d.propiedades(org)]);
   const demanda = d.demanda ? await d.demanda(org).catch(() => new Map()) : new Map();
-  const eleccion = publicador.elegir({ grupos, propiedades, historial, ahora, maxDia: maxDia(), noAntesDe, excluirRefs, demanda });
+
+  // Un grupo donde publicamos pero el radar no escucha no aporta pedidos: se avisa una vez al dia.
+  const sordos = grupos.filter((g) => g.publica && g.modo === "ignorar");
+  if (sordos.length && estado.avisoSordosDia !== hoy) {
+    estado.avisoSordosDia = hoy;
+    const nombres = sordos.map((g) => g.nombre);
+    console.warn("[publicador] publica pero no escucha:", nombres.join(", "));
+    await d.alertar("Hay grupos donde publicamos que el radar no escucha.", nombres.join(", "));
+  }
+
+  const pedidos = d.pedidosPorGrupo ? await d.pedidosPorGrupo(org, grupos.map((g) => g.id)).catch(() => new Map()) : new Map();
+  const perfiles = new Map(grupos.map((g) => [g.id, perfilDe(g, (pedidos && pedidos.get(g.id)) || [])]));
+  const eleccion = publicador.elegir({ grupos, propiedades, historial, ahora, maxDia: maxDia(), noAntesDe, excluirRefs, demanda, porGrupo: porGrupo(), perfiles });
   if (!eleccion.grupo) return { resultado: eleccion.motivo };
   const { grupo, propiedad } = eleccion;
 
@@ -255,14 +301,15 @@ function start() {
   const tick = () => runOnce().catch((e) => console.error("[publicador] runOnce:", e.message));
   setTimeout(tick, 60 * 1000);
   setInterval(tick, TICK_MS);
-  console.log(`[publicador] PRENDIDO — amoblados en grupos, máx ${maxDia()} por día`);
+  console.log(`[publicador] PRENDIDO — máx ${maxDia()} por día, ${porGrupo()} por grupo`);
 }
 
 function _reset() {
   estado.noAntesDe = null;
   estado.pausadoDia = null;
   estado.avisoSesionDia = null;
+  estado.avisoSordosDia = null;
   estado.linkRoto.clear();
 }
 
-module.exports = { insertarPublicacion, demandaPorZona, start, runOnce, activo, _reset, _depsPorDefecto: depsPorDefecto };
+module.exports = { insertarPublicacion, demandaPorZona, porGrupo, start, runOnce, activo, _reset, _depsPorDefecto: depsPorDefecto };
