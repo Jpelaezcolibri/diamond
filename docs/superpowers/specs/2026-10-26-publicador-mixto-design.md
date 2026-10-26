@@ -62,14 +62,19 @@ entrar a grupos nuevos; publicar en grupos que hoy no tienen `publica`.
    - `fincas`: igual que hoy.
    - **`arriendos` (nueva):** arriendo con `aptaParaKit`, precio creíble, **mensual** (periodo Wasi `mensual`, o sin periodo y sin texto de noche/día), con zona; amoblado o no; fincas no.
    - `ofertas`: igual que hoy (venta de asesor, venta de Wasi o amoblado) **más** los arriendos de la categoría `arriendos`.
-2. **Zona:** si `perfil.zonas` no está vacío, `ubicacion.zonaCoincide(p, { zonas: perfil.zonas })` debe ser verdadero
-   (exacta o sub-zona; **la vecina no vale**, misma regla literal del motor).
+2. **Zona:** si `perfil.zonas` no está vacío, la propiedad entra con un **grado**:
+   `exacta` si `ubicacion.zonaCoincide(p, { zonas: perfil.zonas })` (exacta o sub-zona), `vecina` si
+   `ubicacion.zonaVecina(p, { zonas: perfil.zonas })` (zona contigua de `VECINDAD`), y si no, no entra.
+   **Excepción de Juan (2026-10-26):** "si no tenemos propiedad con zona exacta para ofrecer en los grupos tenemos que
+   hacer excepciones para ofrecer zonas cercanas… primero se ofrezcan los que cumplen y luego las zonas cercanas".
+   Solo aplica a las publicaciones en grupos; el DM al colega sigue literal (sin vecinas). Sin zonas en el perfil, todo es `exacta`.
 3. **Operación:** si `perfil.operacion` existe, la propiedad debe ser de esa operación.
 4. **Tipos:** si `perfil.tipos` existe, el tipo debe estar entre ellos (comparación normalizada; dúplex/penthouse/loft cuentan como apartamento, como en `match.js`).
 
 ## 5. Orden: "las mejores primero"
 
 Dentro de lo que encaja, se ordena por (en este orden):
+0. **Grado de zona: `exacta` antes que `vecina`.** Una vecina solo sale si en ese grupo no hay ninguna exacta disponible.
 1. Asesor recién publicado (existente).
 2. **Franja/mezcla (solo OFERTAS):** franja de mañana → venta primero; franja de tarde → arriendo primero.
 3. Ref que ya salió hoy en otro grupo va al final (existente).

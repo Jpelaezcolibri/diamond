@@ -14,7 +14,7 @@
 
 - `RADAR_PUBLICAR_POR_GRUPO` default **1** (con 1 el comportamiento de franjas es el de hoy: 8:00–17:59 en cualquier momento). Con 2: post 0 de un grupo solo en 8:00–11:59, post 1 solo en 14:00–17:59 (Bogotá, lunes a sábado).
 - Espaciado entre posts: **15–30 min** (antes 20–40).
-- Zona: `require("./ubicacion").zonaCoincide(p, { zonas })` — exacta o sub-zona; la vecina NO vale.
+- Zona (Juan, 2026-10-26): grado `exacta` con `require("./ubicacion").zonaCoincide(p, { zonas })` (exacta o sub-zona); si no, grado `vecina` con `zonaVecina(p, { zonas })`; si no, no entra. En el orden, TODA exacta va antes que cualquier vecina. Solo para publicaciones; el DM al colega no cambia.
 - Categoría `arriendos`: `aptaParaKit`, arriendo, precio creíble, mensual (periodo Wasi `mensual`, o sin periodo y sin texto de noche/día: usar `periodoDudoso(p) === false`), con zona, no finca; amoblado o no.
 - `ofertas` acepta además todo lo que acepta `arriendos`.
 - Mezcla (solo `ofertas`): franja mañana → venta primero; tarde → arriendo primero.
@@ -183,7 +183,7 @@ module.exports = { perfilDe, ZONAS_POR_PALABRA };
 - Consumes: `perfilDe` (Task 1); `require("./ubicacion").zonaCoincide(p, c)`.
 - Produces (exportar además de lo existente):
   - `aptaPara(p, "arriendos")` funciona.
-  - `aptaParaGrupo(p, grupo, perfil) → boolean`
+  - `aptaParaGrupo(p, grupo, perfil) → "exacta" | "vecina" | null`
   - `franjaDe(ahora) → 0 | 1 | null` (0 = 8:00–11:59, 1 = 14:00–17:59, null fuera; con lunes a sábado).
   - `elegir({ ..., porGrupo = 1, perfiles = new Map() })` — `perfiles`: Map `group_id → perfil`; si falta, `perfilDe(grupo)`.
 
@@ -205,18 +205,21 @@ function aptaArriendo(p) {
 2. Encaje con el perfil:
 
 ```js
-const { zonaCoincide } = require("./ubicacion");
+const { zonaCoincide, zonaVecina } = require("./ubicacion");
 const normTipo = (t) => {
   const s = String(t || "").normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().trim();
   return /^(duplex|penthouse|pent house|loft)$/.test(s) ? "apartamento" : s;
 };
+// Grado de encaje: "exacta", "vecina" (excepcion de Juan para grupos) o null.
 function aptaParaGrupo(p, grupo, perfil) {
-  if (!aptaPara(p, grupo.publica)) return false;
-  if (perfil.zonas.length && !zonaCoincide(p, { zonas: perfil.zonas })) return false;
-  if (perfil.operacion === "venta" && !esVenta(p)) return false;
-  if (perfil.operacion === "arriendo" && !esArriendo(p)) return false;
-  if (perfil.tipos.length && !perfil.tipos.map(normTipo).includes(normTipo(p.tipo))) return false;
-  return true;
+  if (!aptaPara(p, grupo.publica)) return null;
+  if (perfil.operacion === "venta" && !esVenta(p)) return null;
+  if (perfil.operacion === "arriendo" && !esArriendo(p)) return null;
+  if (perfil.tipos.length && !perfil.tipos.map(normTipo).includes(normTipo(p.tipo))) return null;
+  if (!perfil.zonas.length) return "exacta";
+  if (zonaCoincide(p, { zonas: perfil.zonas })) return "exacta";
+  if (zonaVecina(p, { zonas: perfil.zonas })) return "vecina";
+  return null;
 }
 ```
 
@@ -256,8 +259,8 @@ function completitud(p) {
 5. En `elegir`:
    - Firma: agregar `porGrupo = 1, perfiles = new Map()`.
    - Tope por grupo: `const deHoyGrupo = (id) => deHoy.filter((h) => h.group_id === id).length;` Con `porGrupo === 1`, candidato si `deHoyGrupo(g.id) === 0` (igual que hoy). Con `porGrupo > 1`: `const f = franjaDe(ahora); if (f === null) return { motivo: "entre_franjas" };` y candidato si `deHoyGrupo(g.id) === f` y `f < porGrupo` (así el post 0 solo sale en la mañana y el 1 en la tarde; si la mañana se perdió, la tarde no manda dos).
-   - Filtro: reemplazar `aptaPara(p, grupo.publica)` por `aptaParaGrupo(p, grupo, perfil)` con `const perfil = perfiles.get(grupo.id) || perfilDe(grupo);` (require `./perfil-grupo`).
-   - Orden (sort, en este orden): `prioridad` (asesor) → `mezcla` → `salioHoy` → `-calza` → `-completitud` → `ultimoDeRef` → ref.
+   - Filtro: reemplazar `aptaPara(p, grupo.publica)` por `aptaParaGrupo(p, grupo, perfil) !== null` con `const perfil = perfiles.get(grupo.id) || perfilDe(grupo);` (require `./perfil-grupo`); guardar el grado por ref (Map) para ordenar.
+   - Orden (sort, en este orden): `grado` (exacta 0, vecina 1) → `prioridad` (asesor) → `mezcla` → `salioHoy` → `-calza` → `-completitud` → `ultimoDeRef` → ref.
      - `mezcla(p)`: solo si `grupo.publica === "ofertas"`; con `franja === 1` (tarde, o `porGrupo === 1` y hora ≥ 14) → `esArriendo(p) ? 0 : 1`; si no → `esVenta(p) ? 0 : 1`. En otros grupos 0.
      - `calza(p)`: si `perfil.pedidos.length` → `pedidosQueCalzan(p, perfil.pedidos)`; si no, en `ofertas` y venta → `demandaDe(p, demanda)` (lo de hoy); si no 0.
    - Reemplaza `clase` y `pedidos` actuales (quedan cubiertos por `mezcla` y `calza`).
@@ -266,12 +269,13 @@ function completitud(p) {
 
 Tests (`test/publicador-mixto.test.js`, mismo estilo y fixtures que `test/publicador-grupos.test.js`; usar lunes 2026-10-19 10:00 a. m. Bogotá = 15:00Z y 3:00 p. m. = 20:00Z):
 - `aptaPara(arriendoSinAmoblar, "arriendos")` true; por noche false; finca false; sin zona false; `ofertas` acepta el arriendo sin amoblar.
-- `aptaParaGrupo`: grupo "OFERTAS SUR POB ENV SAB" acepta zona "El Poblado" y "Loma del Esmeraldal" si `SUBZONA_DE` la mapea a Envigado (si no, usar "Envigado"); rechaza "Laureles"; grupo con perfil `operacion: "venta"` rechaza arriendo; perfil `tipos: ["Casa"]` rechaza apartamento y acepta casa; "Duplex" cuenta como apartamento.
+- `aptaParaGrupo`: grupo "OFERTAS SUR POB ENV SAB" da `"exacta"` para "El Poblado" y "Envigado"; para una zona contigua según `VECINDAD` de src/lib/zonas.js (elegir una que de verdad sea vecina de alguna del perfil y no esté en él) da `"vecina"`; para una zona lejana (ej. "Bello") da `null`; un grupo sin zonas da `"exacta"` siempre; grupo con perfil `operacion: "venta"` rechaza arriendo; perfil `tipos: ["Casa"]` rechaza apartamento y acepta casa; "Duplex" cuenta como apartamento.
 - `franjaDe`: 9:00 → 0, 12:30 → null, 15:00 → 1, 18:00 → null, domingo → null.
 - `elegir` con `porGrupo: 2`: en la mañana un grupo sin posts hoy es candidato; con 1 post hoy no lo es; en la tarde con 1 post hoy sí, con 2 no; a las 12:30 → `{ motivo: "entre_franjas" }`; con `porGrupo: 1` a las 12:30 sí publica (comportamiento de hoy).
 - Mezcla en `ofertas`: con una venta y un arriendo aptos, mañana elige la venta, tarde el arriendo.
 - `calza`: con pedidos del grupo de venta en Envigado ≤ $500 M, entre dos ventas aptas gana la de Envigado a $450 M sobre la de Envigado a $900 M y sobre la de Sabaneta.
 - Ficha completa desempata: misma calza, gana la que tiene área y administración.
+- Exacta antes que vecina: en un grupo con zonas, si hay una exacta y una vecina aptas, sale la exacta aunque la vecina tenga más pedidos que calzan; si solo hay vecina, sale la vecina; si no hay ni exacta ni vecina, `nada_que_publicar`.
 
 - [ ] Steps: test que falla → implementar → `node --test test/publicador-mixto.test.js test/publicador-grupos.test.js` → `npm test` → commit `feat(publicador): perfil por grupo, categoria arriendos, dos franjas y mezcla venta/arriendo`.
 
