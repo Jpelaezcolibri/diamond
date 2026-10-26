@@ -1111,6 +1111,42 @@ router.post("/api/citas/accion", async (req, res) => {
   }
 });
 
+// Preguntas de Sofi al asesor (spec 2026-10-25 §5.4): "Responder a Sofi" y
+// "Descartar" desde "Para atender" del CRM. Mismo criterio que citas/accion:
+// responder exige un asesor activo; descartar tambien lo puede hacer un admin.
+router.post("/api/preguntas/responder", async (req, res) => {
+  try {
+    const { preguntaId, respuesta, authUserId } = req.body || {};
+    if (!preguntaId || !respuesta || !authUserId) return res.status(400).json({ error: "faltan preguntaId, respuesta o authUserId" });
+    const org = await organizations.getDefault();
+    const advisor = await require("../data/advisors").findByAuthUserId(org.id, authUserId);
+    if (!advisor || advisor.activo === false) return res.status(403).json({ error: "tu usuario no está ligado a un asesor activo" });
+    const r = await require("../lib/pregunta-asesor").responder({ org, preguntaId, respuesta, advisor, via: "crm" });
+    if (!r.ok) return res.status(r.codigo || 500).json({ error: r.error });
+    res.json({ ok: true, texto: r.texto });
+  } catch (e) {
+    console.error("[api] Error en preguntas/responder:", e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post("/api/preguntas/descartar", async (req, res) => {
+  try {
+    const { preguntaId, authUserId, esAdmin } = req.body || {};
+    if (!preguntaId || !authUserId) return res.status(400).json({ error: "faltan preguntaId o authUserId" });
+    const org = await organizations.getDefault();
+    const advisor = await require("../data/advisors").findByAuthUserId(org.id, authUserId);
+    const asesorActivo = advisor && advisor.activo !== false;
+    if (!asesorActivo && esAdmin !== true) return res.status(403).json({ error: "tu usuario no está ligado a un asesor activo" });
+    const r = await require("../lib/pregunta-asesor").descartar({ org, preguntaId, por: asesorActivo ? advisor.name : "admin" });
+    if (!r.ok) return res.status(r.codigo || 500).json({ error: r.error });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("[api] Error en preguntas/descartar:", e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // "Marcar atendida" de la pestaña Publicaciones del CRM (spec
 // 2026-10-20-publicaciones-y-respuestas §6). Solo el equipo: un asesor activo
 // o un admin del CRM (el CRM manda esAdmin, leido del app_metadata del usuario
