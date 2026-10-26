@@ -50,6 +50,8 @@ const db = {
   directorioLids: [],
   // Learning Domain: append-only, nunca se muta ni se borra (P15).
   signalEvents: [],
+  // Preguntas de Sofi al asesor (ver db/migrations/2026-10-25_preguntas_asesor.sql).
+  preguntasAsesor: [],
   uid,
 };
 
