@@ -28,7 +28,26 @@ Equipo: 1 dev (Juan) + Claude Code. Idioma de la app: español (Colombia).
 Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
 `docs:`, `config:`).
 
-## 2. Estado actual (2026-10-21)
+## 2. Estado actual (2026-10-25)
+
+- **Preparación para las primeras visitas (2026-10-25).**
+  - **La visita la confirma el asesor, no el propietario** (Juan, 2026-10-24):
+    Sofi, el aviso de cita, la escalera y el CRM ya no dicen "con el
+    propietario". Desplegado en `9e7ad9d`. Reglas de 24 h y `corte_at` sin cambio.
+  - **11 grupos más en escucha:** Daiana estaba en 97 grupos y 54 seguían en
+    `ignorar` (los nuevos entran así y sin nombre). Encendidos con OK de Juan:
+    PEDIDOS 7 A.M. 8 P.M., PEDIDOS OCCIDENTE, Pedidos occid 2, BELÉN A CALDAS,
+    SOLO ITAGÜÍ, SOLO RODEO ALTO, SOLO ALTO DE LAS PALMAS, PEDIDOS ORIENTE,
+    FINCAS 2, Triángulo de Occidente y SOLO 50/50 ANTIOQUÍA-BOG.
+  - **Faltan los 3 grupos que más pedidos traían** (Pedidos Poblado/Envigado,
+    PEDIDOS - BUSCANDO, PEDIDOS -Buscando PEDIDOS): eran de Natalia, Daiana no
+    está y no hay link de invitación guardado.
+  - **Diseño pendiente de aprobar:** Sofi le pregunta al asesor hasta tener la
+    respuesta (visitas sin cancelar en el plazo + preguntas del colega como
+    precio final, unidad, administración). Respuestas de Juan: contesta en el
+    CRM o por WhatsApp, insistencia como la escalera, la visita sigue hasta
+    2 h antes. Sin spec escrita todavía.
+  - Borradores para 4 colegas con cliente: `Claude outputs/visitas-borradores-2026-10-24.md`.
 
 - **Sofi super agente (desplegado 2026-10-21, rama `sofi-super-agente`).**
   Spec `docs/superpowers/specs/2026-10-21-sofi-super-agente-design.md`, plan
