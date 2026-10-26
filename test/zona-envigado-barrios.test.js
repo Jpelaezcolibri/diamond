@@ -109,10 +109,15 @@ test("El Poblado no se come Envigado: su vecindad es con el municipio, no con ca
   assert.strictEqual(match.evaluarCandidata(apto({ zona: "Barrio Mesa" }), pide({ zona: "El Poblado" }), "diamond"), null);
 });
 
-test("una vecindad ya declarada conserva su grado: San Joaquin contra Laureles sigue siendo vecina", () => {
+// Cambio deliberado (revision del DM amplio, 2026-10-26, C1): antes esta
+// vecindad "conservaba su grado" y San Joaquin contra Laureles era 'vecina'.
+// Pero Laureles CONTIENE a San Joaquin: la contencion gana y gradua
+// 'zona_general' (barrio sin confirmar). 'vecina' le hacia decir al DM "No es
+// en San Joaquin: queda en Laureles, cerca", que es falso.
+test("la zona que contiene al barrio pedido gana sobre la vecindad: San Joaquin contra Laureles es zona_general", () => {
   const m = match.evaluarCandidata(apto({ zona: "Laureles", ciudad: "Medellín" }), pide({ zona: "San Joaquín" }), "diamond");
   assert.ok(m);
-  assert.strictEqual(m.ubicacion, "vecina");
+  assert.strictEqual(m.ubicacion, "zona_general");
 });
 
 // ── Lo que sale ───────────────────────────────────────────────────────────

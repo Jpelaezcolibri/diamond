@@ -682,15 +682,18 @@ test("SCORING: Las Palmas cuenta como zona EXACTA de un pedido en El Poblado, no
   assert.strictEqual(m.ubicacion, "exacta");
 });
 
-test("SCORING: la contencion de sub-zona no es simetrica — pedir San Joaquin y encontrar Laureles sigue siendo VECINA, no exacta", () => {
+test("SCORING: la contencion de sub-zona no es simetrica — pedir San Joaquin y encontrar Laureles NO es exacta (es zona_general)", () => {
   // La contencion solo promueve subzona -> zona madre a exacta (San Joaquin
   // ES Laureles). Al reves, "Laureles" es el barrio entero, mas grande que
   // lo pedido: sigue matcheando por la vecindad YA declarada
   // (["laureles","joaquin"] en zonas.js, de antes de este fix), pero como
   // 'vecina', no como si fuera exactamente lo pedido.
+  // Desde el 2026-10-26 (revision del DM amplio, C1) gradua 'zona_general':
+  // Laureles CONTIENE a San Joaquin, asi que la ficha puede estar justo ahi;
+  // decir que es "vecina" era falso. Sigue sin ser exacta.
   const m = evaluarCandidata(apto({ zona: "Laureles" }), pide({ zona: "San Joaquín" }), "diamond");
   assert.ok(m);
-  assert.strictEqual(m.ubicacion, "vecina");
+  assert.strictEqual(m.ubicacion, "zona_general");
 });
 
 // DUPLICADOS (senal 3cdbee86): un pedido real trajo 6 candidatas, 5 la MISMA

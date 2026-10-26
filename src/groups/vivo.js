@@ -363,6 +363,10 @@ function pedidoDe(fuente, { texto = null, fechaIso = null } = {}) {
   return {
     zonas: Array.isArray(fuente.zonas) && fuente.zonas.length ? fuente.zonas : null,
     zona: fuente.zona || null,
+    // El municipio que CONTIENE lo pedido (clasificador en vivo). Sin esto
+    // ubicacion.zonasPedidas lo leia como una alternativa y la nota de zona
+    // cercana decia "No es en Envigado ni Zuniga: queda en Envigado".
+    zona_madre: fuente.zona_madre || null,
     habitaciones: fuente.habitaciones || null,
     areaMin: fuente.area_min || null,
     operacion: fuente.operacion || null,

@@ -206,12 +206,15 @@ function ubicacionCoincide(p, c) {
   // "Barrio Mesa" y la propiedad dice solo "Envigado". Esta en el municipio
   // del barrio pedido, pero el barrio exacto no lo registramos. Es un dato que
   // no tenemos, no un incumplimiento (regla D7): entra, y el mensaje lo dice.
-  // Va DESPUES de "vecina": una vecindad ya declarada en zonas.js (San
-  // Joaquin <-> Laureles, Envigado <-> El Escobero) conserva su grado y su
-  // texto de siempre; esto solo suma lo que antes no entraba. Mismo puntaje.
-  if (pide && zonaVecina(p, c)) {
-    return { razon: `${donde} (vecina de lo pedido)`, puntos: -5, grado: "vecina" };
-  }
+  // VA ANTES DE "vecina" (revision del DM amplio, 2026-10-26). Antes iba
+  // despues, y una vecindad declarada en zonas.js entre un barrio y la zona
+  // que lo CONTIENE (Zuniga <-> Envigado, Las Palmas <-> El Poblado, San
+  // Joaquin <-> Laureles, La Mota <-> Belen) graduaba 'vecina': quien pedia
+  // Zuniga y la ficha decia solo "Envigado" recibia "No es en Zuniga: queda
+  // en Envigado, cerca", que es falso -- la ficha puede estar justo en Zuniga.
+  // Si la ficha esta en la zona madre de un barrio pedido, eso es lo que es
+  // (barrio sin confirmar, con sus reglas de siempre); la vecindad solo
+  // gradua cuando no hay contencion. Mismo puntaje que la vecina.
   if (pide && zonaGeneral(p, c)) {
     // EL BARRIO SE LEE DE LA FICHA (Juan, 2026-09-21): "si dice envigado
     // barrio mesa solo enviar envigado barrio mesa". Wasi guarda la zona
@@ -230,6 +233,9 @@ function ubicacionCoincide(p, c) {
       razon: `${donde} (el barrio exacto no está registrado)`, puntos: -5, grado: "zona_general",
       ...(otrosEnFicha.length ? { otrosEnFicha } : {}),
     };
+  }
+  if (pide && zonaVecina(p, c)) {
+    return { razon: `${donde} (vecina de lo pedido)`, puntos: -5, grado: "vecina" };
   }
   if (pide) {
     // Zona distinta y no contigua. Entra, pero muy castigada y marcada: solo

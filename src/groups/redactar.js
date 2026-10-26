@@ -302,7 +302,13 @@ function desvios(match, pedido) {
     // marca (aviso a la asesora, grupo) todo sigue como antes.
     const cercana = match.zona_cercana;
     if (cercana && cercana.tipo === "barrio" && cercana.barrio) salida.push(`queda en ${cercana.barrio}, ${zonaProp}`);
-    else if (cercana && cercana.tipo === "vecina" && grado !== "exacta") salida.push(`No es en ${pedidas}: queda en ${zonaProp}, cerca`);
+    else if (cercana && cercana.tipo === "vecina" && grado === "vecina") {
+      // Nunca se lista la zona de la propia ficha entre las "no es en" (un
+      // pedido guardado sin zona_madre puede repetir el municipio en `zonas`).
+      // Si no queda ninguna, no hay nada verdadero que decir de la zona.
+      const otras = zonasPedidas.filter((z) => !ubicacion.zonaCoincide({ zona: zonaProp }, { zonas: [z], zona: z }));
+      if (otras.length) salida.push(`No es en ${otras.join(" ni ")}: queda en ${zonaProp}, cerca`);
+    }
     else if (grado === "zona_general") salida.push(`queda en ${zonaProp}; el barrio exacto no lo tengo registrado`);
     else if (grado === "vecina") salida.push(`queda en ${zonaProp}, vecina de ${zonasPedidas.join(" y ")}`);
     else if (grado !== "exacta") salida.push(`queda en ${zonaProp}, no en ${pedidas}`);

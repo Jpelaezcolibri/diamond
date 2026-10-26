@@ -244,3 +244,91 @@ test("dudosas: sin dudosas no devuelve nada", () => {
   assert.deepStrictEqual(publicable.dudosasParaDm({ refs_dudosas: [] }, [ficha()]), { matches: [], leFalta: [] });
   assert.deepStrictEqual(publicable.dudosasParaDm(null, [ficha()]), { matches: [], leFalta: [] });
 });
+
+// ── C1 (revision 2026-10-26): la zona que CONTIENE al barrio pedido no es "cerca" ──
+// Pedir el barrio y tener la ficha registrada solo con su zona madre (Zuniga
+// contra "Envigado", Balsos/San Lucas contra "El Poblado") NO es zona cercana:
+// la ficha puede estar justo en el barrio pedido. Es sector_sin_confirmar y
+// sus reglas de siempre aplican. "No es en Zuniga: queda en Envigado, cerca"
+// era falso.
+const pedidoZona = (zonas, extra = {}) => ({
+  operacion: "venta", tipo: "apartamento", zonas, zona: zonas[0],
+  precio_min: 0, precio_max: 500000000, habitaciones: 0,
+  area_min: 0, banos: 0, garajes: 0, estrato: 0, ...extra,
+});
+const aptoZona = (zona, extra = {}) => ({
+  ref: "Z1", titulo: "Apartamento en venta", tipo: "Apartamento", operacion: "Venta",
+  precio: "$450.000.000", zona, ciudad: "Medellín", habitaciones: 3, banos: 2, garaje: 1,
+  estrato: 5, area: "95 m²", descripcion: "",
+  link: "https://diamondinmobiliaria.com/propiedades/z1",
+  linkWasi: "https://info.wasi.co/apartamento-venta/10416693", ...extra,
+});
+function fichaAlColega(zonasPedidas, zonaFicha, opciones = ON, pedidoExtra = {}) {
+  const ped = pedidoZona(zonasPedidas, pedidoExtra);
+  const m = evaluarCandidata(aptoZona(zonaFicha), ped, "diamond");
+  const r = publicable.filtrar(m ? [m] : [], opciones);
+  if (!r.publicables.length) return { m, r, texto: null };
+  const notas = publicable.notasParaDm({ sinConfirmar: [], leFalta: [] }, r.aclaraciones, r.publicables);
+  const armado = redactar.mensajesAlColega({ autor_nombre: "Ana" }, r.publicables, { ...notas, pedido: ped });
+  return { m, r, texto: armado.mensajes.slice(1).map((x) => x.texto).join("\n") };
+}
+
+test("C1: pedido Zúñiga, ficha 'Envigado': no es zona cercana, es barrio sin confirmar", () => {
+  const { m, r, texto } = fichaAlColega(["Zúñiga"], "Envigado");
+  assert.strictEqual(m.ubicacion, "zona_general");
+  assert.ok(!r.aclaraciones.some((a) => a.zonaCercana));
+  assert.match(texto, /queda en Envigado; el barrio exacto no lo tengo registrado/);
+  assert.doesNotMatch(texto, /No es en/);
+});
+
+test("C1: pedido Balsos y San Lucas (con o sin Alto de las Palmas), ficha 'El Poblado': nunca 'No es en'", () => {
+  for (const zonas of [["Balsos", "San Lucas"], ["Alto de las Palmas", "Balsos", "Patio Bonito", "San Lucas"]]) {
+    const { m, texto } = fichaAlColega(zonas, "El Poblado");
+    assert.strictEqual(m.ubicacion, "zona_general", JSON.stringify(zonas));
+    assert.match(texto, /queda en El Poblado; el barrio exacto no lo tengo registrado/, JSON.stringify(zonas));
+    assert.doesNotMatch(texto, /No es en/, JSON.stringify(zonas));
+  }
+});
+
+test("C1: varios barrios de Envigado (uno conocido) contra 'Envigado': tampoco es 'cerca'", () => {
+  const { m, texto } = fichaAlColega(["La Frontera", "Santa María de los Ángeles", "Zúñiga", "Villa Grande"], "Envigado");
+  assert.strictEqual(m.ubicacion, "zona_general");
+  assert.doesNotMatch(texto, /No es en/);
+});
+
+test("C1: San Joaquín contra 'Laureles' y La Mota contra 'Belén': la zona madre no es vecina", () => {
+  for (const [pedida, fichaZona] of [["San Joaquín", "Laureles"], ["La Mota", "Belén"]]) {
+    const m = evaluarCandidata(aptoZona(fichaZona), pedidoZona([pedida]), "diamond");
+    assert.strictEqual(m.ubicacion, "zona_general", pedida);
+  }
+});
+
+test("C1: un vecino de verdad sigue saliendo: pedido Envigado, ficha Itagüí", () => {
+  const { m, r, texto } = fichaAlColega(["Envigado"], "Itagüí");
+  assert.strictEqual(m.ubicacion, "vecina");
+  assert.strictEqual(r.aclaraciones[0].zonaCercana, true);
+  assert.match(texto, /Aclaración: No es en Envigado: queda en Itagüí, cerca/);
+});
+
+test("C1: la nota de zona cercana nunca nombra la zona de la propia ficha entre las 'no es en'", () => {
+  // El clasificador repitio el municipio en `zonas` y el pedido guardado no
+  // trae zona_madre: la ficha vieja dice 'vecina' y vive en Envigado.
+  const m = { ...ficha({ ubicacion: "vecina", zona: "Envigado" }), zona_cercana: { tipo: "vecina" } };
+  const d = redactar.desvios(m, { zonas: ["Envigado", "Zúñiga"] });
+  assert.ok(!d.some((x) => /No es en[^:]*Envigado/.test(x)), JSON.stringify(d));
+});
+
+test("C1: pedidoDe pasa zona_madre, para que la nota no liste el municipio que contiene lo pedido", () => {
+  const vivo = require("../src/groups/vivo");
+  const p = vivo.pedidoDe({ zonas: ["Envigado", "Zúñiga"], zona: "Envigado", zona_madre: "Envigado" });
+  assert.strictEqual(p.zona_madre, "Envigado");
+  const m = { ...ficha({ ubicacion: "vecina", zona: "Sabaneta" }), zona_cercana: { tipo: "vecina" } };
+  const d = redactar.desvios(m, p);
+  assert.deepStrictEqual(d.filter((x) => /No es en/.test(x)), ["No es en Zúñiga: queda en Sabaneta, cerca"]);
+});
+
+test("C1: la marca de zona cercana solo escribe 'No es en' sobre una vecina", () => {
+  const m = { ...ficha({ ubicacion: "zona_general", zona: "Envigado" }), zona_cercana: { tipo: "vecina" } };
+  const d = redactar.desvios(m, { zonas: ["Zúñiga"] });
+  assert.ok(!d.some((x) => /No es en/.test(x)), JSON.stringify(d));
+});
