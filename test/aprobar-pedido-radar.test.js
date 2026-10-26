@@ -7,7 +7,8 @@
 // publicacion en el grupo (ver la nota en vivo.js#aprobarManual). El
 // `resultado: "publicado"` que mockean estos tests conservo el nombre viejo.
 
-const { test } = require("node:test");
+const { test } = require("node:test");
+require("./helpers/interruptores-dm").apagadosEnCadaTest();
 const assert = require("node:assert");
 
 const { executeTool, TOOL_DEFINITIONS } = require("../src/agent/tools");

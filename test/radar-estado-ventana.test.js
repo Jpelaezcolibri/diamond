@@ -7,7 +7,8 @@
 // movil de 24 h. El comentario mandaba contrastar ese numero contra la cuota
 // de WhatsApp, que ademas es un contador de CICLO MENSUAL: tres relojes
 // distintos presentados como si fueran comparables.
-const { test } = require("node:test");
+const { test } = require("node:test");
+require("./helpers/interruptores-dm").apagadosEnCadaTest();
 const assert = require("node:assert");
 
 const config = require("../src/config");

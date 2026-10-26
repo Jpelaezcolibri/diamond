@@ -1,4 +1,5 @@
-const { test } = require("node:test");
+const { test } = require("node:test");
+require("./helpers/interruptores-dm").apagadosEnCadaTest();
 const assert = require("node:assert");
 const { executeCommandTool, COMMAND_TOOL_DEFINITIONS } = require("../src/agent/sofi-comando-tools");
 const { buildCommandSystemPrompt } = require("../src/agent/sofi-comando-prompts");

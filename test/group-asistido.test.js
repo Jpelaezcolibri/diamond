@@ -5,7 +5,8 @@
 // Sofi y —via signal_events— lo que la asesora termino haciendo. Con esas tres
 // se ajusta el umbral con evidencia en vez de intuicion.
 
-const { test, beforeEach } = require("node:test");
+const { test, beforeEach } = require("node:test");
+require("./helpers/interruptores-dm").apagadosEnCadaTest();
 const assert = require("node:assert");
 // Ver la nota en group-avisar-mandato.test.js: el freno de ritmo es de proceso.
 const ritmo = require("../src/lib/ritmo-avisos");
@@ -131,6 +132,22 @@ function instalar() {
   };
   require.cache[RUTA("data/sync-estado.js")] = {
     exports: { estadoDelInventario: async () => ({ fresco: true, iso: "x", horas: 1 }) },
+  };
+  // SIN RED (revision del DM amplio, 2026-10-26, I4). Sin este doble, cada DM
+  // de este archivo hacia un GET REAL a info.wasi.co (verificar-link.js, 6 s de
+  // timeout, resultado cacheado 10 min): con la suite completa en paralelo el
+  // GET a veces vencia, el link quedaba "roto" para todo el archivo y fallaban
+  // 33-34 tests de una (visto el 2026-10-26 dos veces). Abre todo link de Wasi
+  // que la ficha traiga; la compuerta de link vacio sigue en publicable.js.
+  require.cache[RUTA("groups/verificar-link.js")] = {
+    exports: {
+      verificar: async (ms) => ({
+        verificadas: (ms || []).filter((m) => m && m.linkWasi),
+        rotas: (ms || []).filter((m) => !(m && m.linkWasi)).map((m) => ({ ref: m && m.ref, link: m && m.linkWasi })),
+      }),
+      TIMEOUT_MS: 0,
+      _resetCache: () => {},
+    },
   };
   // Sin este doble, cada test que llega a "demanda" dispara un colegas.upsert
   // REAL contra la Supabase compartida por las 4 apps (vivo.js hace
@@ -1377,7 +1394,7 @@ function conAclaracion(fn) {
     try {
       await fn();
     } finally {
-      delete process.env.RADAR_DM_CON_ACLARACION;
+      process.env.RADAR_DM_CON_ACLARACION = "false"; // el valor fijo de helpers/interruptores-dm.js
     }
   };
 }

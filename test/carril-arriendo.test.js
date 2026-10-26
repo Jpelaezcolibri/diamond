@@ -1,4 +1,5 @@
-const { test } = require("node:test");
+const { test } = require("node:test");
+require("./helpers/interruptores-dm").apagadosEnCadaTest();
 const assert = require("node:assert");
 const carril = require("../src/groups/carril-arriendo");
 

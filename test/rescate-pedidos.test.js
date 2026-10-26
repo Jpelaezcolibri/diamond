@@ -1,7 +1,8 @@
 // Script de rescate de pedidos sin DM (2026-10-20). Todo con dependencias
 // inyectadas: ningun test sale a Supabase ni a WAHA.
 
-const { test } = require("node:test");
+const { test } = require("node:test");
+require("./helpers/interruptores-dm").apagadosEnCadaTest();
 const assert = require("node:assert");
 const os = require("node:os");
 const rescate = require("../scripts/rescate-pedidos");

@@ -5,7 +5,8 @@
 // group-classify.test.js— sino QUE SE PUBLICA Y QUE NO. Cada camino que termina
 // en un mensaje dentro de un grupo gremial tiene su test.
 
-const { test, beforeEach } = require("node:test");
+const { test, beforeEach } = require("node:test");
+require("./helpers/interruptores-dm").apagadosEnCadaTest();
 const assert = require("node:assert");
 const path = require("node:path");
 
@@ -1719,7 +1720,7 @@ function conAclaracionManual(fn) {
     try {
       await fn();
     } finally {
-      delete process.env.RADAR_DM_CON_ACLARACION;
+      process.env.RADAR_DM_CON_ACLARACION = "false"; // el valor fijo de helpers/interruptores-dm.js
     }
   };
 }
@@ -1807,7 +1808,7 @@ test("responderPorDmManual: con zona cercana, la vecina sale sin exactas y la tr
     assert.match(enviosDmManual[1].texto, /Aclaración: No es en Envigado: queda en Itagüí, cerca/);
     assert.ok(politicasGuardadas[politicasGuardadas.length - 1].traza.includes("zona_cercana:AP004"));
   } finally {
-    delete process.env.RADAR_DM_ZONA_CERCANA;
+    process.env.RADAR_DM_ZONA_CERCANA = "false"; // el valor fijo de helpers/interruptores-dm.js
   }
 });
 
@@ -1836,6 +1837,6 @@ test("responderPorDmManual y prepararAviso: el grado de zona viejo no imprime un
     const aviso = await vivo.prepararAviso({ id: "org-1" }, "sig-callada", { sesion: "RADA-NATALIA" });
     assert.doesNotMatch(JSON.stringify(aviso.mensajes || aviso.mensaje || ""), /No es en/);
   } finally {
-    delete process.env.RADAR_DM_ZONA_CERCANA;
+    process.env.RADAR_DM_ZONA_CERCANA = "false"; // el valor fijo de helpers/interruptores-dm.js
   }
 });

@@ -4,6 +4,7 @@
 // Mismo estilo que senal-responder-dm-endpoint.test.js: se ejercita el
 // handler de Express a traves del router, sin levantar el servidor.
 const { test, beforeEach } = require("node:test");
+require("./helpers/interruptores-dm").apagadosEnCadaTest();
 const assert = require("node:assert");
 const memory = require("../src/data/memory");
 const groupSignals = require("../src/data/group-signals");

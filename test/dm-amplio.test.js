@@ -8,6 +8,7 @@
 //     test/group-asistido.test.js).
 
 const { test } = require("node:test");
+require("./helpers/interruptores-dm").apagadosEnCadaTest();
 const assert = require("node:assert");
 const publicable = require("../src/groups/publicable");
 const redactar = require("../src/groups/redactar");

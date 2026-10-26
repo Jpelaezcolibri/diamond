@@ -2,6 +2,7 @@
 // costo, 2026-09-14). Sin esta mezcla no se sabe si achicar la salida del
 // ruido vale la pena: es el dato que decide la proxima palanca.
 const test = require("node:test");
+require("./helpers/interruptores-dm").apagadosEnCadaTest();
 const assert = require("node:assert");
 
 const canal = require("../src/channels/whatsapp-group");

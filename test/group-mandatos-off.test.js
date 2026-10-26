@@ -4,7 +4,8 @@
 //
 // Lo que se prueba no es "la bandera se lee". Es la promesa que se le hizo:
 // apagado NO se cruza ni se avisa, y volver a prenderlo no perdio nada.
-const { test, beforeEach } = require("node:test");
+const { test, beforeEach } = require("node:test");
+require("./helpers/interruptores-dm").apagadosEnCadaTest();
 const assert = require("node:assert");
 
 const mandatosData = require("../src/data/mandatos");

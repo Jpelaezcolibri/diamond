@@ -4,7 +4,8 @@
 // estaban antes del 2026-08-20: entonces se persistian todas y saturaban
 // group_signals (402 ofertas de 438 señales en 2 dias) sin aportar nada. Ahora
 // se cruzan en memoria contra los mandatos y solo se persiste lo que cruza.
-const { test, beforeEach } = require("node:test");
+const { test, beforeEach } = require("node:test");
+require("./helpers/interruptores-dm").apagadosEnCadaTest();
 const assert = require("node:assert");
 const mandatosData = require("../src/data/mandatos");
 const ofertas = require("../src/groups/ofertas");

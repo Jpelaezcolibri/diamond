@@ -6,7 +6,8 @@
 // cerrado sin exactamente una activa, igual que aprobarManual) y que le pase
 // a vivo.responderPorDmManual justo lo que devolvio, sin inventar nada.
 
-const { test } = require("node:test");
+const { test } = require("node:test");
+require("./helpers/interruptores-dm").apagadosEnCadaTest();
 const assert = require("node:assert");
 
 const organizations = require("../src/data/organizations");
