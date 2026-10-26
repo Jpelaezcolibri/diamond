@@ -65,7 +65,7 @@ async function registrarRespuestaSofi(org, lead, phone, text) {
 // (Click-to-WhatsApp Ads) — permite separar en el CRM los leads que llegaron
 // por un anuncio pago de los organicos, sin tocar `source` (canal).
 // Devuelve { reply, lead, transfer } — transfer: { motivo, advisorAlert } si aplico.
-async function procesarMensaje({ org, phone, text, source = "whatsapp", messageExtras = {}, phoneNumberId = null, adReferral = null, radarSignalId = null }) {
+async function procesarMensaje({ org, phone, text, source = "whatsapp", messageExtras = {}, phoneNumberId = null, adReferral = null, radarSignalId = null, preguntaId = null }) {
   const client = getClient();
 
   // ¿Escribe un asesor de la casa? Se resuelve ANTES de tocar el lead: casi
@@ -265,6 +265,7 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
     // Solo tiene sentido con un asesor citando el aviso de un pedido del
     // radar; con un cliente esto siempre viene null y no se usa.
     radarSignalId,
+    preguntaId,
   };
   // Este bloque solo tiene sentido con property_ref_origen, que un colega ya
   // no puede tener (ver el bloque de arriba) — el !colega es defensivo, para
@@ -340,10 +341,21 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
     )
   ).filter(Boolean);
 
+  // Preguntas al asesor (spec 2026-10-25): al asesor se le muestran las
+  // pendientes; al colega/cliente, si tiene una respuesta lista por entregar.
+  let preguntas = null;
+  let respuestaPorEntregar = false;
+  const pa = require("../lib/pregunta-asesor");
+  if (pa.activo()) {
+    if (advisor) preguntas = await pa.contextoAsesor({ org, preguntaId }).catch(() => null);
+    else respuestaPorEntregar = await pa.hayPorEntregar(lead.id).catch(() => false);
+  }
+
   const system = buildSystemPrompt({
     org, lead, qualified: isQualified(lead), now: nowInBogota(), advisor, colega, ultimoPedido, coordinador, historial,
     pausaDias: require("./pausa").diasDePausa(history),
     fichasPedido,
+    preguntas, respuestaPorEntregar,
   });
 
   const extractText = (r) =>

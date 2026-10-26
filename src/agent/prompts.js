@@ -31,7 +31,26 @@ const FICHA_FORMAT = `✨ [Gancho de una linea con el beneficio principal, sacad
 // avisos de los grupos le llegan a ella por este mismo chat, asi que cuando
 // responde algo sobre un pedido, Sofi tiene que entender el contexto de
 // trabajo, no arrancar un embudo de ventas.
-function promptAsesor({ org, advisor, now }) {
+// Preguntas al asesor (spec 2026-10-25). Solo con SOFI_PREGUNTA_ASESOR.
+function preguntasActivas() {
+  return require("../lib/pregunta-asesor").activo();
+}
+function reglaPreguntaAsesor() {
+  if (!preguntasActivas()) return "";
+  return `
+
+DATO QUE NO TIENES: si te preguntan un dato de una propiedad que no está en la ficha ni en tus herramientas (precio final o si negocian, nombre de la unidad o si es unidad cerrada, administración u otro dato de la propiedad), NO lo inventes ni lo deduzcas: llama preguntar_al_asesor y dile "Le pregunto al asesor y apenas me responda te escribo." Nunca prometas una hora. Si es sobre comisión o condiciones, la respuesta sigue siendo que eso se confirma con el asesor; no uses la herramienta.`;
+}
+function bloquePreguntasAsesor(preguntas) {
+  if (!preguntasActivas() || !preguntas) return "";
+  const lista = (preguntas.pendientes || []).map((p) => `- ${p.id} · ${p.ref ? `Ref ${p.ref}` : "sin ref"} · ${p.pregunta}`).join("\n");
+  const citada = preguntas.citada ? `\n\nEL ASESOR CITÓ LA PREGUNTA ${preguntas.citada.id}: lo que escribe es la respuesta a esa. Llama responder_pregunta con su texto literal.` : "";
+  if (!lista && !citada) return "";
+  return `\n\nPREGUNTAS PENDIENTES (de colegas y clientes, esperando dato del equipo):\n${lista || "- ninguna"}${citada}\nSi el asesor te da un dato que contesta una de estas, llama responder_pregunta con su id y sus palabras literales. Si hay varias y no sabes a cuál responde, pregúntale cuál antes de registrar.`;
+}
+const LISTA_ENTREGA = "\n\nRESPUESTA DEL ASESOR LISTA: el sistema le manda la respuesta a su pregunta justo después de tu mensaje. No la repitas ni digas que todavía no la tienes.";
+
+function promptAsesor({ org, advisor, now, preguntas = null }) {
   const seccionPublicar = require("./publicar-asesor").activo()
     ? `
 
@@ -95,7 +114,7 @@ HISTORIAL CONTAMINADO: en esta conversacion puede haber mensajes tuyos anteriore
 
 REGLA DE ORO: ante la duda, preguntale que necesita en vez de suponer. Un asesor que escribe "hola" quiere abrir la conversacion, no recibir un catalogo.${seccionPublicar}`;
 
-  const contexto = `${now ? `FECHA Y HORA ACTUAL EN COLOMBIA: ${now.legible} (referencia ISO: ${now.iso}).\n\n` : ""}ASESOR: ${advisor.name}${advisor.especialidad ? ` — especialidad ${advisor.especialidad}` : ""}.`;
+  const contexto = `${now ? `FECHA Y HORA ACTUAL EN COLOMBIA: ${now.legible} (referencia ISO: ${now.iso}).\n\n` : ""}ASESOR: ${advisor.name}${advisor.especialidad ? ` — especialidad ${advisor.especialidad}` : ""}.${bloquePreguntasAsesor(preguntas)}`;
 
   return [
     { type: "text", text: stable, cache_control: CACHE_ESTABLE },
@@ -172,7 +191,7 @@ function reglaComision(org) {
   return `${base} Si te pregunta por la comision, puedes repetirle exactamente esta condicion de la casa: "${lineaComision(org)}" Nada mas alla de ese texto.`;
 }
 
-function promptColega({ org, colega, now, ultimoPedido = null, coordinador = null, historial = [], lead = null, fichasPedido = [] }) {
+function promptColega({ org, colega, now, ultimoPedido = null, coordinador = null, historial = [], lead = null, fichasPedido = [], respuestaPorEntregar = false }) {
   const stable = `Eres Sofi, la asistente virtual de ${org.name} en Colombia. Eres mujer y paisa (de Medellin).
 
 CON QUIEN ESTAS HABLANDO: un colega de otra inmobiliaria. NO es un cliente: es un par del gremio, y ya publico o va a publicar pedidos en los grupos donde estamos. Casi siempre escribe porque tiene un CLIENTE PROPIO buscando algo.
@@ -267,10 +286,10 @@ REGLA DE ORO: ante la duda, preguntale que necesita. Un colega que escribe "hola
       ? `\n\nCOORDINA LAS VISITAS: ${coordinador.alias}. Es quien valida la visita y le escribe o lo llama para confirmarla.`
       : "";
 
-  const contexto = `${now ? `FECHA Y HORA ACTUAL EN COLOMBIA: ${now.legible} (referencia ISO: ${now.iso}).\n\n` : ""}COLEGA: ${colega.nombre || "un colega del gremio"}.${bloqueCoordinador}${bloquePedido}${bloqueFichas}${bloqueHistorial(historial, lead)}`;
+  const contexto = `${now ? `FECHA Y HORA ACTUAL EN COLOMBIA: ${now.legible} (referencia ISO: ${now.iso}).\n\n` : ""}COLEGA: ${colega.nombre || "un colega del gremio"}.${bloqueCoordinador}${bloquePedido}${bloqueFichas}${bloqueHistorial(historial, lead)}${respuestaPorEntregar && preguntasActivas() ? LISTA_ENTREGA : ""}`;
 
   return [
-    { type: "text", text: stable + REGLAS_COMUNES, cache_control: CACHE_ESTABLE },
+    { type: "text", text: stable + REGLAS_COMUNES + reglaPreguntaAsesor(), cache_control: CACHE_ESTABLE },
     { type: "text", text: contexto },
   ];
 }
@@ -285,11 +304,11 @@ ${datosLead}
 No los des por vigentes: lo que busca pudo cambiar. Confirma con el cliente el presupuesto, la zona y el tipo antes de usarlos en una búsqueda o en una respuesta ("la vez pasada me hablaste de hasta 400 millones, ¿sigue siendo así?"), y nunca digas que te los dio hoy. Lo que aparece en el historial antes de la pausa también es de esa conversación anterior.`;
 }
 
-function buildSystemPrompt({ org, lead, qualified, now, advisor = null, colega = null, ultimoPedido = null, coordinador = null, historial = [], pausaDias = 0, fichasPedido = [] }) {
-  if (advisor) return promptAsesor({ org, advisor, now });
+function buildSystemPrompt({ org, lead, qualified, now, advisor = null, colega = null, ultimoPedido = null, coordinador = null, historial = [], pausaDias = 0, fichasPedido = [], preguntas = null, respuestaPorEntregar = false }) {
+  if (advisor) return promptAsesor({ org, advisor, now, preguntas });
   // Un asesor propio que ademas esta en un grupo gremial sigue siendo de la
   // casa: por eso este orden y no el contrario.
-  if (colega) return promptColega({ org, colega, now, ultimoPedido, coordinador, historial, lead, fichasPedido });
+  if (colega) return promptColega({ org, colega, now, ultimoPedido, coordinador, historial, lead, fichasPedido, respuestaPorEntregar });
 
   const datosLead = [
     lead.nombre && `Nombre: ${lead.nombre}`,
@@ -407,10 +426,10 @@ AGENDAMIENTO DE CITAS (dia y hora — dato critico que no se puede perder):
       : "";
   const contexto = `${idiomaBloque}${now ? `FECHA Y HORA ACTUAL EN COLOMBIA: ${now.legible} (referencia ISO: ${now.iso}). Usala para resolver fechas relativas que diga el cliente ("manana", "el jueves", "este fin de semana") cuando agendes una cita.\n\n` : ""}${bloqueDatos(datosLead, pausaDias)}
 
-ESTADO DE CALIFICACION: ${qualified ? "CALIFICADO — ya conoces presupuesto, urgencia y preferencia. Ofrece activamente conectarlo con el asesor humano usando la herramienta transferir_a_asesor cuando acepte." : "EN CALIFICACION — te falta conocer presupuesto, urgencia o preferencia (zona/tipo). Averigua estos datos de forma natural durante la conversacion, UNA pregunta a la vez."}`;
+ESTADO DE CALIFICACION: ${qualified ? "CALIFICADO — ya conoces presupuesto, urgencia y preferencia. Ofrece activamente conectarlo con el asesor humano usando la herramienta transferir_a_asesor cuando acepte." : "EN CALIFICACION — te falta conocer presupuesto, urgencia o preferencia (zona/tipo). Averigua estos datos de forma natural durante la conversacion, UNA pregunta a la vez."}${respuestaPorEntregar && preguntasActivas() ? LISTA_ENTREGA : ""}`;
 
   return [
-    { type: "text", text: stable + REGLAS_COMUNES, cache_control: CACHE_ESTABLE },
+    { type: "text", text: stable + REGLAS_COMUNES + reglaPreguntaAsesor(), cache_control: CACHE_ESTABLE },
     { type: "text", text: contexto },
   ];
 }

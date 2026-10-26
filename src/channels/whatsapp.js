@@ -386,12 +386,17 @@ router.post("/webhook", async (req, res) => {
       // esto resuelve DIRECTO a esa señal — Sofi no tiene que preguntar a
       // cual pedido se refiere ni adivinarlo. Ver registrar_resultado_radar.
       let radarSignalId = null;
+      let preguntaId = null;
       if (message.context?.id) {
         const ref = await conversations.findByWaMessageId(message.context.id);
         replyToId = ref?.id || null;
         if (!replyToId) {
           const señal = await groupSignals.findByWamid(org.id, message.context.id).catch(() => null);
           radarSignalId = señal?.id || null;
+        }
+        if (!replyToId && !radarSignalId && require("../lib/pregunta-asesor").activo()) {
+          const p = await require("../data/preguntas-asesor").porWamid(message.context.id).catch(() => null);
+          preguntaId = p?.id || null;
         }
       }
 
@@ -429,6 +434,7 @@ router.post("/webhook", async (req, res) => {
         phoneNumberId,
         adReferral,
         radarSignalId,
+        preguntaId,
       });
 
       if (reply) {
@@ -436,6 +442,9 @@ router.post("/webhook", async (req, res) => {
         if (assistantMessageId) {
           await conversations.setDelivery(assistantMessageId, ok ? "sent" : "failed", error);
           if (wamid) await conversations.setWaMessageId(assistantMessageId, wamid);
+        }
+        if (ok && leadAtendido && leadAtendido.source !== "asesor" && require("../lib/pregunta-asesor").activo()) {
+          await require("../lib/pregunta-asesor").entregarPendientesDe({ org, lead: leadAtendido }).catch((e) => console.warn("[preguntas] entrega pendiente:", e.message));
         }
       }
       // BUG real (Juan, 2026-08-20): "necesito confirmar si la transferencia a
