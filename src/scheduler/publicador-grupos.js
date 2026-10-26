@@ -23,7 +23,24 @@ const TICK_MS = 5 * 60 * 1000;
 const DIA_MS = 86400000;
 const LINK_ROTO_ASESOR_MIN = 60;
 
-const estado = { noAntesDe: null, pausadoDia: null, avisoSesionDia: null, avisoSordosDia: null, linkRoto: new Map() };
+const estado = { noAntesDe: null, pausadoDia: null, avisoSesionDia: null, avisoSordosDia: null, linkRoto: new Map(), ultimoMotivo: null };
+
+// Motivos de un tick sin post que son normales y no se loguean.
+const MOTIVOS_NORMALES = new Set(["fuera_de_horario", "espaciado", "entre_franjas", "enviado"]);
+
+// Un tick que no publica por otra razon deja una linea en el log, solo cuando
+// el motivo cambia (2026-10-26: el publicador callo toda una manana sin rastro).
+function logMotivo(org, r) {
+  const motivo = r && r.resultado;
+  const clave = `${org.name}:${motivo}`;
+  if (!motivo || MOTIVOS_NORMALES.has(motivo) || estado.ultimoMotivo === clave) {
+    if (motivo === "enviado") estado.ultimoMotivo = null;
+    return false;
+  }
+  estado.ultimoMotivo = clave;
+  console.warn(`[publicador] ${org.name}: sin publicar (${motivo})`);
+  return true;
+}
 
 function activo() {
   return VALORES_ENCENDIDO.has(String(process.env.RADAR_PUBLICAR_ACTIVO ?? "").trim().toLowerCase());
@@ -284,7 +301,9 @@ async function runOnce({ ahora = new Date(), deps = null } = {}) {
   const resultados = [];
   for (const org of await d.orgs()) {
     try {
-      resultados.push({ org: org.name, ...(await runParaOrg(org, d, ahora)) });
+      const r = await runParaOrg(org, d, ahora);
+      logMotivo(org, r);
+      resultados.push({ org: org.name, ...r });
     } catch (e) {
       console.error("[publicador] error en", org.name, e.message);
       resultados.push({ org: org.name, resultado: "error" });
@@ -310,6 +329,7 @@ function _reset() {
   estado.avisoSesionDia = null;
   estado.avisoSordosDia = null;
   estado.linkRoto.clear();
+  estado.ultimoMotivo = null;
 }
 
-module.exports = { insertarPublicacion, demandaPorZona, porGrupo, start, runOnce, activo, _reset, _depsPorDefecto: depsPorDefecto };
+module.exports = { logMotivo, insertarPublicacion, demandaPorZona, porGrupo, start, runOnce, activo, _reset, _depsPorDefecto: depsPorDefecto };

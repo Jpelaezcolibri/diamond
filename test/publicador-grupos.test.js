@@ -535,3 +535,16 @@ test("los pedidos del grupo ordenan: sale primero la venta que calza con ellos",
   assert.equal(r.ref, "V-LAU");
   assert.equal(log.enviados.length, 1);
 });
+
+// 2026-10-26: un tick que no publica por una razon anormal deja log, una vez por motivo.
+test("logMotivo: avisa los motivos anormales una vez y calla los normales", () => {
+  scheduler._reset();
+  const org = { name: "Diamond" };
+  assert.equal(scheduler.logMotivo(org, { resultado: "espaciado" }), false);
+  assert.equal(scheduler.logMotivo(org, { resultado: "sin_sesion" }), true);
+  assert.equal(scheduler.logMotivo(org, { resultado: "sin_sesion" }), false);
+  assert.equal(scheduler.logMotivo(org, { resultado: "inventario_viejo" }), true);
+  assert.equal(scheduler.logMotivo(org, { resultado: "enviado" }), false);
+  assert.equal(scheduler.logMotivo(org, { resultado: "inventario_viejo" }), true);
+  scheduler._reset();
+});
