@@ -329,8 +329,13 @@ function dmDudosasActivo(env = process.env) {
   return String((env && env.RADAR_DM_DUDOSAS) || "").trim().toLowerCase() === "true";
 }
 
+// `zona_vecina_y_colega_tajante` NO sale: el colega escribio "solo" o
+// "unicamente" esa zona, y es un requisito conocido que la ficha no cumple
+// (el caso del 18-sep: "Me dice Itagui y solo quiere Envigado"). Medido el
+// 2026-10-26: 1 de las 25 dudosas de 30 dias era de este tipo.
+const DUDOSAS_QUE_NO_SALEN = new Set(["zona_vecina_y_colega_tajante", "aliado"]);
+
 const TEXTO_DUDOSA = {
-  zona_vecina_y_colega_tajante: "sé que pediste solo esa zona: te la paso por si te sirve",
   de_fondo_dudoso: "no estoy seguro de que calce con todo lo que pediste: revísala antes de pasarla",
 };
 const DUDOSA_GENERICA = "no calza en todo lo que pediste: revísala antes de pasarla";
@@ -355,7 +360,7 @@ function dudosasParaDm(veredicto, matches) {
   const leFalta = [];
   for (const ref of [...new Set(refs)]) {
     const m = (matches || []).find((x) => x && String(x.ref) === ref);
-    if (!m) continue;
+    if (!m || DUDOSAS_QUE_NO_SALEN.has(motivoDe.get(ref))) continue;
     salida.push(m);
     const escrito = deSofi.filter((f) => f && String(f.ref) === ref && f.detalle).map((f) => String(f.detalle));
     const cortos = cortosDe(m).map((r) => String(r).replace(/\s*\(pediste (\d+)\)/, " y pediste $1").replace(/ — /, ": "));

@@ -220,12 +220,14 @@ test("dudosas: la razon de Sofi va como aclaracion de la ficha, en tuteo y sin d
     por_que: "Decidí vos: Daiana sabe si sirve, llamala al 3001234567",
   };
   const r = publicable.dudosasParaDm(veredicto, matches);
-  assert.deepStrictEqual(r.matches.map((m) => m.ref), ["D1", "D2", "D3"]);
+  // D3: el colega escribio "solo" esa zona y la ficha es vecina. Es un
+  // requisito CONOCIDO que no cumple: no sale (el caso del 18-sep).
+  assert.deepStrictEqual(r.matches.map((m) => m.ref), ["D1", "D2"]);
   const porRef = Object.fromEntries(r.leFalta.map((f) => [f.ref, f.detalle]));
   assert.match(porRef.D1, /2 alcobas y pediste 3/);
   assert.match(porRef.D1, /dentro del margen/);
   assert.match(porRef.D2, /es un dúplex y pediste apartamento/, "lo que Sofi escribio para esa ref va primero");
-  assert.match(porRef.D3, /pediste solo esa zona/);
+  assert.strictEqual(porRef.D3, undefined);
   for (const t of Object.values(porRef)) {
     assert.doesNotMatch(t, VOSEO);
     assert.doesNotMatch(t, /Daiana|Claudia|Catherine|\d{10}/, "el por_que de la asesora no se filtra al colega");
