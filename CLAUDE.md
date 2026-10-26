@@ -28,7 +28,19 @@ Equipo: 1 dev (Juan) + Claude Code. Idioma de la app: español (Colombia).
 Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
 `docs:`, `config:`).
 
-## 2. Estado actual (2026-10-25)
+## 2. Estado actual (2026-10-26)
+
+- **Publicador mixto (2026-10-26, rama `publicador-mixto`).** Spec
+  `docs/superpowers/specs/2026-10-26-publicador-mixto-design.md`. Cada grupo
+  tiene perfil (zonas y operación por el nombre, override en
+  `whatsapp_groups.perfil`). Primero sale lo de zona exacta y, solo si no hay,
+  zonas cercanas (excepción de Juan para grupos; el DM al colega sigue
+  literal). Categoría `arriendos` (con y sin amoblar; ARRIENDOS 7AM 8PM).
+  OFERTAS mezcla: venta en la mañana, arriendo en la tarde. Orden por pedidos
+  del propio grupo y ficha completa. `RADAR_PUBLICAR_POR_GRUPO=2` (mañana
+  8–12, tarde 2–6; si la mañana no publicó, la tarde sí) y
+  `RADAR_PUBLICAR_MAX_DIA=20`. Alerta si un grupo que publica no escucha.
+  Migración `2026-10-26_publicador_mixto.sql` (Juan).
 
 - **Preparación para las primeras visitas (2026-10-25).**
   - **La visita la confirma el asesor, no el propietario** (Juan, 2026-10-24):
