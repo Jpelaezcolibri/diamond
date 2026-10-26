@@ -221,11 +221,15 @@ function elegir({ grupos, propiedades, historial, ahora = new Date(), maxDia, no
   if (deHoy.length >= maxDia) return { motivo: "tope_diario" };
   if (noAntesDe && ahora < noAntesDe) return { motivo: "espaciado" };
 
-  // Con varios posts por grupo cada uno tiene su franja: el 0 por la manana, el 1 por la tarde.
+  // Con varios posts por grupo: menos de `porGrupo` hoy y ninguno dentro de la franja actual
+  // (si la manana no publico, la tarde si puede).
   const franja = franjaDe(ahora);
   if (porGrupo > 1 && franja === null) return { motivo: "entre_franjas" };
   const deHoyGrupo = (id) => deHoy.filter((h) => h.group_id === id).length;
-  const tocaGrupo = (id) => (porGrupo > 1 ? deHoyGrupo(id) === franja && franja < porGrupo : deHoyGrupo(id) === 0);
+  const tocaGrupo = (id) =>
+    porGrupo > 1
+      ? deHoyGrupo(id) < porGrupo && !deHoy.some((h) => h.group_id === id && franjaDe(new Date(h.created_at)) === franja)
+      : deHoyGrupo(id) === 0;
 
   const corte = ahora.getTime() - DIAS_SIN_REPETIR * DIA_MS;
   const ultimoDeGrupo = (id) => Math.max(0, ...historial.filter((h) => h.group_id === id).map((h) => new Date(h.created_at).getTime()));

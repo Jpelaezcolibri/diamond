@@ -93,12 +93,36 @@ test("porGrupo 2: manana, con 0 posts hoy es candidato y con 1 no", () => {
   assert.equal(r.motivo, "nada_que_publicar");
 });
 
-test("porGrupo 2: tarde, con 1 post hoy es candidato y con 2 no; con 0 tampoco manda dos", () => {
+test("porGrupo 2: tarde, con 1 post hoy es candidato y con 2 no; con 0 (manana perdida) tambien", () => {
   const uno = [post("1", hace(300, TARDE))];
   assert.equal(publicador.elegir({ ...base, historial: uno, ahora: TARDE, porGrupo: 2 }).grupo.id, "go");
   const dos = [post("1", hace(300, TARDE)), post("2", hace(200, TARDE))];
   assert.equal(publicador.elegir({ ...base, historial: dos, ahora: TARDE, porGrupo: 2 }).motivo, "nada_que_publicar");
-  assert.equal(publicador.elegir({ ...base, historial: [], ahora: TARDE, porGrupo: 2 }).motivo, "nada_que_publicar");
+  // Si la manana no publico nada, la tarde si puede.
+  assert.equal(publicador.elegir({ ...base, historial: [], ahora: TARDE, porGrupo: 2 }).grupo.id, "go");
+});
+
+test("porGrupo 2: un post de hoy dentro de la misma franja la cierra; de la otra, no", () => {
+  const TARDE2 = new Date("2026-10-19T20:30:00Z"); // 3:30 p. m.
+  const manana = [post("1", new Date("2026-10-19T14:00:00Z").toISOString())]; // 9:00
+  assert.equal(publicador.elegir({ ...base, historial: manana, ahora: TARDE, porGrupo: 2 }).grupo.id, "go");
+  const tarde = [post("1", new Date("2026-10-19T19:30:00Z").toISOString())]; // 2:30 p. m.
+  assert.equal(publicador.elegir({ ...base, historial: tarde, ahora: TARDE2, porGrupo: 2 }).motivo, "nada_que_publicar");
+});
+
+test("porGrupo 1: amoblados sin zonas elige la ref que lleva mas tiempo sin salir", () => {
+  const am = (ref) => arriendo(ref, { titulo: "Apartamento Amoblado en El Poblado" });
+  const G = { id: "ga", jid: "a@g.us", nombre: "Arriendos amoblados", publica: "amoblados" };
+  const otro = (ref, cuando) => ({ group_id: "otro", property_ref: ref, estado: "enviado", created_at: cuando });
+  const hist = [otro("A", hace(60 * 24 * 3)), otro("B", hace(60 * 24 * 10))];
+  const r = publicador.elegir({ grupos: [G], propiedades: [am("A"), am("B")], historial: hist, ahora: MANANA, maxDia: 8, porGrupo: 1 });
+  assert.equal(r.propiedad.ref, "B");
+});
+
+test("arriendo de asesor con periodo mensual y area es apto para arriendos; sin area no", () => {
+  const conArea = arriendo("1", { origen: "asesor", area: "70 m2" });
+  assert.equal(publicador.aptaPara(conArea, "arriendos"), true);
+  assert.equal(publicador.aptaPara(arriendo("1", { origen: "asesor", area: "" }), "arriendos"), false);
 });
 
 test("entre franjas: 12:30 con porGrupo 2 no publica; con porGrupo 1 si", () => {
