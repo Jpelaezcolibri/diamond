@@ -282,6 +282,34 @@ function dmZonaCercanaActivo(env = process.env) {
   return String((env && env.RADAR_DM_ZONA_CERCANA) || "").trim().toLowerCase() === "true";
 }
 
+// EL COLEGA TAJANTE NO RECIBE ZONA CERCANA (revision 2026-10-26, I1). Caso
+// Alberto Posada (ca3ae1cd): "No enviar inmuebles que no cumplan" -- ya se
+// quejo en septiembre. Es la misma deteccion que frena sus dudosas
+// (`zona_vecina_y_colega_tajante`, que marca Sofi) mas el texto del pedido:
+// "solo en X", "unicamente X", "no otras zonas", "no enviar ... que no
+// cumplan". Ante la duda se apaga la zona cercana: el pedido cae a la asesora
+// como hoy. "solo contado" no cuenta (no habla de la zona).
+const TAJANTE = [
+  /\bno\s+(?:me\s+|nos\s+)?(?:envi\w*|mand\w*|ofrec\w*|ofrezc\w*|pas\w*)\b[^.\n]{0,60}?\bque\s+no\s+cumpl/,
+  /\b(?:solo|solamente|unicamente|exclusivamente|estrictamente)\s+(?:en|por|el|la|los|las|zona|zonas|sector|sectores|barrio|barrios)\b/,
+  /^\s*(?:solo|solamente|unicamente|exclusivamente)\s+\p{L}/u,
+  /\bno\s+(?:otras?|mas)\s+(?:zonas?|sectores?|barrios?)\b/,
+  /\bnada\s+(?:por\s+)?fuera\s+de\b/,
+];
+
+function colegaTajante({ texto = null, veredicto = null } = {}) {
+  const marcas = veredicto && Array.isArray(veredicto.dudosas_motivo) ? veredicto.dudosas_motivo : [];
+  if (marcas.some((x) => x && x.motivo === "zona_vecina_y_colega_tajante")) return true;
+  const t = normalizarTexto(texto);
+  return Boolean(t) && TAJANTE.some((re) => re.test(t));
+}
+
+// Lo que pasan los caminos del DM a filtrar(): el interruptor, salvo colega
+// tajante.
+function zonaCercanaPara({ texto = null, veredicto = null } = {}, env = process.env) {
+  return dmZonaCercanaActivo(env) && !colegaTajante({ texto, veredicto });
+}
+
 // Devuelve la marca que viaja en la copia del match ({ tipo: "vecina" } o
 // { tipo: "barrio", barrio }) o null si la ficha no es una zona cercana.
 function zonaCercanaDe(motivos, match, { conAclaracion = false } = {}) {
@@ -772,6 +800,8 @@ module.exports = {
   MOTIVOS_ACLARABLES,
   dmConAclaracionActivo,
   dmZonaCercanaActivo,
+  colegaTajante,
+  zonaCercanaPara,
   dmDudosasActivo,
   dudosasParaDm,
   cortosDe,

@@ -598,7 +598,7 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
       syncFresco: inventarioDm.fresco,
       umbral: 0,
       conAclaracion: publicable.dmConAclaracionActivo(),
-      zonaCercana: publicable.dmZonaCercanaActivo(),
+      zonaCercana: publicable.zonaCercanaPara({ texto: mensaje.texto, veredicto }),
     }
   );
   const { verificadas: utiles, rotas: rotasDm } = await verificarLink.verificar(utilesLimpias);
@@ -1300,7 +1300,7 @@ async function aprobarManual(org, signalId) {
     syncFresco: inventario.fresco,
     umbral: 0,
     conAclaracion: publicable.dmConAclaracionActivo(),
-    zonaCercana: publicable.dmZonaCercanaActivo(),
+    zonaCercana: publicable.zonaCercanaPara({ texto: signal.texto_original, veredicto: signal.revalidacion }),
   });
   const { verificadas: publicables, rotas } = await verificarLink.verificar(candidatas);
   for (const r of rotas) descartados.push({ ref: r.ref, motivos: ["link_no_abre"] });
@@ -1552,7 +1552,7 @@ async function responderPorDmManual(org, signalId, { sesion = null, refs = null 
     syncFresco: inventario.fresco,
     umbral: 0,
     conAclaracion: publicable.dmConAclaracionActivo(),
-    zonaCercana: publicable.dmZonaCercanaActivo(),
+    zonaCercana: publicable.zonaCercanaPara({ texto: signal.texto_original, veredicto: signal.revalidacion }),
   });
   const { verificadas: publicables, rotas } = await verificarLink.verificar(candidatas);
   for (const r of rotas) descartados.push({ ref: r.ref, motivos: ["link_no_abre"] });
@@ -1842,7 +1842,7 @@ async function prepararAviso(org, signalId, { sesion = null } = {}) {
     syncFresco: inventario.fresco,
     umbral: 0,
     conAclaracion: publicable.dmConAclaracionActivo(),
-    zonaCercana: publicable.dmZonaCercanaActivo(),
+    zonaCercana: publicable.zonaCercanaPara({ texto: signal.texto_original, veredicto: rev }),
   });
   const { verificadas: utiles, rotas } = await verificarLink
     .verificar(candidatas)

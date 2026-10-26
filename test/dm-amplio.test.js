@@ -340,3 +340,26 @@ test("C2: con una zona cercana, la salvedad conserva zona verde, zonas comunes, 
   const notas = publicable.notasParaDm({ sinConfirmar: pedidos, leFalta: [] }, aclaraciones, publicables);
   assert.deepStrictEqual(notas.sinConfirmar, ["zona verde", "zonas comunes", "sector tranquilo", "cerca al metro", "ascensor"]);
 });
+
+// ── I1: el colega tajante no recibe zona cercana ────────────────────────────
+// Caso Alberto Posada (ca3ae1cd, 2026-10): "No enviar inmuebles que no
+// cumplan". Ya se quejo en septiembre; la zona cercana no le sale.
+const ALBERTO = "Quien con apto el laureles Conquistadores Belén rosales San Joaquín Del 5 piso hacia arriba Ascensor al piso Valor Máximo 600.000.000 Dos alcobas Garaje Útil Cliente comprando ya mismo No enviar inmuebles que no cumplan";
+
+test("I1: colegaTajante reconoce 'no enviar que no cumplan', 'solo en X', 'únicamente X' y la marca de Sofi", () => {
+  for (const texto of [ALBERTO, "Apto en Envigado, solo en Envigado, hasta 400M", "Únicamente El Poblado", "Casa en Sabaneta, no otras zonas", "No me manden opciones que no cumplan"]) {
+    assert.strictEqual(publicable.colegaTajante({ texto }), true, texto);
+  }
+  for (const texto of ["Busco apto en Laureles 2 alcobas No en unidad cerrada", "Apto en Envigado hasta 400M, solo contado", "", null]) {
+    assert.strictEqual(publicable.colegaTajante({ texto }), false, String(texto));
+  }
+  const veredicto = { refs_dudosas: ["X"], dudosas_motivo: [{ ref: "X", motivo: "zona_vecina_y_colega_tajante" }] };
+  assert.strictEqual(publicable.colegaTajante({ texto: "Apto en Envigado", veredicto }), true);
+});
+
+test("I1: zonaCercanaPara apaga la zona cercana para el colega tajante, aunque el interruptor este encendido", () => {
+  const env = { RADAR_DM_ZONA_CERCANA: "true" };
+  assert.strictEqual(publicable.zonaCercanaPara({ texto: ALBERTO }, env), false);
+  assert.strictEqual(publicable.zonaCercanaPara({ texto: "Busco apto en Laureles" }, env), true);
+  assert.strictEqual(publicable.zonaCercanaPara({ texto: "Busco apto en Laureles" }, { RADAR_DM_ZONA_CERCANA: "false" }), false);
+});

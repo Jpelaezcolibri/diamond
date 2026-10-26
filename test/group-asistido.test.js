@@ -1571,3 +1571,17 @@ test("zona cercana apagada: la vecina aprobada sigue frenada por zona_vecina", a
   assert.notStrictEqual(r.resultado, "dm_enviado");
   assert.strictEqual(politicasGuardadas[politicasGuardadas.length - 1].motivo, "zona_vecina");
 });
+
+// I1 (revision 2026-10-26): el colega que escribio "No enviar inmuebles que
+// no cumplan" (Alberto Posada) no recibe zona cercana.
+test("zona cercana: el colega tajante no la recibe, aunque el interruptor este encendido", conEnv({ RADAR_DM_ZONA_CERCANA: "true" }, async () => {
+  telefonoColegaResuelto = "573001234567";
+  extraClasificado = { zona: "Laureles" };
+  matchesDevueltos = [match({ ubicacion: "vecina", zona: "Belén" })];
+  const m = mensaje();
+  m.texto = "Quien con apto el laureles Conquistadores San Joaquín Valor Máximo 600.000.000 Dos alcobas Cliente comprando ya mismo No enviar inmuebles que no cumplan";
+  const r = await vivo.procesarMensaje(ORG, m, { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+  assert.notStrictEqual(r.resultado, "dm_enviado");
+  assert.strictEqual(enviosDm.length, 0);
+  assert.strictEqual(politicasGuardadas[politicasGuardadas.length - 1].motivo, "zona_vecina");
+}));
