@@ -650,8 +650,11 @@ function aclaracionParaColega(motivos) {
 const TEMA_DEL_MOTIVO = {
   sector_sin_confirmar: /barrio|sector/i,
   // Zona cercana (2026-10-26): la ficha ya dice donde queda; la salvedad del
-  // primer mensaje no puede hablar de barrio o zona sin contradecirla.
-  zona_vecina: /barrio|sector|\bzonas?\b|ubicaci/i,
+  // primer mensaje no puede hablar del barrio o de la ubicacion exacta sin
+  // contradecirla. SOLO la ubicacion: "zona verde", "zonas comunes", "sector
+  // tranquilo" o "cerca al metro" son requisitos de la propiedad y se quedan
+  // (revision 2026-10-26, C2: con \bzonas?\b el colega dejaba de leerlos).
+  zona_vecina: /\bbarrio\b|\bsector\s+exacto|\bzona\s+exacta|ubicaci[oó]n\s+exacta/i,
   piso_sin_confirmar: /\bpisos?\b/i,
   garajes_sin_dato: /parqueader|garaje|parqueo/i,
   precio_sin_confirmar: /\bprecio/i,

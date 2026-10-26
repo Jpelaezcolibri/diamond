@@ -332,3 +332,11 @@ test("C1: la marca de zona cercana solo escribe 'No es en' sobre una vecina", ()
   const d = redactar.desvios(m, { zonas: ["Zúñiga"] });
   assert.ok(!d.some((x) => /No es en/.test(x)), JSON.stringify(d));
 });
+
+// ── C2: la salvedad pierde solo la ubicacion, no "zona verde" ni "zonas comunes" ──
+test("C2: con una zona cercana, la salvedad conserva zona verde, zonas comunes, sector tranquilo y cerca al metro", () => {
+  const { publicables, aclaraciones } = publicable.filtrar([ficha({ ubicacion: "vecina", zona: "Itagüí" })], ON);
+  const pedidos = ["zona verde", "zonas comunes", "sector tranquilo", "cerca al metro", "barrio exacto", "ubicación exacta", "ascensor"];
+  const notas = publicable.notasParaDm({ sinConfirmar: pedidos, leFalta: [] }, aclaraciones, publicables);
+  assert.deepStrictEqual(notas.sinConfirmar, ["zona verde", "zonas comunes", "sector tranquilo", "cerca al metro", "ascensor"]);
+});
