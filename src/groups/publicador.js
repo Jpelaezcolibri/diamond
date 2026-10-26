@@ -9,6 +9,8 @@
 const { aptaParaKit } = require("./kit");
 const { esAmoblada } = require("./amoblado");
 const { parsearArea } = require("../lib/formato");
+const { zonaCoincide, zonaVecina } = require("./ubicacion");
+const { perfilDe } = require("./perfil-grupo");
 
 const ESPERA_ASESOR_MS = 15 * 60000;
 const PRIORIDAD_ASESOR_DIAS = 7;
@@ -112,9 +114,19 @@ function precioArriendoCreible(p) {
   return n > 0 && n <= tope;
 }
 
+// Arriendo mensual con zona, amoblado o no (categoria "arriendos").
+function aptaArriendo(p) {
+  if (!aptaParaKit(p) || !esArriendo(p) || !precioArriendoCreible(p)) return false;
+  if (esFinca(p) || !String(p.zona || "").trim()) return false;
+  // Un arriendo de asesor sin periodo claro sigue la compuerta de asesor (periodo explicito).
+  if (esDeAsesor(p) && !aptaDeAsesor(p)) return false;
+  return !periodoDudoso(p);
+}
+
 function aptaPara(p, categoria) {
   // La venta (de un asesor o de Wasi) no es arriendo: se decide antes de la compuerta de arriendo.
-  if (categoria === "ofertas") return aptaDeAsesor(p) || aptaVentaWasi(p) || aptaPara(p, "amoblados");
+  if (categoria === "ofertas") return aptaDeAsesor(p) || aptaVentaWasi(p) || aptaPara(p, "amoblados") || aptaArriendo(p);
+  if (categoria === "arriendos") return aptaArriendo(p);
   if (!aptaParaKit(p) || !esArriendo(p) || !precioArriendoCreible(p)) return false;
   if (categoria === "amoblados") {
     if (esFinca(p) || esAmoblada(p) !== true) return false;
@@ -125,6 +137,24 @@ function aptaPara(p, categoria) {
   return false;
 }
 
+const normTipo = (t) => {
+  const s = String(t || "").normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().trim();
+  return /^(duplex|penthouse|pent house|loft)$/.test(s) ? "apartamento" : s;
+};
+
+// Grado de encaje con el grupo: "exacta", "vecina" (excepcion de Juan para
+// publicaciones, 2026-10-26) o null.
+function aptaParaGrupo(p, grupo, perfil) {
+  if (!aptaPara(p, grupo.publica)) return null;
+  if (perfil.operacion === "venta" && !esVenta(p)) return null;
+  if (perfil.operacion === "arriendo" && !esArriendo(p)) return null;
+  if (perfil.tipos.length && !perfil.tipos.map(normTipo).includes(normTipo(p.tipo))) return null;
+  if (!perfil.zonas.length) return "exacta";
+  if (zonaCoincide(p, { zonas: perfil.zonas })) return "exacta";
+  if (zonaVecina(p, { zonas: perfil.zonas })) return "vecina";
+  return null;
+}
+
 function partesBogota(ahora) {
   const b = new Date(ahora.getTime() - BOGOTA_UTC * 3600e3);
   return { hora: b.getUTCHours(), diaSemana: b.getUTCDay(), dia: b.toISOString().slice(0, 10) };
@@ -133,6 +163,15 @@ function partesBogota(ahora) {
 function enHorario(ahora = new Date()) {
   const { hora, diaSemana } = partesBogota(ahora);
   return diaSemana !== 0 && hora >= HORA_INICIO && hora < HORA_FIN;
+}
+
+// 0 = 8:00-11:59, 1 = 14:00-17:59 (lunes a sabado); null fuera de franja.
+function franjaDe(ahora) {
+  if (!enHorario(ahora)) return null;
+  const { hora } = partesBogota(ahora);
+  if (hora >= 8 && hora < 12) return 0;
+  if (hora >= 14 && hora < 18) return 1;
+  return null;
 }
 
 function diaBogota(fecha) {
@@ -155,12 +194,38 @@ function demandaDe(p, demanda) {
   return total;
 }
 
-function elegir({ grupos, propiedades, historial, ahora = new Date(), maxDia, noAntesDe = null, excluirRefs = new Set(), demanda = new Map() }) {
+// Pedidos del grupo que esta propiedad atenderia (operacion, zona y precio con 10 % de margen).
+function pedidosQueCalzan(p, pedidos) {
+  let n = 0;
+  for (const s of pedidos || []) {
+    const op = /arriend|renta|alquil/i.test(String(s.operacion || "")) ? "arriendo" : /venta/i.test(String(s.operacion || "")) ? "venta" : null;
+    if (op === "venta" && !esVenta(p)) continue;
+    if (op === "arriendo" && !esArriendo(p)) continue;
+    const tieneZona = (Array.isArray(s.zonas) && s.zonas.length) || s.zona;
+    if (tieneZona && !zonaCoincide(p, s)) continue;
+    if (s.precio_max && precioNumerico(p) > Number(s.precio_max) * 1.1) continue;
+    n++;
+  }
+  return n;
+}
+
+// Ficha completa: area, administracion y foto.
+function completitud(p) {
+  return (parsearArea(p.area) !== null ? 1 : 0) + (String(p.administracion || "").trim() ? 1 : 0) + (Array.isArray(p.images) && p.images.filter(Boolean).length ? 1 : 0);
+}
+
+function elegir({ grupos, propiedades, historial, ahora = new Date(), maxDia, noAntesDe = null, excluirRefs = new Set(), demanda = new Map(), porGrupo = 1, perfiles = new Map() }) {
   if (!enHorario(ahora)) return { motivo: "fuera_de_horario" };
   const hoy = diaBogota(ahora);
   const deHoy = historial.filter((h) => diaBogota(h.created_at) === hoy);
   if (deHoy.length >= maxDia) return { motivo: "tope_diario" };
   if (noAntesDe && ahora < noAntesDe) return { motivo: "espaciado" };
+
+  // Con varios posts por grupo cada uno tiene su franja: el 0 por la manana, el 1 por la tarde.
+  const franja = franjaDe(ahora);
+  if (porGrupo > 1 && franja === null) return { motivo: "entre_franjas" };
+  const deHoyGrupo = (id) => deHoy.filter((h) => h.group_id === id).length;
+  const tocaGrupo = (id) => (porGrupo > 1 ? deHoyGrupo(id) === franja && franja < porGrupo : deHoyGrupo(id) === 0);
 
   const corte = ahora.getTime() - DIAS_SIN_REPETIR * DIA_MS;
   const ultimoDeGrupo = (id) => Math.max(0, ...historial.filter((h) => h.group_id === id).map((h) => new Date(h.created_at).getTime()));
@@ -168,7 +233,7 @@ function elegir({ grupos, propiedades, historial, ahora = new Date(), maxDia, no
     Math.max(0, ...historial.filter((h) => h.estado === "enviado" && String(h.property_ref) === String(ref)).map((h) => new Date(h.created_at).getTime()));
 
   const candidatos = grupos
-    .filter((g) => g.publica && !deHoy.some((h) => h.group_id === g.id))
+    .filter((g) => g.publica && tocaGrupo(g.id))
     .sort((a, b) => ultimoDeGrupo(a.id) - ultimoDeGrupo(b.id) || String(a.nombre).localeCompare(String(b.nombre)));
 
   for (const grupo of candidatos) {
@@ -181,21 +246,31 @@ function elegir({ grupos, propiedades, historial, ahora = new Date(), maxDia, no
       esDeAsesor(p) && ahora.getTime() - new Date(p.created_at).getTime() < PRIORIDAD_ASESOR_DIAS * DIA_MS ? 0 : 1;
     // Una ref que ya salio hoy en otro grupo va al final: asi rotan mas fichas.
     const salioHoy = (p) => (deHoy.some((h) => h.estado === "enviado" && String(h.property_ref) === String(p.ref)) ? 1 : 0);
-    // En OFERTAS la venta va antes que los amoblados (87 % de los pedidos de
-    // colegas son de venta; los amoblados tienen sus grupos propios) y, entre
-    // ventas, primero las zonas mas pedidas.
-    const enOfertas = grupo.publica === "ofertas";
-    const clase = (p) => (enOfertas && esVenta(p) ? 0 : 1);
-    const pedidos = (p) => (enOfertas && esVenta(p) ? demandaDe(p, demanda) : 0);
+    const perfil = perfiles.get(grupo.id) || perfilDe(grupo);
+    const grados = new Map();
+    const gradoDe = (p) => (grados.get(String(p.ref)) === "vecina" ? 1 : 0);
+    // En OFERTAS se mezcla venta y arriendo: venta primero por la manana, arriendo por la tarde.
+    const tarde = franja === null ? partesBogota(ahora).hora >= 14 : franja === 1;
+    const mezcla = (p) => (grupo.publica !== "ofertas" ? 0 : tarde ? (esArriendo(p) ? 0 : 1) : esVenta(p) ? 0 : 1);
+    // Lo que el grupo pide (o, en OFERTAS, las zonas mas pedidas en general).
+    const calza = (p) =>
+      perfil.pedidos.length ? pedidosQueCalzan(p, perfil.pedidos) : grupo.publica === "ofertas" && esVenta(p) ? demandaDe(p, demanda) : 0;
     const opciones = propiedades
-      .filter((p) => !excluirRefs.has(String(p.ref)) && !recientes.has(String(p.ref)) && aptaPara(p, grupo.publica))
+      .filter((p) => {
+        if (excluirRefs.has(String(p.ref)) || recientes.has(String(p.ref))) return false;
+        const g = aptaParaGrupo(p, grupo, perfil);
+        if (g !== null) grados.set(String(p.ref), g);
+        return g !== null;
+      })
       .filter((p) => !esDeAsesor(p) || ahora.getTime() - new Date(p.created_at).getTime() >= ESPERA_ASESOR_MS)
       .sort(
         (a, b) =>
+          gradoDe(a) - gradoDe(b) ||
           prioridad(a) - prioridad(b) ||
+          mezcla(a) - mezcla(b) ||
           salioHoy(a) - salioHoy(b) ||
-          clase(a) - clase(b) ||
-          pedidos(b) - pedidos(a) ||
+          calza(b) - calza(a) ||
+          completitud(b) - completitud(a) ||
           ultimoDeRef(a.ref) - ultimoDeRef(b.ref) ||
           String(a.ref).localeCompare(String(b.ref))
       );
@@ -215,7 +290,7 @@ function rotacion(lista, grupo, ahora) {
 function encabezado(grupo, propiedad, ahora = new Date()) {
   let categoria = grupo.publica;
   let linea;
-  if (categoria === "ofertas") {
+  if (categoria === "ofertas" || categoria === "arriendos") {
     const tipo = String(propiedad.tipo || "").trim() || "Inmueble";
     if (!esArriendo(propiedad)) linea = `🏠 ${tipo} en venta`;
     else if (esFinca(propiedad)) categoria = "fincas";
@@ -236,6 +311,6 @@ function textoPost(grupo, propiedad, cuerpo, ahora = new Date()) {
 }
 
 module.exports = {
-  aptaPara, aptaVentaWasi, demandaDe, esDeAsesor, encabezado, periodoDudoso, periodoFinca, enHorario, elegir, textoPost, diaBogota,
+  aptaPara, aptaParaGrupo, franjaDe, aptaVentaWasi, demandaDe, esDeAsesor, encabezado, periodoDudoso, periodoFinca, enHorario, elegir, textoPost, diaBogota,
   APERTURAS, DIAS_SIN_REPETIR,
 };
