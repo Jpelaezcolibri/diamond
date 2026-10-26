@@ -151,6 +151,9 @@ function aptaParaGrupo(p, grupo, perfil) {
   if (perfil.tipos.length && !perfil.tipos.map(normTipo).includes(normTipo(p.tipo))) return null;
   if (!perfil.zonas.length) return "exacta";
   if (zonaCoincide(p, { zonas: perfil.zonas })) return "exacta";
+  // Un barrio que no esta en SUBZONA_DE ("La Ferreria") calza por su municipio
+  // (ciudad "La Estrella"). Seguro: ningun perfil incluye Medellin entera.
+  if (String(p.ciudad || "").trim() && zonaCoincide({ zona: p.ciudad }, { zonas: perfil.zonas })) return "exacta";
   if (zonaVecina(p, { zonas: perfil.zonas })) return "vecina";
   return null;
 }

@@ -59,6 +59,16 @@ test("aptaParaGrupo: grupo con zonas da exacta, vecina o null", () => {
   assert.equal(publicador.aptaParaGrupo(arriendo("1", { zona: "Laureles" }), GPOB, pob), null);
 });
 
+// Revision final 2026-10-26: 10458150 (La Ferreria, ciudad La Estrella) y otras 3
+// del sur quedaban fuera de OFERTAS SUR porque el barrio no esta en SUBZONA_DE.
+test("aptaParaGrupo: un barrio desconocido calza por su ciudad", () => {
+  const perfil = perfilDe(GSUR);
+  const v = venta("10458150", { zona: "La Ferrería", ciudad: "La Estrella" });
+  assert.equal(publicador.aptaParaGrupo(v, GSUR, perfil), "exacta");
+  const lejos = venta("9", { zona: "Barrio Raro", ciudad: "Bello" });
+  assert.equal(publicador.aptaParaGrupo(lejos, GSUR, perfil), null);
+});
+
 test("aptaParaGrupo: sin zonas siempre exacta; operacion y tipos filtran", () => {
   const sin = perfilDe(GO);
   assert.equal(publicador.aptaParaGrupo(arriendo("1", { zona: "Bello" }), GO, sin), "exacta");
