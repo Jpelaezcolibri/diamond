@@ -194,3 +194,21 @@ test("N1: las frases de todos los dias no son un lugar (ni confirman ni nombran 
   assert.strictEqual(barrio.nombra(p, "El Tesoro"), false, "palabra comun: 'en el tesoro' no confirma");
   assert.strictEqual(barrio.nombra(p, "Las Palmas"), false);
 });
+
+// 9922621 (30 dias de produccion, 2026-10-26): "APARTAMENTO AMOBLADO DE LUJO –
+// SAN LUCAS, EL POBLADO". "lucas" es palabra comun y pedia un INTRO: para un
+// pedido de Balsos/Chocho/Tesoro salia "el barrio exacto no lo tengo
+// registrado", y para uno de San Lucas no se confirmaba.
+const sanLucas9922621 = () => ficha({
+  ref: "9922621", zona: "El Poblado", precio: "$1.250.000.000",
+  titulo: "Apartamento en Venta Edificio Fontanar Poblado",
+  descripcion: "<p>🏢&nbsp;APARTAMENTO AMOBLADO DE LUJO &ndash; SAN LUCAS, EL POBLADO</p><p>📐&nbsp;212 m&sup2;</p>",
+});
+
+test("N1 9922621: 'SAN LUCAS' (nombre completo) dice donde queda aunque 'lucas' sea palabra comun", () => {
+  assert.deepStrictEqual(barrio.mencionaOtroBarrio(sanLucas9922621(), ["Balsos", "Chocho", "Tesoro"]), ["lucas"]);
+  assert.strictEqual(barrio.nombra(sanLucas9922621(), "San Lucas"), true);
+  const otra = ficha({ zona: "El Poblado", descripcion: "Cerca al centro comercial, Lucas el portero te recibe." });
+  assert.deepStrictEqual(barrio.mencionaOtroBarrio(otra, ["Balsos"]), []);
+  assert.strictEqual(barrio.nombra(otra, "San Lucas"), false);
+});

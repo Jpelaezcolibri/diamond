@@ -99,6 +99,7 @@ function patronDe(ks) {
 // mesa", "en el tesoro" siguen sin contar.
 function patronesDe(ks, p) {
   const patrones = [patronDe(ks)];
+  if (ks.length === 1 && NOMBRE_COMPLETO[ks[0]]) patrones.push(` ${NOMBRE_COMPLETO[ks[0]]}\\b`);
   if (ks.length !== 1 || PALABRAS_COMUNES.has(ks[0])) return patrones;
   patrones.push(` en(?: (?:el|la|los|las))? ${ks[0]}\\b`);
   for (const z of claves(String(p.zona || ""))) {
@@ -143,6 +144,13 @@ const PALABRAS_COMUNES = new Set([
   "tesoro", "bonito", "linde", "lucas", "indio", "parra", "carlota", "lorena", "castellana", "milan",
   "abadia", "marcos", "cumbres", "rodeo",
 ]);
+
+// El nombre COMPLETO de una palabra comun no es comun: "san lucas" no es el
+// nombre de nadie, "patio bonito" no es un adjetivo. Caso 9922621 "SAN LUCAS,
+// EL POBLADO" (2026-10-26): sin esto "lucas" pedia un INTRO y la ficha salia
+// con "el barrio exacto no lo tengo registrado". Solo los que no se leen como
+// frase de todos los dias ("la mesa", "el tesoro" siguen pidiendo INTRO).
+const NOMBRE_COMPLETO = { lucas: "san lucas", marcos: "san marcos", bonito: "patio bonito" };
 
 // "SECTOR X" TAMBIEN DICE DONDE QUEDA (segunda revision del DM amplio, N1,
 // 2026-10-26). La 10410315 dice "Apartamento remodelado poblado sector
@@ -190,7 +198,8 @@ function mencionaOtroBarrio(p, sectoresPedidos = []) {
   const conocidos = hijas.filter((h) => {
     if (pedidos.has(h)) return false;
     const patron = PALABRAS_COMUNES.has(h) ? ` ${INTRO} ${h}\\b` : ` ${h}\\b`;
-    return new RegExp(patron).test(texto);
+    if (new RegExp(patron).test(texto)) return true;
+    return Boolean(NOMBRE_COMPLETO[h]) && new RegExp(` ${NOMBRE_COMPLETO[h]}\\b`).test(texto);
   });
   return conocidos.length ? conocidos : lugaresNombrados(p, pedidos);
 }
