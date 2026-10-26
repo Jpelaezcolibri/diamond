@@ -109,3 +109,12 @@ test("si la campana se cae (lanza) y no hay telefono, nada llego", async () => {
   const r = await avisarAsesor({ org: ORG, advisor: { ...ADV, phone: "" }, motivo: "aviso", lead: LEAD, titulo: "x" }, d);
   assert.deepStrictEqual({ ok: r.ok, campana: r.campana, push: r.push, whatsapp: r.whatsapp }, { ok: false, campana: false, push: 0, whatsapp: false });
 });
+
+test("whatsapp:false no manda plantilla ni texto pero sí notifica", async () => {
+  const { log, d } = deps();
+  const r = await avisarAsesor({ org: ORG, advisor: ADV, motivo: "pregunta", lead: LEAD, titulo: "Pregunta", cuerpo: "¿precio?", whatsapp: false }, d);
+  assert.strictEqual(log.plantillas.length, 0);
+  assert.strictEqual(log.textos.length, 0);
+  assert.strictEqual(log.notas.length, 1);
+  assert.strictEqual(r.whatsapp, false);
+});

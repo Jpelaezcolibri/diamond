@@ -45,7 +45,6 @@ async function avisar({ org, pregunta, lead, advisor, reaviso = false, deps }) {
   const d = conDeps(deps);
   if (!advisor) return { ok: false };
   const titulo = `${reaviso ? "Sigue pendiente: pregunta" : "Pregunta"} de ${quienDe(lead)}${pregunta.ref ? ` · Ref ${pregunta.ref}` : ""}`;
-  await d.avisarAsesor({ org, advisor, motivo: "pregunta", lead, titulo, cuerpo: pregunta.pregunta }).catch((e) => console.warn("[preguntas] campana:", e.message));
   let r = await d.mensaje(org, advisor.phone, textoParaAsesor(pregunta), { permitirRepetido: reaviso }).catch((e) => ({ ok: false, error: e.message }));
   const nombrePlantilla = process.env.SOFI_PREGUNTA_ASESOR_PLANTILLA;
   if (!(r && r.ok) && nombrePlantilla && VENTANA_CERRADA.test((r && r.error) || "")) {
@@ -53,8 +52,15 @@ async function avisar({ org, pregunta, lead, advisor, reaviso = false, deps }) {
       .plantilla(org, advisor.phone, { name: nombrePlantilla, bodyParams: [pregunta.ref || "sin ref", pregunta.pregunta] })
       .catch((e) => ({ ok: false, error: e.message }));
   }
-  if (r && r.wamid) await d.datos.actualizar(pregunta.id, { wamid_aviso: r.wamid }).catch(() => {});
-  if (r && r.wamid) pregunta.wamid_aviso = r.wamid;
+  if (r && r.wamid) {
+    await d.datos.actualizar(pregunta.id, { wamid_aviso: r.wamid }).catch(() => {});
+    pregunta.wamid_aviso = r.wamid;
+  }
+  // Campana + push siempre; el WhatsApp generico (aviso_app) solo si la
+  // pregunta no llego por WhatsApp, para no mandar dos mensajes.
+  await d
+    .avisarAsesor({ org, advisor, motivo: "pregunta", lead, titulo, cuerpo: pregunta.pregunta, whatsapp: !(r && r.ok) })
+    .catch((e) => console.warn("[preguntas] campana:", e.message));
   return { ok: Boolean(r && r.ok) };
 }
 
@@ -74,6 +80,11 @@ async function registrar({ ctx, input, deps }) {
     return "No pude registrar la pregunta. Dile que lo consultas con el equipo y le escribes, sin prometer hora.";
   }
   if (!creada.nueva) return "Esa pregunta ya está con el asesor. Dile que sigues esperando la respuesta y le escribes apenas llegue. No prometas hora.";
+  if (!(ctx.lead.atencion_pendiente)) {
+    await d
+      .actualizarLead(ctx.lead.id, { atencion_pendiente: "pregunta", atencion_desde: new Date().toISOString() })
+      .catch((e) => console.warn("[preguntas] no se pudo marcar el chat:", e.message));
+  }
   if (asesor) await avisar({ org: ctx.org, pregunta: creada.pregunta, lead: ctx.lead, advisor: asesor, deps: d });
   else console.warn(`[preguntas] sin asesor en el ciclo — pregunta ${creada.pregunta.id} queda sin asignar`);
   return `Pregunta registrada (${creada.pregunta.id.slice(0, 8)}). Dile que le preguntas al asesor y le escribes apenas responda. No prometas hora. No le des nombres ni números del equipo.`;
@@ -81,7 +92,7 @@ async function registrar({ ctx, input, deps }) {
 
 async function limpiarAtencion({ pregunta, lead, d }) {
   const quedan = await d.datos.abiertasDeLead(pregunta.lead_id).catch(() => 1);
-  if (quedan === 0 && lead && lead.atencion_pendiente !== "visita") {
+  if (quedan === 0 && lead && lead.atencion_pendiente === "pregunta") {
     await d.actualizarLead(pregunta.lead_id, { atencion_pendiente: null, atencion_desde: null }).catch(() => {});
   }
 }

@@ -16,7 +16,7 @@ const MOTIVOS = {
   pide_asesor: { atencion: true, asigna: true, tipo: "asesor_solicitado", whatsapp: "alguien pide hablar con un asesor" },
   transferido: { atencion: true, asigna: true, tipo: "transferido", whatsapp: "Sofi te transfirió un cliente" },
   visita: { atencion: true, asigna: false, tipo: "cita_por_confirmar", whatsapp: "una visita por confirmar" },
-  pregunta: { atencion: true, asigna: false, tipo: "pregunta_asesor", whatsapp: "una pregunta de un colega" },
+  pregunta: { atencion: false, asigna: false, tipo: "pregunta_asesor", whatsapp: "una pregunta de un colega" },
   aviso: { atencion: false, asigna: false, tipo: "aviso", whatsapp: "un aviso nuevo" },
 };
 
@@ -33,7 +33,7 @@ function depsPorDefecto() {
   };
 }
 
-async function avisarAsesor({ org, advisor, motivo, lead, titulo, cuerpo = null }, deps = null) {
+async function avisarAsesor({ org, advisor, motivo, lead, titulo, cuerpo = null, whatsapp: mandarWhatsApp = true }, deps = null) {
   if (!advisor || !advisor.id || !org) return { ok: false, error: "sin asesora con usuario" };
   // Un asesor dado de baja no recibe nada (2026-10-21: Natalia, inactiva,
   // comparte el 8024 con la linea 2 de Daiana).
@@ -56,7 +56,7 @@ async function avisarAsesor({ org, advisor, motivo, lead, titulo, cuerpo = null 
 
   const tel = String(advisor.phone || "").replace(/\D/g, "");
   let whatsapp = false;
-  if (tel) {
+  if (tel && mandarWhatsApp) {
     const r = await d.plantilla(org, tel, { name: "aviso_app", bodyParams: [m.whatsapp] }).catch((e) => ({ ok: false, error: e.message }));
     if (r && r.ok) whatsapp = true;
     else {

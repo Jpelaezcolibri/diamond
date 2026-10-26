@@ -12,7 +12,7 @@ const LEAD = { id: "l1", org_id: "org-1", phone: "573125550000", nombre: "Andrea
 let envios;
 const deps = (over = {}) => ({
   ciclo: async () => [A1, A2],
-  avisarAsesor: async (a) => { envios.push({ campana: a.motivo, a: a.advisor.id, titulo: a.titulo, cuerpo: a.cuerpo }); return { ok: true }; },
+  avisarAsesor: async (a) => { envios.push({ campana: a.motivo, a: a.advisor.id, titulo: a.titulo, cuerpo: a.cuerpo, whatsapp: a.whatsapp }); return { ok: true }; },
   mensaje: async (_o, to, texto, opts) => { envios.push({ wa: to, texto, opts }); return { ok: true, wamid: "wamid.A" }; },
   texto: async (_o, to, texto) => { envios.push({ colega: to, texto }); return { ok: true, wamid: "wamid.C" }; },
   plantilla: async (_o, to, o) => { envios.push({ plantilla: o.name, to, params: o.bodyParams }); return { ok: true }; },
@@ -45,6 +45,7 @@ test("registrar crea la pregunta, avisa por la campana y por WhatsApp sin datos 
   assert.strictEqual(wa.wa, A1.phone);
   assert.match(wa.texto, /Ref 10013037: ¿Precio final de la ref 10013037\?/);
   assert.doesNotMatch(wa.texto, /Andrea|573125550000/);
+  assert.strictEqual(envios.find((e) => e.campana).whatsapp, false, "la pregunta ya llego por WhatsApp: avisarAsesor no manda el suyo");
 });
 
 test("registrar no duplica ni vuelve a avisar", async () => {
@@ -60,26 +61,28 @@ test("con la ventana del asesor cerrada usa la plantilla si existe; si no, queda
   process.env.SOFI_PREGUNTA_ASESOR_PLANTILLA = "pregunta_asesor";
   await pa.registrar({ ctx: ctx(), input, deps: deps(cerrada) });
   assert.ok(envios.some((e) => e.plantilla === "pregunta_asesor" && e.params[0] === "10013037"));
+  assert.strictEqual(envios.find((e) => e.campana).whatsapp, false, "la plantilla de la pregunta llego: sin aviso_app");
   memory.preguntasAsesor.length = 0;
   envios = [];
   delete process.env.SOFI_PREGUNTA_ASESOR_PLANTILLA;
   await pa.registrar({ ctx: ctx(), input, deps: deps(cerrada) });
   assert.ok(!envios.some((e) => e.plantilla));
   assert.ok(envios.some((e) => e.campana === "pregunta"));
+  assert.strictEqual(envios.find((e) => e.campana).whatsapp, true, "la pregunta no llego por WhatsApp: aviso_app avisa que mire el CRM");
 });
 
 test("sin asesores en el ciclo la pregunta queda sin asesor y Sofi igual dice que pregunta", async () => {
   const out = await pa.registrar({ ctx: ctx(), input, deps: deps({ ciclo: async () => [] }) });
   assert.match(out, /Pregunta registrada/);
   assert.strictEqual(memory.preguntasAsesor[0].asesor_id, null);
-  assert.strictEqual(envios.length, 0);
+  assert.strictEqual(envios.filter((e) => !e.leadPatch).length, 0, "nadie recibe aviso; el chat queda marcado en Para atender");
 });
 
 test("responder cierra, entrega literal al colega y la segunda respuesta no pisa", async () => {
   await pa.registrar({ ctx: ctx(), input, deps: deps() });
   const id = memory.preguntasAsesor[0].id;
   envios = [];
-  const r = await pa.responder({ org: ORG, preguntaId: id, respuesta: "450 es el precio final, negocian poco", advisor: A1, via: "crm", deps: deps() });
+  const r = await pa.responder({ org: ORG, preguntaId: id, respuesta: "450 es el precio final, negocian poco", advisor: A1, via: "crm", deps: deps({ lead: async () => ({ ...LEAD, atencion_pendiente: "pregunta" }) }) });
   assert.strictEqual(r.ok, true);
   const msg = envios.find((e) => e.colega);
   assert.strictEqual(msg.colega, LEAD.phone);
@@ -148,4 +151,30 @@ test("descartar cierra sin escribirle a nadie", async () => {
   assert.strictEqual(r.ok, true);
   assert.strictEqual(memory.preguntasAsesor[0].estado, "descartada");
   assert.ok(!envios.some((e) => e.colega || e.wa));
+});
+
+test("registrar marca el chat como pregunta solo si no hay otro pendiente", async () => {
+  const conOtro = { ...ctx(), lead: { ...LEAD, atencion_pendiente: "pide_asesor" } };
+  await pa.registrar({ ctx: conOtro, input, deps: deps() });
+  assert.ok(!envios.some((e) => e.leadPatch), "no pisa pide_asesor");
+  memory.preguntasAsesor.length = 0;
+  envios = [];
+  await pa.registrar({ ctx: ctx(), input, deps: deps() });
+  const patch = envios.find((e) => e.leadPatch).leadPatch;
+  assert.strictEqual(patch.atencion_pendiente, "pregunta");
+  assert.ok(patch.atencion_desde);
+});
+
+test("el re-aviso no vuelve a marcar el chat", async () => {
+  await pa.registrar({ ctx: ctx(), input, deps: deps() });
+  envios = [];
+  await pa.avisar({ org: ORG, pregunta: memory.preguntasAsesor[0], lead: { ...LEAD }, advisor: A1, reaviso: true, deps: deps() });
+  assert.ok(!envios.some((e) => e.leadPatch));
+});
+
+test("responder no limpia un pendiente ajeno (pide_asesor)", async () => {
+  await pa.registrar({ ctx: ctx(), input, deps: deps() });
+  envios = [];
+  await pa.responder({ org: ORG, preguntaId: memory.preguntasAsesor[0].id, respuesta: "450", advisor: A1, via: "crm", deps: deps({ lead: async () => ({ ...LEAD, atencion_pendiente: "pide_asesor" }) }) });
+  assert.ok(!envios.some((e) => e.leadPatch));
 });
