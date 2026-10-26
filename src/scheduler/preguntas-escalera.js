@@ -47,7 +47,8 @@ async function runOnce({ ahora = new Date(), deps = {} } = {}) {
         acciones++;
         const lead = await c.lead(org.id, p.lead_id).catch(() => null);
         if (paso.accion === "reaviso") {
-          await c.datos.actualizar(p.id, { reaviso_at: ahora.toISOString() });
+          // Condicional a "pendiente": si alguien la respondio a mitad del tick, no se reavisa.
+          if (!(await c.datos.actualizarSiPendiente(p.id, { reaviso_at: ahora.toISOString() }))) continue;
           p.reaviso_at = ahora.toISOString();
           const actual = ciclo.find((a) => a.id === p.asesor_id);
           await c.avisar({ org, pregunta: p, lead, advisor: actual, reaviso: true });
@@ -55,8 +56,9 @@ async function runOnce({ ahora = new Date(), deps = {} } = {}) {
           continue;
         }
         const anterior = ciclo.find((a) => a.id === p.asesor_id) || null;
-        const patch = { asesor_id: paso.nuevo.id, asignada_at: ahora.toISOString(), reaviso_at: null, wamid_aviso: null };
-        await c.datos.actualizar(p.id, patch);
+        // Los wamids de aviso se conservan: el asesor puede citar un aviso viejo.
+        const patch = { asesor_id: paso.nuevo.id, asignada_at: ahora.toISOString(), reaviso_at: null };
+        if (!(await c.datos.actualizarSiPendiente(p.id, patch))) continue;
         Object.assign(p, patch);
         await c.avisar({ org, pregunta: p, lead, advisor: paso.nuevo, reaviso: false });
         if (paso.accion === "asignar") res.asignadas++;

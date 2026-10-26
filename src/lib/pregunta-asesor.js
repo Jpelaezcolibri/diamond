@@ -22,6 +22,7 @@ function depsPorDefecto() {
     plantilla: (...a) => require("../channels/whatsapp").sendWhatsAppTemplate(...a),
     notificar: (...a) => require("../notifications/notificar").notificar(...a),
     soloLlamada: (orgId, tel) => require("../data/colegas").esSoloLlamada(orgId, { telefono: tel }),
+    registrar: (...a) => require("./registrar-saliente").registrarSaliente(...a),
     lead: (orgId, id) => require("../data/leads").findById(orgId, id),
     actualizarLead: (id, patch) => require("../data/leads").update(id, patch),
   };
@@ -53,8 +54,9 @@ async function avisar({ org, pregunta, lead, advisor, reaviso = false, deps }) {
       .catch((e) => ({ ok: false, error: e.message }));
   }
   if (r && r.wamid) {
-    await d.datos.actualizar(pregunta.id, { wamid_aviso: r.wamid }).catch(() => {});
-    pregunta.wamid_aviso = r.wamid;
+    // Se AGREGA: el asesor puede citar cualquiera de los avisos de esta pregunta.
+    await d.datos.agregarWamid(pregunta.id, r.wamid).catch(() => {});
+    pregunta.wamids_aviso = [...(pregunta.wamids_aviso || []).filter((w) => w !== r.wamid), r.wamid];
   }
   // Campana + push siempre; el WhatsApp generico (aviso_app) solo si la
   // pregunta no llego por WhatsApp, para no mandar dos mensajes.
@@ -97,6 +99,13 @@ async function limpiarAtencion({ pregunta, lead, d }) {
   }
 }
 
+// Lo que se le mando al colega queda en su chat. Un fallo al guardar no deshace el envio.
+async function guardarEnChat({ d, org, lead, texto, wamid }) {
+  await Promise.resolve()
+    .then(() => d.registrar(org, lead, texto, wamid))
+    .catch((e) => console.warn("[preguntas] no se pudo guardar en el chat:", e.message));
+}
+
 async function entregarRespuesta({ org, pregunta, lead, advisor, deps }) {
   const d = conDeps(deps);
   const avisarFallo = async (titulo) => {
@@ -111,9 +120,11 @@ async function entregarRespuesta({ org, pregunta, lead, advisor, deps }) {
       return { ok: false, motivo: "solo_llamada" };
     }
   }
-  const r = await d.texto(org, lead.phone, textoRespuesta({ lead, pregunta })).catch((e) => ({ ok: false, error: e.message }));
+  const textoFinal = textoRespuesta({ lead, pregunta });
+  const r = await d.texto(org, lead.phone, textoFinal).catch((e) => ({ ok: false, error: e.message }));
   if (r && r.ok) {
     await d.datos.actualizar(pregunta.id, { estado: "entregada", entregada_at: new Date().toISOString(), entrega_error: null });
+    await guardarEnChat({ d, org, lead, texto: textoFinal, wamid: r.wamid || null });
     return { ok: true };
   }
   const ventana = VENTANA_CERRADA.test((r && r.error) || "");
@@ -182,20 +193,25 @@ async function entregarPendientesDe({ org, lead, deps }) {
   const filas = await d.datos.porEntregarDe(lead.id).catch(() => []);
   let n = 0;
   for (const p of filas) {
-    const r = await d.texto(org, lead.phone, textoRespuesta({ lead, pregunta: p })).catch((e) => ({ ok: false, error: e.message }));
+    const textoFinal = textoRespuesta({ lead, pregunta: p });
+    const r = await d.texto(org, lead.phone, textoFinal).catch((e) => ({ ok: false, error: e.message }));
     if (r && r.ok) {
       await d.datos.actualizar(p.id, { estado: "entregada", entregada_at: new Date().toISOString(), entrega_error: null });
+      await guardarEnChat({ d, org, lead, texto: textoFinal, wamid: r.wamid || null });
       n++;
     }
   }
   return n;
 }
 
-async function contextoAsesor({ org, preguntaId = null }) {
+// citada: la pendiente que el asesor cito. cerrada: el asesor cito el aviso de
+// una pregunta que YA no esta pendiente (respondida o descartada); su mensaje
+// no sirve para ninguna otra.
+async function contextoAsesor({ org, preguntaId = null, preguntaCerrada = null }) {
   const datos = require("../data/preguntas-asesor");
   const pendientes = await datos.pendientesDeOrg(org.id);
   const citada = preguntaId ? pendientes.find((p) => p.id === preguntaId) || null : null;
-  return { pendientes, citada };
+  return { pendientes, citada, cerrada: citada ? null : preguntaCerrada };
 }
 
 async function hayPorEntregar(leadId) {
@@ -203,12 +219,14 @@ async function hayPorEntregar(leadId) {
   return filas.length > 0;
 }
 
-// Id de la pregunta pendiente cuyo aviso citó el asesor (swipe-to-reply), o null.
+// La pregunta cuyo aviso citó el asesor (swipe-to-reply), en CUALQUIER estado:
+// { id, estado, respondida_por }, o null si ese wamid no es de una pregunta.
+// Quien llama decide: pendiente -> es la respuesta; cerrada -> no se reusa.
 async function preguntaCitada(contextId) {
   if (!activo() || !contextId) return null;
   try {
     const p = await require("../data/preguntas-asesor").porWamid(contextId);
-    return p && p.estado === "pendiente" ? p.id : null;
+    return p ? { id: p.id, estado: p.estado, respondida_por: p.respondida_por || null } : null;
   } catch (_) {
     return null;
   }

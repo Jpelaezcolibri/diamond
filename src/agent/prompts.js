@@ -45,8 +45,11 @@ function bloquePreguntasAsesor(preguntas) {
   if (!preguntasActivas() || !preguntas) return "";
   const lista = (preguntas.pendientes || []).map((p) => `- ${p.id} · ${p.ref ? `Ref ${p.ref}` : "sin ref"} · ${p.pregunta}`).join("\n");
   const citada = preguntas.citada ? `\n\nEL ASESOR CITÓ LA PREGUNTA ${preguntas.citada.id}: lo que escribe es la respuesta a esa. Llama responder_pregunta con su texto literal.` : "";
-  if (!lista && !citada) return "";
-  return `\n\nPREGUNTAS PENDIENTES (de colegas y clientes, esperando dato del equipo):\n${lista || "- ninguna"}${citada}\nSi el asesor te da un dato que contesta una de estas, llama responder_pregunta con su id y sus palabras literales. Si hay varias y no sabes a cuál responde, pregúntale cuál antes de registrar.`;
+  const cerrada = preguntas.cerrada
+    ? `\n\nEL ASESOR CITÓ UNA PREGUNTA QUE YA ESTÁ CERRADA (${preguntas.cerrada.estado === "descartada" ? "descartada" : `respondida${preguntas.cerrada.respondida_por ? ` por ${preguntas.cerrada.respondida_por}` : ""}`}): no la registres de nuevo ni uses su mensaje como respuesta a otra pregunta. Dile que esa pregunta ya está cerrada; si quiere dar un dato de otra, que cite el aviso correcto o diga a cuál se refiere.`
+    : "";
+  if (!lista && !citada && !cerrada) return "";
+  return `\n\nPREGUNTAS PENDIENTES (de colegas y clientes, esperando dato del equipo):\n${lista || "- ninguna"}${citada}${cerrada}\nSi el asesor te da un dato que contesta una de estas, llama responder_pregunta con su id y sus palabras literales. Si hay varias y no sabes a cuál responde, pregúntale cuál antes de registrar.`;
 }
 const LISTA_ENTREGA = "\n\nRESPUESTA DEL ASESOR LISTA: el sistema le manda la respuesta a su pregunta justo después de tu mensaje. No la repitas ni digas que todavía no la tienes.";
 

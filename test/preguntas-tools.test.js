@@ -48,3 +48,15 @@ test("responder_pregunta usa la pregunta citada si no viene id", async () => {
   assert.match(out, /Listo|guardada|avisé/);
   assert.strictEqual(memory.preguntasAsesor[0].respuesta, "450 final");
 });
+
+test("responder_pregunta con la citada cerrada: no usa otra pendiente ni guarda nada", async () => {
+  process.env.SOFI_PREGUNTA_ASESOR = "true";
+  memory.preguntasAsesor.push({ id: "p1", org_id: "org-1", lead_id: "l1", ref: "1", tipo: "precio", pregunta: "¿precio?", estado: "pendiente", asesor_id: "a1" });
+  const cerrada = { id: "p9", estado: "respondida", respondida_por: "Claudia" };
+  for (const input of [{ respuesta: "320 millones" }, { pregunta_id: "p1", respuesta: "320 millones" }]) {
+    const out = await executeTool("responder_pregunta", input, { org: { id: "org-1" }, lead: { id: "la" }, advisor: A1, preguntaId: null, preguntaCerrada: cerrada });
+    assert.match(out, /ya está cerrada/);
+  }
+  assert.strictEqual(memory.preguntasAsesor[0].estado, "pendiente");
+  assert.strictEqual(memory.preguntasAsesor[0].respuesta, undefined);
+});

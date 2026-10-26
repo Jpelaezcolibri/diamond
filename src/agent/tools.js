@@ -783,6 +783,8 @@ async function executeTool(name, input, ctx) {
       return pa.registrar({ ctx, input: input || {} });
     }
     if (!ctx.advisor) return "Esta herramienta es solo para un asesor de la casa.";
+    // Cito el aviso de una pregunta ya cerrada: su mensaje no es la respuesta a otra.
+    if (ctx.preguntaCerrada && !ctx.preguntaId) return "El asesor citó una pregunta que ya está cerrada (respondida o descartada). No guardes su mensaje como respuesta de otra: dile que esa pregunta ya está cerrada.";
     const preguntaId = (input && input.pregunta_id) || ctx.preguntaId || null;
     if (!preguntaId) return "No sé a qué pregunta responde. Pregúntale cuál de las PREGUNTAS PENDIENTES es.";
     const r = await pa.responder({ org: ctx.org, preguntaId, respuesta: input && input.respuesta, advisor: ctx.advisor, via: "whatsapp" });

@@ -65,7 +65,7 @@ async function registrarRespuestaSofi(org, lead, phone, text) {
 // (Click-to-WhatsApp Ads) — permite separar en el CRM los leads que llegaron
 // por un anuncio pago de los organicos, sin tocar `source` (canal).
 // Devuelve { reply, lead, transfer } — transfer: { motivo, advisorAlert } si aplico.
-async function procesarMensaje({ org, phone, text, source = "whatsapp", messageExtras = {}, phoneNumberId = null, adReferral = null, radarSignalId = null, preguntaId = null }) {
+async function procesarMensaje({ org, phone, text, source = "whatsapp", messageExtras = {}, phoneNumberId = null, adReferral = null, radarSignalId = null, preguntaId = null, preguntaCerrada = null }) {
   const client = getClient();
 
   // ¿Escribe un asesor de la casa? Se resuelve ANTES de tocar el lead: casi
@@ -266,6 +266,7 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
     // radar; con un cliente esto siempre viene null y no se usa.
     radarSignalId,
     preguntaId,
+    preguntaCerrada,
   };
   // Este bloque solo tiene sentido con property_ref_origen, que un colega ya
   // no puede tener (ver el bloque de arriba) — el !colega es defensivo, para
@@ -347,7 +348,7 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
   let respuestaPorEntregar = false;
   const pa = require("../lib/pregunta-asesor");
   if (pa.activo()) {
-    if (advisor) preguntas = await pa.contextoAsesor({ org, preguntaId }).catch(() => null);
+    if (advisor) preguntas = await pa.contextoAsesor({ org, preguntaId, preguntaCerrada }).catch(() => null);
     else respuestaPorEntregar = await pa.hayPorEntregar(lead.id).catch(() => false);
   }
 

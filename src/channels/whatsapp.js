@@ -387,6 +387,7 @@ router.post("/webhook", async (req, res) => {
       // cual pedido se refiere ni adivinarlo. Ver registrar_resultado_radar.
       let radarSignalId = null;
       let preguntaId = null;
+      let preguntaCerrada = null;
       if (message.context?.id) {
         const ref = await conversations.findByWaMessageId(message.context.id);
         replyToId = ref?.id || null;
@@ -395,7 +396,13 @@ router.post("/webhook", async (req, res) => {
           radarSignalId = señal?.id || null;
         }
         // El aviso al asesor queda en messages (replyToId puesto): la pregunta se busca aparte.
-        preguntaId = await require("../lib/pregunta-asesor").preguntaCitada(message.context.id);
+        // Cualquier estado: si el asesor cito una pregunta ya cerrada, el motor lo
+        // sabe y no le asigna ese mensaje a otra pendiente.
+        const citada = await require("../lib/pregunta-asesor").preguntaCitada(message.context.id);
+        if (citada) {
+          if (citada.estado === "pendiente") preguntaId = citada.id;
+          else preguntaCerrada = citada;
+        }
       }
 
       // Normalizar el contenido segun el tipo
@@ -433,6 +440,7 @@ router.post("/webhook", async (req, res) => {
         adReferral,
         radarSignalId,
         preguntaId,
+        preguntaCerrada,
       });
 
       if (reply) {

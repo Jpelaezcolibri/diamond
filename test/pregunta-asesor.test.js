@@ -15,6 +15,7 @@ const deps = (over = {}) => ({
   avisarAsesor: async (a) => { envios.push({ campana: a.motivo, a: a.advisor.id, titulo: a.titulo, cuerpo: a.cuerpo, whatsapp: a.whatsapp }); return { ok: true }; },
   mensaje: async (_o, to, texto, opts) => { envios.push({ wa: to, texto, opts }); return { ok: true, wamid: "wamid.A" }; },
   texto: async (_o, to, texto) => { envios.push({ colega: to, texto }); return { ok: true, wamid: "wamid.C" }; },
+  registrar: async (_o, lead, texto, wamid) => { envios.push({ guardado: lead.id, texto, wamid }); return {}; },
   plantilla: async (_o, to, o) => { envios.push({ plantilla: o.name, to, params: o.bodyParams }); return { ok: true }; },
   notificar: async (n) => { envios.push({ nota: n.titulo, a: n.advisor.id }); return { ok: true }; },
   soloLlamada: async () => false,
@@ -39,7 +40,7 @@ test("registrar crea la pregunta, avisa por la campana y por WhatsApp sin datos 
   assert.match(out, /No prometas hora/);
   const p = memory.preguntasAsesor[0];
   assert.strictEqual(p.asesor_id, "a1");
-  assert.strictEqual(p.wamid_aviso, "wamid.A");
+  assert.deepStrictEqual(p.wamids_aviso, ["wamid.A"]);
   assert.ok(envios.some((e) => e.campana === "pregunta" && e.a === "a1"));
   const wa = envios.find((e) => e.wa);
   assert.strictEqual(wa.wa, A1.phone);
@@ -197,4 +198,81 @@ test("marcarEntregadaAMano: una pendiente da 409 y otra org da 404", async () =>
   assert.strictEqual(memory.preguntasAsesor[0].estado, "pendiente");
   const r2 = await pa.marcarEntregadaAMano({ org: { id: "otra" }, preguntaId: id, por: "Daiana", deps: deps() });
   assert.deepStrictEqual([r2.ok, r2.codigo], [false, 404]);
+});
+
+test("I1: la respuesta entregada queda guardada en la conversacion del colega", async () => {
+  await pa.registrar({ ctx: ctx(), input, deps: deps() });
+  envios = [];
+  await pa.responder({ org: ORG, preguntaId: memory.preguntasAsesor[0].id, respuesta: "450 final", advisor: A1, via: "crm", deps: deps() });
+  const g = envios.find((e) => e.guardado);
+  assert.ok(g, "se guardo en la conversacion");
+  assert.strictEqual(g.guardado, "l1");
+  assert.match(g.texto, /450 final/);
+  assert.strictEqual(g.wamid, "wamid.C");
+});
+
+test("I1: entregarPendientesDe tambien guarda lo que manda", async () => {
+  await pa.registrar({ ctx: ctx(), input, deps: deps() });
+  Object.assign(memory.preguntasAsesor[0], { estado: "respondida", respuesta: "450", entrega_error: "esperando_ventana" });
+  envios = [];
+  await pa.entregarPendientesDe({ org: ORG, lead: { ...LEAD }, deps: deps() });
+  assert.ok(envios.some((e) => e.guardado === "l1" && /450/.test(e.texto)));
+});
+
+test("I1: si guardar falla, el envio no se deshace ni falla", async () => {
+  await pa.registrar({ ctx: ctx(), input, deps: deps() });
+  const r = await pa.responder({ org: ORG, preguntaId: memory.preguntasAsesor[0].id, respuesta: "450", advisor: A1, via: "crm", deps: deps({ registrar: async () => { throw new Error("db caida"); } }) });
+  assert.match(r.texto, /ya le pasé la respuesta/);
+  assert.strictEqual(memory.preguntasAsesor[0].estado, "entregada");
+});
+
+test("I1: si el envio falla no se guarda nada en la conversacion", async () => {
+  await pa.registrar({ ctx: ctx(), input, deps: deps() });
+  envios = [];
+  await pa.responder({ org: ORG, preguntaId: memory.preguntasAsesor[0].id, respuesta: "450", advisor: A1, via: "crm", deps: deps({ texto: async () => ({ ok: false, error: "boom" }) }) });
+  assert.ok(!envios.some((e) => e.guardado));
+});
+
+test("I2: cada aviso, reaviso o rotacion AGREGA su wamid y no pisa los anteriores", async () => {
+  await pa.registrar({ ctx: ctx(), input, deps: deps() });
+  const p = memory.preguntasAsesor[0];
+  const otro = (w) => deps({ mensaje: async () => ({ ok: true, wamid: w }) });
+  await pa.avisar({ org: ORG, pregunta: p, lead: LEAD, advisor: A1, reaviso: true, deps: otro("wamid.B") });
+  await pa.avisar({ org: ORG, pregunta: p, lead: LEAD, advisor: A2, reaviso: false, deps: otro("wamid.C") });
+  assert.deepStrictEqual(memory.preguntasAsesor[0].wamids_aviso, ["wamid.A", "wamid.B", "wamid.C"]);
+});
+
+test("I2: contextoAsesor distingue la citada pendiente de la cerrada", async () => {
+  process.env.SOFI_PREGUNTA_ASESOR = "true";
+  await pa.registrar({ ctx: ctx(), input, deps: deps() });
+  const p = memory.preguntasAsesor[0];
+  const c1 = await pa.contextoAsesor({ org: ORG, preguntaId: p.id });
+  assert.strictEqual(c1.citada.id, p.id);
+  assert.strictEqual(c1.cerrada, null);
+  const c2 = await pa.contextoAsesor({ org: ORG, preguntaCerrada: { id: "x", estado: "respondida", respondida_por: "Claudia" } });
+  assert.strictEqual(c2.citada, null);
+  assert.strictEqual(c2.cerrada.estado, "respondida");
+  delete process.env.SOFI_PREGUNTA_ASESOR;
+});
+
+test("I3: una respondida con ventana_cerrada se entrega en el siguiente mensaje del colega", async () => {
+  await pa.registrar({ ctx: ctx(), input, deps: deps() });
+  const id = memory.preguntasAsesor[0].id;
+  const cerrada = { texto: async () => ({ ok: false, error: "more than 24 hours" }) };
+  await pa.responder({ org: ORG, preguntaId: id, respuesta: "450", advisor: A1, via: "crm", deps: deps(cerrada) });
+  assert.strictEqual(memory.preguntasAsesor[0].entrega_error, "ventana_cerrada");
+  assert.strictEqual(await pa.hayPorEntregar("l1"), true);
+  envios = [];
+  const n = await pa.entregarPendientesDe({ org: ORG, lead: { ...LEAD }, deps: deps() });
+  assert.strictEqual(n, 1);
+  assert.ok(envios.some((e) => e.colega && /450/.test(e.texto)));
+  assert.strictEqual(memory.preguntasAsesor[0].estado, "entregada");
+  assert.strictEqual(await pa.hayPorEntregar("l1"), false);
+});
+
+test("I3: solo_llamada no se reintenta", async () => {
+  await pa.registrar({ ctx: ctx(), input, deps: deps() });
+  Object.assign(memory.preguntasAsesor[0], { estado: "respondida", respuesta: "450", entrega_error: "solo_llamada" });
+  assert.strictEqual(await pa.hayPorEntregar("l1"), false);
+  assert.strictEqual(await pa.entregarPendientesDe({ org: ORG, lead: { ...LEAD }, deps: deps() }), 0);
 });

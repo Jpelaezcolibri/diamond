@@ -13,7 +13,7 @@ create table if not exists preguntas_asesor (
   asesor_id uuid references advisors(id),
   asignada_at timestamptz not null default now(),
   reaviso_at timestamptz,
-  wamid_aviso text,
+  wamids_aviso text[] not null default '{}',
   respuesta text,
   respondida_por text,
   respondida_via text check (respondida_via is null or respondida_via in ('crm','whatsapp')),
@@ -24,7 +24,7 @@ create table if not exists preguntas_asesor (
   created_at timestamptz not null default now()
 );
 create index if not exists preguntas_asesor_pendientes on preguntas_asesor (org_id, estado);
-create index if not exists preguntas_asesor_wamid on preguntas_asesor (wamid_aviso);
+create index if not exists preguntas_asesor_wamids on preguntas_asesor using gin (wamids_aviso);
 create index if not exists preguntas_asesor_lead on preguntas_asesor (lead_id, estado);
 alter table preguntas_asesor enable row level security;
 drop policy if exists "team read" on preguntas_asesor;

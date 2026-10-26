@@ -64,3 +64,27 @@ test("de noche no hace nada", async () => {
   const r = await sched.runOnce({ ahora: new Date("2026-10-09T03:00:00Z"), deps: deps() });
   assert.deepStrictEqual(r, { asignadas: 0, rotadas: 0, reavisadas: 0 });
 });
+
+test("M3: si el asesor responde a mitad del tick, no se rota ni se reavisa", async () => {
+  const p = await crear();
+  const racing = {
+    ...datos,
+    pendientes: async () => {
+      const foto = (await datos.pendientes()).map((f) => ({ ...f }));
+      await datos.marcarRespondida(p.id, { respuesta: "450", por: "Claudia", via: "crm" });
+      return foto;
+    },
+  };
+  const r = await sched.runOnce({ ahora: new Date("2026-10-08T15:00:00Z"), deps: deps({ datos: racing }) });
+  assert.strictEqual(r.rotadas, 0);
+  assert.deepStrictEqual(log, [], "no se avisa a nadie ni se notifica");
+  assert.strictEqual(p.asesor_id, "a1");
+  assert.strictEqual(p.estado, "respondida");
+});
+
+test("M3 + I2: rotar conserva los wamids de aviso", async () => {
+  const p = await crear({ wamids_aviso: ["wamid.1"] });
+  await sched.runOnce({ ahora: new Date("2026-10-08T15:00:00Z"), deps: deps() });
+  assert.deepStrictEqual(p.wamids_aviso, ["wamid.1"]);
+  assert.strictEqual(p.asesor_id, "a2");
+});

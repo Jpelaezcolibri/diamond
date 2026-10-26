@@ -36,7 +36,7 @@ test("marcarRespondida solo cierra una pendiente, y una sola vez", async () => {
 
 test("porWamid, abiertasDeLead y porEntregarDe", async () => {
   const { pregunta } = await datos.crear(base);
-  await datos.actualizar(pregunta.id, { wamid_aviso: "wamid.X" });
+  await datos.agregarWamid(pregunta.id, "wamid.X");
   assert.strictEqual((await datos.porWamid("wamid.X")).id, pregunta.id);
   assert.strictEqual(await datos.abiertasDeLead("l1"), 1);
   await datos.marcarRespondida(pregunta.id, { respuesta: "450", por: "Daiana", via: "crm" });
@@ -49,4 +49,39 @@ test("esTablaAusente reconoce el error de Postgres y el de PostgREST", () => {
   assert.strictEqual(datos.esTablaAusente({ code: "42P01" }), true);
   assert.strictEqual(datos.esTablaAusente({ code: "PGRST205", message: "Could not find the table" }), true);
   assert.strictEqual(datos.esTablaAusente({ code: "23505" }), false);
+});
+
+test("wamids_aviso acumula: el primer aviso sigue resolviendo despues de un reaviso", async () => {
+  const { pregunta } = await datos.crear(base);
+  await datos.agregarWamid(pregunta.id, "wamid.1");
+  await datos.agregarWamid(pregunta.id, "wamid.2");
+  await datos.agregarWamid(pregunta.id, "wamid.2");
+  assert.deepStrictEqual(pregunta.wamids_aviso, ["wamid.1", "wamid.2"]);
+  assert.strictEqual((await datos.porWamid("wamid.1")).id, pregunta.id);
+  assert.strictEqual((await datos.porWamid("wamid.2")).id, pregunta.id);
+  assert.strictEqual(await datos.porWamid("wamid.3"), null);
+});
+
+test("porEntregarDe incluye esperando_ventana y ventana_cerrada, no solo_llamada ni otros errores", async () => {
+  const mk = async (ref, err) => {
+    const { pregunta } = await datos.crear({ ...base, ref });
+    await datos.marcarRespondida(pregunta.id, { respuesta: "450", por: "Daiana", via: "crm" });
+    await datos.actualizar(pregunta.id, { entrega_error: err });
+  };
+  await mk("1", "esperando_ventana");
+  await mk("2", "ventana_cerrada");
+  await mk("3", "solo_llamada");
+  await mk("4", "131000 otro error");
+  const refs = (await datos.porEntregarDe("l1")).map((p) => p.ref).sort();
+  assert.deepStrictEqual(refs, ["1", "2"]);
+});
+
+test("actualizarSiPendiente solo actualiza una pendiente", async () => {
+  const { pregunta } = await datos.crear(base);
+  const ok = await datos.actualizarSiPendiente(pregunta.id, { reaviso_at: "2026-10-26T10:00:00Z" });
+  assert.strictEqual(ok.reaviso_at, "2026-10-26T10:00:00Z");
+  await datos.marcarRespondida(pregunta.id, { respuesta: "450", por: "Daiana", via: "crm" });
+  assert.strictEqual(await datos.actualizarSiPendiente(pregunta.id, { asesor_id: "a2" }), null);
+  assert.strictEqual(pregunta.asesor_id, "a1");
+  assert.strictEqual(await datos.actualizarSiPendiente("no-existe", { asesor_id: "a2" }), null);
 });

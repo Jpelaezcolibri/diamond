@@ -40,3 +40,14 @@ test("asesor: lista las pendientes con su id y marca la citada", () => {
   const con = asesor({ pendientes: [p1, p2], citada: p1 });
   assert.match(con, /EL ASESOR CITÓ LA PREGUNTA 11111111-aaaa/);
 });
+
+test("asesor: la citada ya cerrada se lo dice al modelo y prohibe reusar el mensaje", () => {
+  process.env.SOFI_PREGUNTA_ASESOR = "true";
+  const p1 = { id: "11111111-aaaa", ref: "1", pregunta: "¿Precio final?" };
+  const t = asesor({ pendientes: [p1], citada: null, cerrada: { id: "99999999-zzzz", estado: "respondida", respondida_por: "Claudia" } });
+  assert.match(t, /CITÓ UNA PREGUNTA QUE YA ESTÁ CERRADA/);
+  assert.match(t, /no la registres de nuevo/);
+  assert.match(t, /ya está cerrada/);
+  const d = asesor({ pendientes: [], citada: null, cerrada: { id: "x", estado: "descartada" } });
+  assert.match(d, /descartada/);
+});
