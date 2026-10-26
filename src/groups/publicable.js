@@ -366,11 +366,14 @@ function nombreDeBarrio(token, match) {
 // razon de Sofi como aclaracion de la ficha. 25 pedidos en 30 dias se quedaban
 // sin DM por `solo_dudosas`.
 //
-// La razon se arma con lo que es POR REF y se puede decir al colega:
+// La aclaracion de la ficha se arma con lo que es POR REF y el cliente final
+// puede leer (la ficha se reenvia tal cual):
 //   · lo que Sofi escribio en `le_falta` para esa ref (si escribio algo);
-//   · los cortos del motor ("2 alcobas y pediste 3"), que es lo que hace a una
-//     ref dudosa por cuenta (revalidar.js#cortosDe);
-//   · el motivo tipado de `dudosas_motivo`, en tuteo.
+//   · los cortos del motor ("2 alcobas y pediste 3", "cuesta $470M y pediste
+//     hasta $450M"), que es lo que hace a una ref dudosa por cuenta
+//     (revalidar.js#cortosDe).
+// Si no hay nada concreto, la ficha va sin nota. Que "no calza en todo" se le
+// dice al COLEGA en el primer mensaje (`avisoColega`), no en la ficha.
 // NUNCA `por_que`: lo escribe Sofi para la asesora, es del lote entero y puede
 // traer voseo o nombres del equipo.
 function dmDudosasActivo(env = process.env) {
@@ -383,10 +386,21 @@ function dmDudosasActivo(env = process.env) {
 // 2026-10-26: 1 de las 25 dudosas de 30 dias era de este tipo.
 const DUDOSAS_QUE_NO_SALEN = new Set(["zona_vecina_y_colega_tajante", "aliado"]);
 
-const TEXTO_DUDOSA = {
-  de_fondo_dudoso: "no estoy seguro de que calce con todo lo que pediste: revísala antes de pasarla",
-};
-const DUDOSA_GENERICA = "no calza en todo lo que pediste: revísala antes de pasarla";
+// LA FICHA SE REENVIA AL CLIENTE FINAL (revision 2026-10-26, I3). Lo que es
+// para el colega ("no estoy seguro de que calce", "revísala antes de pasarla")
+// va en el PRIMER mensaje (avisoColega), nunca en la ficha; y los cortos del
+// motor se dicen como los dice la ficha ("cuesta $470M y pediste hasta
+// $450M"), sin su jerga ("4% sobre $450M, dentro del margen").
+const AVISO_DUDOSAS = "Ninguna opción calza en todo lo que pediste: te paso las más cercanas: revísalas antes de pasárselas a tu cliente.";
+const PARA_EL_COLEGA = /rev[ií]sal|antes de pas|no estoy segur|asesor|decid[ií]/i;
+
+function cortoParaFicha(razon) {
+  const r = String(razon || "").trim();
+  const precio = r.match(/^(.+?)\s+—\s+.*?\bsobre\s+(.+?),\s*dentro del margen$/);
+  if (precio) return `cuesta ${precio[1]} y pediste hasta ${precio[2]}`;
+  if (/\(pediste \d+\)/.test(r)) return r.replace(/\s*\(pediste (\d+)\)/, " y pediste $1");
+  return null;
+}
 
 // Los cortos CONOCIDOS de una candidata, tal como los escribe el motor
 // (match.js): cada razon con "(pediste N)" o "dentro del margen" es un dato
@@ -397,7 +411,7 @@ function cortosDe(m) {
 
 function dudosasParaDm(veredicto, matches) {
   const refs = veredicto && Array.isArray(veredicto.refs_dudosas) ? veredicto.refs_dudosas.map(String) : [];
-  if (!refs.length) return { matches: [], leFalta: [] };
+  if (!refs.length) return { matches: [], leFalta: [], avisoColega: null };
   const motivoDe = new Map(
     (Array.isArray(veredicto.dudosas_motivo) ? veredicto.dudosas_motivo : [])
       .filter((x) => x && x.ref)
@@ -410,13 +424,15 @@ function dudosasParaDm(veredicto, matches) {
     const m = (matches || []).find((x) => x && String(x.ref) === ref);
     if (!m || DUDOSAS_QUE_NO_SALEN.has(motivoDe.get(ref))) continue;
     salida.push(m);
-    const escrito = deSofi.filter((f) => f && String(f.ref) === ref && f.detalle).map((f) => String(f.detalle));
-    const cortos = cortosDe(m).map((r) => String(r).replace(/\s*\(pediste (\d+)\)/, " y pediste $1").replace(/ — /, ": "));
-    const tipado = TEXTO_DUDOSA[motivoDe.get(ref)] || null;
-    const partes = [...new Set([...escrito, ...cortos, tipado].filter(Boolean))];
-    leFalta.push({ ref, detalle: (partes.length ? partes : [DUDOSA_GENERICA]).join(" · ") });
+    const escrito = deSofi
+      .filter((f) => f && String(f.ref) === ref && f.detalle)
+      .map((f) => String(f.detalle))
+      .filter((d) => !PARA_EL_COLEGA.test(d));
+    const cortos = cortosDe(m).map(cortoParaFicha);
+    const partes = [...new Set([...escrito, ...cortos].filter(Boolean))];
+    if (partes.length) leFalta.push({ ref, detalle: partes.join(" · ") });
   }
-  return { matches: salida, leFalta };
+  return { matches: salida, leFalta, avisoColega: salida.length ? AVISO_DUDOSAS : null };
 }
 
 // Filtra una lista de matches y devuelve los publicables (ya ordenados por

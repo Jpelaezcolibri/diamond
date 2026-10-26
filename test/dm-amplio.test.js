@@ -225,7 +225,9 @@ test("dudosas: la razon de Sofi va como aclaracion de la ficha, en tuteo y sin d
   assert.deepStrictEqual(r.matches.map((m) => m.ref), ["D1", "D2"]);
   const porRef = Object.fromEntries(r.leFalta.map((f) => [f.ref, f.detalle]));
   assert.match(porRef.D1, /2 alcobas y pediste 3/);
-  assert.match(porRef.D1, /dentro del margen/);
+  // I3: el precio se dice como en la ficha, sin la jerga del motor.
+  assert.match(porRef.D1, /cuesta \$470M y pediste hasta \$450M/);
+  assert.doesNotMatch(porRef.D1, /dentro del margen|% sobre/);
   assert.match(porRef.D2, /es un dúplex y pediste apartamento/, "lo que Sofi escribio para esa ref va primero");
   assert.strictEqual(porRef.D3, undefined);
   for (const t of Object.values(porRef)) {
@@ -234,15 +236,58 @@ test("dudosas: la razon de Sofi va como aclaracion de la ficha, en tuteo y sin d
   }
 });
 
-test("dudosas: sin motivo tipado, igual lleva una aclaracion honesta", () => {
+test("dudosas: sin dato concreto la ficha no lleva nota; el aviso va para el colega", () => {
   const r = publicable.dudosasParaDm({ refs_dudosas: ["D1"] }, [ficha({ ref: "D1" })]);
-  assert.strictEqual(r.leFalta.length, 1);
-  assert.match(r.leFalta[0].detalle, /no calza en todo lo que pediste/);
+  assert.deepStrictEqual(r.leFalta, []);
+  assert.match(r.avisoColega, /revísalas antes de pasárselas a tu cliente/);
+  assert.doesNotMatch(r.avisoColega, VOSEO);
+});
+
+// ── I3: la ficha de una dudosa se reenvia al cliente final ─────────────────
+// Nada dirigido al colega ("revísala antes de pasarla", "no estoy seguro") ni
+// jerga del motor ("4% sobre $450M, dentro del margen") dentro de la ficha.
+// La salvedad para el colega va en el primer mensaje.
+const PROHIBIDO_EN_FICHA = /rev[ií]sal|antes de pasar|no estoy seguro|no calza en todo|dentro del margen|% sobre|Daiana|Claudia|Catherine|asesora/i;
+
+test("I3: la ficha de la dudosa no lleva texto para el colega ni jerga; el primer mensaje si avisa", () => {
+  const matches = [
+    ficha({ ref: "D1", habitaciones: 2, precio: "$470.000.000", razones: ["Zona: Envigado", "2 alcobas (pediste 3)", "$470M — 4% sobre $450M, dentro del margen"] }),
+    ficha({ ref: "D2", razones: ["Zona: Envigado"] }),
+  ];
+  const veredicto = {
+    refs_utiles: [], refs_dudosas: ["D1", "D2"],
+    dudosas_motivo: [{ ref: "D1", motivo: "dos_o_mas_incumplimientos_conocidos" }, { ref: "D2", motivo: "de_fondo_dudoso" }],
+  };
+  const dud = publicable.dudosasParaDm(veredicto, matches);
+  for (const f of dud.leFalta) assert.doesNotMatch(f.detalle, PROHIBIDO_EN_FICHA, f.detalle);
+  const r = publicable.filtrar(dud.matches, ON);
+  const notas = publicable.notasParaDm({ sinConfirmar: [], leFalta: dud.leFalta }, r.aclaraciones, r.publicables);
+  const armado = redactar.mensajesAlColega({ autor_nombre: "Ana" }, r.publicables, {
+    ...notas, avisoAlColega: dud.avisoColega,
+    pedido: { zonas: ["Envigado"], zona: "Envigado", habitaciones: 3, precio_max: 450000000 },
+  });
+  const [primero, ...fichas] = armado.mensajes.map((x) => x.texto);
+  for (const t of fichas) {
+    assert.doesNotMatch(t, PROHIBIDO_EN_FICHA, t);
+    assert.doesNotMatch(t, VOSEO, t);
+  }
+  assert.match(fichas[0], /2 alcobas y pediste 3/);
+  assert.match(fichas[0], /cuesta \$470M y pediste hasta \$450M/);
+  assert.match(primero, /revísalas antes de pasárselas a tu cliente/);
+  assert.doesNotMatch(primero, VOSEO);
+});
+
+test("I3: sin aviso, el primer mensaje queda igual que siempre", () => {
+  const props = [ficha()];
+  const a = redactar.mensajesAlColega({ autor_nombre: "Ana" }, props, { pedido: { zonas: ["Envigado"] } });
+  const b = redactar.mensajesAlColega({ autor_nombre: "Ana" }, props, { pedido: { zonas: ["Envigado"] }, avisoAlColega: null });
+  assert.strictEqual(a.mensajes[0].texto, b.mensajes[0].texto);
+  assert.doesNotMatch(a.mensajes[0].texto, /revísalas/);
 });
 
 test("dudosas: sin dudosas no devuelve nada", () => {
-  assert.deepStrictEqual(publicable.dudosasParaDm({ refs_dudosas: [] }, [ficha()]), { matches: [], leFalta: [] });
-  assert.deepStrictEqual(publicable.dudosasParaDm(null, [ficha()]), { matches: [], leFalta: [] });
+  assert.deepStrictEqual(publicable.dudosasParaDm({ refs_dudosas: [] }, [ficha()]), { matches: [], leFalta: [], avisoColega: null });
+  assert.deepStrictEqual(publicable.dudosasParaDm(null, [ficha()]), { matches: [], leFalta: [], avisoColega: null });
 });
 
 // ── C1 (revision 2026-10-26): la zona que CONTIENE al barrio pedido no es "cerca" ──

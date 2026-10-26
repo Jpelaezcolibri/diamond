@@ -590,7 +590,7 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
   const dudosasDm =
     utilesSegunSofi.length === 0 && publicable.dmDudosasActivo()
       ? publicable.dudosasParaDm(veredicto, matches)
-      : { matches: [], leFalta: [] };
+      : { matches: [], leFalta: [], avisoColega: null };
   const porDudosas = dudosasDm.matches.length > 0;
   const { publicables: utilesLimpias, descartados: descartadosDm, aclaraciones: aclaracionesDm = [] } = publicable.filtrar(
     porDudosas ? dudosasDm.matches : utilesSegunSofi,
@@ -784,6 +784,8 @@ async function asistir(org, c, señal, signal, { mensaje, grupo, asesor, ahora, 
       sinConfirmar: notasDm.sinConfirmar,
       leFalta: notasDm.leFalta,
       pedido: pedidoDe(c, { texto: mensaje.texto, fechaIso: mensaje.instanteIso }),
+      // Dudosas: la salvedad para el colega va aca, no en la ficha (I3).
+      avisoAlColega: porDudosas ? dudosasDm.avisoColega : null,
     });
     if (armado) {
       // POR CUAL VIA SALE. `decidirDm` ya eligio (el lid primero, ver

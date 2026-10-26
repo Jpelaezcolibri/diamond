@@ -538,7 +538,7 @@ const MAX_POR_DM = Number(process.env.RADAR_DM_MAX_PROPIEDADES || 3);
 function mensajesAlColega(
   senal,
   publicables,
-  { org = null, sinConfirmar = [], leFalta = [], pedido = null, ahora = new Date(), max = MAX_POR_DM, codigo = null } = {}
+  { org = null, sinConfirmar = [], leFalta = [], pedido = null, ahora = new Date(), max = MAX_POR_DM, codigo = null, avisoAlColega = null } = {}
 ) {
   const todas = publicables || [];
   const props = todas.slice(0, Math.max(1, Number(max) || 1));
@@ -589,7 +589,11 @@ function mensajesAlColega(
         ]
       : lineasCierre(org);
 
-  const primero = [presentacion, ...(salvedad ? [salvedad] : []), "", ...cierre].join("\n");
+  // `avisoAlColega` (revision 2026-10-26, I3): lo que es para el colega y no
+  // para su cliente ("revísalas antes de pasárselas") va aca, nunca en la
+  // ficha, que se reenvia tal cual. Sin aviso, el mensaje es el de siempre.
+  const aviso = String(avisoAlColega || "").trim();
+  const primero = [presentacion, ...(aviso ? [aviso] : []), ...(salvedad ? [salvedad] : []), "", ...cierre].join("\n");
   const detalles = detallesPorFicha(props, leFalta, pedido);
   const fichas = props.map((m, i) => ({
     texto: ficha(m, i + 1, { detalleFalta: detalles[i] }),

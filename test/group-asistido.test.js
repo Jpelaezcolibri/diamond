@@ -1585,3 +1585,18 @@ test("zona cercana: el colega tajante no la recibe, aunque el interruptor este e
   assert.strictEqual(enviosDm.length, 0);
   assert.strictEqual(politicasGuardadas[politicasGuardadas.length - 1].motivo, "zona_vecina");
 }));
+
+// I3 (revision 2026-10-26): la ficha de una dudosa se reenvia al cliente; lo
+// que es para el colega va en el primer mensaje.
+test("dudosas: la ficha no lleva 'revísala' ni jerga del motor; el aviso va en el primer mensaje", conEnv({ RADAR_DM_DUDOSAS: "true" }, async () => {
+  telefonoColegaResuelto = "573001234567";
+  matchesDevueltos = [match({ habitaciones: 2, razones: ["Zona: Laureles", "2 alcobas (pediste 3)", "$950M — 5% sobre $900M, dentro del margen"] })];
+  veredictoDeSofi = { ...SOLO_DUDOSA, dudosas_motivo: [{ ref: "9780079", motivo: "de_fondo_dudoso" }] };
+  const r = await vivo.procesarMensaje(ORG, mensaje(), { grupo: GRUPO, modo: "asistido", asesor: CATHERINE, sesion: "RADA-NATALIA" });
+  assert.strictEqual(r.resultado, "dm_enviado");
+  for (const e of enviosDm.slice(1)) {
+    assert.doesNotMatch(e.texto, /rev[ií]sal|antes de pasar|no estoy seguro|no calza en todo|dentro del margen|% sobre/i, e.texto);
+  }
+  assert.match(enviosDm[1].texto, /cuesta \$950M y pediste hasta \$900M/);
+  assert.match(enviosDm[0].texto, /revísalas antes de pasárselas a tu cliente/);
+}));
