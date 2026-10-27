@@ -82,7 +82,10 @@ function fichasOfrecibles(matches, señal, opciones) {
  * @returns {{ items, sinFicha, mensajes }}
  */
 function armar(filas, opciones = {}) {
-  const pendientes = (filas || []).filter(({ señal }) => señal && señal.respuesta_modo !== "auto" && !señal.respondida_at);
+  // `ya_se_le_mando`: el mismo pedido publicado en otro grupo, cuyas fichas ya
+  // le salieron por DM (caso Daniela Arcila, 2026-10-26: contestado solo a las
+  // 4:15 p. m. y listado a Daiana a las 5 p. m. para mandárselo otra vez).
+  const pendientes = (filas || []).filter(({ señal }) => señal && señal.respuesta_modo !== "auto" && !señal.respondida_at && señal.politica_motivo !== "ya_se_le_mando");
   const items = [];
   let sinFicha = 0;
   for (const { señal, matches } of pendientes) {

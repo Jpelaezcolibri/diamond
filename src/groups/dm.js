@@ -83,6 +83,7 @@ Como juzgar:
 - Una conversacion de estar coordinando agenda ("te aviso que dia me queda bien", "dejame confirmar con mi cliente y te digo") tambien cuenta, aunque no haya fecha exacta todavia.
 - Cualquier señal de interes real avanzado cuenta: "a mi cliente le gusto mucho", "cual es el margen de negociacion", "necesito mas fotos para mostrarsela hoy mismo".
 - Un simple "gracias", pedir el link sin mas, o un intercambio que se corta ahi, NO cuenta — eso es ruido, no avance.
+- Manda lo ULTIMO: si el mensaje mas reciente descarta la propiedad ("no le sirve", "no le interesa la ubicacion", "ya compro", "lo dejamos"), hay_avance es false aunque antes hubiera interes o una visita hablada.
 - Si hay VARIAS fechas mencionadas en el hilo, la que va en fecha_hora_iso es la MAS RECIENTE (pudo reagendar).
 - Fechas relativas ("mañana", "el jueves") se resuelven contra la fecha de HOY que se te da abajo.
 - Ante la duda entre avance real y charla suelta, marca hay_avance false: una alerta de mas le hace perder confianza al sistema.`;

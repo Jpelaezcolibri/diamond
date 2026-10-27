@@ -174,7 +174,12 @@ test("agendar_cita: arriendo a 8 h ya no sale, igual que venta, y dice 24 horas 
 test("agendar_cita de arriendo a 25 h sale, con corte y sin guardar operación", async () => {
   horario24h();
   const c = ctx({ categoria: "alquiler" });
-  const iso = new Date(Math.ceil(enHoras(25).getTime() / 1800000) * 1800000).toISOString();
+  // Las 10 a. m. de Bogotá (15:00Z) del primer día a >= 25 h: corriendo de
+  // noche, "25 h adelante" caía a las 11 p. m., fuera del horario de visitas.
+  const d = enHoras(25);
+  const diez = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 15));
+  if (diez < d) diez.setUTCDate(diez.getUTCDate() + 1);
+  const iso = diez.toISOString();
   const out = await executeTool("agendar_cita", { descripcion: "visita", tipo: "visita", fecha_hora_iso: iso, ref: "ARR1" }, c);
   assert.strictEqual(c.lead.cita.estado, "propuesta");
   assert.strictEqual(c.lead.cita.operacion, undefined);

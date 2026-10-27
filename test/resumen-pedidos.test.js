@@ -183,3 +183,11 @@ test("el encabezado de sin atender muestra el total real y lista hasta 20", asyn
   assert.strictEqual((t.match(/^• Ref/gm) || []).length, 20);
   assert.match(t, /y 17 más/);
 });
+
+// Caso Daniela Arcila (2026-10-26): el mismo pedido en dos grupos; el primero
+// salio solo por DM y el segundo (ya_se_le_mando) se le listo a Daiana.
+test("un pedido cuyas fichas ya le salieron por DM no entra al resumen", () => {
+  const r = resumen.armar([{ señal: señal({ politica_motivo: "ya_se_le_mando" }), matches: [match()] }]);
+  assert.strictEqual(r.items.length, 0);
+  assert.deepStrictEqual(r.mensajes, []);
+});
