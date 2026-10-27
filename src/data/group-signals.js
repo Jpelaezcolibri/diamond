@@ -1096,7 +1096,7 @@ async function dmsHoyLinea(orgId, desdeIso) {
 //
 // "Mas reciente" y sin ventana de tiempo, por decision de Juan: dos DM
 // seguidos al mismo colega atribuyen la respuesta al segundo.
-const COLUMNAS_SEÑAL_HILO = "id, texto_original, zona, tipo, operacion, created_at, matches, respuesta_refs, respondida_at";
+const COLUMNAS_SEÑAL_HILO = "id, texto_original, zona, tipo, operacion, created_at, matches, respuesta_refs, respondida_at, autor_telefono";
 
 async function buscarPorTelefono(orgId, telefono) {
   if (!telefono) return null;

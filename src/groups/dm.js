@@ -159,6 +159,14 @@ async function procesarMensaje(org, mensaje, { ahora = new Date() } = {}) {
     ? await groupSignals.buscarPorLid(org.id, identidad.lid).catch(() => null)
     : await groupSignals.buscarPorTelefono(org.id, identidad.telefono).catch(() => null);
 
+  // Una asesora de la casa escribiendole a Daiana (2026-10-27, caso
+  // Catherine): coordinacion interna, no un colega. Ver ./equipo-linea.js.
+  const delEquipo = await require("./equipo-linea").esDelEquipo(org, { ...identidad, señal });
+  if (delEquipo) {
+    console.log(`[linea-dm] mensaje de ${delEquipo.name} (equipo): no se registra como colega`);
+    return { resultado: "equipo" };
+  }
+
   const { mensaje: guardado, duplicado } = await lineaDm.create(org.id, {
     sesion: mensaje.sesion,
     waMessageId: mensaje.waMessageId,
@@ -249,7 +257,7 @@ async function procesarMensaje(org, mensaje, { ahora = new Date() } = {}) {
   // cita queda en el sistema (Juan, 2026-10-20; ver ./visita-linea.js). Ya no
   // sale por WhatsApp a RADAR_VISITAS_ALERTA_TO.
   const aviso = await require("./visita-linea")
-    .avisar(org, { mensaje, veredicto, señal, identidad })
+    .avisar(org, { mensaje, veredicto, señal, identidad, hilo })
     .catch((e) => ({ ok: false, error: e.message }));
   if (aviso && aviso.motivo === "sin_asesora") return { resultado: "sin_destinatario", dmId: guardado.id };
   if (aviso && aviso.ok) await lineaDm.marcarAlertado(org.id, guardado.id).catch(() => {});

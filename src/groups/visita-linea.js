@@ -17,6 +17,8 @@ const leads = require("../data/leads");
 const advisors = require("../data/advisors");
 const whatsappGroups = require("../data/whatsapp-groups");
 const notif = require("../notifications/notificar");
+const properties = require("../data/properties");
+const { plano } = require("./texto");
 
 const ORIGEN = "linea_dm";
 
@@ -35,9 +37,34 @@ async function asesoraDeLinea(org, nombreSesion) {
   return advisors.findAsesorPrincipalRadar(org).catch(() => null);
 }
 
-function refDe(señal) {
-  const refs = (señal && (señal.respuesta_refs || señal.aviso_refs)) || [];
-  return refs.length ? String(refs[0]) : null;
+// La ref de la visita (2026-10-27, caso Luna del Campo): antes era la primera
+// ref que el radar le mando al colega, y la visita a un apartamento en Robledo
+// quedo con la 9805628, una casa en Alto de las Palmas. Ahora, en orden: la
+// ref que el hilo nombra; la unica que se le mando; la unica de las enviadas
+// cuyo barrio o titulo aparece en el hilo. Si no se puede saber, null: una
+// visita "ref por confirmar" se arregla, una con la ref de otra casa manda a
+// la asesora a la propiedad equivocada.
+const GENERICAS = new Set(["medellin", "antioquia", "apartamento", "apartamentos", "venta", "arriendo", "casa", "sector", "para", "con", "del", "las", "los", "en"]);
+
+function palabras(t) {
+  return plano(t).split(/[^a-z0-9]+/).filter((w) => w.length >= 4 && !GENERICAS.has(w));
+}
+
+async function refDe(org, señal, textos = []) {
+  const refs = [...new Set(((señal && (señal.respuesta_refs || señal.aviso_refs)) || []).filter(Boolean).map(String))];
+  const texto = textos.filter(Boolean).join(" ");
+  const nombradas = [...new Set(texto.match(/\b\d{7,8}\b/g) || [])];
+  const enviada = nombradas.find((r) => refs.includes(r));
+  if (enviada) return enviada;
+  if (nombradas.length === 1) return nombradas[0];
+  if (refs.length === 1) return refs[0];
+  const dichas = new Set(palabras(texto));
+  const describe = [];
+  for (const r of refs) {
+    const p = await properties.findByRef(org, r).catch(() => null);
+    if (p && palabras(`${p.zona || ""} ${p.titulo || ""}`).some((w) => dichas.has(w))) describe.push(r);
+  }
+  return describe.length === 1 ? describe[0] : null;
 }
 
 function cuandoDe(iso) {
@@ -51,11 +78,11 @@ function cuandoDe(iso) {
  * @returns { ok, motivo?, leadId? } — ok=false con motivo "sin_asesora" si no
  *          hay a quien avisar. Nunca lanza.
  */
-async function avisar(org, { mensaje, veredicto, señal, identidad }) {
+async function avisar(org, { mensaje, veredicto, señal, identidad, hilo = [] }) {
   const advisor = await asesoraDeLinea(org, mensaje.sesion);
   if (!advisor) return { ok: false, motivo: "sin_asesora" };
 
-  const ref = refDe(señal);
+  const ref = await refDe(org, señal, [...hilo.map((m) => m && m.texto), mensaje.texto]);
   const colega = mensaje.remitenteNombre || mensaje.remitenteTelefono || "Un colega";
   const esVisita = veredicto.tipo === "cita_confirmada" || veredicto.tipo === "agendando";
 
@@ -88,7 +115,7 @@ async function avisar(org, { mensaje, veredicto, señal, identidad }) {
   const cuerpo = [
     colega,
     cuandoDe(veredicto.fecha_hora_iso),
-    ref ? `ref ${ref}` : null,
+    ref ? `ref ${ref}` : "ref por confirmar",
     veredicto.resumen || null,
   ].filter(Boolean).join(" · ");
   const r = await notif
@@ -105,4 +132,4 @@ async function avisar(org, { mensaje, veredicto, señal, identidad }) {
   return { ok: Boolean(r && r.ok), leadId, error: r && r.error };
 }
 
-module.exports = { avisar, asesoraDeLinea, ORIGEN };
+module.exports = { avisar, asesoraDeLinea, refDe, ORIGEN };
