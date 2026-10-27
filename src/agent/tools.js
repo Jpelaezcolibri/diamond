@@ -35,6 +35,7 @@ const TOOL_DEFINITIONS = [
         precio_max: { type: "integer", description: "Precio maximo en pesos, ej 1200000" },
         habitaciones_min: { type: "integer", description: "Minimo de habitaciones" },
         operacion: { type: "string", enum: ["venta", "arriendo"], description: "venta si quiere comprar; arriendo si busca arrendar (todo nuestro arriendo es amoblado)" },
+        fuera_del_pedido: { type: "boolean", description: "Solo con un colega: true SOLO si en este chat el colega pidio ampliar la zona o el presupuesto de su pedido. Sin eso, la busqueda se queda dentro de lo que pidio en el grupo." },
       },
     },
   },
@@ -798,6 +799,17 @@ async function executeTool(name, input, ctx) {
     } else {
       results = await properties.search(ctx.org, input);
     }
+    // Con un colega, la busqueda se queda dentro de su pedido (caso Juan
+    // Felipe, 2026-10-26; ver busqueda-colega.js). Una ref puntual no se filtra.
+    if (ctx.colega && !input.ref && !input.fuera_del_pedido && ctx.pedidoColegaId) {
+      const busquedaColega = require("./busqueda-colega");
+      if (ctx.pedidoColega === undefined) ctx.pedidoColega = await busquedaColega.cargarPedido(ctx.org.id, ctx.pedidoColegaId);
+      if (busquedaColega.pedidoFiltra(ctx.pedidoColega)) {
+        const { quedan } = busquedaColega.filtrar(results.filter((p) => p.disponible), ctx.pedidoColega);
+        if (quedan.length === 0) return busquedaColega.textoSinResultados(ctx.pedidoColega);
+        results = quedan;
+      }
+    }
     const disponibles = results.filter((p) => p.disponible);
     if (disponibles.length > 0 && !ctx.propertyInteres) ctx.propertyInteres = disponibles[0];
     if (disponibles.length > 0) await maybeCaptadorAlert(ctx, disponibles[0]);
@@ -1200,8 +1212,9 @@ async function executeTool(name, input, ctx) {
     }
     // Quien comparte la propiedad NUNCA se califica como lead comprador: no se
     // toca ctx.lead.categoria/estado/score aqui, a diferencia de las demas tools.
+    let guardada = null;
     try {
-      await allyProperties.create(ctx.org.id, {
+      guardada = await allyProperties.create(ctx.org.id, {
         ...input,
         contacto_telefono: ctx.lead.phone,
         lead_id: ctx.lead.id,
@@ -1209,6 +1222,12 @@ async function executeTool(name, input, ctx) {
       });
     } catch (e) {
       console.warn("[tools] No se pudo persistir la propiedad de aliado (revisar migracion ally_properties):", e.message);
+    }
+    // Caso Simón (2026-10-26): Sofi no ve sus tools en el historial, creyó que
+    // no la había registrado, la registró 8 veces y se disculpó por una
+    // mentira que no dijo.
+    if (guardada && guardada.actualizada) {
+      return "Esta propiedad YA estaba registrada en la red desde un mensaje anterior: se le sumaron los datos nuevos, no se duplicó. Si antes le dijiste que quedó registrada, era cierto: no te disculpes ni lo corrijas. Agradécele corto y, si falta algo (área, ubicación exacta, fotos), pídeselo. No vuelvas a llamar esta herramienta por la misma propiedad salvo que traiga un dato nuevo.";
     }
     return "Propiedad de aliado registrada para la red. Agradece brevemente a quien la compartio, en 1-2 frases, SIN tratarlo como cliente interesado en comprar: no lo califiques con registrar_dato_lead, no le armes ficha, no lo transfieras a un asesor de ventas.";
   }

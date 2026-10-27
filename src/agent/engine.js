@@ -298,6 +298,8 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
           return null;
         })
       : null;
+  // El pedido que buscar_propiedades respeta con este colega (busqueda-colega.js).
+  ctx.pedidoColegaId = colega && ultimoPedido ? ultimoPedido.id || null : null;
 
   // Quien coordina las visitas del gremio, para que Sofi pueda pasarle el
   // contacto al colega al confirmarle una cita (Juan, 2026-09-04: "el mensaje

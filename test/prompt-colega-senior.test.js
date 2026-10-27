@@ -25,3 +25,11 @@ test("se fueron las reglas que lo frenaban", () => {
   assert.doesNotMatch(estable, /sin discurso de ventas/);
   assert.doesNotMatch(estable, /No le cierres cada mensaje con una pregunta comercial/);
 });
+
+// Caso Juan Felipe (2026-10-26): dijo "la opción está buena, pásame el link"
+// y Sofi le preguntó "¿te dejo ya algún horario?" en vez de ofrecer dos.
+test("si una opción le sirve, Sofi ofrece dos horarios en el mismo mensaje", () => {
+  assert.match(estable, /SI UNA OPCION LE SIRVE/);
+  assert.match(estable, /en ESE MISMO mensaje, llama horarios_disponibles con esa ref y ofrécele DOS horarios/);
+  assert.match(estable, /Nunca le preguntes "¿te dejo algún horario\?"/);
+});

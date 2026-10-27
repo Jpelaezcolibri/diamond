@@ -88,6 +88,15 @@ async function create(orgId, fields) {
   // que significa "sigue disponible".
   if (row.origen === "grupo") return upsertDeGrupo(orgId, row);
 
+  // El mismo colega contando la misma propiedad en varios mensajes del chat
+  // (caso Simón, 2026-10-26: un lote, 8 filas, una por cada foto que mandó).
+  // Sin ref, la clave es el colega + tipo + zona + precio; lo nuevo se suma a
+  // la fila que ya estaba. `actualizada` le dice a la tool que no es nueva.
+  if (!row.ref && row.contacto_telefono) {
+    const existente = await buscarDelColega(orgId, row);
+    if (existente) return { ...(await completar(existente, row)), actualizada: true };
+  }
+
   if (!supabase) {
     // Dedup en memoria: mismo aliado + misma ref no duplica (mismo criterio
     // del indice unico de la migracion).
@@ -114,6 +123,64 @@ async function create(orgId, fields) {
     return data;
   }
   const { data, error } = await supabase.from("ally_properties").insert(row).select().single();
+  if (error) throw error;
+  return data;
+}
+
+// "$245.000.000" y "$245 millones" son el mismo precio.
+function precioClave(precio) {
+  const t = plano(precio);
+  const m = t.match(/(\d[\d.,]*)\s*(millon|mill|m\b)?/);
+  if (!m) return "";
+  const n = Number(m[1].replace(/[.,](?=\d{3}(?!\d))/g, "").replace(",", "."));
+  if (!Number.isFinite(n) || n <= 0) return "";
+  return String(Math.round(m[2] ? n * 1e6 : n));
+}
+
+const DIAS_DEDUP_COLEGA = 30;
+
+function mismaPropiedadDelColega(a, row) {
+  const n = (v) => plano(v || "");
+  return a.origen !== "grupo"
+    && !a.ref
+    && a.contacto_telefono === row.contacto_telefono
+    && n(a.zona) === n(row.zona)
+    && precioClave(a.precio) === precioClave(row.precio)
+    && (!a.tipo || !row.tipo || n(a.tipo) === n(row.tipo));
+}
+
+async function buscarDelColega(orgId, row) {
+  const desde = new Date(Date.now() - DIAS_DEDUP_COLEGA * 24 * 3600 * 1000).toISOString();
+  if (!supabase) {
+    return memory.allyProperties.find((a) => a.org_id === orgId && (a.created_at || "") >= desde && mismaPropiedadDelColega(a, row)) || null;
+  }
+  const { data, error } = await supabase
+    .from("ally_properties")
+    .select("*")
+    .eq("org_id", orgId)
+    .eq("contacto_telefono", row.contacto_telefono)
+    .is("ref", null)
+    .gte("created_at", desde)
+    .order("created_at", { ascending: true });
+  if (error) {
+    console.warn("[ally] No se pudo buscar el duplicado del colega:", error.message);
+    return null;
+  }
+  return (data || []).find((a) => mismaPropiedadDelColega(a, row)) || null;
+}
+
+// Suma a la fila existente lo que el mensaje nuevo trae y ella no tenia; la
+// descripcion es la mas reciente (Sofi la reescribe con todo lo acumulado).
+async function completar(existente, row) {
+  const cambios = {};
+  for (const k of ["titulo", "tipo", "operacion", "ciudad", "inmobiliaria_origen", "contacto_nombre"]) {
+    if (!existente[k] && row[k]) cambios[k] = row[k];
+  }
+  if (row.descripcion && row.descripcion !== existente.descripcion) cambios.descripcion = row.descripcion;
+  if (Object.keys(cambios).length === 0) return existente;
+  cambios.updated_at = new Date().toISOString();
+  if (!supabase) return Object.assign(existente, cambios);
+  const { data, error } = await supabase.from("ally_properties").update(cambios).eq("id", existente.id).select().single();
   if (error) throw error;
   return data;
 }
@@ -301,4 +368,4 @@ async function registerAlert(orgId, allyPropertyId, leadId) {
   return true;
 }
 
-module.exports = { create, search, findById, list, update, matchesFilters, registerAlert, vigente, mismaPropiedadDeGrupo, claveColega, DIAS_VIGENCIA_GRUPO };
+module.exports = { create, precioClave, mismaPropiedadDelColega, search, findById, list, update, matchesFilters, registerAlert, vigente, mismaPropiedadDeGrupo, claveColega, DIAS_VIGENCIA_GRUPO };
