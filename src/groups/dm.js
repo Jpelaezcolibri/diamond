@@ -49,8 +49,13 @@ function clasificadorActivo() {
 const ESQUEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["hay_avance", "tipo", "fecha_hora_iso", "resumen", "confianza"],
+  required: ["es_agente", "hay_avance", "tipo", "fecha_hora_iso", "resumen", "confianza"],
   properties: {
+    es_agente: {
+      type: "boolean",
+      description:
+        "true si quien escribe es un asistente o contestador AUTOMATICO de otra inmobiliaria, no una persona. Señales: le habla a 'Sofi' o a 'Diamond' como a un cliente que llega, ofrece su catalogo, dice que 'conecto tu mensaje con el equipo', resume y repite lo que le dijimos con formato armado (negritas, cifras copiadas), nunca da un dato propio de un cliente concreto (nombre, dia que puede, que le parecio). Ante la duda, false.",
+    },
     hay_avance: {
       type: "boolean",
       description:
@@ -86,7 +91,8 @@ Como juzgar:
 - Manda lo ULTIMO: si el mensaje mas reciente descarta la propiedad ("no le sirve", "no le interesa la ubicacion", "ya compro", "lo dejamos"), hay_avance es false aunque antes hubiera interes o una visita hablada.
 - Si hay VARIAS fechas mencionadas en el hilo, la que va en fecha_hora_iso es la MAS RECIENTE (pudo reagendar).
 - Fechas relativas ("mañana", "el jueves") se resuelven contra la fecha de HOY que se te da abajo.
-- Ante la duda entre avance real y charla suelta, marca hay_avance false: una alerta de mas le hace perder confianza al sistema.`;
+- Ante la duda entre avance real y charla suelta, marca hay_avance false: una alerta de mas le hace perder confianza al sistema.
+- Antes que nada: ¿es una persona o un agente automatico de otra inmobiliaria? Si es un agente (es_agente true), hay_avance es false: un bot que dice "quedamos atentos para coordinar la visita" no tiene ningun cliente detras.`;
 
 async function clasificarAvance(mensajes, ahora) {
   if (!mensajes || mensajes.length === 0) return null;
@@ -180,6 +186,20 @@ async function procesarMensaje(org, mensaje, { ahora = new Date() } = {}) {
   if (duplicado) return { resultado: "duplicado" };
   if (!guardado) return { resultado: "sin_tabla" };
 
+  // Agente automatico de otra inmobiliaria (Juan, 2026-10-28, caso elizabeth
+  // muriel). El mensaje queda guardado, pero no cuenta como respuesta a un
+  // post, Sofi no le contesta (dos bots en loop) y no se clasifica: no hay
+  // cita ni aviso. Ver ./agente-linea.js.
+  // Sin remitente_lid el hilo no se puede leer por lid: se mira solo este mensaje.
+  const previos = lineaDm.faltaColumnaLid() ? [] : await lineaDm.historialDe(org.id, identidad, { limite: 10 }).catch(() => []);
+  const agente = await require("./agente-linea")
+    .detectar(org, { identidad, nombre: mensaje.remitenteNombre, textos: [...previos.map((m) => m && m.texto), mensaje.texto] })
+    .catch(() => ({ agente: false }));
+  if (agente.agente) {
+    console.log(`[linea-dm] ${mensaje.remitenteNombre || identidad.lid || identidad.telefono}: agente automatico (${agente.motivo}), no se clasifica ni se avisa`);
+    return { resultado: "agente", dmId: guardado.id };
+  }
+
   // Respuesta a una publicacion nuestra (spec 2026-10-20-publicaciones-y-respuestas).
   // Falla abierta: nunca corta el camino del mensaje.
   try {
@@ -234,14 +254,12 @@ async function procesarMensaje(org, mensaje, { ahora = new Date() } = {}) {
 
   const historial = await lineaDm.historialDe(org.id, identidad, { limite: 10 });
   const hilo = historial.length ? historial : [{ texto: mensaje.texto, created_at: guardado.created_at }];
-  // Contestador de otra inmobiliaria (caso elizabeth muriel, 2026-10-28): su
-  // "quedamos atentos para coordinar la visita" quedo como cita. Ni se
-  // clasifica ni se avisa.
-  if (require("./rechaza-bot").hiloAutomatico([...hilo.map((m) => m && m.texto), mensaje.texto])) {
-    return { resultado: "autorespuesta", dmId: guardado.id };
-  }
   const veredicto = await clasificarAvance(hilo, ahora);
   if (!veredicto) return { resultado: "sin_clasificar", dmId: guardado.id };
+  if (veredicto.es_agente) {
+    await require("./agente-linea").marcar(org, { identidad, nombre: mensaje.remitenteNombre, motivo: `clasificador: ${veredicto.resumen || ""}` });
+    return { resultado: "agente", dmId: guardado.id };
+  }
 
   await lineaDm.guardarClasificacion(org.id, guardado.id, {
     tieneCita: veredicto.hay_avance,

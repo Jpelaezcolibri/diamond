@@ -26,16 +26,9 @@ function esAutorespuesta(texto) {
   return AUTORESPUESTA.test(String(texto || ""));
 }
 
-// Basta UN mensaje automatico en el hilo (caso elizabeth muriel, 2026-10-28):
-// el mismo asistente despues escribe "quedamos atentos para coordinar la
-// visita", que suelto parece de una persona.
-function hiloAutomatico(textos) {
-  return (textos || []).some(esAutorespuesta);
-}
-
 function pidePersona(texto) {
   const t = String(texto || "");
   return RECHAZA_BOT.test(t) || RECHAZA_IA.test(t) || LLAMAME.test(t) || (QUIEN.test(t) && QUE_HAGA.test(t) && !SE_PRESENTA.test(t));
 }
 
-module.exports = { pidePersona, esAutorespuesta, hiloAutomatico };
+module.exports = { pidePersona, esAutorespuesta };

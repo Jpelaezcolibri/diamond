@@ -403,4 +403,71 @@ async function marcarSoloLlamada(orgId, { telefono = null } = {}) {
   }
 }
 
-module.exports = { upsert, porTelefono, listarConTelefono, listarSinTelefono, esSoloLlamada, marcarSoloLlamada };
+// AGENTE AUTOMATICO (Juan, 2026-10-28: "identifica siempre si es un agente
+// para que no tengamos confusiones"). Caso elizabeth muriel: el asistente de
+// otra inmobiliaria le contesto a Sofi en la linea y su "quedamos atentos para
+// coordinar la visita" quedo como cita. Con la marca, la linea guarda lo que
+// escribe pero no lo clasifica, no crea citas ni avisos, y Sofi no le contesta.
+// Ver db/migrations/2026-10-28_colega_agente.sql y src/groups/agente-linea.js.
+
+/**
+ * ¿Este colega esta marcado como agente automatico?
+ * @returns true | false | null — null = no se pudo verificar (sin la columna,
+ *          por ejemplo). FALLA ABIERTO: quien llama sigue como con un colega
+ *          normal; frenar a un colega real cuesta mas que un aviso de mas.
+ */
+async function esAgente(orgId, { lid = null, telefono = null } = {}) {
+  const l = soloDigitos(lid);
+  const t = soloDigitos(telefono);
+  if (!orgId || (!l && !t)) return false;
+  const tels = t && t.length >= 10 ? variantesTelefono(t) : [];
+  if (!supabase) {
+    return memory.colegasGrupos.some((c) => c.org_id === orgId && c.es_agente === true && ((l && c.lid === l) || (c.telefono && tels.includes(c.telefono))));
+  }
+  try {
+    const { data, error } = await supabase
+      .from("colegas_grupos")
+      .select("id")
+      .eq("org_id", orgId)
+      .eq("es_agente", true)
+      .or(filtroLidsOTelefonos(new Set(l ? [l] : []), new Set(tels)))
+      .limit(1);
+    if (error) throw error;
+    return (data || []).length > 0;
+  } catch (e) {
+    console.warn(`[colegas] No se pudo leer es_agente (revisar migracion 2026-10-28_colega_agente): ${e.message}`);
+    return null;
+  }
+}
+
+/** Marca al colega como agente automatico. Si no tiene fila y llega con lid, la crea. */
+async function marcarAgente(orgId, { lid = null, telefono = null, nombre = null, motivo = null } = {}) {
+  const l = soloDigitos(lid);
+  const t = soloDigitos(telefono);
+  if (!orgId || (!l && !t)) return { ok: false, motivo: "sin_identidad" };
+  if (l) await upsert(orgId, { lid: l, telefono: t, nombre });
+  const tels = t && t.length >= 10 ? variantesTelefono(t) : [];
+  const ahora = new Date().toISOString();
+  const marca = { es_agente: true, es_agente_at: ahora, es_agente_motivo: motivo ? String(motivo).slice(0, 300) : null };
+
+  if (!supabase) {
+    const filas = memory.colegasGrupos.filter((c) => c.org_id === orgId && ((l && c.lid === l) || (c.telefono && tels.includes(c.telefono))));
+    for (const f of filas) Object.assign(f, marca);
+    return filas.length ? { ok: true } : { ok: false, motivo: "no_encontrado" };
+  }
+  try {
+    const { data, error } = await supabase
+      .from("colegas_grupos")
+      .update(marca)
+      .eq("org_id", orgId)
+      .or(filtroLidsOTelefonos(new Set(l ? [l] : []), new Set(tels)))
+      .select("id");
+    if (error) throw error;
+    return (data || []).length ? { ok: true } : { ok: false, motivo: "no_encontrado" };
+  } catch (e) {
+    console.warn(`[colegas] No se pudo marcar al agente (revisar migracion 2026-10-28_colega_agente): ${e.message}`);
+    return { ok: false, motivo: "error" };
+  }
+}
+
+module.exports = { upsert, porTelefono, listarConTelefono, listarSinTelefono, esSoloLlamada, marcarSoloLlamada, esAgente, marcarAgente };
