@@ -98,3 +98,31 @@ test("la escalera de rotacion no toma las visitas de la linea", async () => {
     memory.leads.splice(antes);
   }
 });
+
+// Caso elizabeth muriel (2026-10-28): "quedamos atentos ... para coordinar la
+// visita", sin fecha, quedo como cita propuesta. Juan: la linea no crea citas
+// sin fecha; avisa el interes y la cita se arma cuando haya dia y hora.
+test("una visita sin fecha no crea cita: avisa como interes", async (t) => {
+  for (const tipo of ["agendando", "cita_confirmada"]) {
+    const log = escenario(t);
+    const d = datos(tipo);
+    d.veredicto = { ...d.veredicto, fecha_hora_iso: null };
+    const r = await visitaLinea.avisar(ORG, d);
+    assert.strictEqual(r.ok, true, tipo);
+    assert.strictEqual(r.leadId, null, tipo);
+    assert.strictEqual(log.creados.length, 0, tipo);
+    assert.strictEqual(log.updates.length, 0, tipo);
+    const n = log.notif[0];
+    assert.strictEqual(n.tipo, "interes_colega", tipo);
+    assert.strictEqual(n.link, "/grupos", tipo);
+    assert.match(n.cuerpo, /sin fecha/i, tipo);
+  }
+});
+
+test("una fecha que no se puede leer cuenta como sin fecha", async (t) => {
+  const log = escenario(t);
+  const d = datos("agendando");
+  d.veredicto = { ...d.veredicto, fecha_hora_iso: "el lunes" };
+  await visitaLinea.avisar(ORG, d);
+  assert.strictEqual(log.updates.length, 0);
+});

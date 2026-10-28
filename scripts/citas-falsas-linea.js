@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Limpieza de las dos citas falsas de la linea del radar (Juan, 2026-10-27).
+// Limpieza de las citas falsas de la linea del radar (Juan, 2026-10-27).
 //
 //   node scripts/citas-falsas-linea.js            -> en seco: solo lista (SELECT)
 //   node scripts/citas-falsas-linea.js --aplicar  -> las marca estado='cancelada'
@@ -10,6 +10,9 @@
 //     oficial, antes del filtro de ecos (9e83553, 23-oct).
 //   - "cathe Uribe relator" (lid 269230108872829): Catherine, del equipo,
 //     coordinando con Daiana; ademas quedo con la ref de otra propiedad.
+//   - "elizabeth muriel" (lid 243344424886478, 2026-10-28): el bot de otra
+//     inmobiliaria contestandole a Sofi ("quedamos atentos ... para coordinar
+//     la visita"); quedo como cita propuesta sin fecha.
 //
 // Solo toca citas con origen 'linea_dm' de esos dos lids. No borra nada: la
 // cita conserva todos sus campos y suma estado_anterior, cancelada_at,
@@ -23,6 +26,7 @@ const aplicar = process.argv.includes("--aplicar");
 const FALSAS = {
   "48297494470698@lid": "Mensaje de Sofi a Daiana leído como colega (eco de la línea oficial)",
   "269230108872829@lid": "Mensaje de Catherine (equipo) leído como colega; ref equivocada",
+  "243344424886478@lid": "Respuesta automática de otra inmobiliaria leída como visita; sin fecha",
 };
 
 async function main() {

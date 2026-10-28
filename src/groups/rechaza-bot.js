@@ -20,10 +20,17 @@ const SE_PRESENTA = /\b(soy|te habla|le habla|les habla|mi nombre es)\b/i;
 // RESPUESTA AUTOMATICA de otra inmobiliaria (Fenix, Colpropiedades, la misma
 // Propiedades Carva): 20 de 594 mensajes reales de colegas en la linea. Si se
 // le contesta, quedan dos bots en loop.
-const AUTORESPUESTA = /gracias por (contactar|contactarnos|comunicarte|comunicarse|escribir|escribirnos|tu mensaje|su mensaje)|horario de atenci[oó]n|mensaje autom[aá]tico|respuesta autom[aá]tica|en breve (te|le) (atender|responder|contactar)|pasado (este|tu|su) mensaje a nuestro equipo|se pondr[aá] en contacto|lunes a viernes \d/i;
+const AUTORESPUESTA = /gracias por (contactar|contactarnos|comunicarte|comunicarse|escribir|escribirnos|tu mensaje|su mensaje)|horario de atenci[oó]n|mensaje autom[aá]tico|respuesta autom[aá]tica|en breve (te|le) (atender|responder|contactar)|(pasado|conectado|enviado|remitido) (este|tu|su) mensaje (a|con) nuestro equipo|accedas a nuestro cat[aá]logo|nuestro cat[aá]logo aqu[ií] en whatsapp|se pondr[aá] en contacto|lunes a viernes \d/i;
 
 function esAutorespuesta(texto) {
   return AUTORESPUESTA.test(String(texto || ""));
+}
+
+// Basta UN mensaje automatico en el hilo (caso elizabeth muriel, 2026-10-28):
+// el mismo asistente despues escribe "quedamos atentos para coordinar la
+// visita", que suelto parece de una persona.
+function hiloAutomatico(textos) {
+  return (textos || []).some(esAutorespuesta);
 }
 
 function pidePersona(texto) {
@@ -31,4 +38,4 @@ function pidePersona(texto) {
   return RECHAZA_BOT.test(t) || RECHAZA_IA.test(t) || LLAMAME.test(t) || (QUIEN.test(t) && QUE_HAGA.test(t) && !SE_PRESENTA.test(t));
 }
 
-module.exports = { pidePersona, esAutorespuesta };
+module.exports = { pidePersona, esAutorespuesta, hiloAutomatico };

@@ -35,3 +35,17 @@ test("contestadores con horario o 'pasado a nuestro equipo' son respuesta automa
   assert.strictEqual(esAutorespuesta("He pasado este mensaje a nuestro equipo para que puedan revisarlo. Alguien se pondrá en contacto pronto si es necesario."), true);
   assert.strictEqual(esAutorespuesta("*BIENVENID@* --- JC10AUTOS Y PROPIEDADES --- Lunes a Viernes 9 am - 5 pm Sábados 9 am - 3 pm"), true);
 });
+
+// Caso elizabeth muriel (2026-10-28): el bot de otra inmobiliaria contesto en
+// la linea y su "quedamos atentos ... para coordinar la visita" quedo como cita.
+test("el asistente de otra inmobiliaria que remite al equipo o al catalogo", () => {
+  assert.strictEqual(esAutorespuesta("He conectado tu mensaje con nuestro equipo para que lo revisen."), true);
+  assert.strictEqual(esAutorespuesta("¡Hola! Es un gusto saludarte.\nTe recomiendo que accedas a nuestro catálogo aquí en WhatsApp para ver algunas de las opciones"), true);
+  assert.strictEqual(esAutorespuesta("Te mando el catálogo de opciones que tengo"), false);
+});
+
+test("hiloAutomatico: un solo mensaje automatico marca todo el hilo", () => {
+  const { hiloAutomatico } = require("../src/groups/rechaza-bot");
+  assert.strictEqual(hiloAutomatico(["He conectado tu mensaje con nuestro equipo para que lo revisen.", "Perfecto Diamond, quedamos atentos para coordinar la visita"]), true);
+  assert.strictEqual(hiloAutomatico(["el cliente puede el lunes a las 4", null]), false);
+});

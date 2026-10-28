@@ -70,3 +70,34 @@ test("ref: si no se puede saber, queda sin ref en vez de una equivocada", async 
   assert.strictEqual(await visitaLinea.refDe(ORG, { respuesta_refs: ["9805628", "10229646"] }, ["confirmada la visita en las palmas"]), null);
   assert.strictEqual(await visitaLinea.refDe(ORG, { respuesta_refs: ["9805628", "10013440"] }, ["listo, mañana a las 10"]), null);
 });
+
+test("dm.procesarMensaje: si el hilo es de un contestador automatico no se clasifica ni se avisa", async (t) => {
+  const dm = require("../src/groups/dm");
+  const eco = require("../src/groups/eco-sofi");
+  const lineaDm = require("../src/data/linea-dm");
+  const groupSignals = require("../src/data/group-signals");
+  const sofiLinea = require("../src/groups/sofi-linea");
+  const puente = require("../src/groups/puente-sofi");
+  const prev = process.env.RADAR_DM_CLASIFICAR;
+  process.env.RADAR_DM_CLASIFICAR = "true";
+  t.after(() => { if (prev === undefined) delete process.env.RADAR_DM_CLASIFICAR; else process.env.RADAR_DM_CLASIFICAR = prev; });
+  t.mock.method(advisors, "findByPhone", async () => null);
+  t.mock.method(directorio, "telefonoDe", async () => null);
+  t.mock.method(eco, "esEcoDeSofi", async () => false);
+  t.mock.method(groupSignals, "buscarPorLid", async () => ({ id: "sig-1", respuesta_refs: ["10488315"] }));
+  t.mock.method(lineaDm, "create", async () => ({ mensaje: { id: "dm-1", created_at: "2026-10-27T22:08:33Z" }, duplicado: false }));
+  t.mock.method(lineaDm, "faltaColumnaLid", () => false);
+  t.mock.method(lineaDm, "historialDe", async () => [
+    { texto: "He conectado tu mensaje con nuestro equipo para que lo revisen." },
+    { texto: "Perfecto Diamond, gracias por avisar. Quedamos atentos a Sofi por el WhatsApp que compartiste para coordinar la visita." },
+  ]);
+  t.mock.method(sofiLinea, "activo", () => false);
+  t.mock.method(puente, "tenderPuente", async () => ({ resultado: "sin_senal" }));
+  const avisar = t.mock.method(visitaLinea, "avisar", async () => ({ ok: true }));
+  const r = await dm.procesarMensaje(ORG, {
+    waMessageId: "w-2", sesion: "DaianaDiamond", remitenteLid: "243344424886478@lid", remitenteTelefono: null,
+    remitenteNombre: "elizabeth muriel", texto: "Perfecto Diamond, gracias por avisar. Quedamos atentos a Sofi por el WhatsApp que compartiste para coordinar la visita.", fechaMensaje: "2026-10-27T22:08:33Z",
+  });
+  assert.strictEqual(r.resultado, "autorespuesta");
+  assert.strictEqual(avisar.mock.callCount(), 0);
+});

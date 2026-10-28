@@ -84,7 +84,10 @@ async function avisar(org, { mensaje, veredicto, señal, identidad, hilo = [] })
 
   const ref = await refDe(org, señal, [...hilo.map((m) => m && m.texto), mensaje.texto]);
   const colega = mensaje.remitenteNombre || mensaje.remitenteTelefono || "Un colega";
-  const esVisita = veredicto.tipo === "cita_confirmada" || veredicto.tipo === "agendando";
+  // Sin dia y hora no hay cita (Juan, 2026-10-28, caso elizabeth muriel): la
+  // visita "por coordinar" llega como interes y la cita se arma cuando haya fecha.
+  const sinFecha = !cuandoDe(veredicto.fecha_hora_iso);
+  const esVisita = (veredicto.tipo === "cita_confirmada" || veredicto.tipo === "agendando") && !sinFecha;
 
   let leadId = null;
   if (esVisita) {
@@ -114,7 +117,7 @@ async function avisar(org, { mensaje, veredicto, señal, identidad, hilo = [] })
 
   const cuerpo = [
     colega,
-    cuandoDe(veredicto.fecha_hora_iso),
+    cuandoDe(veredicto.fecha_hora_iso) || (veredicto.tipo === "agendando" || veredicto.tipo === "cita_confirmada" ? "visita sin fecha todavía" : null),
     ref ? `ref ${ref}` : "ref por confirmar",
     veredicto.resumen || null,
   ].filter(Boolean).join(" · ");

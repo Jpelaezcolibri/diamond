@@ -234,6 +234,12 @@ async function procesarMensaje(org, mensaje, { ahora = new Date() } = {}) {
 
   const historial = await lineaDm.historialDe(org.id, identidad, { limite: 10 });
   const hilo = historial.length ? historial : [{ texto: mensaje.texto, created_at: guardado.created_at }];
+  // Contestador de otra inmobiliaria (caso elizabeth muriel, 2026-10-28): su
+  // "quedamos atentos para coordinar la visita" quedo como cita. Ni se
+  // clasifica ni se avisa.
+  if (require("./rechaza-bot").hiloAutomatico([...hilo.map((m) => m && m.texto), mensaje.texto])) {
+    return { resultado: "autorespuesta", dmId: guardado.id };
+  }
   const veredicto = await clasificarAvance(hilo, ahora);
   if (!veredicto) return { resultado: "sin_clasificar", dmId: guardado.id };
 
