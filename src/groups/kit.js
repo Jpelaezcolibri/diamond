@@ -32,23 +32,25 @@ function etiquetaUltima(publicacion, aliasPorUsuario, ahora = new Date()) {
   if (!publicacion) return { texto: "Nunca compartida", reciente: false };
   const dias = Math.floor((ahora.getTime() - new Date(publicacion.created_at).getTime()) / DIA_MS);
   const cuando = dias <= 0 ? "hoy" : dias === 1 ? "hace 1 día" : `hace ${dias} días`;
+  if (publicacion.sistema) return { texto: `Salió en grupos ${cuando}`, reciente: dias < DIAS_RECIENTE };
   const alias = aliasPorUsuario[publicacion.user_id];
   return { texto: `Compartida ${cuando}${alias ? ` por ${alias}` : ""}`, reciente: dias < DIAS_RECIENTE };
 }
 
-// Ultima publicacion por ref. Best-effort: sin la tabla, todo "Nunca".
+// Ultima publicacion por ref: la que compartio una asesora (kit_publicaciones)
+// o la que saco el publicador automatico (grupo_publicaciones, sistema=true).
+// Best-effort: sin la tabla, todo "Nunca".
 async function ultimasPublicaciones(orgId) {
-  const { data, error } = await supabase
-    .from("kit_publicaciones")
-    .select("property_ref, user_id, created_at")
-    .eq("org_id", orgId)
-    .gte("created_at", new Date(Date.now() - 60 * DIA_MS).toISOString())
-    .order("created_at", { ascending: false });
-  if (error) {
-    console.warn("[kit] No se pudo leer kit_publicaciones (revisar migracion 2026-10-16_kit_publicacion):", error.message);
-    return [];
-  }
-  return data || [];
+  const desde = new Date(Date.now() - 60 * DIA_MS).toISOString();
+  const [kit, auto] = await Promise.all([
+    supabase.from("kit_publicaciones").select("property_ref, user_id, created_at").eq("org_id", orgId).gte("created_at", desde).order("created_at", { ascending: false }),
+    supabase.from("grupo_publicaciones").select("property_ref, created_at").eq("org_id", orgId).eq("estado", "enviado").gte("created_at", desde).order("created_at", { ascending: false }),
+  ]);
+  if (kit.error) console.warn("[kit] No se pudo leer kit_publicaciones (revisar migracion 2026-10-16_kit_publicacion):", kit.error.message);
+  if (auto.error) console.warn("[kit] No se pudo leer grupo_publicaciones:", auto.error.message);
+  return [...(kit.data || []), ...(auto.data || []).map((p) => ({ ...p, sistema: true }))].sort((a, b) =>
+    String(b.created_at).localeCompare(String(a.created_at))
+  );
 }
 
 // Alias publico por auth user id: nunca el nombre.
@@ -65,13 +67,16 @@ async function aliasPorUsuario(orgId) {
   return mapa;
 }
 
-async function contarDesde(tabla, orgId, columna, desdeIso) {
-  const { count, error } = await supabase
-    .from(tabla)
-    .select("id", { count: "exact", head: true })
-    .eq("org_id", orgId)
-    .gte(columna, desdeIso);
+async function contarDesde(tabla, orgId, columna, desdeIso, filtro = null) {
+  let q = supabase.from(tabla).select("id", { count: "exact", head: true }).eq("org_id", orgId).gte(columna, desdeIso);
+  if (filtro) q = q.eq(filtro[0], filtro[1]);
+  const { count, error } = await q;
   return error ? null : count;
+}
+
+// null solo si no se pudo contar ninguno de los dos (el CRM muestra "—").
+function sumar(a, b) {
+  return a == null && b == null ? null : (a || 0) + (b || 0);
 }
 
 async function listar(org, { operacion = "Venta", zona = null } = {}) {
@@ -106,10 +111,18 @@ async function listar(org, { operacion = "Venta", zona = null } = {}) {
     }));
 
   const semana = new Date(ahora.getTime() - 7 * DIA_MS).toISOString();
-  const [compartidasSemana, clientesSemana] = await Promise.all([
+  // Juan, 2026-10-28: el Kit decia "0 compartidas" con el publicador sacando
+  // ~17 posts diarios. Se cuentan los dos caminos: lo que comparte una asesora
+  // y lo que sale solo; y como llegada, el lead del kit y la respuesta de un
+  // colega a un post nuestro.
+  const [kitSemana, autoSemana, leadsSemana, respuestasSemana] = await Promise.all([
     contarDesde("kit_publicaciones", org.id, "created_at", semana),
+    contarDesde("grupo_publicaciones", org.id, "created_at", semana, ["estado", "enviado"]),
     contarDesde("leads", org.id, "kit_at", semana),
+    contarDesde("respuestas_publicacion", org.id, "created_at", semana),
   ]);
+  const compartidasSemana = sumar(kitSemana, autoSemana);
+  const clientesSemana = sumar(leadsSemana, respuestasSemana);
   // kpis: los conteos pueden ser null si la migracion no corrio (el CRM muestra "—").
   return { fresco: true, horas: inventario.horas, items, kpis: { compartidasSemana, clientesSemana, listas: items.length } };
 }

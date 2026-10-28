@@ -90,8 +90,8 @@ export default function KitPublicacion() {
 
       {lista?.kpis && (
         <div className="mb-3 grid grid-cols-3 gap-2">
-          <Kpi color="bg-indigo-600" valor={lista.kpis.compartidasSemana} texto="compartidas esta semana" />
-          <Kpi color="bg-teal-600" valor={lista.kpis.clientesSemana} texto="clientes llegaron a Sofi" />
+          <Kpi color="bg-indigo-600" valor={lista.kpis.compartidasSemana} texto="publicadas en grupos esta semana" />
+          <Kpi color="bg-teal-600" valor={lista.kpis.clientesSemana} texto="colegas respondieron" />
           <Kpi color="bg-amber-600" valor={lista.kpis.listas} texto="listas para publicar" />
         </div>
       )}

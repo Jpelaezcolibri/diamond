@@ -111,6 +111,29 @@ test("listar: filtra sin fotos y arma la etiqueta con el alias", async (t) => {
   fake.tablas = {};
 });
 
+// 2026-10-28 (Juan): el Kit decia "0 compartidas esta semana" con 17 posts
+// diarios del publicador automatico. Ahora cuenta los dos caminos y la ficha
+// que ya salio sola dice "Salió en grupos", no "Nunca compartida".
+test("listar: los KPIs suman el publicador automatico y las respuestas de colegas", async (t) => {
+  t.mock.method(syncEstado, "estadoDelInventario", async () => ({ fresco: true, horas: 2 }));
+  const hace1 = new Date(Date.now() - 86400000 - 3600000).toISOString();
+  fake.tablas = {
+    properties: [completa],
+    grupo_publicaciones: [{ property_ref: "10077063", created_at: hace1, estado: "enviado" }],
+  };
+  const r = await kit.listar(ORG, { operacion: "Venta" });
+  // El fake cuenta 3 por tabla: 3 del kit + 3 del publicador; 3 leads + 3 respuestas.
+  assert.strictEqual(r.kpis.compartidasSemana, 6);
+  assert.strictEqual(r.kpis.clientesSemana, 6);
+  assert.strictEqual(r.items[0].etiqueta.texto, "Salió en grupos hace 1 día");
+  fake.tablas = {};
+});
+
+test("etiquetaUltima: la del publicador automatico", () => {
+  const ahora = new Date("2026-10-16T12:00:00Z");
+  assert.deepStrictEqual(kit.etiquetaUltima({ sistema: true, created_at: "2026-10-16T09:00:00Z" }, {}, ahora), { texto: "Salió en grupos hoy", reciente: true });
+});
+
 test("filtroZonaOr: 'Itagüí' arma un patron que tambien trae 'Itagüi' (sin ilike con tilde)", () => {
   const { filtroZonaOr } = require("../src/data/properties");
   const f = filtroZonaOr("Itagüí");
