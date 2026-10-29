@@ -155,6 +155,9 @@ app.listen(config.port, () => {
   // La escalera horaria de las citas en rotacion (2026-10-07).
   if (config.supabaseUrl) require("./scheduler/citas-escalera").start();
   if (config.supabaseUrl) require("./scheduler/preguntas-escalera").start();
+  // Nadie queda sin contactar (Juan, 2026-10-29): lo que Sofi no retoma pasa a
+  // una asesora. No lo apaga ASESORA_SOLO_VISITAS.
+  if (config.supabaseUrl) require("./scheduler/sin-respuesta").start();
   // Seguimiento al colega: +4 h del DM y +24 h en la linea oficial (2026-10-07).
   if (config.supabaseUrl) require("./scheduler/seguimiento-colega").start();
   // Cruce diario visitas -> ventas (Juan, 2026-08-21): de lo que el sistema

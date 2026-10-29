@@ -24,6 +24,7 @@ const MOTIVO: Record<string, string> = {
   transferido: "🔁 Sofi te lo transfirió",
   visita: "📅 Tiene una visita por confirmar",
   pregunta: "❓ Sofi le preguntó algo al asesor y espera la respuesta",
+  sin_respuesta: "📞 No le contestó a Sofi: escríbele o llámalo",
 };
 
 export default function ChatAtencion({

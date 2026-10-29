@@ -5,12 +5,17 @@
 // es Fase 2).
 //
 // Reglas:
-// - Candidatos: leads en_conversacion|calificado, conversacion activa en modo
+// - Candidatos: leads nuevo|en_conversacion|calificado, conversacion activa en modo
 //   bot, silencio del cliente entre silenceMin y maxSilenceMin (tope 20h por
 //   defecto: margen de seguridad antes del cierre de la ventana de 24h).
 // - Solo si el ultimo mensaje fue de Sofi (el cliente callo; si el ultimo fue
 //   del cliente, Sofi le debe respuesta y esto no aplica).
-// - UN solo toque por lead (flag en leads.seguimiento.t24_sent_at). Si la
+// - UN toque por EPISODIO de silencio (2026-10-29): leads.seguimiento.t24_sent_at
+//   vale para el episodio que arranco con el ultimo mensaje de la persona;
+//   si vuelve a escribir y vuelve a callar, hay otro toque. Antes era uno por
+//   lead para siempre, y los colegas (que quedan en "nuevo") nunca entraban:
+//   Clara y Luz Stella se quedaron sin seguimiento. Si no contesta el toque,
+//   scheduler/sin-respuesta.js le pasa el caso a la asesora. Si la
 //   migracion 2026-07-23_lead_seguimiento no ha corrido, el worker se
 //   auto-desactiva con un warn (nunca spamea por no poder marcar).
 // - Horario: nada entre quietStartHour (8pm) y quietEndHour (8am) Colombia.
@@ -50,6 +55,17 @@ function ventanaAbierta(ultimoDelClienteIso, ahora = new Date()) {
   const t = new Date(ultimoDelClienteIso).getTime();
   return !isNaN(t) && ahora.getTime() - t < VENTANA_MS;
 }
+
+// ¿El episodio actual (desde el ultimo mensaje de la persona) ya tuvo toque?
+function episodioSinSeguimiento(lead, ultimoDelClienteIso) {
+  const marca = new Date((lead && lead.seguimiento && lead.seguimiento.t24_sent_at) || 0).getTime();
+  const desde = new Date(ultimoDelClienteIso || 0).getTime();
+  return !(marca > 0) || marca < desde;
+}
+
+// Lo que ya espera a otra persona no se retoma desde Sofi: la pregunta al
+// asesor, el pedido de asesor, la transferencia y la visita por confirmar.
+const ATENCION_SIN_TOQUE = new Set(["pregunta", "pide_asesor", "transferido", "visita"]);
 
 function inQuietHours(hour, { quietStartHour, quietEndHour }) {
   return hour >= quietStartHour || hour < quietEndHour;
@@ -135,7 +151,7 @@ async function runOnce() {
     const candidates = await conversations.followupCandidates(org.id, {
       minSilenceMin: config.followups.silenceMin,
       maxSilenceMin: config.followups.maxSilenceMin,
-      estados: ["en_conversacion", "calificado"],
+      estados: ["nuevo", "en_conversacion", "calificado"],
     });
 
     for (const conv of candidates) {
@@ -154,24 +170,29 @@ async function runOnce() {
         if (!last || last.role !== "assistant") continue;
         // Sin ventana abierta el texto libre no se entrega: eso es de la Fase 2
         // (seguimiento por plantilla, src/scheduler/seguimiento-plantilla.js).
-        if (!ventanaAbierta(await conversations.lastUserMessageAt(conv.id))) continue;
+        const ultimoDelCliente = await conversations.lastUserMessageAt(conv.id);
+        if (!ventanaAbierta(ultimoDelCliente)) continue;
+        if (!episodioSinSeguimiento(lead, ultimoDelCliente)) continue;
+        if (ATENCION_SIN_TOQUE.has(lead.atencion_pendiente)) continue;
         if (!colegaListoParaSeguimiento(lead, last)) continue;
-        // Un colega "solo llamada" no recibe nada por escrito (2026-09-10).
+        // Un colega "solo llamada" no recibe nada por escrito (2026-09-10), y a
+        // un agente automatico de otra inmobiliaria no se le escribe (2026-10-28).
         if (lead.source === "colega") {
           const solo = await colegas.esSoloLlamada(org.id, { telefono: lead.phone }).catch(() => null);
           if (solo !== false) continue;
+          if (await colegas.esAgente(org.id, { telefono: lead.phone }).catch(() => false)) continue;
         }
 
         const texto = await buildFollowupMessage(conv.id, org, lead);
         if (!texto) continue;
 
-        // Claim atomico ANTES de enviar (ver src/data/leads.js#claimFollowup):
+        // Claim atomico ANTES de enviar (ver src/data/leads.js#claimSeguimiento):
         // el UPDATE lleva su propio WHERE ...is null, asi que si dos ticks (o
         // dos replicas, a futuro) corrieran a la vez sobre el mismo lead, solo
         // uno gana el claim — el otro se salta el lead en vez de duplicar el
         // toque. Si el envio falla despues, se pierde este toque (aceptable en
         // Fase 1: un solo intento por diseno, igual que antes).
-        const claimed = await leads.claimFollowup(lead.id);
+        const claimed = await leads.claimSeguimiento(lead.id, "t24_sent_at");
         if (!claimed) continue; // otro tick/proceso ya lo esta manejando
         sentThisProcess.add(lead.id);
 
@@ -205,4 +226,4 @@ function start() {
   );
 }
 
-module.exports = { start, runOnce, hourInBogota, inQuietHours, buildFollowupMessage, buildFollowupSystemPrompt, colegaListoParaSeguimiento, ventanaAbierta };
+module.exports = { start, runOnce, hourInBogota, inQuietHours, buildFollowupMessage, buildFollowupSystemPrompt, colegaListoParaSeguimiento, ventanaAbierta, episodioSinSeguimiento };

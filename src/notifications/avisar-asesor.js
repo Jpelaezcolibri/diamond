@@ -16,6 +16,9 @@ const MOTIVOS = {
   pide_asesor: { atencion: true, asigna: true, tipo: "asesor_solicitado", whatsapp: "alguien pide hablar con un asesor" },
   transferido: { atencion: true, asigna: true, tipo: "transferido", whatsapp: "Sofi te transfirió un cliente" },
   visita: { atencion: true, asigna: false, tipo: "cita_por_confirmar", whatsapp: "una visita por confirmar" },
+  // No asigna: el round-robin de transferencias vive en transferido_advisor_id
+  // (data/advisors.js) y esto no es una transferencia (scheduler/sin-respuesta.js).
+  sin_respuesta: { atencion: true, asigna: false, tipo: "sin_respuesta", whatsapp: "alguien que no le contestó a Sofi y hay que contactar" },
   pregunta: { atencion: false, asigna: false, tipo: "pregunta_asesor", whatsapp: "una pregunta de un colega" },
   aviso: { atencion: false, asigna: false, tipo: "aviso", whatsapp: "un aviso nuevo" },
 };

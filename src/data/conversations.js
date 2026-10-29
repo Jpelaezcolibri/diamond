@@ -207,9 +207,11 @@ async function followupCandidates(orgId, { minSilenceMin, maxSilenceMin, estados
     .gte("last_activity_at", desde)
     .lte("last_activity_at", hasta)
     .in("leads.estado", estados)
-    .limit(50);
+    .limit(200);
   if (error) throw error;
-  return (data || []).filter((c) => !c.leads?.seguimiento?.t24_sent_at);
+  // El toque es por episodio: lo filtra followups.js con el ultimo mensaje
+  // de la persona (episodioSinSeguimiento), no aca.
+  return data || [];
 }
 
 // Fecha del ultimo mensaje DEL CLIENTE: es lo que abre la ventana de 24 h.

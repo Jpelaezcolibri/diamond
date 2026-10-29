@@ -1028,7 +1028,7 @@ router.post("/api/conversations/:id/media", upload.single("file"), async (req, r
   }
 });
 
-// El chat deja de esperar (pide asesor / transferido): la visita se limpia al
+// El chat deja de esperar (pide asesor / transferido / sin respuesta): la visita se limpia al
 // confirmarla o cancelarla, no aca. Best-effort.
 async function limpiarPendienteAtendido(leadId) {
   if (!leadId || !supabase) return;
@@ -1036,7 +1036,7 @@ async function limpiarPendienteAtendido(leadId) {
     .from("leads")
     .update({ atencion_pendiente: null, atencion_desde: null })
     .eq("id", leadId)
-    .in("atencion_pendiente", ["pide_asesor", "transferido"])
+    .in("atencion_pendiente", ["pide_asesor", "transferido", "sin_respuesta"])
     .then(({ error }) => error && console.warn("[api] No se pudo limpiar atencion_pendiente:", error.message));
 }
 

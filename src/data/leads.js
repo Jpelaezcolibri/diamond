@@ -97,6 +97,31 @@ async function claimFollowup(leadId) {
   return data === true;
 }
 
+// Claim de una marca de leads.seguimiento que se REPITE por episodio (no una
+// sola vez para siempre, como claim_followup): gana solo si la marca sigue
+// valiendo lo que se leyo. Relee el lead justo antes para no pisar otras
+// claves del jsonb escritas en el medio. Devuelve el seguimiento nuevo o null
+// si otro tick ya la cambio.
+async function claimSeguimiento(leadId, clave) {
+  const ahora = new Date().toISOString();
+  if (!supabase) {
+    const lead = memory.leads.find((l) => l.id === leadId);
+    if (!lead) return null;
+    lead.seguimiento = { ...(lead.seguimiento || {}), [clave]: ahora };
+    return lead.seguimiento;
+  }
+  const { data: actual, error: e1 } = await supabase.from("leads").select("seguimiento").eq("id", leadId).maybeSingle();
+  if (e1) throw e1;
+  if (!actual) return null;
+  const previo = (actual.seguimiento || {})[clave] || null;
+  const seguimiento = { ...(actual.seguimiento || {}), [clave]: ahora };
+  let q = supabase.from("leads").update({ seguimiento }).eq("id", leadId);
+  q = previo ? q.eq(`seguimiento->>${clave}`, previo) : q.is(`seguimiento->>${clave}`, null);
+  const { data, error } = await q.select("seguimiento");
+  if (error) throw error;
+  return data && data[0] ? data[0].seguimiento : null;
+}
+
 async function claimAppointmentReminder(leadId) {
   if (!supabase) {
     const lead = memory.leads.find((l) => l.id === leadId);
@@ -167,4 +192,4 @@ async function listConCitaPendiente(estados) {
   return (data || []).filter(filtro);
 }
 
-module.exports = { findOrCreate, findById, update, claimFollowup, claimAppointmentReminder, listConCitasPropuestasVencidas, listCitasPropuestasEnRotacion, listConCitaPendiente };
+module.exports = { findOrCreate, findById, update, claimFollowup, claimSeguimiento, claimAppointmentReminder, listConCitasPropuestasVencidas, listCitasPropuestasEnRotacion, listConCitaPendiente };

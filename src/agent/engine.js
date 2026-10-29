@@ -195,6 +195,11 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
 
   const conv = await conversations.findOrCreate(org.id, lead.id, phoneNumberId);
   await conversations.appendMessage(conv.id, "user", text, messageExtras);
+  // Volvio a escribir: Sofi lo retoma y el "hay que contactarlo" del CRM se
+  // cae (scheduler/sin-respuesta.js). Best-effort.
+  if (lead.atencion_pendiente === "sin_respuesta") {
+    Object.assign(lead, await leads.update(lead.id, { atencion_pendiente: null, atencion_desde: null }).catch(() => lead));
+  }
 
   // Conversacion tomada por un asesor desde el CRM: guardar el mensaje y callar a Sofi
   if (conv.modo === "humano") {

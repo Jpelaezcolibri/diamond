@@ -73,7 +73,7 @@ test("Tomar control sigue limpiando el pendiente de transferido / pide asesor", 
   await rutaDe("/api/conversations/:id/modo")({ params: { id: "conv-1" }, body: { modo: "humano" } }, res);
   const lead = llamadas.find((c) => c.tabla === "leads");
   assert.ok(lead);
-  assert.deepStrictEqual(lead.ops.find((o) => o[0] === "in"), ["in", "atencion_pendiente", ["pide_asesor", "transferido"]]);
+  assert.deepStrictEqual(lead.ops.find((o) => o[0] === "in"), ["in", "atencion_pendiente", ["pide_asesor", "transferido", "sin_respuesta"]]);
 });
 
 function graphOk(t) {
@@ -102,7 +102,7 @@ test("la asesora escribe desde el CRM (/send): limpia el pendiente y la pausa po
   const ops = limpiezaDeLead();
   assert.ok(ops, "se actualiza el lead");
   assert.deepStrictEqual(ops.find((o) => o[0] === "update")[1], { atencion_pendiente: null, atencion_desde: null });
-  assert.deepStrictEqual(ops.find((o) => o[0] === "in"), ["in", "atencion_pendiente", ["pide_asesor", "transferido"]]);
+  assert.deepStrictEqual(ops.find((o) => o[0] === "in"), ["in", "atencion_pendiente", ["pide_asesor", "transferido", "sin_respuesta"]]);
   assert.deepStrictEqual(limpiar.mock.calls[0].arguments[0], { orgId: "org-1", leadId: "lead-1" });
 });
 

@@ -35,3 +35,11 @@ test("con SOFI_SEGUIMIENTO_COLEGA=false los colegas se saltan", () => {
     else process.env.SOFI_SEGUIMIENTO_COLEGA = antes;
   }
 });
+
+// 2026-10-29: el toque es por episodio (antes uno por lead para siempre).
+test("el seguimiento vale por episodio: si volvió a escribir, hay otro toque", () => {
+  const { episodioSinSeguimiento } = require("../src/scheduler/followups");
+  assert.strictEqual(episodioSinSeguimiento({ seguimiento: null }, "2026-10-29T12:00:00Z"), true);
+  assert.strictEqual(episodioSinSeguimiento({ seguimiento: { t24_sent_at: "2026-10-20T12:00:00Z" } }, "2026-10-29T12:00:00Z"), true);
+  assert.strictEqual(episodioSinSeguimiento({ seguimiento: { t24_sent_at: "2026-10-29T15:00:00Z" } }, "2026-10-29T12:00:00Z"), false);
+});

@@ -21,19 +21,8 @@ function canal(deps) {
     lead: deps.lead || ((orgId, id) => require("../data/leads").findById(orgId, id)),
     avisar: deps.avisar || ((args) => pa.avisar(args)),
     notificar: deps.notificar || ((...a) => require("../notifications/notificar").notificar(...a)),
-    ventanaAbierta: deps.ventanaAbierta || ventanaAbierta,
+    ventanaAbierta: deps.ventanaAbierta || require("../lib/ventana-asesoras").ventanaAbierta,
   };
-}
-
-// ¿Le escribio la asesora a Sofi en las ultimas 24 h? Mismo camino que
-// scheduler/ventana-asesora.js: su lead "asesor" -> su conversacion.
-async function ventanaAbierta(org, advisor, ahora = new Date()) {
-  const tel = String((advisor && advisor.phone) || "").replace(/D/g, "");
-  if (!tel) return false;
-  const lead = await require("../data/leads").findOrCreate(org.id, tel, "asesor");
-  const conversations = require("../data/conversations");
-  const conv = await conversations.findOrCreate(org.id, lead.id, null);
-  return conversations.hayMensajeEntranteDespues(conv.id, new Date(ahora.getTime() - 24 * 3600 * 1000).toISOString());
 }
 
 // Ultimo aviso del tope: una sola nota por la campana a cada asesor del ciclo.
