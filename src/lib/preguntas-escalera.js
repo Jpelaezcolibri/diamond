@@ -20,14 +20,18 @@ function siguienteDe(ciclo, actualId) {
   return i === -1 ? ciclo[0] : ciclo[(i + 1) % ciclo.length];
 }
 
-function pasoDePregunta({ pregunta, ciclo, ahora = new Date() }) {
+// enviados: los avisos que cuentan para el tope (el scheduler descuenta los que
+// WhatsApp rechazo); sin el dato, todos los de wamids_aviso.
+// ciclo: las asesoras a las que se les puede escribir ahora. Si la asignada ya
+// no esta (se le cerro la ventana), la pregunta pasa a la primera.
+function pasoDePregunta({ pregunta, ciclo, ahora = new Date(), enviados = null }) {
   if (!pregunta || pregunta.estado !== "pendiente" || !ciclo || ciclo.length === 0) return { accion: "nada" };
   if (enPausa(ahora)) return { accion: "nada" };
-  const enviados = avisosDe(pregunta);
-  if (enviados >= MAX_AVISOS) return { accion: "nada" };
+  const cuenta = enviados === null ? avisosDe(pregunta) : enviados;
+  if (cuenta >= MAX_AVISOS) return { accion: "nada" };
   // ultimo: este aviso completa el tope; el scheduler cierra la escalera.
-  const ultimo = enviados + 1 >= MAX_AVISOS;
-  if (!pregunta.asesor_id) return { accion: "asignar", nuevo: ciclo[0], ultimo };
+  const ultimo = cuenta + 1 >= MAX_AVISOS;
+  if (!pregunta.asesor_id || !ciclo.some((a) => a.id === pregunta.asesor_id)) return { accion: "asignar", nuevo: ciclo[0], ultimo };
   const desde = new Date(pregunta.asignada_at).getTime();
   if (isNaN(desde)) return { accion: "asignar", nuevo: ciclo[0], ultimo };
   const pasaron = ahora.getTime() - desde;

@@ -76,6 +76,18 @@ async function agregarWamid(id, wamid) {
   return actualizar(id, { wamids_aviso: [...actuales, String(wamid)] });
 }
 
+// Cuantos de esos avisos rechazo WhatsApp (delivery "failed", llega despues por
+// el acuse; caso 2026-10-29: 131047 a las asesoras con la ventana cerrada).
+// La escalera no los cuenta para su tope.
+async function avisosFallidos(wamids) {
+  const ids = (wamids || []).map(String).filter(Boolean);
+  if (ids.length === 0) return 0;
+  if (!supabase) return memory.messages.filter((m) => ids.includes(m.wa_message_id) && m.delivery === "failed").length;
+  const { data, error } = await supabase.from("messages").select("id").in("wa_message_id", ids).eq("delivery", "failed");
+  if (error) throw error;
+  return (data || []).length;
+}
+
 async function actualizar(id, patch) {
   if (!supabase) {
     const p = memory.preguntasAsesor.find((x) => x.id === id);
@@ -132,4 +144,4 @@ async function porEntregarDe(leadId) {
   return data || [];
 }
 
-module.exports = { crear, pendientes, pendientesDeOrg, porId, porWamid, agregarWamid, actualizar, actualizarSiPendiente, marcarRespondida, abiertasDeLead, porEntregarDe, esTablaAusente };
+module.exports = { crear, pendientes, pendientesDeOrg, porId, porWamid, agregarWamid, avisosFallidos, actualizar, actualizarSiPendiente, marcarRespondida, abiertasDeLead, porEntregarDe, esTablaAusente };

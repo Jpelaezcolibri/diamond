@@ -70,3 +70,14 @@ test("el aviso que completa el tope sale marcado como ultimo", () => {
   const antes = pasoDePregunta({ pregunta: p({ wamids_aviso: w(2) }), ciclo: CICLO, ahora: t("2026-10-08T14:15:00Z") });
   assert.deepStrictEqual([antes.accion, antes.ultimo], ["reaviso", false]);
 });
+
+test("si la asignada ya no está en el turno (ventana cerrada), pasa a la primera", () => {
+  const r = pasoDePregunta({ pregunta: p({ asesor_id: "a3" }), ciclo: [A1], ahora: t("2026-10-08T14:20:00Z") });
+  assert.deepStrictEqual([r.accion, r.nuevo.id], ["asignar", "a1"]);
+});
+
+test("el tope usa los avisos que contaron, no los que WhatsApp rechazó", () => {
+  const w = Array.from({ length: 10 }, (_, i) => `w${i}`);
+  const r = pasoDePregunta({ pregunta: p({ wamids_aviso: w }), ciclo: CICLO, ahora: t("2026-10-08T15:00:00Z"), enviados: 4 });
+  assert.deepStrictEqual([r.accion, r.ultimo], ["rotar", false]);
+});

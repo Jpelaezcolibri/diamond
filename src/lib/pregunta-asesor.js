@@ -42,10 +42,22 @@ function textoRespuesta({ lead, pregunta }) {
   return `Hola${nombre ? ` ${nombre}` : ""}, ya tengo la respuesta sobre ${sobre}:\n${pregunta.respuesta}`;
 }
 
-async function avisar({ org, pregunta, lead, advisor, reaviso = false, deps }) {
+// sinTexto: la asesora tiene la ventana de 24 h cerrada y el texto libre
+// fallaria (131047). Va solo la campana + aviso_app, y queda una marca en
+// wamids_aviso para que el tope de la escalera lo cuente.
+async function avisar({ org, pregunta, lead, advisor, reaviso = false, sinTexto = false, deps }) {
   const d = conDeps(deps);
   if (!advisor) return { ok: false };
   const titulo = `${reaviso ? "Sigue pendiente: pregunta" : "Pregunta"} de ${quienDe(lead)}${pregunta.ref ? ` · Ref ${pregunta.ref}` : ""}`;
+  if (sinTexto) {
+    const a = await d
+      .avisarAsesor({ org, advisor, motivo: "pregunta", lead, titulo, cuerpo: pregunta.pregunta, whatsapp: true })
+      .catch((e) => ({ ok: false, error: e.message }));
+    const marca = `aviso_app:${new Date().toISOString()}`;
+    await d.datos.agregarWamid(pregunta.id, marca).catch(() => {});
+    pregunta.wamids_aviso = [...(pregunta.wamids_aviso || []).filter((w) => w !== marca), marca];
+    return { ok: Boolean(a && a.ok) };
+  }
   let r = await d.mensaje(org, advisor.phone, textoParaAsesor(pregunta), { permitirRepetido: reaviso }).catch((e) => ({ ok: false, error: e.message }));
   const nombrePlantilla = process.env.SOFI_PREGUNTA_ASESOR_PLANTILLA;
   if (!(r && r.ok) && nombrePlantilla && VENTANA_CERRADA.test((r && r.error) || "")) {

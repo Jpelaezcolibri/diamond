@@ -286,3 +286,17 @@ test("I3: solo_llamada no se reintenta", async () => {
   assert.strictEqual(await pa.hayPorEntregar("l1"), false);
   assert.strictEqual(await pa.entregarPendientesDe({ org: ORG, lead: { ...LEAD }, deps: deps() }), 0);
 });
+
+// Caso 2026-10-29: a Claudia y Catherine el texto libre les fallaba (131047).
+test("con la ventana cerrada no manda texto libre: campana + aviso_app y una marca para el tope", async () => {
+  await pa.registrar({ ctx: ctx(), input, deps: deps() });
+  envios = [];
+  const p = memory.preguntasAsesor[0];
+  const antes = (p.wamids_aviso || []).length;
+  await pa.avisar({ org: ORG, pregunta: p, lead: LEAD, advisor: A1, reaviso: true, sinTexto: true, deps: deps() });
+  assert.ok(!envios.some((e) => e.wa), "no debe mandar texto libre");
+  const campana = envios.find((e) => e.campana === "pregunta");
+  assert.strictEqual(campana && campana.whatsapp, true);
+  assert.strictEqual(p.wamids_aviso.length, antes + 1);
+  assert.match(p.wamids_aviso[p.wamids_aviso.length - 1], /^aviso_app:/);
+});

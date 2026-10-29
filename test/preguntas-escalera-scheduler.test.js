@@ -13,7 +13,8 @@ const deps = (over = {}) => ({
   org: async () => ({ id: "org-1", name: "Diamond" }),
   ciclo: async () => [A1, A2],
   lead: async () => ({ id: "l1", phone: "57300", nombre: "Andrea", source: "colega" }),
-  avisar: async ({ advisor, reaviso }) => { log.push({ avisar: advisor.id, reaviso: Boolean(reaviso) }); return { ok: true }; },
+  avisar: async ({ advisor, reaviso, sinTexto }) => { log.push({ avisar: advisor.id, reaviso: Boolean(reaviso), ...(sinTexto ? { sinTexto: true } : {}) }); return { ok: true }; },
+  ventanaAbierta: async () => true,
   notificar: async (n) => { log.push({ nota: n.advisor.id, titulo: n.titulo }); return { ok: true }; },
   ...over,
 });
@@ -99,4 +100,26 @@ test("el ultimo aviso del tope avisa por la campana a todo el ciclo y despues ca
   log = [];
   const r2 = await sched.runOnce({ ahora: new Date("2026-10-08T17:00:00Z"), deps: deps() });
   assert.deepStrictEqual([r2.rotadas, r2.reavisadas, log.length], [0, 0, 0]);
+});
+
+// Caso 2026-10-29: 2 de cada 3 avisos fallaban por la ventana cerrada.
+test("rota solo entre las asesoras con la ventana abierta", async () => {
+  await crear();
+  const r = await sched.runOnce({ ahora: new Date("2026-10-08T15:00:00Z"), deps: deps({ ventanaAbierta: async (_o, a) => a.id === "a1" }) });
+  // a2 tiene la ventana cerrada: la hora vuelve a caer en a1, la unica abierta.
+  assert.strictEqual(r.rotadas, 1);
+  assert.deepStrictEqual(log.filter((x) => x.avisar), [{ avisar: "a1", reaviso: false }]);
+});
+
+test("si nadie tiene la ventana abierta, avisa sin texto libre", async () => {
+  await crear();
+  await sched.runOnce({ ahora: new Date("2026-10-08T15:00:00Z"), deps: deps({ ventanaAbierta: async () => false }) });
+  assert.deepStrictEqual(log.filter((x) => x.avisar), [{ avisar: "a2", reaviso: false, sinTexto: true }]);
+});
+
+test("los avisos que WhatsApp rechazó no cuentan para el tope", async () => {
+  await crear({ wamids_aviso: ["w1", "w2", "w3", "w4", "w5", "w6", "w7", "w8"] });
+  const r = await sched.runOnce({ ahora: new Date("2026-10-08T15:00:00Z"), deps: deps({ datos: { ...datos, avisosFallidos: async () => 5 } }) });
+  assert.strictEqual(r.rotadas, 1);
+  assert.strictEqual(r.agotadas, 0);
 });
