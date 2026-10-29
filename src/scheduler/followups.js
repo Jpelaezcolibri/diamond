@@ -29,6 +29,7 @@ const conversations = require("../data/conversations");
 const { sendWhatsApp } = require("../channels/whatsapp");
 const { getClient, paramsDeModelo } = require("../lib/anthropic");
 const colegas = require("../data/colegas");
+const { esAutorespuesta } = require("../groups/rechaza-bot");
 
 // Backstop en memoria contra dobles envios dentro del mismo proceso (si el
 // update del flag falla, el reinicio del server es el unico reintento posible).
@@ -149,7 +150,6 @@ async function runOnce() {
   let sent = 0;
   for (const org of orgs) {
     const candidates = await conversations.followupCandidates(org.id, {
-      minSilenceMin: config.followups.silenceMin,
       maxSilenceMin: config.followups.maxSilenceMin,
       estados: ["nuevo", "en_conversacion", "calificado"],
     });
@@ -168,10 +168,18 @@ async function runOnce() {
         // Solo si Sofi hablo de ultimo (el cliente callo).
         const last = await conversations.lastMessage(conv.id);
         if (!last || last.role !== "assistant") continue;
+        // El silencio se mide con la hora real del ultimo mensaje, no con
+        // last_activity_at (ver conversations.followupCandidates).
+        if (Date.now() - new Date(last.created_at).getTime() < config.followups.silenceMin * 60 * 1000) continue;
         // Sin ventana abierta el texto libre no se entrega: eso es de la Fase 2
         // (seguimiento por plantilla, src/scheduler/seguimiento-plantilla.js).
         const ultimoDelCliente = await conversations.lastUserMessageAt(conv.id);
         if (!ventanaAbierta(ultimoDelCliente)) continue;
+        // Lo ultimo fue una respuesta automatica de otra inmobiliaria: no hay
+        // persona a quien retomar (caso Propiedades Carva, 2026-10-28).
+        const recientes = await conversations.getRecentMessages(conv.id, 4);
+        const ultimoTexto = [...recientes].reverse().find((m) => m.role === "user");
+        if (ultimoTexto && esAutorespuesta(String(ultimoTexto.content || ""))) continue;
         if (!episodioSinSeguimiento(lead, ultimoDelCliente)) continue;
         if (ATENCION_SIN_TOQUE.has(lead.atencion_pendiente)) continue;
         if (!colegaListoParaSeguimiento(lead, last)) continue;

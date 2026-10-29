@@ -16,9 +16,11 @@ const tras = (envName, def) => Number(process.env[envName] || def) * H;
 const TRAS_SEGUIMIENTO = () => tras("SIN_RESPUESTA_TRAS_SEGUIMIENTO_H", 3);
 const PIDE_ASESOR = () => tras("SIN_RESPUESTA_PIDE_ASESOR_H", 2);
 const NOTA_DE_VOZ = () => tras("SIN_RESPUESTA_NOTA_DE_VOZ_H", 2);
-// Si Sofi no alcanzo a hacer su seguimiento (ventana cerrada, noche), a la
-// asesora le llega igual: silencio de Sofi + este margen.
-const SIN_SEGUIMIENTO = () => tras("SIN_RESPUESTA_SIN_SEGUIMIENTO_H", 6);
+// Si Sofi no alcanzo a hacer su seguimiento, a la asesora le llega cuando la
+// ventana de 24 h ya se cerro (Sofi no puede escribirle texto libre) y Sofi
+// lleva por lo menos este silencio. Con la ventana abierta, primero Sofi.
+const SIN_SEGUIMIENTO = () => tras("SIN_RESPUESTA_SIN_SEGUIMIENTO_H", 3);
+const VENTANA = 23 * H; // mismo margen que followups.ventanaAbierta
 // Mas viejo que esto ya no es un episodio vivo (los atrasados se entregan en
 // una lista aparte, no por este carril).
 const EDAD_MAX = () => tras("SIN_RESPUESTA_EDAD_MAX_H", 48);
@@ -67,6 +69,7 @@ function motivoEscalar({ lead, ultimoUsuario, ultimoMensaje, ahora = new Date() 
   if (seguimiento >= desdeUsuario) {
     return now - seguimiento >= TRAS_SEGUIMIENTO() ? { motivo: "no_contesto" } : null;
   }
+  if (now - desdeUsuario < VENTANA) return null; // todavia le toca a Sofi
   return !isNaN(desdeSofi) && now - desdeSofi >= SIN_SEGUIMIENTO() ? { motivo: "sin_seguimiento" } : null;
 }
 

@@ -188,16 +188,18 @@ async function resetForLead(leadId) {
 }
 
 // Candidatos a seguimiento automatico de Sofi (Capa B Fase 1): conversaciones
-// ACTIVAS en modo bot cuyo cliente lleva entre minSilenceMin y maxSilenceMin
-// sin escribir (last_activity_at solo se actualiza con mensajes ENTRANTES del
-// cliente, asi que es exactamente el reloj de silencio y de la ventana de 24h).
+// ACTIVAS en modo bot con actividad en los ultimos maxSilenceMin
+// sin escribir. OJO (2026-10-29): last_activity_at NO es solo el reloj de los
+// mensajes entrantes: findOrCreate lo actualiza cada vez que algo interno abre
+// la conversacion (avisos, radar, ventana). Por eso aca solo acota hacia
+// atras (maxSilenceMin, un toque no puede ser mas viejo) y el minimo de
+// silencio lo mide el worker con la hora real del ultimo mensaje.
 // El filtro de estado del lead y del flag de seguimiento se hace aca; el de
 // "el ultimo mensaje fue de Sofi" lo hace el worker mensaje a mensaje.
-async function followupCandidates(orgId, { minSilenceMin, maxSilenceMin, estados }) {
+async function followupCandidates(orgId, { maxSilenceMin, estados }) {
   if (!supabase) return [];
   const now = Date.now();
   const desde = new Date(now - maxSilenceMin * 60 * 1000).toISOString();
-  const hasta = new Date(now - minSilenceMin * 60 * 1000).toISOString();
   const { data, error } = await supabase
     .from("conversations")
     .select("*, leads!inner(*)")
@@ -205,7 +207,6 @@ async function followupCandidates(orgId, { minSilenceMin, maxSilenceMin, estados
     .eq("estado", "activa")
     .or("modo.is.null,modo.eq.bot")
     .gte("last_activity_at", desde)
-    .lte("last_activity_at", hasta)
     .in("leads.estado", estados)
     .limit(200);
   if (error) throw error;

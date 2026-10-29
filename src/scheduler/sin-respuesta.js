@@ -41,8 +41,9 @@ function depsPorDefecto() {
         .eq("org_id", orgId)
         .eq("estado", "activa")
         .or("modo.is.null,modo.eq.bot")
+        // Solo acota hacia atras: last_activity_at lo mueve cualquier proceso
+        // interno que abra la conversacion. Los tiempos los mide motivoEscalar.
         .gte("last_activity_at", new Date(ahora.getTime() - 48 * H).toISOString())
-        .lte("last_activity_at", new Date(ahora.getTime() - 2 * H).toISOString())
         .neq("leads.source", "asesor")
         .order("last_activity_at", { ascending: true })
         .limit(200);

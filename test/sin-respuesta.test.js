@@ -25,8 +25,9 @@ test("un seguimiento de un episodio viejo no cuenta para el nuevo", () => {
   assert.strictEqual(motivoEscalar({ lead: l, ultimoUsuario: u(4), ultimoMensaje: s(4), ahora: AHORA }), null);
 });
 
-test("si Sofi no alcanzó a hacer el seguimiento, a las 6 h de silencio pasa igual", () => {
-  assert.deepStrictEqual(motivoEscalar({ lead: lead(), ultimoUsuario: u(6), ultimoMensaje: s(6), ahora: AHORA }), { motivo: "sin_seguimiento" });
+test("si Sofi no alcanzó a hacer el seguimiento, pasa cuando se cierra la ventana; antes, le toca a Sofi", () => {
+  assert.deepStrictEqual(motivoEscalar({ lead: lead(), ultimoUsuario: u(24), ultimoMensaje: s(24), ahora: AHORA }), { motivo: "sin_seguimiento" });
+  assert.strictEqual(motivoEscalar({ lead: lead(), ultimoUsuario: u(10), ultimoMensaje: s(10), ahora: AHORA }), null);
 });
 
 test("Luz Stella: nota de voz sin respuesta escrita -> a la asesora a las 2 h", () => {
@@ -45,7 +46,7 @@ test("una sola vez por episodio", () => {
 });
 
 test("no escala lo que atiende otro carril, lo cerrado, lo viejo ni a quien espera respuesta de Sofi", () => {
-  const base = { ultimoUsuario: u(8), ultimoMensaje: s(8), ahora: AHORA };
+  const base = { ultimoUsuario: u(30), ultimoMensaje: s(30), ahora: AHORA };
   assert.strictEqual(motivoEscalar({ ...base, lead: lead({ atencion_pendiente: "pregunta" }) }), null);
   assert.strictEqual(motivoEscalar({ ...base, lead: lead({ estado: "cerrado_perdido" }) }), null);
   assert.strictEqual(motivoEscalar({ ...base, lead: lead({ source: "asesor" }) }), null);
