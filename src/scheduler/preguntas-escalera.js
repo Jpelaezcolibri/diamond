@@ -1,7 +1,8 @@
 // La escalera de las preguntas al asesor (spec 2026-10-25 §5.3). Cada tick
 // mira las pendientes: sin asesor -> se asigna; 15 min sin respuesta -> se le
-// repite; 60 min -> pasa al siguiente del ciclo. Sin limite: sigue hasta que
-// alguien conteste o la descarten en el CRM. Pausa de noche y domingo.
+// repite; 60 min -> pasa al siguiente del ciclo. Con el ultimo aviso del tope
+// (PREGUNTA_MAX_AVISOS) se avisa por la campana a todo el ciclo y la escalera
+// calla: la pregunta sigue en "Para atender" del CRM. Pausa de noche y domingo.
 const { pasoDePregunta } = require("../lib/preguntas-escalera");
 const pa = require("../lib/pregunta-asesor");
 
@@ -19,9 +20,22 @@ function canal(deps) {
   };
 }
 
+// Ultimo aviso del tope: una sola nota por la campana a cada asesor del ciclo.
+// Despues la escalera no vuelve a escribir por esta pregunta.
+async function cerrarEscalera(c, org, ciclo, p, res) {
+  res.agotadas++;
+  for (const advisor of ciclo) {
+    await c.notificar({
+      orgId: org.id, advisor, tipo: "pregunta_asesor",
+      titulo: "Pregunta de un colega sin respuesta: no se va a repetir más",
+      cuerpo: `${p.pregunta}\nRespóndela o descártala en "Para atender" del CRM.`, leadId: p.lead_id,
+    }).catch(() => {});
+  }
+}
+
 let corriendo = false;
 async function runOnce({ ahora = new Date(), deps = {} } = {}) {
-  const res = { asignadas: 0, rotadas: 0, reavisadas: 0 };
+  const res = { asignadas: 0, rotadas: 0, reavisadas: 0, agotadas: 0 };
   if (corriendo) return res;
   corriendo = true;
   const c = canal(deps);
@@ -53,6 +67,7 @@ async function runOnce({ ahora = new Date(), deps = {} } = {}) {
           const actual = ciclo.find((a) => a.id === p.asesor_id);
           await c.avisar({ org, pregunta: p, lead, advisor: actual, reaviso: true });
           res.reavisadas++;
+          if (paso.ultimo) await cerrarEscalera(c, org, ciclo, p, res);
           continue;
         }
         const anterior = ciclo.find((a) => a.id === p.asesor_id) || null;
@@ -69,6 +84,7 @@ async function runOnce({ ahora = new Date(), deps = {} } = {}) {
             titulo: `La pregunta pasó a ${paso.nuevo.name}`, cuerpo: p.pregunta, leadId: p.lead_id,
           }).catch(() => {});
         }
+        if (paso.ultimo) await cerrarEscalera(c, org, ciclo, p, res);
       } catch (e) {
         console.error("[preguntas-escalera] error con pregunta", p.id, e.message);
       }

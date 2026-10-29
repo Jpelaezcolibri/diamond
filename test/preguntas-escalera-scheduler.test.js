@@ -62,7 +62,7 @@ test("rotar a sí mismo (ciclo de uno) no le manda la nota de reasignación", as
 test("de noche no hace nada", async () => {
   await crear();
   const r = await sched.runOnce({ ahora: new Date("2026-10-09T03:00:00Z"), deps: deps() });
-  assert.deepStrictEqual(r, { asignadas: 0, rotadas: 0, reavisadas: 0 });
+  assert.deepStrictEqual(r, { asignadas: 0, rotadas: 0, reavisadas: 0, agotadas: 0 });
 });
 
 test("M3: si el asesor responde a mitad del tick, no se rota ni se reavisa", async () => {
@@ -87,4 +87,16 @@ test("M3 + I2: rotar conserva los wamids de aviso", async () => {
   await sched.runOnce({ ahora: new Date("2026-10-08T15:00:00Z"), deps: deps() });
   assert.deepStrictEqual(p.wamids_aviso, ["wamid.1"]);
   assert.strictEqual(p.asesor_id, "a2");
+});
+
+test("el ultimo aviso del tope avisa por la campana a todo el ciclo y despues calla", async () => {
+  const p = await crear({ wamids_aviso: ["w1", "w2", "w3", "w4", "w5"] });
+  const r = await sched.runOnce({ ahora: new Date("2026-10-08T15:00:00Z"), deps: deps() });
+  assert.strictEqual(r.agotadas, 1);
+  const notas = log.filter((x) => x.nota && /no se va a repetir/.test(x.titulo)).map((x) => x.nota);
+  assert.deepStrictEqual(notas.sort(), ["a1", "a2"]);
+  p.wamids_aviso.push("w6");
+  log = [];
+  const r2 = await sched.runOnce({ ahora: new Date("2026-10-08T17:00:00Z"), deps: deps() });
+  assert.deepStrictEqual([r2.rotadas, r2.reavisadas, log.length], [0, 0, 0]);
 });

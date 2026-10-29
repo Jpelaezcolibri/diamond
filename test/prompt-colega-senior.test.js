@@ -33,3 +33,9 @@ test("si una opción le sirve, Sofi ofrece dos horarios en el mismo mensaje", ()
   assert.match(estable, /en ESE MISMO mensaje, llama horarios_disponibles con esa ref y ofrécele DOS horarios/);
   assert.match(estable, /Nunca le preguntes "¿te dejo algún horario\?"/);
 });
+
+test("los horarios se ofrecen una vez y no se repiten en cada mensaje (caso Freddy)", () => {
+  assert.match(estable, /LOS HORARIOS SE OFRECEN UNA VEZ/);
+  assert.match(estable, /contéstale SOLO eso, sin volver a ponerle los horarios/);
+  assert.match(estable, /no insistas con los horarios: el asesor coordina/);
+});

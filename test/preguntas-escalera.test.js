@@ -54,3 +54,19 @@ test("sin ciclo o pregunta cerrada, nada", () => {
   assert.strictEqual(pasoDePregunta({ pregunta: p(), ciclo: [], ahora: t("2026-10-08T15:00:00Z") }).accion, "nada");
   assert.strictEqual(pasoDePregunta({ pregunta: p({ estado: "respondida" }), ciclo: CICLO, ahora: t("2026-10-08T15:00:00Z") }).accion, "nada");
 });
+
+// Caso 2026-10-29: 48 avisos por una sola pregunta en 3 dias.
+test("con el tope de avisos enviados la escalera calla", () => {
+  const w = (n) => Array.from({ length: n }, (_, i) => `w${i}`);
+  const llena = p({ wamids_aviso: w(6) });
+  assert.strictEqual(pasoDePregunta({ pregunta: llena, ciclo: CICLO, ahora: t("2026-10-08T15:00:00Z") }).accion, "nada");
+  assert.strictEqual(pasoDePregunta({ pregunta: p({ wamids_aviso: w(48) }), ciclo: CICLO, ahora: t("2026-10-08T14:15:00Z") }).accion, "nada");
+});
+
+test("el aviso que completa el tope sale marcado como ultimo", () => {
+  const w = (n) => Array.from({ length: n }, (_, i) => `w${i}`);
+  const r = pasoDePregunta({ pregunta: p({ wamids_aviso: w(5) }), ciclo: CICLO, ahora: t("2026-10-08T15:00:00Z") });
+  assert.deepStrictEqual([r.accion, r.ultimo], ["rotar", true]);
+  const antes = pasoDePregunta({ pregunta: p({ wamids_aviso: w(2) }), ciclo: CICLO, ahora: t("2026-10-08T14:15:00Z") });
+  assert.deepStrictEqual([antes.accion, antes.ultimo], ["reaviso", false]);
+});
