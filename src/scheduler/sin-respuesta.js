@@ -14,6 +14,9 @@
 // abierta, campana + aviso_app (el texto libre no llegaria: 131047).
 // De a uno: como mucho un caso por asesora en cada vuelta de 15 min, y nada si
 // el freno de ritmo-avisos esta cerrado; lo demas espera la proxima vuelta.
+// Con PENDIENTES_EXCEL y la tabla contactos_pendientes (spec 2026-10-30), lo
+// no urgente va al Excel de la asesora (scheduler/excel-pendientes.js) y solo
+// lo urgente (pidio asesor, nota de voz) sale ademas por WhatsApp de a uno.
 // Este carril NO lo apaga ASESORA_SOLO_VISITAS: es pedido expreso de Juan.
 // Interruptor: SOFI_SIN_RESPUESTA (encendido salvo "false").
 const { motivoEscalar, textoParaAsesora } = require("../lib/sin-respuesta");
@@ -61,6 +64,8 @@ function depsPorDefecto() {
     nombreColega: async (orgId, tel) => ((await require("../data/colegas").porTelefono(orgId, tel)) || {}).nombre || null,
     enviar: (...a) => require("../lib/mensaje-asesor").enviarYRegistrar(...a),
     avisarAsesor: (...a) => require("../notifications/avisar-asesor").avisarAsesor(...a),
+    pendientes: require("../data/contactos-pendientes"),
+    excelActivo: () => /^(true|1|si|sí|on)$/i.test(String(process.env.PENDIENTES_EXCEL || "")),
     crmUrl: String(process.env.CRM_PUBLIC_URL || "").trim().replace(/\/$/, "") || null,
   };
 }
@@ -70,7 +75,7 @@ const ultimoDe = (msgs, role) => [...msgs].reverse().find((m) => m.role === role
 let turno = 0;
 let corriendo = false;
 async function runOnce({ ahora = new Date(), deps = null } = {}) {
-  const res = { escalados: 0, enviados: 0, soloCampana: 0, esperando: 0 };
+  const res = { escalados: 0, enviados: 0, soloCampana: 0, esperando: 0, soloExcel: 0 };
   if (corriendo || enPausa(ahora)) return res;
   corriendo = true;
   const d = { ...depsPorDefecto(), ...(deps || {}) };
@@ -82,6 +87,9 @@ async function runOnce({ ahora = new Date(), deps = null } = {}) {
       });
       let ciclo = null;
       let abiertas = null;
+      // Con el Excel de pendientes encendido y su tabla creada (spec 2026-10-30),
+      // lo no urgente va al Excel; sin tabla, todo sigue saliendo de a uno.
+      const conExcel = d.excelActivo() && (await Promise.resolve().then(() => d.pendientes.disponible()).catch(() => false));
       const porAsesora = new Map(); // advisor.id -> { advisor, casos: [] }
       let listos = 0;
       for (const conv of convs) {
@@ -104,6 +112,22 @@ async function runOnce({ ahora = new Date(), deps = null } = {}) {
             console.warn(`[sin-respuesta] ${org.name}: no hay asesoras en el ciclo — el caso de lead ${lead.id} queda sin pasar`);
             continue;
           }
+          const urgente = paso.motivo === "pide_asesor" || paso.motivo === "nota_de_voz";
+          if (conExcel && !urgente) {
+            // Cada asesora recibe sus casos en su Excel; la ventana la resuelve
+            // scheduler/excel-pendientes.js al mandarlo.
+            const asesoraExcel = ciclo.find((a) => a.id === lead.transferido_advisor_id) || ciclo[turno++ % ciclo.length];
+            if (!(await d.claim(lead.id))) continue;
+            listos++;
+            await d.pendientes.abrir({ orgId: org.id, leadId: lead.id, conversationId: conv.id, asesorId: asesoraExcel.id, motivo: paso.motivo });
+            await d
+              .avisarAsesor({ org, advisor: asesoraExcel, motivo: "sin_respuesta", lead, titulo: `Por contactar: ${lead.nombre || `+${lead.phone}`}`, cuerpo: "Va en tu próximo Excel de pendientes.", whatsapp: false })
+              .catch(() => {});
+            res.soloExcel++;
+            res.escalados++;
+            console.log(`[sin-respuesta] ${paso.motivo}: lead ${lead.id} -> Excel de ${asesoraExcel.name}`);
+            continue;
+          }
           const duena = abiertas.find((a) => a.id === lead.transferido_advisor_id);
           const advisor = duena || (abiertas.length ? abiertas[turno++ % abiertas.length] : ciclo[0]);
           const conVentanaAbierta = abiertas.some((a) => a.id === advisor.id);
@@ -116,6 +140,11 @@ async function runOnce({ ahora = new Date(), deps = null } = {}) {
           }
           if (!(await d.claim(lead.id))) continue;
           listos++;
+          if (conExcel) {
+            await d.pendientes
+              .abrir({ orgId: org.id, leadId: lead.id, conversationId: conv.id, asesorId: advisor.id, motivo: paso.motivo })
+              .catch((e) => console.warn("[sin-respuesta] no se pudo abrir el pendiente:", e.message));
+          }
           const solo = lead.source === "colega" ? await d.soloLlamada(org.id, lead.phone).catch(() => false) : false;
           const nombre = lead.nombre || (lead.source === "colega" ? await d.nombreColega(org.id, lead.phone).catch(() => null) : null);
           const texto = textoParaAsesora({

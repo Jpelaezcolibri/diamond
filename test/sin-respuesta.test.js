@@ -90,6 +90,8 @@ const deps = (over = {}) => ({
   enviar: async (_o, tel, texto) => { log.push({ wa: tel, texto }); return { ok: true }; },
   avisarAsesor: async (a) => { log.push({ campana: a.advisor.id, motivo: a.motivo, whatsapp: a.whatsapp }); return { ok: true }; },
   crmUrl: null,
+  pendientes: { disponible: async () => false, abrir: async () => ({}) },
+  excelActivo: () => false,
   ...over,
 });
 
@@ -135,4 +137,23 @@ test("a un agente automático de otra inmobiliaria no se le pasa", async () => {
 test("de noche no corre", async () => {
   const r = await sched.runOnce({ ahora: new Date("2026-10-30T03:00:00Z"), deps: deps() });
   assert.strictEqual(r.escalados, 0);
+});
+
+// Spec 2026-10-30: pendientes por Excel.
+test("con el Excel encendido, lo no urgente solo queda pendiente y lo urgente sale de a uno", async () => {
+  const pend = { disponible: async () => true, abrir: async (a) => { log.push({ abrir: a.motivo }); return { pendiente: { codigo: "C-0001" }, nuevo: true }; } };
+  const r = await sched.runOnce({ ahora: AHORA, deps: deps({ pendientes: pend, excelActivo: () => true }) });
+  // c1 = Clara (no_contesto) -> solo Excel; c2 = Luz Stella (nota de voz) -> WhatsApp.
+  assert.deepStrictEqual(log.filter((x) => x.abrir).map((x) => x.abrir), ["no_contesto", "nota_de_voz"]);
+  const wa = log.filter((x) => x.wa);
+  assert.strictEqual(wa.length, 1);
+  assert.match(wa[0].texto, /Luz Stella/);
+  assert.strictEqual(r.soloExcel, 1);
+});
+
+test("sin la tabla de pendientes sigue como hoy", async () => {
+  const pend = { disponible: async () => false, abrir: async () => { throw new Error("no"); } };
+  const r = await sched.runOnce({ ahora: AHORA, deps: deps({ pendientes: pend, excelActivo: () => true }) });
+  assert.strictEqual(r.soloExcel, 0);
+  assert.strictEqual(log.filter((x) => x.wa).length, 1);
 });
