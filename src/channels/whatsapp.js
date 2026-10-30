@@ -416,6 +416,12 @@ router.post("/webhook", async (req, res) => {
         extras.type = message.type;
         extras.media_url = persisted?.url || null;
         extras.media_mime = persisted?.mime || mediaObj.mime_type || null;
+        // El MIME de Meta a veces llega como octet-stream: el nombre dice si es un
+        // .xlsx (devolucion del Excel de pendientes). No va como campo aparte:
+        // extras se inserta tal cual en messages, que no tiene columna filename.
+        if (message.type === "document" && /\.xlsx$/i.test(mediaObj.filename || "") && !/spreadsheetml/.test(extras.media_mime || "")) {
+          extras.media_mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+        }
         userText = mediaObj.caption?.trim() ||
           (message.type === "image" ? "[Imagen recibida]" :
            message.type === "audio" ? "[Nota de voz recibida]" :

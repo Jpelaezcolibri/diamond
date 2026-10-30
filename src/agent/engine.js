@@ -200,10 +200,25 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
   if (lead.atencion_pendiente === "sin_respuesta") {
     Object.assign(lead, await leads.update(lead.id, { atencion_pendiente: null, atencion_desde: null }).catch(() => lead));
   }
+  // Y su pendiente del Excel se resuelve solo (spec 2026-10-30 §7).
+  if (!advisor) await require("../data/contactos-pendientes").resolverPorLead(lead.id, "volvio_a_escribir").catch(() => 0);
 
   // Conversacion tomada por un asesor desde el CRM: guardar el mensaje y callar a Sofi
   if (conv.modo === "humano") {
     return { reply: null, lead, transfer: null, assistantMessageId: null };
+  }
+
+  // La asesora devuelve el Excel de pendientes (spec 2026-10-30 §6): Sofi lo
+  // lee, lo aplica en el CRM y le contesta el resumen. No pasa por Claude.
+  if (advisor && require("../lib/devolucion-excel").esExcel(messageExtras) && messageExtras.media_url) {
+    const reply = await require("../lib/devolucion-excel")
+      .procesar({ org, advisor, mediaUrl: messageExtras.media_url })
+      .catch((e) => {
+        console.error("[engine] devolucion de Excel:", e.message);
+        return "No pude procesar el Excel por un error mío. Intenta de nuevo en un rato.";
+      });
+    const msg = await conversations.appendMessage(conv.id, "assistant", reply);
+    return { reply, lead, transfer: null, assistantMessageId: msg && msg.id };
   }
 
   const history = await conversations.getRecentMessages(conv.id, HISTORY_LIMIT);
