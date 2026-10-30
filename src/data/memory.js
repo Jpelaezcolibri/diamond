@@ -52,6 +52,7 @@ const db = {
   signalEvents: [],
   // Preguntas de Sofi al asesor (ver db/migrations/2026-10-25_preguntas_asesor.sql).
   preguntasAsesor: [],
+  contactosPendientes: [],
   uid,
 };
 
