@@ -3,7 +3,12 @@
 const { POR_QUE } = require("./sin-respuesta");
 
 const recorte = (s, n) => { const x = String(s || "").replace(/\s+/g, " ").trim(); return x.length > n ? `${x.slice(0, n - 1)}…` : x; };
-const pesos = (n) => (Number(n) > 0 ? `$${Math.round(Number(n)).toLocaleString("es-CO")}` : null);
+// properties.precio es texto ("$700.000.000", "700000000"): se lee con el mismo
+// parser del motor de match.
+const pesos = (t) => {
+  const n = require("./formato").parsearPrecio(t);
+  return n > 0 ? `$${Math.round(n).toLocaleString("es-CO")}` : null;
+};
 
 function refsDe(textos) {
   const out = [];

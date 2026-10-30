@@ -66,3 +66,7 @@ test("un archivo que no es nuestro o no es Excel", async () => {
   assert.deepStrictEqual(await px.leerLibro(Buffer.from(await wb.xlsx.writeBuffer())), { ok: false, error: "no_es_nuestro" });
   assert.deepStrictEqual(await px.leerLibro(Buffer.from("no soy un excel")), { ok: false, error: "ilegible" });
 });
+
+test("ningún resultado lleva coma (Excel la usa para separar la lista)", () => {
+  assert.ok(px.RESULTADOS.every((r) => !r.texto.includes(",")));
+});

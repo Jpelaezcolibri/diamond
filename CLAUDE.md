@@ -28,7 +28,31 @@ Equipo: 1 dev (Juan) + Claude Code. Idioma de la app: español (Colombia).
 Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
 `docs:`, `config:`).
 
-## 2. Estado actual (2026-10-26)
+## 2. Estado actual (2026-10-30)
+
+- **Nadie queda sin contactar (2026-10-29/30, desplegado).** Caso Clara, Luz
+  Stella y Freddy: 33 chats en 14 días terminaron con Sofi y nadie volvió a
+  escribir; a ningún colega le llegaba el seguimiento (quedan en `nuevo`).
+  - `followups.js` ya toma leads `nuevo` y el toque es por episodio.
+  - `scheduler/sin-respuesta.js` le pasa el caso a la asesora con la ventana
+    abierta, de a uno (máx. 1 por asesora cada 15 min), si no contestó el
+    seguimiento en 3 h, si se cerró la ventana sin seguimiento, si pidió asesor
+    y en 2 h nadie le escribió, o si mandó una nota de voz. No lo apaga
+    `ASESORA_SOLO_VISITAS`.
+  - OJO: `last_activity_at` lo mueve `findOrCreate` (cualquier proceso
+    interno), no solo lo entrante: el silencio se mide con los mensajes.
+  - La escalera de preguntas tiene tope de 6 avisos y solo le escribe a quien
+    tiene la ventana abierta (Claudia y Catherine fallaban con 131047).
+- **Pendientes por Excel (2026-10-30, SIN encender).** Spec
+  `docs/superpowers/specs/2026-10-30-pendientes-excel-asesoras-design.md`,
+  plan en `docs/superpowers/plans/`. `sin-respuesta.js` crea
+  `contactos_pendientes`; `scheduler/excel-pendientes.js` manda el Excel a las
+  8 a. m. y 2 p. m.; la asesora lo devuelve a Sofi y `lib/devolucion-excel.js`
+  lo valida y aplica (cita confirmada, estado del lead, nota del chat).
+  **Pendiente (Juan):** migración `2026-10-30_contactos_pendientes.sql`,
+  plantilla `pendientes_contacto` (`docs/plantillas-meta-pendientes.md`) y
+  `PENDIENTES_EXCEL=true`. Prueba en seco:
+  `railway run --service diamond node scripts/excel-pendientes-en-seco.js`.
 
 - **Publicador mixto (2026-10-26, rama `publicador-mixto`).** Spec
   `docs/superpowers/specs/2026-10-26-publicador-mixto-design.md`. Cada grupo

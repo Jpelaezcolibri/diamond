@@ -42,7 +42,7 @@ test("aplica lo válido y le cuenta qué falta corregir", async () => {
   const buf = await excelLleno([
     { Resultado: "Agendó visita", "Fecha visita": "31/10", Hora: "10:00", "Ref visita": "10414675" },
     { Resultado: "Agendó visita", "Fecha visita": "31/10" },
-    { Resultado: "Interesado, sigue en conversación" },
+    { Resultado: "Interesado: sigue en conversación" },
   ]);
   const txt = await dev.procesar({ org: ORG, advisor: ADV, mediaUrl: "u", ahora: AHORA, deps: deps(buf) });
   assert.deepStrictEqual(aplicados, [[p1.codigo, "visita"]]);

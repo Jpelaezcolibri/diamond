@@ -71,14 +71,14 @@ Hoja **Pendientes**, una fila por caso; las columnas grises están bloqueadas y 
 - **WhatsApp:** link `wa.me/57…` (o "sin número: escríbele desde el CRM").
 - **Qué pidió:** el pedido del colega (`group_signals`, por el código del pedido) o lo que dijo el cliente.
 - **Qué se le ofreció:** las refs enviadas con su link de Wasi (`info.wasi.co/…?shared=whatsapp`).
-- **Resultado:** lista desplegable con:
+- **Resultado:** lista desplegable (ningún texto lleva coma: Excel la usa para separar) con:
   1. **Agendó visita.** Pide fecha, hora y ref. Sofi crea la cita confirmada por esa asesora y le avisa al colega o cliente con `confirmar-cita.js` (alias "Asesor N").
-  2. **Interesado, sigue en conversación.** Nota en el chat. El pendiente se resuelve.
+  2. **Interesado: sigue en conversación.** Nota en el chat. El pendiente se resuelve.
   3. **Quiere otras opciones.** Nota con lo que busca. El pendiente se resuelve y la asesora le busca opciones desde el CRM.
   4. **No contesta.** `intentos + 1` y vuelve en el siguiente Excel. Al tercer intento, el pendiente pasa a `cerrado` y el lead queda en `cerrado_perdido`.
   5. **No le interesa / ya consiguió.** El lead queda en `cerrado_perdido` y el pendiente se resuelve.
   6. **Número equivocado.** El lead queda en `descartado` y el pendiente se resuelve.
-- Hoja oculta **_lote** con el `lote_id` y la asesora, para reconocer el archivo de vuelta.
+- Hoja oculta **_lote** con el `lote_id` y la asesora. Si Google Sheets la suelta, el archivo se acepta igual: lo que manda es el código de cada fila.
 - Nombre del archivo: `Pendientes Diamond — Daiana — 30-oct 8am.xlsx`.
 - Mensaje que lo acompaña: "Daiana, tienes 6 personas por contactar. Escríbeles o llámalas, llena la columna Resultado y devuélveme el Excel por este chat."
 - **Sin casos, no se manda nada.**
@@ -91,7 +91,7 @@ Hoja **Pendientes**, una fila por caso; las columnas grises están bloqueadas y 
 
 ## 6. La devolución
 
-1. **Reconocer.** En `engine.js`, mensaje de una asesora (`advisor`) con documento cuyo MIME es xlsx. Se descarga (`persistIncomingMedia` ya lo guarda en el bucket `media`) y se lee. Si no tiene la hoja `_lote`, Sofi responde: "Ese Excel no es uno de los que te mandé; devuélveme el que te llegó".
+1. **Reconocer.** En `engine.js`, mensaje de una asesora (`advisor`) con documento cuyo MIME es xlsx. Se descarga (`persistIncomingMedia` ya lo guarda en el bucket `media`) y se lee. Si no tiene la columna Código (no es uno de los nuestros), Sofi responde: "Ese Excel no es uno de los que te mandé; devuélveme el que te llegó".
 2. **Validar** cada fila con resultado:
    - El código existe, es de esta asesora y está `pendiente` o `enviado`. Una fila de un pendiente ya resuelto se ignora sin error, así que mandar el mismo archivo dos veces no duplica nada.
    - El resultado es uno de los seis.

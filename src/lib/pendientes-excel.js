@@ -7,7 +7,7 @@ const ExcelJS = require("exceljs");
 
 const RESULTADOS = [
   { clave: "visita", texto: "Agendó visita" },
-  { clave: "interesado", texto: "Interesado, sigue en conversación" },
+  { clave: "interesado", texto: "Interesado: sigue en conversación" },
   { clave: "otras_opciones", texto: "Quiere otras opciones" },
   { clave: "no_contesta", texto: "No contesta" },
   { clave: "no_interesa", texto: "No le interesa / ya consiguió" },
@@ -29,6 +29,7 @@ async function armarLibro({ loteId, asesorId, casos }) {
   const ws = wb.addWorksheet("Pendientes", { views: [{ state: "frozen", xSplit: 2, ySplit: 1 }] });
   ws.columns = [...INFO, ...LLENAR].map(([header, key, width]) => ({ header, key, width }));
   ws.getRow(1).font = { bold: true };
+  // Excel separa la lista por comas: ningun texto de RESULTADOS puede llevar una.
   const lista = `"${RESULTADOS.map((r) => r.texto).join(",")}"`;
   for (const c of casos) {
     const row = ws.addRow({ ...c, chatUrl: c.chatUrl ? { text: "Abrir chat", hyperlink: c.chatUrl } : "" });
