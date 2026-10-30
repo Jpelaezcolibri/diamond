@@ -95,20 +95,21 @@ const deps = (over = {}) => ({
 
 beforeEach(() => { log = []; ritmo._reset(); });
 
-test("lo que está listo para la misma asesora sale en un solo WhatsApp, y queda en el CRM", async () => {
+// Juan, 2026-10-30: "si son muchos, que se haga de a uno".
+test("de a uno: un caso por asesora por vuelta, el otro espera; y queda en el CRM", async () => {
   const r = await sched.runOnce({ ahora: AHORA, deps: deps() });
-  assert.deepStrictEqual([r.escalados, r.enviados, r.soloCampana], [2, 1, 0]);
+  assert.deepStrictEqual([r.escalados, r.enviados, r.esperando], [1, 1, 1]);
   const wa = log.filter((x) => x.wa);
   assert.strictEqual(wa.length, 1);
   assert.strictEqual(wa[0].wa, "573011880668");
   assert.match(wa[0].texto, /Clara/);
-  assert.match(wa[0].texto, /Luz Stella/);
-  assert.deepStrictEqual(log.filter((x) => x.campana).map((x) => [x.campana, x.motivo, x.whatsapp]), [["a1", "sin_respuesta", false], ["a1", "sin_respuesta", false]]);
+  assert.doesNotMatch(wa[0].texto, /Luz Stella/);
+  assert.deepStrictEqual(log.filter((x) => x.campana).map((x) => [x.campana, x.motivo, x.whatsapp]), [["a1", "sin_respuesta", false]]);
 });
 
 test("si ninguna asesora tiene la ventana abierta: campana + aviso_app, sin texto libre", async () => {
   const r = await sched.runOnce({ ahora: AHORA, deps: deps({ conVentana: async () => [] }) });
-  assert.strictEqual(r.soloCampana, 2);
+  assert.strictEqual(r.soloCampana, 1);
   assert.ok(!log.some((x) => x.wa));
   assert.ok(log.filter((x) => x.campana).every((x) => x.whatsapp === true));
 });

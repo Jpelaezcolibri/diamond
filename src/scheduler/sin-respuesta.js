@@ -12,8 +12,8 @@
 // A quien: la asesora duena del chat si tiene la ventana de 24 h abierta; si
 // no, las del ciclo con la ventana abierta, por turno. Si ninguna la tiene
 // abierta, campana + aviso_app (el texto libre no llegaria: 131047).
-// Respeta ritmo-avisos: lo que este listo para la misma asesora en la misma
-// vuelta sale en un solo mensaje; si el freno esta cerrado, espera la proxima.
+// De a uno: como mucho un caso por asesora en cada vuelta de 15 min, y nada si
+// el freno de ritmo-avisos esta cerrado; lo demas espera la proxima vuelta.
 // Este carril NO lo apaga ASESORA_SOLO_VISITAS: es pedido expreso de Juan.
 // Interruptor: SOFI_SIN_RESPUESTA (encendido salvo "false").
 const { motivoEscalar, textoParaAsesora } = require("../lib/sin-respuesta");
@@ -107,9 +107,12 @@ async function runOnce({ ahora = new Date(), deps = null } = {}) {
           const duena = abiertas.find((a) => a.id === lead.transferido_advisor_id);
           const advisor = duena || (abiertas.length ? abiertas[turno++ % abiertas.length] : ciclo[0]);
           const conVentanaAbierta = abiertas.some((a) => a.id === advisor.id);
-          if (conVentanaAbierta && !ritmo.puedeEnviar(advisor.id, ahora.getTime()) && !porAsesora.has(advisor.id)) {
+          // De a uno (Juan, 2026-10-30: "si son muchos, que se haga de a uno y
+          // que le de tiempo de que conteste"): un caso por asesora por vuelta,
+          // y nada si el freno de ritmo esta cerrado. El resto espera.
+          if (porAsesora.has(advisor.id) || (conVentanaAbierta && !ritmo.puedeEnviar(advisor.id, ahora.getTime()))) {
             res.esperando++;
-            continue; // freno de ritmo cerrado: la proxima vuelta
+            continue;
           }
           if (!(await d.claim(lead.id))) continue;
           listos++;
