@@ -158,6 +158,8 @@ app.listen(config.port, () => {
   // Nadie queda sin contactar (Juan, 2026-10-29): lo que Sofi no retoma pasa a
   // una asesora. No lo apaga ASESORA_SOLO_VISITAS.
   if (config.supabaseUrl) require("./scheduler/sin-respuesta").start();
+  // Excel de pendientes a las asesoras, 8 a. m. y 2 p. m. (spec 2026-10-30).
+  if (config.supabaseUrl) require("./scheduler/excel-pendientes").start();
   // Seguimiento al colega: +4 h del DM y +24 h en la linea oficial (2026-10-07).
   if (config.supabaseUrl) require("./scheduler/seguimiento-colega").start();
   // Cruce diario visitas -> ventas (Juan, 2026-08-21): de lo que el sistema

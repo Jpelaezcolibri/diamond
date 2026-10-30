@@ -135,7 +135,7 @@ async function sendWhatsAppButtons(org, to, body, buttons, opts = {}) {
 // buttonPayloads (2026-10-07): un payload por quick reply de la plantilla, en
 // orden. Vuelve en el webhook como message.button.payload, asi el toque dice
 // que cita y que accion es (ver botonDeMensaje y src/lib/confirmar-cita.js).
-async function sendWhatsAppTemplate(org, to, { name, language = "es", bodyParams = [], buttonPayloads = [], fromPhoneId } = {}) {
+async function sendWhatsAppTemplate(org, to, { name, language = "es", bodyParams = [], buttonPayloads = [], headerDocument = null, fromPhoneId } = {}) {
   const { token, phoneId } = credsFor(org, fromPhoneId);
   if (!token || !phoneId) {
     console.warn("[whatsapp] Sin token/phoneId — plantilla no enviada:", name);
@@ -148,6 +148,10 @@ async function sendWhatsAppTemplate(org, to, { name, language = "es", bodyParams
   buttonPayloads.forEach((payload, i) =>
     components.push({ type: "button", sub_type: "quick_reply", index: String(i), parameters: [{ type: "payload", payload }] })
   );
+  // Encabezado de documento (plantilla pendientes_contacto, spec 2026-10-30).
+  if (headerDocument && headerDocument.id) {
+    components.unshift({ type: "header", parameters: [{ type: "document", document: { id: headerDocument.id, filename: headerDocument.filename || "archivo.xlsx" } }] });
+  }
   const body = {
     messaging_product: "whatsapp",
     to,
