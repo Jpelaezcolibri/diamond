@@ -32,3 +32,14 @@ test("resolverPorLead cierra el abierto cuando la persona vuelve a escribir", as
   assert.strictEqual(await cp.resolverPorLead("l1", "volvio_a_escribir"), 1);
   assert.strictEqual((await cp.abiertos("o1")).length, 0);
 });
+
+// Juan, 2026-11-07: lo que ya salio no vuelve a salir "a menos que haya algo
+// nuevo". Un motivo nuevo sobre un pendiente ya enviado lo devuelve a la cola.
+test("un motivo nuevo sobre un pendiente ya enviado lo vuelve a poner en la cola; el mismo motivo no", async () => {
+  const { pendiente } = await cp.abrir({ orgId: "o1", leadId: "l1", asesorId: "a1", motivo: "no_contesto" });
+  await cp.marcarEnviados([pendiente.id], { loteId: "L1", asesorId: "a1" });
+  const igual = await cp.abrir({ orgId: "o1", leadId: "l1", asesorId: "a1", motivo: "no_contesto" });
+  assert.deepStrictEqual([igual.nuevo, igual.pendiente.estado], [false, "enviado"]);
+  const nuevo = await cp.abrir({ orgId: "o1", leadId: "l1", asesorId: "a1", motivo: "pide_asesor" });
+  assert.deepStrictEqual([nuevo.nuevo, nuevo.pendiente.estado, nuevo.pendiente.motivo], [false, "pendiente", "pide_asesor"]);
+});

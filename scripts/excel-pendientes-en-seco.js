@@ -11,6 +11,7 @@ const conversations = require("../src/data/conversations");
 const { motivoEscalar } = require("../src/lib/sin-respuesta");
 const { armarCaso } = require("../src/lib/caso-pendiente");
 const { armarLibro } = require("../src/lib/pendientes-excel");
+const { textoExcel } = require("../src/lib/texto-pendientes");
 
 async function main() {
   const org = (await require("../src/data/organizations").listActive())[0];
@@ -42,7 +43,9 @@ async function main() {
     }
     const archivo = path.join(__dirname, "..", "Claude outputs", `pendientes-en-seco-${a.name.split(" ")[0]}.xlsx`);
     fs.writeFileSync(archivo, await armarLibro({ loteId: "EN-SECO", asesorId: a.id, casos }));
-    console.log(`${a.name}: ${casos.length} pendientes -> ${archivo}`);
+    const enCola = filas.filter((p) => p.estado === "pendiente" || !p.estado).length;
+    console.log(`${a.name}: ${casos.length} pendientes (${enCola} saldrían mañana; el resto ya salió) -> ${archivo}`);
+    console.log(`  Texto: ${textoExcel(a.name.split(" ")[0], casos)}`);
   }
 }
 main().catch((e) => { console.error(e); process.exit(1); });

@@ -70,3 +70,24 @@ test("un archivo que no es nuestro o no es Excel", async () => {
 test("ningún resultado lleva coma (Excel la usa para separar la lista)", () => {
   assert.ok(px.RESULTADOS.every((r) => !r.texto.includes(",")));
 });
+
+// Juan, 2026-11-07 (captura de Catherine): en el celular solo se veian Codigo y
+// Nombre. Con dos columnas congeladas que llenan la pantalla, Google Sheets no
+// deja llegar a las demas. Solo se congela el encabezado, y el celular y el
+// link van pegados al nombre.
+test("en el celular se ve todo: solo el encabezado congelado, celular y WhatsApp al lado del nombre, y se lee igual", async () => {
+  const c = caso({ celular: "+57 301 452 1622", desde: "Pendiente desde el 6 nov", especial: "Prefiere LLAMADA" });
+  const buf = await px.armarLibro({ loteId: "L-1", asesorId: "a1", casos: [c] });
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buf);
+  const ws = wb.getWorksheet("Pendientes");
+  assert.deepStrictEqual(ws.views.map((v) => [v.state, v.xSplit || 0, v.ySplit]), [["frozen", 0, 1]]);
+  const h = ws.getRow(1).values;
+  assert.deepStrictEqual(h.slice(1, 5), ["Código", "Nombre", "Celular", "WhatsApp"]);
+  assert.ok(h.includes("Desde cuándo") && h.includes("Peticiones especiales") && h.includes("Resultado") && h.includes("Nota"));
+  const fila = ws.getRow(2);
+  assert.strictEqual(fila.getCell(3).value, "+57 301 452 1622");
+  assert.deepStrictEqual(fila.getCell(4).value, { text: "wa.me/573014521622", hyperlink: "https://wa.me/573014521622" });
+  const leido = await px.leerLibro(buf);
+  assert.deepStrictEqual([leido.ok, leido.filas[0].codigo], [true, "C-0001"]);
+});

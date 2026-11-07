@@ -14,11 +14,11 @@ const RESULTADOS = [
   { clave: "numero_equivocado", texto: "Número equivocado" },
 ];
 
-const INFO = [
-  ["Código", "codigo", 9], ["Nombre", "nombre", 22], ["Colega / cliente", "tipo", 10], ["WhatsApp", "whatsapp", 22],
-  ["Por qué", "porQue", 30], ["Qué pidió", "pidio", 40], ["Qué se le ofreció", "ofrecido", 40],
-  ["Lo último que dijo", "ultimoSuyo", 35], ["Lo último de Sofi", "ultimoSofi", 40], ["Chat CRM", "chatUrl", 14],
-];
+// Las columnas de informacion viven con el caso (caso-pendiente.js). Solo se
+// congela el encabezado: con dos columnas congeladas que llenaban la pantalla
+// del celular, Google Sheets no dejaba llegar a las demas y la asesora veia
+// solo Codigo y Nombre (caso Catherine, 2026-11-07).
+const { COLUMNAS_CASO: INFO } = require("./caso-pendiente");
 const LLENAR = [["Resultado", "resultado", 28], ["Fecha visita", "fecha", 13], ["Hora", "hora", 10], ["Ref visita", "ref", 11], ["Nota", "nota", 35]];
 
 const GRIS = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEDEDED" } };
@@ -26,7 +26,7 @@ const AMARILLO = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFF2B3
 
 async function armarLibro({ loteId, asesorId, casos }) {
   const wb = new ExcelJS.Workbook();
-  const ws = wb.addWorksheet("Pendientes", { views: [{ state: "frozen", xSplit: 2, ySplit: 1 }] });
+  const ws = wb.addWorksheet("Pendientes", { views: [{ state: "frozen", ySplit: 1 }] });
   ws.columns = [...INFO, ...LLENAR].map(([header, key, width]) => ({ header, key, width }));
   ws.getRow(1).font = { bold: true };
   // Excel separa la lista por comas: ningun texto de RESULTADOS puede llevar una.

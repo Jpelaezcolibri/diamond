@@ -32,7 +32,13 @@ async function disponible() {
 async function abrir({ orgId, leadId, conversationId = null, asesorId = null, motivo }) {
   if (!supabase) {
     const ya = memory.contactosPendientes.find((p) => p.lead_id === leadId && ABIERTOS.includes(p.estado));
-    if (ya) { ya.motivo = motivo; return { pendiente: ya, nuevo: false }; }
+    if (ya) {
+      // Un motivo nuevo sobre uno ya enviado lo devuelve a la cola del Excel
+      // (Juan, 2026-11-07: no se repite "a menos que haya algo nuevo").
+      if (ya.motivo !== motivo && ya.estado === "enviado") ya.estado = "pendiente";
+      ya.motivo = motivo;
+      return { pendiente: ya, nuevo: false };
+    }
     correlativo += 1;
     const fila = {
       id: memory.uid(), codigo: `C-${String(correlativo).padStart(4, "0")}`, org_id: orgId, lead_id: leadId,
@@ -46,7 +52,9 @@ async function abrir({ orgId, leadId, conversationId = null, asesorId = null, mo
   const { data: ya, error: e1 } = await supabase.from("contactos_pendientes").select("*").eq("lead_id", leadId).in("estado", ABIERTOS).limit(1);
   if (e1) vigilar(e1);
   if (ya && ya[0]) {
-    const { data } = await supabase.from("contactos_pendientes").update({ motivo }).eq("id", ya[0].id).select("*").maybeSingle();
+    const patch = { motivo };
+    if (ya[0].motivo !== motivo && ya[0].estado === "enviado") patch.estado = "pendiente";
+    const { data } = await supabase.from("contactos_pendientes").update(patch).eq("id", ya[0].id).select("*").maybeSingle();
     return { pendiente: data || ya[0], nuevo: false };
   }
   const { data, error } = await supabase
