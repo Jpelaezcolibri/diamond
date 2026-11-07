@@ -148,3 +148,25 @@ Hoja **Pendientes**, una fila por caso; las columnas grises están bloqueadas y 
 
 - La página del CRM para resolver pendientes con botones (enfoque B): si el Excel funciona, puede leer la misma tabla más adelante.
 - Que Sofi le escriba al colega con las "otras opciones": la asesora lo hace desde el CRM.
+
+## 12. Cambios del 2026-11-07 (pedido de Juan, capturas de Catherine)
+
+Lo que se vio: a Catherine le llegó el mismo Excel (una sola fila, `C-0011 ·
+Andrea Strauch`) el 6-nov a las 2 p. m. y el 7-nov a las 8 a. m. y a las
+2 p. m., con el texto "tienes 1 personas por contactar"; en el celular solo se
+veían las columnas Código y Nombre.
+
+| Antes | Ahora |
+|---|---|
+| Excel a las 8 a. m. y a las 2 p. m.; lo que no volvía salía otra vez. | **Una vez al día** (8 a. m., `PENDIENTES_EXCEL_HORA`), lunes a sábado. Solo salen los pendientes **en cola** (`estado = pendiente`). Lo que ya salió (`enviado`) no se repite aunque no vuelva: vuelve a la cola solo si la asesora marca "No contesta", si aparece un **motivo nuevo** (`contactos-pendientes.abrir` lo devuelve a `pendiente`) o si es un pendiente nuevo. |
+| Dos columnas congeladas (Código y Nombre). En el celular llenaban la pantalla y Google Sheets no dejaba llegar a las demás. | Solo el encabezado congelado. Celular y WhatsApp van pegados al nombre. |
+| 15 columnas. | 18: Código · Nombre · **Celular** (`+57 313 788 4474`) · WhatsApp (link `wa.me`) · Colega / cliente · Por qué · **Desde cuándo** (pendiente desde / su último mensaje) · Qué pidió (el pedido del grupo **literal**, por el código del DM o, si escribió sin código, por su lid o teléfono en `group_signals`; si no, sus mensajes con fecha) · Qué se le ofreció (refs del chat **y** del DM, con link de Wasi `?shared=whatsapp`; una ref que ya no está, se dice) · **Peticiones especiales** (solo llamada, presupuesto, zona, tipo, urgencia, visita pedida, inmueble que ofrece) · Lo último que dijo (con fecha, literal) · Lo último de Sofi · Chat CRM, más las 5 que llena la asesora. Las columnas viven en `caso-pendiente.COLUMNAS_CASO`; la devolución sigue leyendo por nombre. |
+| "Catherine, tienes 1 personas por contactar. Escríbeles o llámalas…" | `lib/texto-pendientes.js`: con una persona, nombre y motivo ("tienes 1 persona por contactar: Andrea Strauch (colega), que no le contestó a Sofi y ella ya no alcanza a escribirle"); con varias, el conteo por motivo ("6 no le contestaron a Sofi, 2 pidieron hablar con un asesor…"). La plantilla recibe `{{1}}` = "1 persona" / "6 personas". |
+| Campana (nadie con ventana abierta) en cada tick de la media hora, dos veces al día. | Una vez al día por asesora y pasa por `ritmo.puedeEnviar`. |
+| Archivo `Pendientes Diamond - Catherine - 7 de nov 8am.xlsx`, lote `L-2026-11-07-8am-…`. | `Pendientes Diamond - Catherine - 7 nov.xlsx`, lote `L-2026-11-07-…`. |
+
+Sin migración: `estado` y `enviado_at` alcanzan. Los 11 pendientes que
+salieron el 7-nov quedaron `enviado` y con la regla nueva no vuelven a salir;
+si Juan quiere que salgan el lunes con las columnas completas, los devuelve a
+la cola con un `update … set estado = 'pendiente' where lote_id like
+'L-2026-11-07-%' and estado = 'enviado'` (lo corre él).

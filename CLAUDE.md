@@ -64,16 +64,34 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
     interno), no solo lo entrante: el silencio se mide con los mensajes.
   - La escalera de preguntas tiene tope de 6 avisos y solo le escribe a quien
     tiene la ventana abierta (Claudia y Catherine fallaban con 131047).
-- **Pendientes por Excel (2026-10-30, SIN encender).** Spec
-  `docs/superpowers/specs/2026-10-30-pendientes-excel-asesoras-design.md`,
-  plan en `docs/superpowers/plans/`. `sin-respuesta.js` crea
-  `contactos_pendientes`; `scheduler/excel-pendientes.js` manda el Excel a las
-  8 a. m. y 2 p. m.; la asesora lo devuelve a Sofi y `lib/devolucion-excel.js`
-  lo valida y aplica (cita confirmada, estado del lead, nota del chat).
-  **Pendiente (Juan):** migración `2026-10-30_contactos_pendientes.sql`,
-  plantilla `pendientes_contacto` (`docs/plantillas-meta-pendientes.md`) y
-  `PENDIENTES_EXCEL=true`. Prueba en seco:
-  `railway run --service diamond node scripts/excel-pendientes-en-seco.js`.
+- **Pendientes por Excel (encendido en Railway; arreglado el 2026-11-07 en la
+  rama `pendientes-excel-una-vez`, SIN desplegar).** Spec
+  `docs/superpowers/specs/2026-10-30-pendientes-excel-asesoras-design.md`
+  (§12 = cambios del 7-nov), plan en `docs/superpowers/plans/`.
+  `sin-respuesta.js` crea `contactos_pendientes`; `scheduler/excel-pendientes.js`
+  manda el Excel **una vez al día** (8 a. m., `PENDIENTES_EXCEL_HORA`, L-S) y
+  solo con lo que está en cola (`estado = pendiente`): lo ya `enviado` no se
+  repite aunque la asesora no lo devuelva; vuelve a la cola con "No
+  contesta", con un motivo nuevo o si es un pendiente nuevo. La asesora lo
+  devuelve a Sofi y `lib/devolucion-excel.js` lo valida y aplica (cita
+  confirmada, estado del lead, nota del chat).
+  - **Caso Catherine (2026-11-07):** Andrea Strauch (C-0011) le llegó tres
+    veces en dos días con "tienes 1 personas por contactar" y en el celular
+    solo se veían Código y Nombre: las dos columnas congeladas llenaban la
+    pantalla y Google Sheets no dejaba llegar a las demás.
+  - La fila trae todo para comunicarse (`lib/caso-pendiente.js`,
+    `COLUMNAS_CASO`): celular, link `wa.me`, por qué y desde cuándo, el pedido
+    del grupo literal (por código del DM o por lid/teléfono en
+    `group_signals`), lo ofrecido con link de Wasi (chat + DM), peticiones
+    especiales (solo llamada, presupuesto, zona, visita pedida, inmueble que
+    ofrece) y lo último de cada lado con fecha. Solo el encabezado congelado.
+  - El texto (`lib/texto-pendientes.js`) dice cuántas y por qué, singular y
+    plural bien; la plantilla recibe "1 persona" / "6 personas" (ver
+    `docs/plantillas-meta-pendientes.md`, cuerpo cambiado).
+  - **Pendiente (Juan):** desplegar (merge a `main`); plantilla
+    `pendientes_contacto` con el cuerpo nuevo; opcional, devolver a la cola los
+    11 pendientes del 7-nov (SQL en la spec §12) para que salgan completos.
+    Prueba en seco: `railway run --service diamond node scripts/excel-pendientes-en-seco.js`.
 
 - **Publicador mixto (2026-10-26, rama `publicador-mixto`).** Spec
   `docs/superpowers/specs/2026-10-26-publicador-mixto-design.md`. Cada grupo
