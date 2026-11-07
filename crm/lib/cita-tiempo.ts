@@ -11,6 +11,8 @@ export type CitaTiempo = {
   fecha_hora?: string | null;
   asignada_at?: string | null;
   corte_at?: string | null;
+  /** La escalera no tiene a quien pasarla (horario): no se promete rotacion. */
+  sin_relevo_at?: string | null;
 };
 
 const MIN = 60 * 1000;
@@ -46,7 +48,7 @@ export function duracion(min: number): string {
   return m ? `${h} h ${m} min` : `${h} h`;
 }
 
-export type TiempoRestante = { texto: string; urgente: boolean; evento: "rotar" | "cortar"; minutos: number };
+export type TiempoRestante = { texto: string; urgente: boolean; evento: "rotar" | "cortar" | "sin_relevo"; minutos: number };
 
 // null si no hay contador que mostrar: cita que no esta por confirmar, ya
 // vencida, o vieja (sin asignada_at ni corte_at).
@@ -58,6 +60,14 @@ export function tiempoRestante(cita: CitaTiempo | null | undefined, ahoraMs: num
   const hayAsignada = !isNaN(asignada);
   const hayCorte = !isNaN(corte);
   if (!hayAsignada && !hayCorte) return null;
+
+  // Sin relevo (caso Nancy, 2026-11-06): la escalera ya vio que nadie mas la
+  // puede tomar, asi que prometer "pasa a la siguiente" era mentira.
+  if (cita.sin_relevo_at) {
+    if (!hayCorte) return { texto: "Nadie más la puede tomar: confírmala o pide otro horario", urgente: false, evento: "sin_relevo", minutos: 0 };
+    const minutos = Math.max(0, Math.ceil((corte - ahoraMs) / MIN));
+    return { texto: `Nadie más la puede tomar · se cancela en ${duracion(minutos)}`, urgente: minutos < URGENTE_MIN, evento: "cortar", minutos };
+  }
 
   let paso = hayAsignada ? Math.max(asignada + pasoMin * MIN, ahoraMs) : NaN;
   if (!isNaN(paso)) paso = fueraDePausa(paso);

@@ -12,7 +12,6 @@ const { buildAdvisorAlert, formatCitaFechaHora } = require("../notifications/adv
 const { detectSellerIntent, intencionDeDuenoEnTurno, detectClientLanguage } = require("./intent");
 const { refDeKit } = require("./kit-origen");
 const { getClient, registrarUso, paramsDeModelo } = require("../lib/anthropic");
-const { aliasPublico } = require("../lib/identidad-publica");
 const codigoColega = require("../groups/codigo-colega");
 const { quitarLinksInventados } = require("./links-verificados");
 
@@ -329,15 +328,9 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
   // cita (ver resolveLeadAdvisor en tools.js), asi que el colega y el asesor
   // no pueden quedar apuntando a numeros distintos. Best-effort: si falla,
   // Sofi confirma la cita sin contacto en vez de inventarlo.
-  const coordinador = colega
-    ? await advisors
-        .findAsesorPrincipalRadar(org)
-        .then((a) => (a ? { alias: aliasPublico(a, org) } : null))
-        .catch((e) => {
-          console.warn("[engine] No se pudo resolver quien coordina las visitas del colega:", e.message);
-          return null;
-        })
-    : null;
+  // Con una cita viva es quien la tiene en la rotacion, no la principal
+  // (caso Nancy, 2026-11-06: "Asesor 1 te la confirma" con la cita en Asesor 3).
+  const coordinador = colega ? await require("../lib/coordinador-visitas").resolverCoordinador({ org, lead }) : null;
 
   // Memoria del colega (2026-10-07): sus ultimos pedidos y lo que se le mando.
   const historial = colega
@@ -374,11 +367,21 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
     else respuestaPorEntregar = await pa.hayPorEntregar(lead.id).catch(() => false);
   }
 
+  // Sus visitas por confirmar (caso Catherine, 2026-11-06: escribio "Hola"
+  // dos veces con una encima y Sofi no se la menciono). Best-effort.
+  const citasPendientes = advisor
+    ? await require("../data/appointments").citasPendientesDeConfirmar(org.id, advisor).catch((e) => {
+        console.warn("[engine] No se pudieron leer las visitas pendientes del asesor:", e.message);
+        return null;
+      })
+    : null;
+
   const system = buildSystemPrompt({
     org, lead, qualified: isQualified(lead), now: nowInBogota(), advisor, colega, ultimoPedido, coordinador, historial,
     pausaDias: require("./pausa").diasDePausa(history),
     fichasPedido,
     preguntas, respuestaPorEntregar,
+    citasPendientes,
   });
 
   const extractText = (r) =>

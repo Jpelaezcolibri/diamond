@@ -309,3 +309,22 @@ test("restaura la memoria compartida", () => {
   memory.advisors.length = 0;
   memory.advisors.push(...(advisorsOriginales || []));
 });
+
+// ---------- 5. Sin relevo: el contador no promete lo que no va a pasar ----------
+describe("contador con la visita sin relevo (caso Nancy, 2026-11-06)", () => {
+  const ms = (iso) => Date.parse(iso);
+  const base = { estado: "propuesta", fecha_hora: "2026-11-07T15:00:00Z", asignada_at: "2026-11-04T22:22:00Z", corte_at: "2026-11-07T13:00:00Z", sin_relevo_at: "2026-11-05T15:00:00Z" };
+
+  test("con corte: dice que se cancela y que nadie mas la puede tomar", () => {
+    const r = tiempo.tiempoRestante(base, ms("2026-11-07T01:00:00Z"));
+    assert.strictEqual(r.evento, "cortar");
+    assert.strictEqual(r.texto, "Nadie más la puede tomar · se cancela en 12 h");
+    assert.strictEqual(r.urgente, false);
+  });
+
+  test("sin corte: solo avisa que nadie mas la puede tomar", () => {
+    const r = tiempo.tiempoRestante({ ...base, corte_at: null }, ms("2026-11-07T01:00:00Z"));
+    assert.strictEqual(r.evento, "sin_relevo");
+    assert.strictEqual(r.texto, "Nadie más la puede tomar: confírmala o pide otro horario");
+  });
+});

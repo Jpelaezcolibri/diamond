@@ -53,7 +53,27 @@ function bloquePreguntasAsesor(preguntas) {
 }
 const LISTA_ENTREGA = "\n\nRESPUESTA DEL ASESOR LISTA: el sistema le manda la respuesta a su pregunta justo después de tu mensaje. No la repitas ni digas que todavía no la tienes.";
 
-function promptAsesor({ org, advisor, now, preguntas = null }) {
+// Las visitas propuestas que esperan a ESTE asesor (caso Catherine,
+// 2026-11-06: escribio "Hola" con una visita encima y Sofi no se la nombro).
+function bloqueCitasPendientes(citas) {
+  const lista = (citas || []).filter((l) => l && l.cita);
+  if (lista.length === 0) return "";
+  const { formatCitaFechaHora } = require("../notifications/advisor");
+  const cuando = (iso) => {
+    const fh = formatCitaFechaHora(iso);
+    return fh ? `${fh.fecha}, ${fh.hora}` : "por definir";
+  };
+  const filas = lista
+    .map((l) => {
+      const quien = `${l.nombre || `+${l.phone}`}${l.source === "colega" ? " (colega)" : ""}`;
+      const c = l.cita;
+      return `- ${quien} · Ref ${c.ref || "sin ref"} · ${cuando(c.fecha_hora)}${c.corte_at ? ` · confírmala antes de ${cuando(c.corte_at)} o se cancela` : ""}`;
+    })
+    .join("\n");
+  return `\n\nVISITAS POR CONFIRMAR (son suyas y el cliente o colega está esperando):\n${filas}\nSi solo saluda o no las menciona, recuérdaselas en una línea. Si te dice "OK CONFIRMADA", "confirmada" o que sí puede, llama confirmar_cita. Si no puede ese día, no la confirmes: dile que toque "Otro horario" en el chat del CRM, o que te diga qué día y hora sí puede para que el equipo la reagende.`;
+}
+
+function promptAsesor({ org, advisor, now, preguntas = null, citasPendientes = null }) {
   const seccionPublicar = require("./publicar-asesor").activo()
     ? `
 
@@ -118,7 +138,7 @@ HISTORIAL CONTAMINADO: en esta conversacion puede haber mensajes tuyos anteriore
 
 REGLA DE ORO: ante la duda, preguntale que necesita en vez de suponer. Un asesor que escribe "hola" quiere abrir la conversacion, no recibir un catalogo.${seccionPublicar}`;
 
-  const contexto = `${now ? `FECHA Y HORA ACTUAL EN COLOMBIA: ${now.legible} (referencia ISO: ${now.iso}).\n\n` : ""}ASESOR: ${advisor.name}${advisor.especialidad ? ` — especialidad ${advisor.especialidad}` : ""}.${bloquePreguntasAsesor(preguntas)}`;
+  const contexto = `${now ? `FECHA Y HORA ACTUAL EN COLOMBIA: ${now.legible} (referencia ISO: ${now.iso}).\n\n` : ""}ASESOR: ${advisor.name}${advisor.especialidad ? ` — especialidad ${advisor.especialidad}` : ""}.${bloqueCitasPendientes(citasPendientes)}${bloquePreguntasAsesor(preguntas)}`;
 
   return [
     { type: "text", text: stable, cache_control: CACHE_ESTABLE },
@@ -311,8 +331,8 @@ ${datosLead}
 No los des por vigentes: lo que busca pudo cambiar. Confirma con el cliente el presupuesto, la zona y el tipo antes de usarlos en una búsqueda o en una respuesta ("la vez pasada me hablaste de hasta 400 millones, ¿sigue siendo así?"), y nunca digas que te los dio hoy. Lo que aparece en el historial antes de la pausa también es de esa conversación anterior.`;
 }
 
-function buildSystemPrompt({ org, lead, qualified, now, advisor = null, colega = null, ultimoPedido = null, coordinador = null, historial = [], pausaDias = 0, fichasPedido = [], preguntas = null, respuestaPorEntregar = false }) {
-  if (advisor) return promptAsesor({ org, advisor, now, preguntas });
+function buildSystemPrompt({ org, lead, qualified, now, advisor = null, colega = null, ultimoPedido = null, coordinador = null, historial = [], pausaDias = 0, fichasPedido = [], preguntas = null, respuestaPorEntregar = false, citasPendientes = null }) {
+  if (advisor) return promptAsesor({ org, advisor, now, preguntas, citasPendientes });
   // Un asesor propio que ademas esta en un grupo gremial sigue siendo de la
   // casa: por eso este orden y no el contrario.
   if (colega) return promptColega({ org, colega, now, ultimoPedido, coordinador, historial, lead, fichasPedido, respuestaPorEntregar });

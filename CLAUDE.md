@@ -28,7 +28,28 @@ Equipo: 1 dev (Juan) + Claude Code. Idioma de la app: español (Colombia).
 Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
 `docs:`, `config:`).
 
-## 2. Estado actual (2026-10-30)
+## 2. Estado actual (2026-11-06)
+
+- **Visita sin relevo (2026-11-06, rama `visitas-sin-relevo`, SIN desplegar).**
+  Caso Nancy David (colega, ref 10031500, sábado 7-nov 10 a. m.): la cita
+  quedó en Catherine (Asesor 3) 2 días con un solo aviso; Daiana y Claudia
+  no tienen sábados en `advisors.horario` (Claudia tiene `null` → por defecto
+  L-V), así que `rotacion.siguiente` devolvía a la misma y la escalera decía
+  "nada" mientras el CRM prometía "pasa a la siguiente asesora". Claudia
+  (admin) la vio en "Para atender" sin botón ni link al chat y buscó el
+  número en su WhatsApp (el colega habla con la línea de Sofi).
+  - `pasoDeEscalera` devuelve `sin_relevo`; `cita.sin_relevo_at` se marca una
+    vez por asignación, campana `cita_sin_relevo` a las otras asesoras del
+    ciclo, alerta técnica a Juan y reaviso a la actual cada
+    `ESCALERA_REAVISO_SIN_RELEVO_MIN` (120). El contador del CRM dice
+    "Nadie más la puede tomar · se cancela en …".
+  - "Para atender" tiene Confirmar / Otro horario (`acciones-cita.tsx`,
+    compartido con el chat) y link "Abrir el chat con Sofi".
+  - Sofi le muestra a la asesora sus VISITAS POR CONFIRMAR cuando le escribe
+    (`citasPendientes` en `promptAsesor`); el alias de "coordina las visitas"
+    es quien tiene la cita viva (`src/lib/coordinador-visitas.js`).
+  - **Pendiente (Juan):** cargar horario de Claudia si atiende sábados;
+    Catherine no entra al CRM desde el 19-ago y no tiene push.
 
 - **Nadie queda sin contactar (2026-10-29/30, desplegado).** Caso Clara, Luz
   Stella y Freddy: 33 chats en 14 días terminaron con Sofi y nadie volvió a

@@ -106,3 +106,68 @@ test("domingo: la escalera no rota ni reavisa, pero el corte sigue cortando", ()
   const vencido = lead({ asignada_at: "2026-10-25T10:00:00Z", corte_at: "2026-10-25T15:00:00Z", fecha_hora: "2026-10-26T20:00:00Z" });
   assert.strictEqual(pasoDeEscalera({ lead: vencido, ciclo: CICLO, citasOrg: [], ahora: dom }).accion, "cortar");
 });
+
+// ---------- Visita sin relevo (caso Nancy, 2026-11-06) ----------
+// Visita un sabado: Daiana y Claudia no tienen sabados en el horario, asi que
+// la escalera no tenia a quien pasarsela y se quedo 2 dias en Catherine con un
+// solo aviso, mientras el CRM prometia "pasa a la siguiente asesora".
+const LV = { dias: [1, 2, 3, 4, 5], desde: "08:00", hasta: "18:00" };
+const S1 = { ...A1, horario: LV };
+const S2 = { ...A2, horario: LV };
+const S3 = { ...A3 }; // todos los dias
+const CICLO_SABADO = [S1, S2, S3];
+const citaSabado = (over = {}) =>
+  lead({
+    asesor_id: "a3", fecha_hora: "2026-11-07T15:00:00Z", corte_at: "2026-11-07T13:00:00Z",
+    creada_at: "2026-11-04T22:22:00Z", asignada_at: "2026-11-04T22:22:00Z", reaviso_at: "2026-11-04T22:42:00Z",
+    historial: [{ asesor_id: "a3", desde: "2026-11-04T22:22:00Z" }], ...over,
+  });
+
+test("sin relevo: si nadie mas puede tomar la visita, la escalera lo dice en vez de nada", () => {
+  const p = pasoDeEscalera({ lead: citaSabado(), ciclo: CICLO_SABADO, citasOrg: [], ahora: new Date("2026-11-05T15:00:00Z") });
+  assert.strictEqual(p.accion, "sin_relevo");
+});
+
+test("sin relevo: el reaviso a la asesora se repite cada 2 h, no una sola vez", () => {
+  const l = citaSabado();
+  assert.strictEqual(escalera.tocaReaviso({ lead: l, ahora: new Date("2026-11-05T02:00:00Z"), sinRelevo: true }), false, "de noche no");
+  assert.strictEqual(escalera.tocaReaviso({ lead: l, ahora: new Date("2026-11-05T15:00:00Z") }), false, "sin relevo no declarado: una vez por asignacion");
+  assert.strictEqual(escalera.tocaReaviso({ lead: l, ahora: new Date("2026-11-05T00:30:00Z"), sinRelevo: true }), false, "paso 1 h 48 min: todavia no");
+  assert.strictEqual(escalera.tocaReaviso({ lead: l, ahora: new Date("2026-11-05T15:00:00Z"), sinRelevo: true }), true);
+});
+
+test("runOnce sin relevo: marca la cita, avisa a las otras asesoras y a Juan una sola vez, y reavisa a la actual", async () => {
+  memory.leads.length = 0;
+  memory.advisors.length = 0;
+  memory.advisors.push({ ...S1 }, { ...S2 }, { ...S3 });
+  memory.leads.push(citaSabado());
+  const enviados = [];
+  const alertas = [];
+  const deps = {
+    aviso: async () => ({ ok: true }),
+    org: async () => ({ id: "org-1", name: "Diamond" }),
+    notificar: async (n) => { enviados.push({ nota: n.tipo, a: n.advisor.id }); return { ok: true }; },
+    reaviso: async ({ advisor }) => { enviados.push({ reaviso: advisor.id }); return { ok: true }; },
+    alertaTecnica: async (resumen) => { alertas.push(resumen); },
+  };
+  const ahora = new Date("2026-11-05T15:00:00Z");
+  const r = await escalera.runOnce({ ahora, deps });
+  const c = memory.leads[0].cita;
+  assert.strictEqual(c.asesor_id, "a3", "no rota: nadie mas puede");
+  assert.strictEqual(c.sin_relevo_at, ahora.toISOString());
+  assert.deepStrictEqual(enviados.filter((e) => e.nota === "cita_sin_relevo").map((e) => e.a).sort(), ["a1", "a2"]);
+  assert.strictEqual(alertas.length, 1);
+  assert.match(alertas[0], /sin relevo/i);
+  assert.ok(enviados.some((e) => e.reaviso === "a3"), "la actual recibe el reaviso");
+  assert.strictEqual(r.reavisadas, 1);
+
+  // Segunda corrida 1 h despues: ni campanas ni alerta de nuevo; el reaviso aun no toca.
+  enviados.length = 0;
+  alertas.length = 0;
+  await escalera.runOnce({ ahora: new Date("2026-11-05T16:00:00Z"), deps });
+  assert.strictEqual(enviados.length, 0);
+  assert.strictEqual(alertas.length, 0);
+  // A las 2 h del reaviso anterior, vuelve a reavisar a la actual.
+  await escalera.runOnce({ ahora: new Date("2026-11-05T17:01:00Z"), deps });
+  assert.deepStrictEqual(enviados, [{ reaviso: "a3" }]);
+});

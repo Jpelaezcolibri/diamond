@@ -60,14 +60,21 @@ function pasoDeEscalera({ lead, ciclo, citasOrg, ahora = new Date() }) {
     ahora: comoSiCreada(c),
     excluirLeadId: lead.id,
   });
-  if (!nuevo || nuevo.id === c.asesor_id) return { accion: "nada" };
+  if (!nuevo) return { accion: "nada" };
+  // Nadie mas del ciclo puede (horario o choque): la visita no tiene relevo
+  // (caso Nancy, 2026-11-06: un sabado solo lo cubria Catherine y la cita se
+  // quedo 2 dias con un solo aviso mientras el CRM prometia rotacion).
+  if (nuevo.id === c.asesor_id) return { accion: "sin_relevo" };
   return { accion: "rotar", nuevo };
 }
+
+// Sin relevo, el aviso a la misma asesora se repite cada tanto (de dia).
+const REAVISO_SIN_RELEVO_MIN = Number(process.env.ESCALERA_REAVISO_SIN_RELEVO_MIN || 120);
 
 // ¿Le toca hoy el aviso repetido a la asesora actual? Pura. Una vez por
 // asignacion (reaviso_at posterior a asignada_at), nunca de noche, nunca
 // pasado el corte. No cambia el paso de 60 min.
-function tocaReaviso({ lead, ahora = new Date() }) {
+function tocaReaviso({ lead, ahora = new Date(), sinRelevo = false }) {
   const c = lead && lead.cita;
   if (!c || !c.asesor_id || c.estado !== "propuesta") return false;
   if (c.corte_at && ahora.getTime() >= new Date(c.corte_at).getTime()) return false;
@@ -76,7 +83,10 @@ function tocaReaviso({ lead, ahora = new Date() }) {
   if (isNaN(desde) || desde <= 0) return false;
   if (ahora.getTime() - desde < REAVISO_MIN * 60 * 1000) return false;
   const ya = c.reaviso_at ? new Date(c.reaviso_at).getTime() : NaN;
-  return !(ya >= desde);
+  if (!(ya >= desde)) return true;
+  // Ya se le aviso en esta asignacion. Sin relevo no hay rotacion que la
+  // rescate, asi que se le insiste cada REAVISO_SIN_RELEVO_MIN.
+  return sinRelevo && ahora.getTime() - ya >= REAVISO_SIN_RELEVO_MIN * 60 * 1000;
 }
 
 function canal(deps) {
@@ -90,6 +100,7 @@ function canal(deps) {
     vencidas: deps.vencidas || ((args) => require("../lib/citas-vencidas").marcarVencidas(args)),
     registrar: deps.registrar || ((...a) => require("../lib/registrar-saliente").registrarSaliente(...a)),
     soloLlamada: deps.soloLlamada || ((orgId, tel) => require("../data/colegas").esSoloLlamada(orgId, { telefono: tel })),
+    alertaTecnica: deps.alertaTecnica || ((...a) => require("../lib/alerta-saldo").enviarAlertaTecnica(...a)),
   };
 }
 
@@ -110,6 +121,7 @@ async function rotar({ org, lead, ciclo, nuevo, ahora, c }) {
     asignada_at: ahoraIso,
     // El aviso repetido de 15 min vuelve a empezar con la nueva asesora.
     reaviso_at: null,
+    sin_relevo_at: null,
     historial,
   };
   await leads.update(lead.id, { cita });
@@ -193,6 +205,37 @@ async function reavisar({ org, lead, ciclo, ahora, c }) {
   return true;
 }
 
+// Primera vez que se detecta que nadie mas puede tomar la visita: se marca
+// en la cita (el CRM deja de prometer rotacion), las otras asesoras del ciclo
+// reciben una campana por si alguna la puede cubrir igual (confirmar no exige
+// horario) y Juan una alerta tecnica sin datos del cliente. Una sola vez por
+// asignacion: rotar la borra.
+async function marcarSinRelevo({ org, lead, ciclo, ahora, c }) {
+  const actual = ciclo.find((a) => a.id === lead.cita.asesor_id) || null;
+  const cita = { ...lead.cita, sin_relevo_at: ahora.toISOString() };
+  await leads.update(lead.id, { cita });
+  lead.cita = cita;
+  const quien = `${lead.nombre || `+${lead.phone}`}${lead.source === "colega" ? " (colega)" : ""}`;
+  const tiene = actual ? aliasPublico(actual, org) || actual.name : "una asesora";
+  for (const a of ciclo) {
+    if (actual && a.id === actual.id) continue;
+    await c
+      .notificar({
+        orgId: org.id, advisor: a, tipo: "cita_sin_relevo", titulo: `Visita sin relevo: la tiene ${tiene} (${refCuando(cita)})`,
+        cuerpo: `${quien}. Nadie más del ciclo la puede tomar por horario. Si la puedes cubrir, confírmala desde el chat del CRM.`,
+        link: "/pendientes", leadId: lead.id,
+      })
+      .catch(() => {});
+  }
+  await Promise.resolve(
+    c.alertaTecnica(
+      `Visita sin relevo: lead ${lead.id}.`,
+      `${refCuando(cita)}. La tiene ${actual ? actual.name : "?"} y nadie más del ciclo la puede tomar por horario. Revisar "Para atender" del CRM ${org.name || ""}.`
+    )
+  ).catch(() => {});
+  console.log(`[citas-escalera] lead ${lead.id}: sin relevo (la tiene ${actual ? actual.name : "?"})`);
+}
+
 let corriendo = false;
 async function runOnce({ ahora = new Date(), deps = {} } = {}) {
   if (corriendo) return { rotadas: 0, cortadas: 0, reavisadas: 0, vencidas: 0 };
@@ -234,6 +277,11 @@ async function runOnce({ ahora = new Date(), deps = {} } = {}) {
         } else if (paso.accion === "cortar") {
           await cortar({ org, lead, ciclo, ahora, c });
           cortadas++;
+        } else if (paso.accion === "sin_relevo") {
+          if (!lead.cita.sin_relevo_at) await marcarSinRelevo({ org, lead, ciclo, ahora, c });
+          if (tocaReaviso({ lead, ahora, sinRelevo: true })) {
+            if (await reavisar({ org, lead, ciclo, ahora, c })) reavisadas++;
+          }
         } else if (tocaReaviso({ lead, ahora })) {
           if (await reavisar({ org, lead, ciclo, ahora, c })) reavisadas++;
         }
@@ -264,4 +312,4 @@ function stop() {
   timer = null;
 }
 
-module.exports = { citasSinCorte, pasoDeEscalera, tocaReaviso, runOnce, start, stop, REAVISO_MIN };
+module.exports = { citasSinCorte, pasoDeEscalera, tocaReaviso, runOnce, start, stop, REAVISO_MIN, REAVISO_SIN_RELEVO_MIN };

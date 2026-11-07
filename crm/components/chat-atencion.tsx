@@ -7,12 +7,11 @@
 //     de tomar la conversacion al alcance;
 //   - la visita por confirmar, con Confirmar / Otro horario ahi mismo;
 //   - cuanto queda de la ventana de 24 h de WhatsApp para escribir libre.
-import { useState } from "react";
-import { useRouter } from "next/navigation";
 import type { Lead, Message } from "@/lib/types";
 import { vencidaSinConfirmar } from "@/lib/cita-tiempo";
 import TiempoCita from "@/components/tiempo-cita";
 import DescartarCita from "@/components/descartar-cita";
+import AccionesCita from "@/components/acciones-cita";
 
 const fmt = (iso?: string) =>
   iso
@@ -38,9 +37,6 @@ export default function ChatAtencion({
   modo: "bot" | "humano";
   onTomar: () => void;
 }) {
-  const router = useRouter();
-  const [enviando, setEnviando] = useState<string | null>(null);
-  const [resultado, setResultado] = useState<string | null>(null);
   if (!lead) return null;
 
   // Ventana de 24 h: desde el ultimo mensaje del cliente/colega.
@@ -52,20 +48,6 @@ export default function ChatAtencion({
   const vencida = lead.cita && vencidaSinConfirmar(lead.cita, Date.now()) ? lead.cita : null;
   const cita = !vencida && lead.cita && lead.cita.estado === "propuesta" ? lead.cita : null;
   const pendiente = lead.atencion_pendiente && lead.atencion_pendiente !== "visita" ? lead.atencion_pendiente : null;
-
-  async function accion(tipo: "confirmar" | "otro") {
-    setEnviando(tipo);
-    setResultado(null);
-    const r = await fetch("/api/citas/accion", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ leadId: lead!.id, accion: tipo }),
-    });
-    const body = await r.json().catch(() => ({}));
-    setEnviando(null);
-    setResultado(r.ok ? body.texto || "Listo." : body.error || "No se pudo, intentá de nuevo.");
-    if (r.ok) router.refresh();
-  }
 
   return (
     <div className="space-y-2 border-b border-slate-200 bg-white px-3 py-2 sm:px-4">
@@ -101,23 +83,7 @@ export default function ChatAtencion({
           </div>
           {cita.corte_at && <div className="text-xs text-slate-300">Confírmala antes de {fmt(cita.corte_at)} o se cancela sola.</div>}
           <TiempoCita cita={cita} oscuro />
-          <div className="mt-2 flex flex-wrap gap-2">
-            <button
-              disabled={!!enviando}
-              onClick={() => accion("confirmar")}
-              className="rounded-md bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-600 disabled:opacity-60"
-            >
-              {enviando === "confirmar" ? "Confirmando…" : "✅ Confirmar"}
-            </button>
-            <button
-              disabled={!!enviando}
-              onClick={() => accion("otro")}
-              className="rounded-md bg-white/10 px-3 py-1.5 text-xs font-semibold text-white ring-1 ring-white/30 hover:bg-white/20 disabled:opacity-60"
-            >
-              {enviando === "otro" ? "Enviando…" : "🕐 Otro horario"}
-            </button>
-          </div>
-          <div className="mt-1 text-[11px] text-slate-400">Al confirmar, Sofi le avisa al cliente por este chat. “Otro horario” cancela y le ofrece reagendar.</div>
+          <AccionesCita leadId={lead.id} oscuro />
         </div>
       )}
 
@@ -134,8 +100,6 @@ export default function ChatAtencion({
           </div>
         </details>
       )}
-
-      {resultado && <div className="text-xs text-slate-600">{resultado}</div>}
 
       {modo === "humano" && (
         <div className={`text-xs ${horasQuedan > 2 ? "text-slate-500" : horasQuedan > 0 ? "text-amber-700" : "text-red-600"}`}>

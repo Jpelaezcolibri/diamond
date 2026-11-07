@@ -18,12 +18,13 @@ import { formatearPrecio } from "@/lib/formato";
 import { vencidaSinConfirmar } from "@/lib/cita-tiempo";
 import TiempoCita from "@/components/tiempo-cita";
 import DescartarCita from "@/components/descartar-cita";
+import AccionesCita from "@/components/acciones-cita";
 import PreguntaPendiente, { type Pregunta } from "@/components/pregunta-pendiente";
 import { enlazarWasiPublico } from "@/lib/wasi-link";
 
 export const dynamic = "force-dynamic";
 
-type Cita = { estado?: string; fecha_hora?: string; ref?: string; asesor_id?: string; advisor_id?: string; corte_at?: string; asignada_at?: string; descripcion?: string };
+type Cita = { estado?: string; fecha_hora?: string; ref?: string; asesor_id?: string; advisor_id?: string; corte_at?: string; asignada_at?: string; sin_relevo_at?: string | null; descripcion?: string };
 type LeadCita = { id: string; nombre: string | null; phone: string; source: string | null; cita: Cita | null };
 type LeadQuieto = { id: string; nombre: string | null; phone: string; updated_at: string; estado: string };
 type Nota = { id: string; titulo: string; cuerpo: string | null; link: string | null; created_at: string };
@@ -98,6 +99,20 @@ export default async function PendientesPage() {
     .filter((l) => l.cita && l.cita.estado === "propuesta" && !vencidaSinConfirmar(l.cita, ahora) && esMia(l.cita))
     .sort(porFecha);
   const vencidas = citas.filter((l) => l.cita && vencidaSinConfirmar(l.cita, ahora) && esMia(l.cita)).sort(porFecha);
+  // El chat de cada visita por confirmar, para el link "Abrir chat" (caso
+  // Claudia, 2026-11-06: sin link ni boton, se fue a buscar al cliente a su
+  // WhatsApp, donde no existe porque habla con la linea de Sofi).
+  const chatDe = new Map<string, string>();
+  if (porConfirmar.length > 0) {
+    const { data: convs } = await supabase
+      .from("conversations")
+      .select("id, lead_id")
+      .in(
+        "lead_id",
+        porConfirmar.map((l) => l.id)
+      );
+    for (const c of (convs as { id: string; lead_id: string }[]) || []) if (!chatDe.has(c.lead_id)) chatDe.set(c.lead_id, c.id);
+  }
 
   // Preguntas de colegas al asesor (spec 2026-10-25): pendientes, y las
   // respondidas que no se pudieron entregar (menos las que esperan la ventana).
@@ -213,7 +228,12 @@ export default async function PendientesPage() {
                 </div>
                 {l.cita?.corte_at && <div className="mt-1 text-xs text-amber-800">Confírmala antes de {fmt(l.cita.corte_at)} o se cancela</div>}
                 <TiempoCita cita={l.cita} />
-                <div className="mt-1 text-xs text-slate-500">Se confirma con el botón del WhatsApp o escribiéndole “OK CONFIRMADA” a Sofi.</div>
+                <AccionesCita leadId={l.id} />
+                {chatDe.get(l.id) && (
+                  <Link href={`/inbox/${chatDe.get(l.id)}`} className="mt-1 inline-block text-xs font-medium text-[#8a6a1f] hover:underline">
+                    Abrir el chat con Sofi →
+                  </Link>
+                )}
               </li>
             ))}
           </ul>

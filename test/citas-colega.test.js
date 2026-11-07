@@ -354,11 +354,15 @@ const fs = require("node:fs");
 const path = require("node:path");
 const leer = (...p) => fs.readFileSync(path.join(__dirname, "..", ...p), "utf8");
 
-test("engine.js resuelve el coordinador con findAsesorPrincipalRadar y se lo pasa al prompt", () => {
+test("engine.js resuelve el coordinador (lib/coordinador-visitas) y se lo pasa al prompt", () => {
   const fuente = leer("src", "agent", "engine.js");
-  assert.match(fuente, /findAsesorPrincipalRadar/, "se reusa el resolutor que ya existe, no se inventa otro");
+  assert.match(fuente, /resolverCoordinador\(/);
   const i = fuente.indexOf("buildSystemPrompt({");
   assert.ok(i > -1);
   assert.match(fuente.slice(i, i + 300), /coordinador/, "el prompt tiene que recibirlo");
-  assert.match(fuente, /aliasPublico/, "engine pasa el alias, no el nombre ni el telefono");
+  // Desde 2026-11-06 vive en src/lib/coordinador-visitas.js: con cita viva es
+  // quien la tiene; si no, la principal del radar. Siempre el alias.
+  const lib = leer("src", "lib", "coordinador-visitas.js");
+  assert.match(lib, /findAsesorPrincipalRadar/, "se reusa el resolutor que ya existe, no se inventa otro");
+  assert.match(lib, /aliasPublico/, "se pasa el alias, no el nombre ni el telefono");
 });
