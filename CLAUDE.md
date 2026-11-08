@@ -64,8 +64,8 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
     interno), no solo lo entrante: el silencio se mide con los mensajes.
   - La escalera de preguntas tiene tope de 6 avisos y solo le escribe a quien
     tiene la ventana abierta (Claudia y Catherine fallaban con 131047).
-- **Pendientes por Excel (encendido en Railway; arreglado el 2026-11-07 en la
-  rama `pendientes-excel-una-vez`, SIN desplegar).** Spec
+- **Pendientes por Excel (encendido en Railway; arreglado y desplegado el
+  2026-11-07, `7277eb4`).** Spec
   `docs/superpowers/specs/2026-10-30-pendientes-excel-asesoras-design.md`
   (§12 = cambios del 7-nov), plan en `docs/superpowers/plans/`.
   `sin-respuesta.js` crea `contactos_pendientes`; `scheduler/excel-pendientes.js`
@@ -88,10 +88,16 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
   - El texto (`lib/texto-pendientes.js`) dice cuántas y por qué, singular y
     plural bien; la plantilla recibe "1 persona" / "6 personas" (ver
     `docs/plantillas-meta-pendientes.md`, cuerpo cambiado).
-  - **Pendiente (Juan):** desplegar (merge a `main`); plantilla
-    `pendientes_contacto` con el cuerpo nuevo; opcional, devolver a la cola los
-    11 pendientes del 7-nov (SQL en la spec §12) para que salgan completos.
-    Prueba en seco: `railway run --service diamond node scripts/excel-pendientes-en-seco.js`.
+  - **Desplegado el 2026-11-07** (`7277eb4` en `main`, Railway OK). Los 10
+    pendientes del lote `L-2026-11-07-2pm-*` volvieron a `pendiente` por REST
+    el mismo día (respaldo del estado anterior en la sesión): salen completos
+    el lunes 9-nov a las 8 a. m. La plantilla `pendientes_contacto` se creó
+    por la API (id `1872340423937542`, `PENDING`; ver
+    `docs/plantillas-meta-pendientes.md`).
+  - **Pendiente (Juan):** cuando Meta apruebe la plantilla, poner
+    `PENDIENTES_EXCEL_PLANTILLA=pendientes_contacto` en Railway; hasta entonces
+    los casos de una asesora con la ventana cerrada le llegan a la que la tenga
+    abierta. Prueba en seco: `railway run --service diamond node scripts/excel-pendientes-en-seco.js`.
 
 - **Publicador mixto (2026-10-26, rama `publicador-mixto`).** Spec
   `docs/superpowers/specs/2026-10-26-publicador-mixto-design.md`. Cada grupo

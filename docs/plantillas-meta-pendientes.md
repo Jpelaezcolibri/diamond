@@ -15,4 +15,10 @@ Para mandarle el Excel de pendientes (spec `docs/superpowers/specs/2026-10-30-pe
 | Pie | Diamond Inmobiliaria |
 | Botones | Ninguno |
 
-**Cuando Meta la apruebe:** poner `PENDIENTES_EXCEL_PLANTILLA=pendientes_contacto` en Railway (servicio `diamond`).
+**Creada por la API el 2026-11-07** (id `1872340423937542`, estado `PENDING` al crearla) con el cuerpo de arriba. Meta solo acepta un PDF como ejemplo del encabezado de documento (con un .xlsx responde el error 2388084 "Tipo de archivo no compatible"); el Excel real sí sale después. Script: `crear-plantilla-pendientes.js` (sube el ejemplo por la Resumable Upload API de la app `1727749525019938` y crea la plantilla en la WABA `1702397800906189`).
+
+**Cuando Meta la apruebe:** poner `PENDIENTES_EXCEL_PLANTILLA=pendientes_contacto` en Railway (servicio `diamond`). Verificar el estado:
+
+```
+curl -s "https://graph.facebook.com/v21.0/1702397800906189/message_templates?name=pendientes_contacto&fields=status" -H "Authorization: Bearer $WHATSAPP_TOKEN"
+```
