@@ -90,14 +90,18 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
     `docs/plantillas-meta-pendientes.md`, cuerpo cambiado).
   - **Desplegado el 2026-11-07** (`7277eb4` en `main`, Railway OK). Los 10
     pendientes del lote `L-2026-11-07-2pm-*` volvieron a `pendiente` por REST
-    el mismo día (respaldo del estado anterior en la sesión): salen completos
-    el lunes 9-nov a las 8 a. m. La plantilla `pendientes_contacto` se creó
-    por la API (id `1872340423937542`, `PENDING`; ver
-    `docs/plantillas-meta-pendientes.md`).
-  - **Pendiente (Juan):** cuando Meta apruebe la plantilla, poner
-    `PENDIENTES_EXCEL_PLANTILLA=pendientes_contacto` en Railway; hasta entonces
-    los casos de una asesora con la ventana cerrada le llegan a la que la tenga
-    abierta. Prueba en seco: `railway run --service diamond node scripts/excel-pendientes-en-seco.js`.
+    el mismo día y salieron completos el lunes 9-nov a las 8:02 a. m. a Daiana
+    (lote `L-2026-11-09-f63ca64b`, 10 filas; el de Catherine fue a Daiana
+    porque aún no había plantilla). A las 8:12 salió un **segundo Excel** del
+    mismo día con 4 pendientes que `sin-respuesta` creó a las 8:07: el
+    scheduler manda en cada tick de la media hora lo que esté en cola, no
+    frena por asesora que ya recibió lote hoy.
+  - **Plantilla `pendientes_contacto` aprobada por Meta el 2026-11-09**
+    (id `1872340423937542`, creada por la API el 7-nov; ver
+    `docs/plantillas-meta-pendientes.md`). `PENDIENTES_EXCEL_PLANTILLA=pendientes_contacto`
+    puesta en Railway el 2026-11-09 (redeploy `673cfcdc` OK): desde el
+    martes 10-nov los casos de una asesora con la ventana cerrada le llegan a
+    ella por plantilla. Prueba en seco: `railway run --service diamond node scripts/excel-pendientes-en-seco.js`.
 
 - **Publicador mixto (2026-10-26, rama `publicador-mixto`).** Spec
   `docs/superpowers/specs/2026-10-26-publicador-mixto-design.md`. Cada grupo
