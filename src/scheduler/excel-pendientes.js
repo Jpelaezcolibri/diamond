@@ -12,6 +12,10 @@
 // contesta" (aplicar-pendiente.js), si aparece un motivo nuevo
 // (contactos-pendientes.abrir) o si es un pendiente nuevo. Caso Catherine
 // (2026-11-07): Andrea Strauch le llego tres veces en dos dias.
+// Y una asesora recibe UN solo archivo por dia: si ya tiene un lote de hoy
+// (estado `enviado` con lote de hoy), lo que entro despues espera al dia
+// siguiente. Caso del lunes 2026-11-09: a Daiana le salieron dos Excel con 10
+// minutos de diferencia porque sin-respuesta creo 4 pendientes a las 8:07.
 // Interruptor PENDIENTES_EXCEL (apagado salvo "true"). No lo apaga
 // ASESORA_SOLO_VISITAS (pedido de Juan, 2026-10-30).
 const ritmo = require("../lib/ritmo-avisos");
@@ -65,6 +69,12 @@ function depsPorDefecto() {
 }
 
 const tel = (a) => String((a && a.phone) || "").replace(/\D/g, "");
+// Un pendiente salio hoy si su lote es de hoy o si se envio hoy (hora de Bogota).
+function esDeHoy(p, hoy) {
+  if (String(p.lote_id || "").startsWith(`L-${hoy}-`)) return true;
+  const t = p.enviado_at ? new Date(p.enviado_at) : null;
+  return !!(t && !Number.isNaN(t.getTime()) && minutosBogota(t).fecha === hoy);
+}
 const fechaCorta = (ahora) => new Date(ahora.getTime() - 5 * 3600 * 1000).toLocaleDateString("es-CO", { timeZone: "UTC", day: "numeric", month: "short" }).replace(/\./g, "").replace(/\s+de\s+/, " ");
 
 // La campana (cuando nadie tiene la ventana abierta) sale una vez al dia por
@@ -74,7 +84,7 @@ let campanaHoy = new Map(); // advisor.id -> fecha (Bogota)
 
 let corriendo = false;
 async function runOnce({ ahora = new Date(), deps = null } = {}) {
-  const res = { enviados: 0, filas: 0, porPlantilla: 0, reasignados: 0 };
+  const res = { enviados: 0, filas: 0, porPlantilla: 0, reasignados: 0, esperan: 0 };
   const turno = turnoDe(ahora);
   const d = { ...depsPorDefecto(), ...(deps || {}) };
   if (!turno || corriendo || !d.activo()) return res;
@@ -90,6 +100,8 @@ async function runOnce({ ahora = new Date(), deps = null } = {}) {
       if (ciclo.length === 0) continue;
       const abiertas = await d.conVentana(org, ciclo, ahora).catch(() => []);
       const conVentana = new Set(abiertas.map((a) => a.id));
+      // Quien ya recibio su lote de hoy no recibe otro: lo nuevo espera a manana.
+      const recibioHoy = new Set(abiertos.filter((p) => p.estado === "enviado" && esDeHoy(p, hoy)).map((p) => p.asesor_id));
 
       // A quien le toca cada pendiente hoy.
       const grupos = new Map(); // advisor.id -> { advisor, filas, porPlantilla }
@@ -100,6 +112,7 @@ async function runOnce({ ahora = new Date(), deps = null } = {}) {
           if (d.nombrePlantilla) porPlantilla = true;
           else if (abiertas.length) { a = abiertas[0]; res.reasignados++; }
         }
+        if (recibioHoy.has(a.id)) { res.esperan++; continue; }
         if (!grupos.has(a.id)) grupos.set(a.id, { advisor: a, filas: [], porPlantilla });
         grupos.get(a.id).filas.push(p);
       }

@@ -93,9 +93,10 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
     el mismo día y salieron completos el lunes 9-nov a las 8:02 a. m. a Daiana
     (lote `L-2026-11-09-f63ca64b`, 10 filas; el de Catherine fue a Daiana
     porque aún no había plantilla). A las 8:12 salió un **segundo Excel** del
-    mismo día con 4 pendientes que `sin-respuesta` creó a las 8:07: el
-    scheduler manda en cada tick de la media hora lo que esté en cola, no
-    frena por asesora que ya recibió lote hoy.
+    mismo día con 4 pendientes que `sin-respuesta` creó a las 8:07. **Arreglado
+    el 2026-11-09:** una asesora recibe UN solo archivo por día; si ya tiene
+    lote de hoy (`enviado` con `lote_id` L-hoy-…), lo que entra después
+    espera al día siguiente (`res.esperan`).
   - **Plantilla `pendientes_contacto` aprobada por Meta el 2026-11-09**
     (id `1872340423937542`, creada por la API el 7-nov; ver
     `docs/plantillas-meta-pendientes.md`). `PENDIENTES_EXCEL_PLANTILLA=pendientes_contacto`

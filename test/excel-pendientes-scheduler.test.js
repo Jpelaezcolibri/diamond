@@ -125,3 +125,37 @@ test("si nadie tiene la ventana abierta ni hay plantilla, va por la campana una 
   assert.deepStrictEqual(campanas.map((x) => x.campana), ["a1"]);
   assert.match(campanas[0].titulo, /Tienes 1 persona por contactar/);
 });
+
+// Lunes 2026-11-09: a las 8:02 salió el Excel de Daiana y a las 8:12 salió un
+// SEGUNDO archivo con 4 pendientes que sin-respuesta creó a las 8:07. "Un Excel
+// al día" es literal: lo que entra después del lote del día espera al siguiente.
+test("una asesora que ya recibió su lote hoy no recibe un segundo Excel: lo nuevo espera a mañana", async () => {
+  filas = [
+    fila("C-1", "a1", { estado: "enviado", enviado_at: "2026-10-30T13:02:00Z", lote_id: "L-2026-10-30-a1" }), // salió hoy 8:02
+    fila("C-2", "a1"), // entró a las 8:07: espera
+    fila("C-3", "a2"), // a2 cerrada sin plantilla: pasaría a a1, que ya recibió hoy -> también espera
+  ];
+  const r = await sched.runOnce({ ahora: new Date("2026-10-30T13:12:00Z"), deps: deps() });
+  assert.deepStrictEqual([r.enviados, r.esperan], [0, 2]);
+  assert.strictEqual(log.length, 0);
+});
+
+test("el lote de hoy de una asesora no frena el de otra que aún no recibió", async () => {
+  filas = [
+    fila("C-1", "a1", { estado: "enviado", enviado_at: "2026-10-30T13:02:00Z", lote_id: "L-2026-10-30-a1" }),
+    fila("C-2", "a1"),
+    fila("C-3", "a2"),
+  ];
+  const r = await sched.runOnce({ ahora: new Date("2026-10-30T13:12:00Z"), deps: deps({ nombrePlantilla: "pendientes_contacto" }) });
+  assert.deepStrictEqual([r.enviados, r.porPlantilla, r.esperan], [1, 1, 1]);
+  assert.deepStrictEqual(log.find((x) => x.marcados).marcados, ["C-3"]);
+});
+
+test("el lote de ayer no frena el de hoy", async () => {
+  filas = [
+    fila("C-1", "a1", { estado: "enviado", enviado_at: "2026-10-29T13:02:00Z", lote_id: "L-2026-10-29-a1" }),
+    fila("C-2", "a1"),
+  ];
+  const r = await sched.runOnce({ ahora: VIE_8AM, deps: deps() });
+  assert.deepStrictEqual([r.enviados, r.esperan], [1, 0]);
+});
