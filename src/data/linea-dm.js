@@ -6,6 +6,7 @@
 // (ver la nota de diseno en src/groups/dm.js).
 
 const supabase = require("./supabase");
+const { esAutorespuesta } = require("../groups/rechaza-bot");
 const memory = require("./memory");
 
 // La IDENTIDAD de quien escribe (Juan, 2026-09-08): un chat 1 a 1 llega por
@@ -237,7 +238,10 @@ async function estadoConversacion(orgId, identidad, { desdeIso } = {}) {
   const salidas = filas.filter((m) => m.direccion === "salida");
   return {
     faltaAutor: false,
-    humano: salidas.some((m) => m.autor !== "sofi"),
+    // El saludo automatico de WhatsApp Business de la linea ("Gracias por
+    // comunicarte con Diamond Inversiones SAS…") entra como salida `humano`
+    // pero no lo escribio nadie: no calla a Sofi (caso Norha, 2026-11-09).
+    humano: salidas.some((m) => m.autor !== "sofi" && !esAutorespuesta(m.texto)),
     respuestasSofi: salidas.filter((m) => m.autor === "sofi" && (!desdeIso || m.created_at >= desdeIso)).length,
     hilo: filas.slice(-10),
   };

@@ -185,8 +185,8 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
     `SOFI_POSTVISITA_PLANTILLA` y `SOFI_CITA_CONFIRMADA_PLANTILLA` en Railway.
   - **Pendiente encender** (Juan, en Railway): `SOFI_RECORDATORIO_VISITA`,
     `SOFI_POSTVISITA` y `RADAR_SEGUIMIENTO_CON_OPCION`.
-  - **Sofi contesta en la línea del radar (2026-10-21, SIN desplegar,
-    interruptor `RADAR_SOFI_LINEA` apagado).** Caso Luz Amparo (Projency):
+  - **Sofi contesta en la línea del radar (2026-10-21; `RADAR_SOFI_LINEA=true`
+    encendido en Railway el 2026-11-09).** Caso Luz Amparo (Projency):
     preguntó "¿cuál es tu nombre?" y recibió solo el link. Ahora Sofi se
     presenta como "asistente virtual", contesta hasta 3 mensajes por colega en
     7 días con el pedido y las fichas reales, y lleva a la línea oficial para
@@ -197,7 +197,14 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
     inmobiliarias (20 de 594 mensajes reales). Migración
     `2026-10-21_linea_dm_autor.sql` **corrida por Juan y verificada por REST
     el 2026-10-21**. **Antes de encender:** `message.any` en la sesión
-    `DaianaDiamond`, ver una salida humana en el log y desplegar. Prueba en seco: `railway run --service diamond node scripts/sofi-linea-en-seco.js`.
+    `DaianaDiamond`, ver una salida humana en el log y desplegar (cumplido: 184
+    salidas `humano` en la semana del 9-nov). Al encender, 30 de 56 chats de
+    colegas de la semana terminaban sin respuesta y nadie recibía aviso.
+    **Saludo automático (rama `sofi-linea-saludo-automatico`, SIN desplegar):**
+    el saludo de WhatsApp Business de la línea ("Gracias por comunicarte con
+    Diamond Inversiones SAS…") entra como salida `humano` y callaba a Sofi en
+    19 de 108 chats con pedido; `estadoConversacion` ya no lo cuenta como
+    persona. Prueba en seco: `railway run --service diamond node scripts/sofi-linea-en-seco.js`.
   - **Incidente de Railway (2026-10-21/22):** Railway pausó todos los builds
     ~34 h por un incidente de seguridad (variables de entorno expuestas).
     **Resuelto el 2026-10-22 a las 11:56 a. m.:** el bot quedó en `830fad9`

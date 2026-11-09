@@ -54,3 +54,20 @@ test("lo de otro colega no se mezcla", async () => {
   assert.strictEqual(e.humano, false);
   assert.strictEqual(e.hilo.length, 0);
 });
+
+// Caso Norha Vélez (2026-11-09): la línea del radar es un WhatsApp Business con
+// saludo automático ("Gracias por comunicarte con Diamond Inversiones SAS…").
+// Entra por message.any como salida `humano`, y Sofi callaba para siempre en
+// 19 de 108 chats con pedido aunque ninguna persona había escrito.
+test("el saludo automático de nuestra línea no cuenta como persona", async () => {
+  memory.lineaDm = [];
+  const id = { lid: "777@lid" };
+  await fila(id, {});
+  await fila(id, { direccion: "salida", autor: "humano", texto: "Gracias por comunicarte con Diamond Inversiones SAS 💛🩵❤️ Somos tu mejor aliado a la hora de vender , comprar , construir" });
+  let e = await lineaDm.estadoConversacion(ORG, id, { desdeIso: "2000-01-01T00:00:00Z" });
+  assert.strictEqual(e.humano, false);
+
+  await fila(id, { direccion: "salida", autor: "humano", texto: "Hola Norha, soy Claudia. ¿Te llamo ahora?" });
+  e = await lineaDm.estadoConversacion(ORG, id, { desdeIso: "2000-01-01T00:00:00Z" });
+  assert.strictEqual(e.humano, true);
+});
