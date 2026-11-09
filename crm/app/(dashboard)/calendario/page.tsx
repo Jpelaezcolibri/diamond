@@ -4,6 +4,9 @@ import { getCalendarEvents, bogotaDateKey, type CalendarEvent } from "@/lib/cale
 import ErrorBanner from "@/components/error-banner";
 import { CancelarCitaAvisos, BotonCancelarCita } from "@/components/cancelar-cita";
 import DescartarCita from "@/components/descartar-cita";
+import PanelDetalleCita from "@/components/panel-detalle-cita";
+import { getDetalleCita } from "@/lib/cita-detalle";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -89,13 +92,20 @@ function horaBogota(iso: string): string {
 export default async function CalendarioPage({
   searchParams,
 }: {
-  searchParams: Promise<{ mes?: string }>;
+  searchParams: Promise<{ mes?: string; cita?: string }>;
 }) {
-  const { mes } = await searchParams;
+  const { mes, cita } = await searchParams;
   const { year, month } = parseMes(mes);
 
   const supabase = await createClient();
   const { events, vencidas, hasError, message } = await getCalendarEvents(supabase);
+  // Detalle de una visita (Juan, 2026-11-09): ?cita=<leadId> abre el panel.
+  // Solo con sesión: el layout del dashboard ya la exige, y esto lo confirma.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const detalle = cita && user && /^[0-9a-f-]{36}$/i.test(cita) ? await getDetalleCita(createAdminClient(), cita).catch(() => null) : null;
+  const mesActual = mesParam(year, month);
 
   const porDia = new Map<string, CalendarEvent[]>();
   for (const ev of events) {
@@ -201,7 +211,12 @@ export default async function CalendarioPage({
                       const contenido = `${ev.autoAgendada ? "🤖 " : ""}${horaBogota(ev.fechaHora)} ${ev.titulo}`;
                       const titulo = `${horaBogota(ev.fechaHora)} · ${ev.titulo}${ev.advisorNombre ? ` · ${ev.advisorNombre}` : ""}${ev.linkChat ? " · ver chat" : ""}${ev.autoAgendada ? " · agendada sola por Sofi, revisar" : ""}${ev.estado === "propuesta" ? " · propuesta, sin confirmar" : ""}${ev.estado === "vencida" ? " · vencida, nadie la confirmó" : ""}`;
                       const clase = `block truncate rounded-md border px-1.5 py-0.5 text-[11px] font-medium ${colorFor(ev.advisorId)}${ev.linkChat ? " hover:brightness-95" : ""}`;
-                      const chip = ev.linkChat ? (
+                      // Una cita de cliente abre su detalle completo (Juan, 2026-11-09).
+                      const chip = ev.origen === "cita_cliente" && ev.leadId ? (
+                        <Link href={`?mes=${mesActual}&cita=${ev.leadId}`} scroll={false} title={`${titulo} · ver todo el detalle`} className={`${clase} hover:brightness-95`}>
+                          {contenido}
+                        </Link>
+                      ) : ev.linkChat ? (
                         <Link href={ev.linkChat} title={titulo} className={clase}>
                           {contenido}
                         </Link>
@@ -247,6 +262,7 @@ export default async function CalendarioPage({
             })}
           </div>
         </div>
+        {detalle && <PanelDetalleCita detalle={detalle} cerrarHref={`?mes=${mesActual}`} />}
       </CancelarCitaAvisos>
     </div>
   );

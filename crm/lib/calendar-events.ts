@@ -54,6 +54,10 @@ type Cita = {
   fecha_hora?: string | null;
   tipo?: string | null;
   advisor_id?: string | null;
+  /** advisors.id de quien tiene la cita hoy (rotación). advisor_id es el
+   *  usuario del CRM y puede quedar viejo: Catherine no tiene usuario, así que
+   *  al confirmar se conservaba el de otra persona (caso Norha, 2026-11-09). */
+  asesor_id?: string | null;
   origen?: string | null;
   estado?: string | null;
   ref?: string | null;
@@ -72,6 +76,7 @@ type LeadConCita = {
   id: string;
   nombre: string | null;
   phone: string;
+  source?: string | null;
   property_ref_origen: string | null;
   cita: Cita | null;
 };
@@ -142,7 +147,7 @@ export async function getCalendarEvents(supabase: any): Promise<{
   message: string | null;
 }> {
   const [citasRes, remindersRes, dmRes, roster] = await Promise.all([
-    supabase.from("leads").select("id, nombre, phone, property_ref_origen, cita").not("cita", "is", null).limit(500),
+    supabase.from("leads").select("id, nombre, phone, source, property_ref_origen, cita").not("cita", "is", null).limit(500),
     supabase
       .from("advisor_reminders")
       .select("id, user_id, descripcion, fecha_hora")
@@ -157,6 +162,14 @@ export async function getCalendarEvents(supabase: any): Promise<{
       .limit(500),
     getTeamRoster(),
   ]);
+  // Quién tiene cada cita hoy, por advisors.id (no por usuario del CRM).
+  const { data: asesoras } = await supabase.from("advisors").select("id, name, alias_publico");
+  const asesoraPorId = new Map<string, string>(
+    ((asesoras as { id: string; name: string; alias_publico: string | null }[]) || []).map((a) => [a.id, a.alias_publico ? `${a.alias_publico} · ${a.name}` : a.name]),
+  );
+  // WhatsApp puede ocultar el número ("CO.1622…"): eso no es un teléfono.
+  const nombreVisible = (l: LeadConCita) =>
+    l.nombre || (/^[A-Z]{2}\.[A-Za-z0-9.]+$/.test(String(l.phone || "")) ? (l.source === "colega" ? "Colega sin celular visible" : "Contacto sin celular visible") : `+${l.phone}`);
 
   if (citasRes.error) console.error("[calendario:leads]", citasRes.error.message);
   if (remindersRes.error) console.error("[calendario:advisor_reminders]", remindersRes.error.message);
@@ -198,18 +211,20 @@ export async function getCalendarEvents(supabase: any): Promise<{
     if (!l.cita?.fecha_hora) continue;
     // Pasó la hora sin confirmar: nunca se pinta como "propuesta".
     const pasada = vencidaSinConfirmar(l.cita, ahora);
-    if (pasada) vencidas.push({ leadId: l.id, cliente: l.nombre || `+${l.phone}`, fechaHora: l.cita.fecha_hora, ref: l.cita.ref || l.property_ref_origen });
+    if (pasada) vencidas.push({ leadId: l.id, cliente: nombreVisible(l), fechaHora: l.cita.fecha_hora, ref: l.cita.ref || l.property_ref_origen });
     if (new Date(l.cita.fecha_hora) < hoyInicio) continue;
     const estado = pasada ? "vencida" : estadoDeCita(l.cita);
     if (estado === "cancelada") continue; // no se muestra: fue cancelada
     citaEvents.push({
       id: `lead:${l.id}`,
       fechaHora: l.cita.fecha_hora,
-      titulo: `${TIPO_LABEL[l.cita?.tipo || ""] || "Cita"} · ${l.nombre || `+${l.phone}`}`,
-      advisorId: l.cita?.advisor_id ?? null,
-      advisorNombre: l.cita?.advisor_id ? roster[l.cita.advisor_id]?.nombre ?? null : null,
+      titulo: `${TIPO_LABEL[l.cita?.tipo || ""] || "Cita"} · ${nombreVisible(l)}`,
+      advisorId: l.cita?.asesor_id ?? l.cita?.advisor_id ?? null,
+      advisorNombre: l.cita?.asesor_id && asesoraPorId.has(l.cita.asesor_id)
+        ? asesoraPorId.get(l.cita.asesor_id) ?? null
+        : l.cita?.advisor_id ? roster[l.cita.advisor_id]?.nombre ?? null : null,
       clienteNombre: l.nombre,
-      propertyRef: l.property_ref_origen,
+      propertyRef: l.cita?.ref || l.property_ref_origen,
       origen: "cita_cliente" as const,
       linkChat: null,
       autoAgendada: l.cita?.origen === "auto",

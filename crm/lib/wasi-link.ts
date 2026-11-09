@@ -26,6 +26,8 @@ export function enlazarWasiPublico(link: string | null | undefined): string | nu
   }
   const esDominioWasi = url.hostname === "info.wasi.co" || url.hostname.endsWith(".inmo.co");
   if (!esDominioWasi && !RUTA_DE_WASI.test(url.pathname)) return link;
+  // Igual que el bot: siempre https (Wasi guarda http en algunas fichas).
+  url.protocol = "https:";
   url.hostname = HOST_WASI_PUBLICO;
   url.searchParams.set("shared", "whatsapp");
   return url.toString();
