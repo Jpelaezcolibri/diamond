@@ -22,7 +22,7 @@ test("confirmar_cita: sin ctx.advisor, la rechaza", async () => {
 test("confirmar_cita: ninguna pendiente", async (t) => {
   t.mock.method(appointments, "citasPendientesDeConfirmar", async () => []);
   const r = await executeTool("confirmar_cita", {}, ctxAsesor());
-  assert.match(r, /no tenes ninguna/i);
+  assert.match(r, /no tienes ninguna visita por confirmar/i); // tuteo y sin decir que no existe (caso Norha)
 });
 
 test("confirmar_cita: varias pendientes, pregunta cual", async (t) => {

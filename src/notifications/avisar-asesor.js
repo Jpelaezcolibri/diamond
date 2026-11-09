@@ -36,7 +36,12 @@ function depsPorDefecto() {
   };
 }
 
-async function avisarAsesor({ org, advisor, motivo, lead, titulo, cuerpo = null, whatsapp: mandarWhatsApp = true }, deps = null) {
+// `detalle` (Juan, 2026-11-09, caso Norha): el texto COMPLETO para la asesora
+// (ficha de la visita, contacto, pedido). Con detalle, el WhatsApp intenta
+// primero mandarle eso entero; si su ventana de 24 h esta cerrada, cae a la
+// plantilla corta aviso_app y el detalle queda en el CRM. Antes solo llegaba
+// "tienes una visita por confirmar" y Catherine confirmo sin saber a quien.
+async function avisarAsesor({ org, advisor, motivo, lead, titulo, cuerpo = null, detalle = null, whatsapp: mandarWhatsApp = true }, deps = null) {
   if (!advisor || !advisor.id || !org) return { ok: false, error: "sin asesora con usuario" };
   // Un asesor dado de baja no recibe nada (2026-10-21: Natalia, inactiva,
   // comparte el 8024 con la linea 2 de Daiana).
@@ -59,12 +64,17 @@ async function avisarAsesor({ org, advisor, motivo, lead, titulo, cuerpo = null,
 
   const tel = String(advisor.phone || "").replace(/\D/g, "");
   let whatsapp = false;
-  if (tel && mandarWhatsApp) {
+  if (tel && mandarWhatsApp && detalle) {
+    const enTitulo = titulo ? `🔔 *${titulo}*\n\n` : "";
+    const t = await d.texto(org, tel, `${enTitulo}${detalle}`).catch((e) => ({ ok: false, error: e.message }));
+    whatsapp = Boolean(t && t.ok);
+  }
+  if (tel && mandarWhatsApp && !whatsapp) {
     const r = await d.plantilla(org, tel, { name: "aviso_app", bodyParams: [m.whatsapp] }).catch((e) => ({ ok: false, error: e.message }));
     if (r && r.ok) whatsapp = true;
-    else {
+    else if (!detalle) {
       const t = await d
-        .texto(org, tel, `Tenés un pendiente en la app de Diamond: ${m.whatsapp}. Entrá a la app para atenderlo: crm.diamondinmobiliaria.com/pendientes`)
+        .texto(org, tel, `Tienes un pendiente en la app de Diamond: ${m.whatsapp}. Entra a la app para atenderlo: crm.diamondinmobiliaria.com/pendientes`)
         .catch((e) => ({ ok: false, error: e.message }));
       whatsapp = Boolean(t && t.ok);
     }

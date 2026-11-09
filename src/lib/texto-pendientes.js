@@ -44,7 +44,8 @@ function textoExcel(nombreAsesora, casos) {
   } else {
     cabeza = `${nombreAsesora}, tienes ${cuantas(n)} por contactar: ${resumenMotivos(casos)}. Comunícate con cada una`;
   }
-  return `${cabeza} (celular y WhatsApp en el Excel), llena la columna Resultado (y fecha, hora y ref si agendaste visita) y devuélveme el Excel por este chat.`;
+  // La hoja Fichas se lee en el celular sin deslizar de lado (Juan, 2026-11-09).
+  return `${cabeza} (celular y WhatsApp en el Excel), llena la columna Resultado (y fecha, hora y ref si agendaste visita) y devuélveme el Excel por este chat. En la hoja Fichas ves cada caso completo, fácil de leer en el celular; el resultado va en la hoja Pendientes.`;
 }
 
 module.exports = { textoExcel, resumenMotivos, cuantas, MOTIVO };

@@ -20,5 +20,5 @@ test("una persona: nombre y motivo; varias: conteo; cliente sin nombre no queda 
   assert.match(textoExcel("Daiana", [caso("no_contesto", "(sin nombre)", "cliente")]), /1 persona por contactar: un cliente sin nombre, que no le contestó a Sofi/);
   const t = textoExcel("Daiana", [caso("no_contesto"), caso("no_contesto"), caso("nota_de_voz")]);
   assert.match(t, /^Daiana, tienes 3 personas por contactar: 2 no le contestaron a Sofi y 1 mandó una nota de voz que Sofi no puede escuchar\. Comunícate con cada una/);
-  assert.match(t, /llena la columna Resultado \(y fecha, hora y ref si agendaste visita\) y devuélveme el Excel por este chat\.$/);
+  assert.match(t, /llena la columna Resultado \(y fecha, hora y ref si agendaste visita\) y devuélveme el Excel por este chat\. En la hoja Fichas ves cada caso completo/);
 });

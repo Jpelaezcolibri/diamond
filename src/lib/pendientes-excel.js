@@ -24,8 +24,39 @@ const LLENAR = [["Resultado", "resultado", 28], ["Fecha visita", "fecha", 13], [
 const GRIS = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEDEDED" } };
 const AMARILLO = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFF2B3" } };
 
+// Hoja "Fichas" (Juan, 2026-11-09): cada caso en vertical, etiqueta | dato,
+// para leerlo en el celular sin deslizar de lado (18 columnas no caben en una
+// pantalla). Va primero porque es la que se abre; el resultado se llena en la
+// hoja Pendientes, que es la que lee la devolución.
+const AZUL = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0B1526" } };
+function hojaFichas(wb, casos) {
+  const ws = wb.addWorksheet("Fichas");
+  ws.columns = [{ key: "dato", width: 16 }, { key: "valor", width: 58 }];
+  const etiquetas = INFO.filter(([, key]) => key !== "codigo" && key !== "nombre");
+  for (const c of casos) {
+    const titulo = ws.addRow([`${c.codigo} · ${c.nombre || "sin nombre"}`, ""]);
+    ws.mergeCells(titulo.number, 1, titulo.number, 2);
+    titulo.font = { bold: true, color: { argb: "FFC9A24B" }, size: 13 };
+    titulo.getCell(1).fill = AZUL;
+    for (const [label, key] of etiquetas) {
+      const v = c[key];
+      if (v === null || v === undefined || String(v).trim() === "") continue;
+      const row = ws.addRow([label, ""]);
+      row.getCell(1).font = { bold: true };
+      if (key === "whatsapp" && /^wa\.me\//.test(v)) row.getCell(2).value = { text: v, hyperlink: `https://${v}` };
+      else if (key === "chatUrl") row.getCell(2).value = { text: "Abrir chat en el CRM", hyperlink: v };
+      else row.getCell(2).value = String(v);
+      row.alignment = { vertical: "top", wrapText: true };
+    }
+    ws.addRow([]);
+  }
+  ws.addRow(["Resultado", "Llénalo en la hoja Pendientes y devuelve el archivo a Sofi."]).font = { italic: true };
+  return ws;
+}
+
 async function armarLibro({ loteId, asesorId, casos }) {
   const wb = new ExcelJS.Workbook();
+  hojaFichas(wb, casos);
   const ws = wb.addWorksheet("Pendientes", { views: [{ state: "frozen", ySplit: 1 }] });
   ws.columns = [...INFO, ...LLENAR].map(([header, key, width]) => ({ header, key, width }));
   ws.getRow(1).font = { bold: true };

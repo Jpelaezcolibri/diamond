@@ -73,7 +73,27 @@ function bloqueCitasPendientes(citas) {
   return `\n\nVISITAS POR CONFIRMAR (son suyas y el cliente o colega está esperando):\n${filas}\nSi solo saluda o no las menciona, recuérdaselas en una línea. Si te dice "OK CONFIRMADA", "confirmada" o que sí puede, llama confirmar_cita. Si no puede ese día, no la confirmes: dile que toque "Otro horario" en el chat del CRM, o que te diga qué día y hora sí puede para que el equipo la reagende.`;
 }
 
-function promptAsesor({ org, advisor, now, preguntas = null, citasPendientes = null }) {
+// Sus visitas YA confirmadas (caso Norha, 2026-11-09): sin esto, Sofi le dijo
+// a Catherine que una visita confirmada "no existía". Con contacto, porque
+// la asesora es la que tiene que comunicarse.
+function bloqueCitasConfirmadas(citas) {
+  const lista = (citas || []).filter((l) => l && l.cita);
+  if (lista.length === 0) return "";
+  const { formatCitaFechaHora } = require("../notifications/advisor");
+  const { sinCelular } = require("../lib/quien-lead");
+  const { celularLegible } = require("../lib/ficha-visita");
+  const filas = lista
+    .map((l) => {
+      const fh = formatCitaFechaHora(l.cita.fecha_hora);
+      const quien = `${l.nombre || "sin nombre"}${l.source === "colega" ? " (colega)" : ""}`;
+      const contacto = sinCelular(l.phone) ? "sin celular visible: se le escribe desde su chat en el CRM" : celularLegible(l.phone) || "sin teléfono";
+      return `- ${quien} · Ref ${l.cita.ref || "sin ref"} · ${fh ? `${fh.fecha}, ${fh.hora}` : "sin hora"} · contacto: ${contacto}`;
+    })
+    .join("\n");
+  return `\n\nTUS PRÓXIMAS VISITAS CONFIRMADAS (existen y están en firme):\n${filas}\nSi pregunta por una de estas o dice "confirmar", dile que YA está confirmada y dale los datos; nunca le digas que no existe. Si quiere toda la información, usa confirmar_cita: te la devuelve.`;
+}
+
+function promptAsesor({ org, advisor, now, preguntas = null, citasPendientes = null, citasConfirmadas = null }) {
   const seccionPublicar = require("./publicar-asesor").activo()
     ? `
 
@@ -138,7 +158,7 @@ HISTORIAL CONTAMINADO: en esta conversacion puede haber mensajes tuyos anteriore
 
 REGLA DE ORO: ante la duda, preguntale que necesita en vez de suponer. Un asesor que escribe "hola" quiere abrir la conversacion, no recibir un catalogo.${seccionPublicar}`;
 
-  const contexto = `${now ? `FECHA Y HORA ACTUAL EN COLOMBIA: ${now.legible} (referencia ISO: ${now.iso}).\n\n` : ""}ASESOR: ${advisor.name}${advisor.especialidad ? ` — especialidad ${advisor.especialidad}` : ""}.${bloqueCitasPendientes(citasPendientes)}${bloquePreguntasAsesor(preguntas)}`;
+  const contexto = `${now ? `FECHA Y HORA ACTUAL EN COLOMBIA: ${now.legible} (referencia ISO: ${now.iso}).\n\n` : ""}ASESOR: ${advisor.name}${advisor.especialidad ? ` — especialidad ${advisor.especialidad}` : ""}.${bloqueCitasPendientes(citasPendientes)}${bloqueCitasConfirmadas(citasConfirmadas)}${bloquePreguntasAsesor(preguntas)}`;
 
   return [
     { type: "text", text: stable, cache_control: CACHE_ESTABLE },
@@ -349,8 +369,8 @@ ${datosLead}
 No los des por vigentes: lo que busca pudo cambiar. Confirma con el cliente el presupuesto, la zona y el tipo antes de usarlos en una búsqueda o en una respuesta ("la vez pasada me hablaste de hasta 400 millones, ¿sigue siendo así?"), y nunca digas que te los dio hoy. Lo que aparece en el historial antes de la pausa también es de esa conversación anterior.`;
 }
 
-function buildSystemPrompt({ org, lead, qualified, now, advisor = null, colega = null, ultimoPedido = null, coordinador = null, historial = [], pausaDias = 0, fichasPedido = [], preguntas = null, respuestaPorEntregar = false, citasPendientes = null }) {
-  if (advisor) return promptAsesor({ org, advisor, now, preguntas, citasPendientes });
+function buildSystemPrompt({ org, lead, qualified, now, advisor = null, colega = null, ultimoPedido = null, coordinador = null, historial = [], pausaDias = 0, fichasPedido = [], preguntas = null, respuestaPorEntregar = false, citasPendientes = null, citasConfirmadas = null }) {
+  if (advisor) return promptAsesor({ org, advisor, now, preguntas, citasPendientes, citasConfirmadas });
   // Un asesor propio que ademas esta en un grupo gremial sigue siendo de la
   // casa: por eso este orden y no el contrario.
   if (colega) return promptColega({ org, colega, now, ultimoPedido, coordinador, historial, lead, fichasPedido, respuestaPorEntregar });

@@ -98,6 +98,7 @@ function canal(deps) {
     org: deps.org || ((id) => organizations.findById(id)),
     notificar: deps.notificar || ((...a) => require("../notifications/notificar").notificar(...a)),
     reaviso: deps.reaviso || ((...a) => require("../notifications/avisar-asesor").avisarAsesor(...a)),
+    ficha: deps.ficha || (deps.reaviso ? null : (a) => require("../lib/ficha-visita").armarFichaVisita(a)),
     vencidas: deps.vencidas || ((args) => require("../lib/citas-vencidas").marcarVencidas(args)),
     registrar: deps.registrar || ((...a) => require("../lib/registrar-saliente").registrarSaliente(...a)),
     soloLlamada: deps.soloLlamada || ((orgId, tel) => require("../data/colegas").esSoloLlamada(orgId, { telefono: tel })),
@@ -195,11 +196,14 @@ async function reavisar({ org, lead, ciclo, ahora, c }) {
   lead.cita = cita;
   const quien = `${quienDe(lead)}${lead.source === "colega" ? " (colega)" : ""}`;
   const corte = cita.corte_at ? formatCitaFechaHora(cita.corte_at) : null;
+  // La ficha completa también en el recordatorio (caso Norha, 2026-11-09).
+  const detalle = c.ficha ? await c.ficha({ org, lead, cita }).catch(() => null) : null;
   await c
     .reaviso({
       org, advisor: actual, motivo: "visita", lead,
       titulo: `Sigue pendiente: visita por confirmar (${refCuando(cita)})`,
       cuerpo: `${quien}${corte ? ` · confírmala antes de ${corte.fecha}, ${corte.hora}` : ""}`,
+      detalle,
     })
     .catch((e) => console.warn("[citas-escalera] aviso repetido:", e.message));
   console.log(`[citas-escalera] lead ${lead.id}: aviso repetido a ${actual.name}`);

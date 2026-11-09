@@ -237,7 +237,36 @@ async function citasPendientesDeConfirmar(orgId, asesor) {
   return (data || []).filter((l) => esPendienteDe(l.cita, asesor)).sort(porFecha);
 }
 
+// Las visitas CONFIRMADAS de este asesor que todavia no pasan. Caso Norha
+// (2026-11-09): Catherine escribio "Confirmar visita" sobre una ya confirmada,
+// confirmar_cita respondio "no tienes ninguna pendiente" y Sofi le dijo que la
+// visita no existia. Con esta lista Sofi sabe que si existe.
+function esConfirmadaDe(cita, asesor, ahoraMs) {
+  if (!cita || citasData.estadoDe(cita) !== "confirmada" || !cita.fecha_hora) return false;
+  if (new Date(cita.fecha_hora).getTime() < ahoraMs - 2 * 60 * 60 * 1000) return false;
+  if (cita.asesor_id) return cita.asesor_id === asesor.id;
+  return Boolean(asesor.auth_user_id && cita.advisor_id === asesor.auth_user_id);
+}
+
+async function citasConfirmadasDe(orgId, asesor, { ahora = new Date() } = {}) {
+  if (!asesor || typeof asesor === "string" || (!asesor.id && !asesor.auth_user_id)) return [];
+  const t = ahora.getTime();
+  const porFecha = (a, b) => new Date(a.cita.fecha_hora) - new Date(b.cita.fecha_hora);
+  if (!supabase) {
+    return memory.leads.filter((l) => l.org_id === orgId && esConfirmadaDe(l.cita, asesor, t)).sort(porFecha);
+  }
+  const { data, error } = await supabase
+    .from("leads")
+    .select("id, nombre, phone, source, cita")
+    .eq("org_id", orgId)
+    .not("cita", "is", null)
+    .limit(500);
+  if (error) throw error;
+  return (data || []).filter((l) => esConfirmadaDe(l.cita, asesor, t)).sort(porFecha);
+}
+
 module.exports = {
+  citasConfirmadasDe,
   DEFAULT_HORARIO,
   DURACION_MIN,
   partesBogota,

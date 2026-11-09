@@ -17,7 +17,13 @@ async function avisarCitaPorConfirmar({ org, advisor, lead, cita, deps = {} }) {
   const quien = `${quienDe(lead)}${lead.source === "colega" ? " (colega)" : ""}`;
   const oculto = sinCelular(lead.phone) ? ` · ${AVISO_SIN_CELULAR}` : "";
   const cuerpo = `Ref ${cita.ref || "sin ref"} · ${cuando(cita.fecha_hora)} · ${quien} · Confirmar antes de ${cuando(cita.corte_at)}${oculto}`;
-  const r = await avisar({ org, advisor, motivo: "visita", lead, titulo: "Nueva visita por confirmar", cuerpo }).catch((e) => ({
+  // La ficha completa va por WhatsApp a la asesora (caso Norha, 2026-11-09).
+  const ficha = deps.ficha || ((a) => require("../lib/ficha-visita").armarFichaVisita(a));
+  const detalle = await ficha({ org, lead, cita }).catch((e) => {
+    console.warn("[aviso-cita] No se pudo armar la ficha de la visita:", e.message);
+    return null;
+  });
+  const r = await avisar({ org, advisor, motivo: "visita", lead, titulo: "Nueva visita por confirmar", cuerpo, detalle }).catch((e) => ({
     ok: false,
     error: e.message,
   }));

@@ -49,6 +49,27 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
   - Probado con la clave de producción sobre el chat real de Norha y 4 chats
     limpios (`replay`, solo lectura): sin alias ni promesas de tiempo.
 
+- **Avisos completos a la asesora (2026-11-09, rama `avisos-asesora-completos`,
+  SIN desplegar).** Catherine confirmó la visita de Norha con un WhatsApp que
+  solo decía "una visita por confirmar"; después Sofi le dijo que la visita no
+  existía (confirmar_cita respondió "no tienes pendientes" sobre una ya
+  confirmada). Se le reenvió el caso completo a mano el 9-nov 5:57 p. m.
+  (entregado; ella respondió y pidió el número).
+  - `lib/ficha-visita.js`: estado, fecha, propiedad con link de Wasi, quién
+    va, contacto (o "sin celular visible"), pedido literal con su grupo,
+    preguntas abiertas y link al chat. `avisarAsesor({ detalle })` manda la
+    ficha completa por WhatsApp y, si la ventana está cerrada, cae a
+    `aviso_app`. La usan el aviso de visita, el reaviso de la escalera y
+    `pedir_contacto_asesora` con visita viva.
+  - Sofi con la asesora ve TUS PRÓXIMAS VISITAS CONFIRMADAS
+    (`appointments.citasConfirmadasDe`) y `confirmar_cita` sin pendientes
+    devuelve la ficha de las confirmadas.
+  - Excel: hoja "Fichas" vertical primero (se lee en el celular); la
+    devolución sigue leyendo "Pendientes".
+  - Calendario del CRM: mockup del panel de detalle en
+    `Claude outputs/mockup-calendario-detalle-cita.html`, **pendiente de
+    aprobación de Juan** (pidió poder responder desde el panel).
+
 - **Visita sin relevo (2026-11-06, rama `visitas-sin-relevo`, SIN desplegar).**
   Caso Nancy David (colega, ref 10031500, sábado 7-nov 10 a. m.): la cita
   quedó en Catherine (Asesor 3) 2 días con un solo aviso; Daiana y Claudia

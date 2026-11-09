@@ -378,6 +378,14 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
         return null;
       })
     : null;
+  // Y las ya confirmadas (caso Norha, 2026-11-09): Sofi le dijo a Catherine
+  // que una visita confirmada no existia. Best-effort.
+  const citasConfirmadas = advisor
+    ? await require("../data/appointments").citasConfirmadasDe(org.id, advisor).catch((e) => {
+        console.warn("[engine] No se pudieron leer las visitas confirmadas del asesor:", e.message);
+        return null;
+      })
+    : null;
 
   const system = buildSystemPrompt({
     org, lead, qualified: isQualified(lead), now: nowInBogota(), advisor, colega, ultimoPedido, coordinador, historial,
@@ -385,6 +393,7 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
     fichasPedido,
     preguntas, respuestaPorEntregar,
     citasPendientes,
+    citasConfirmadas,
   });
 
   const extractText = (r) =>

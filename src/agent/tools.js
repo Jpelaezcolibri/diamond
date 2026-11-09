@@ -1281,7 +1281,18 @@ async function executeTool(name, input, ctx) {
       return "No pude leer tus citas pendientes ahorita. Intenta de nuevo en un momento.";
     }
     if (pendientes.length === 0) {
-      return "No tenes ninguna cita PROPUESTA pendiente de confirmar ahorita.";
+      // Caso Norha (2026-11-09): "no tenes ninguna pendiente" se leyo como "la
+      // visita no existe". Si tiene confirmadas, se las recuerda con su ficha.
+      const confirmadas = await appointments.citasConfirmadasDe(ctx.org.id, ctx.advisor).catch(() => []);
+      if (confirmadas.length === 0) return "No tienes ninguna visita por confirmar ni visitas confirmadas próximas.";
+      const { armarFichaVisita } = require("../lib/ficha-visita");
+      const fichas = [];
+      for (const l of confirmadas.slice(0, 3)) {
+        const ficha = await armarFichaVisita({ org: ctx.org, lead: l, cita: l.cita }).catch(() => null);
+        fichas.push(ficha || `${l.nombre || "sin nombre"} · Ref ${l.cita.ref || "sin ref"}`);
+      }
+      const separador = "\n\n———\n\n";
+      return `No hay nada por confirmar: esta visita YA está confirmada (no le digas que no existe). Pásale estos datos tal cual:\n\n${fichas.join(separador)}`;
     }
     if (pendientes.length > 1) {
       const lista = pendientes
@@ -2002,10 +2013,18 @@ async function pedirContactoAsesora(input, ctx) {
     pedido && pedido.texto_original ? `Su último pedido: "${String(pedido.texto_original).replace(/\s+/g, " ").slice(0, 120)}"` : null,
     refs.length ? `Le respondimos: ${refs.map((r) => `Ref ${r}`).join(", ")}` : null,
   ].filter(Boolean).join(" · ") || null;
+  // Con visita viva, la asesora recibe la ficha completa (caso Norha,
+  // 2026-11-09): quién es, la propiedad, cómo contactarlo y para qué escribe.
+  let detalle = null;
+  if (ctx.lead.cita && require("../data/citas").estaViva(ctx.lead.cita)) {
+    const ficha = await require("../lib/ficha-visita").armarFichaVisita({ org: ctx.org, lead: { ...ctx.lead, nombre: ctx.lead.nombre || nombreColega }, cita: ctx.lead.cita }).catch(() => null);
+    const paraQue = input && input.motivo ? `📌 Para qué: ${String(input.motivo).trim()}\n\n` : "";
+    if (ficha) detalle = `${paraQue}${ficha}`;
+  }
   const aviso = await require("../notifications/avisar-asesor")
     .avisarAsesor({
       org: ctx.org, advisor: asesora, motivo: "pide_asesor", lead: ctx.lead,
-      titulo: `${nombreColega} pide hablar con un asesor`, cuerpo,
+      titulo: `${nombreColega} pide hablar con un asesor`, cuerpo, detalle,
     })
     .catch((e) => ({ ok: false, error: e.message }));
 
