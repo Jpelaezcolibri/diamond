@@ -25,7 +25,7 @@
 // cliente es el que la disparo, y un cliente que insiste no debe correr el
 // plazo hacia adelante.
 
-const { aliasPublico } = require("./identidad-publica");
+const { asesorPublico } = require("./identidad-publica");
 
 const MIN = 60 * 1000;
 const H = 60 * MIN;
@@ -70,8 +70,8 @@ function pasoPausa({ marca, modo, ultimoAsistente = null, ahora = new Date() }) 
   return "nada";
 }
 
-function textoDevolucion(alias) {
-  return `Sigo pendiente de ti mientras ${alias} se desocupa. ¿En qué te puedo ayudar mientras tanto?`;
+function textoDevolucion() {
+  return `Sigo pendiente de ti mientras ${asesorPublico()} se desocupa. ¿En qué te puedo ayudar mientras tanto?`;
 }
 
 function depsPorDefecto() {
@@ -178,8 +178,7 @@ async function atenderPausa({ org, c, ahora = new Date() }, deps = null) {
   if (seg) lead.seguimiento = seg;
   c.modo = "bot";
 
-  const alias = aliasPublico(asesora, org);
-  const texto = textoDevolucion(alias);
+  const texto = textoDevolucion();
   const ultimoCliente = c.ultimoCliente;
   const enVentana = Boolean(ultimoCliente && ahora.getTime() - new Date(ultimoCliente.created_at).getTime() < VENTANA_24H_MS);
   let resultado = "fuera de la ventana de 24 h: no se le escribió al cliente";

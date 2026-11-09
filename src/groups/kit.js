@@ -8,7 +8,7 @@ const syncEstado = require("../data/sync-estado");
 const { REFS_BLOQUEADAS } = require("./publicable");
 const verificarLink = require("./verificar-link");
 const { postGrupo } = require("./redactar");
-const { aliasPublico } = require("../lib/identidad-publica");
+const { aliasInterno } = require("../lib/identidad-publica");
 
 // La ref llega del request y va a ilike (post) o a la tabla (registrar): solo
 // caracteres de una ref, sin comodines de LIKE (% _ ).
@@ -62,8 +62,8 @@ async function aliasPorUsuario(orgId) {
   }
   const mapa = {};
   // Sin alias_publico no se pone nada: la etiqueta queda sin "por ..." en vez
-  // de mostrar el texto de reemplazo de aliasPublico.
-  for (const a of data || []) if (a.auth_user_id && String(a.alias_publico || "").trim()) mapa[a.auth_user_id] = aliasPublico(a);
+  // de mostrar el nombre real.
+  for (const a of data || []) if (a.auth_user_id && String(a.alias_publico || "").trim()) mapa[a.auth_user_id] = aliasInterno(a);
   return mapa;
 }
 

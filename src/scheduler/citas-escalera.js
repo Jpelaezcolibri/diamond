@@ -11,7 +11,8 @@ const organizations = require("../data/organizations");
 const appointments = require("../data/appointments");
 const rotacion = require("../data/rotacion-citas");
 const reglas = require("../lib/agenda-reglas");
-const { aliasPublico } = require("../lib/identidad-publica");
+const { aliasInterno } = require("../lib/identidad-publica");
+const { quienDe } = require("../lib/quien-lead");
 const { formatCitaFechaHora } = require("../notifications/advisor");
 
 const PASO_MIN = Number(process.env.ESCALERA_PASO_MIN || 60);
@@ -129,8 +130,8 @@ async function rotar({ org, lead, ciclo, nuevo, ahora, c }) {
   await c.aviso({ org, advisor: nuevo, lead, cita }).catch((e) => console.warn("[citas-escalera] aviso al nuevo:", e.message));
   if (anterior) {
     await c.notificar({
-      orgId: org.id, advisor: anterior, tipo: "cita_reasignada", titulo: `La visita pasó a ${aliasPublico(nuevo, org)}`,
-      cuerpo: `${lead.nombre || `+${lead.phone}`} ${cuandoDe(cita)}`, link: "/calendario", leadId: lead.id,
+      orgId: org.id, advisor: anterior, tipo: "cita_reasignada", titulo: `La visita pasó a ${aliasInterno(nuevo)}`,
+      cuerpo: `${quienDe(lead)} ${cuandoDe(cita)}`, link: "/calendario", leadId: lead.id,
     }).catch(() => {});
   }
   // Sin WhatsApp al celular (plan 6): el anterior se entera en la app.
@@ -152,7 +153,7 @@ async function cortar({ org, lead, ciclo, ahora, c }) {
   if (actual) {
     await c.notificar({
       orgId: org.id, advisor: actual, tipo: "cita_cancelada", titulo: "Visita cancelada por falta de confirmación",
-      cuerpo: `${lead.nombre || `+${lead.phone}`} ${cuandoDe(cita)}`, link: "/calendario", leadId: lead.id,
+      cuerpo: `${quienDe(lead)} ${cuandoDe(cita)}`, link: "/calendario", leadId: lead.id,
     }).catch(() => {});
   }
   console.log(`[citas-escalera] lead ${lead.id}: cancelada por falta de confirmacion`);
@@ -192,7 +193,7 @@ async function reavisar({ org, lead, ciclo, ahora, c }) {
   const cita = { ...lead.cita, reaviso_at: ahora.toISOString() };
   await leads.update(lead.id, { cita });
   lead.cita = cita;
-  const quien = `${lead.nombre || `+${lead.phone}`}${lead.source === "colega" ? " (colega)" : ""}`;
+  const quien = `${quienDe(lead)}${lead.source === "colega" ? " (colega)" : ""}`;
   const corte = cita.corte_at ? formatCitaFechaHora(cita.corte_at) : null;
   await c
     .reaviso({
@@ -215,8 +216,8 @@ async function marcarSinRelevo({ org, lead, ciclo, ahora, c }) {
   const cita = { ...lead.cita, sin_relevo_at: ahora.toISOString() };
   await leads.update(lead.id, { cita });
   lead.cita = cita;
-  const quien = `${lead.nombre || `+${lead.phone}`}${lead.source === "colega" ? " (colega)" : ""}`;
-  const tiene = actual ? aliasPublico(actual, org) || actual.name : "una asesora";
+  const quien = `${quienDe(lead)}${lead.source === "colega" ? " (colega)" : ""}`;
+  const tiene = actual ? aliasInterno(actual) : "una asesora";
   for (const a of ciclo) {
     if (actual && a.id === actual.id) continue;
     await c

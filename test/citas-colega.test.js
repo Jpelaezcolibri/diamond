@@ -313,7 +313,8 @@ test("promptColega ya no dice que no existe herramienta: Sofi SI puede agendar",
   assert.match(p, /registrar_demanda_colega/);
 });
 
-test("quien coordina se INYECTA con su alias, sin nombre real ni celular", () => {
+// Juan (2026-11-09, caso Norha): hacia afuera nunca "Asesor N"; siempre "un asesor de nuestro equipo".
+test("el prompt del colega no nombra a quien coordina: ni alias, ni nombre, ni celular", () => {
   const bloques = buildSystemPrompt({
     org: ORG,
     lead: { id: "l1", estado: "nuevo" },
@@ -324,7 +325,7 @@ test("quien coordina se INYECTA con su alias, sin nombre real ni celular", () =>
   });
   const estable = bloques[0].text;
   const volatil = bloques[bloques.length - 1].text;
-  assert.match(volatil, /COORDINA LAS VISITAS: Asesor 1/, "va en el bloque volatil");
+  assert.doesNotMatch(volatil, /COORDINA LAS VISITAS|Asesor 1/, "ya no se inyecta");
   assert.doesNotMatch(volatil, /celular|\+57|57300/i, "sin celular");
   assert.doesNotMatch(estable, /pasale el nombre y el celular/i, "el prompt ya no le pide dar celulares");
   assert.match(estable, /NUNCA le des el celular de nadie del equipo/);
@@ -342,7 +343,7 @@ test("sin coordinador resuelto, el contexto no trae ningun contacto que Sofi pue
   // hacer si no esta); el que no puede existir es el dato en el volatil.
   const volatil = bloques[bloques.length - 1].text;
   assert.doesNotMatch(volatil, /COORDINA LAS VISITAS/);
-  assert.match(bloques[0].text, /si abajo no aparece ninguno/i, "el prompt tiene que decirle que hacer cuando no hay quien coordine");
+  assert.match(bloques[0].text, /un asesor de nuestro equipo le confirma/i, "sin nombre: un asesor de nuestro equipo");
 });
 
 // ── El cableado (engine) ──────────────────────────────────────────────────
@@ -354,15 +355,14 @@ const fs = require("node:fs");
 const path = require("node:path");
 const leer = (...p) => fs.readFileSync(path.join(__dirname, "..", ...p), "utf8");
 
-test("engine.js resuelve el coordinador (lib/coordinador-visitas) y se lo pasa al prompt", () => {
+test("el coordinador se resuelve solo para avisar adentro (pedir contacto), no para el prompt", () => {
+  // Desde 2026-11-09 (caso Norha) el prompt no nombra a nadie: engine.js ya
+  // no lo resuelve; lo usa pedir_contacto_asesora para avisarle a quien
+  // tiene la visita.
   const fuente = leer("src", "agent", "engine.js");
-  assert.match(fuente, /resolverCoordinador\(/);
-  const i = fuente.indexOf("buildSystemPrompt({");
-  assert.ok(i > -1);
-  assert.match(fuente.slice(i, i + 300), /coordinador/, "el prompt tiene que recibirlo");
-  // Desde 2026-11-06 vive en src/lib/coordinador-visitas.js: con cita viva es
-  // quien la tiene; si no, la principal del radar. Siempre el alias.
+  assert.doesNotMatch(fuente, /resolverCoordinador\(/);
   const lib = leer("src", "lib", "coordinador-visitas.js");
   assert.match(lib, /findAsesorPrincipalRadar/, "se reusa el resolutor que ya existe, no se inventa otro");
-  assert.match(lib, /aliasPublico/, "se pasa el alias, no el nombre ni el telefono");
+  assert.doesNotMatch(lib, /aliasPublico|alias_publico/, "devuelve el asesor, no un alias para afuera");
+  assert.match(leer("src", "agent", "tools.js"), /resolverCoordinador\(/, "pedir_contacto_asesora avisa a quien tiene la visita");
 });

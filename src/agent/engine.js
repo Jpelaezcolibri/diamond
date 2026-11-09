@@ -330,7 +330,10 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
   // Sofi confirma la cita sin contacto en vez de inventarlo.
   // Con una cita viva es quien la tiene en la rotacion, no la principal
   // (caso Nancy, 2026-11-06: "Asesor 1 te la confirma" con la cita en Asesor 3).
-  const coordinador = colega ? await require("../lib/coordinador-visitas").resolverCoordinador({ org, lead }) : null;
+  // Desde 2026-11-09 (caso Norha) el prompt no nombra a ningun asesor: no se
+  // resuelve aca. pedir_contacto_asesora usa coordinador-visitas para avisarle
+  // a quien tiene la visita.
+  const coordinador = null;
 
   // Memoria del colega (2026-10-07): sus ultimos pedidos y lo que se le mando.
   const historial = colega

@@ -30,7 +30,7 @@ function textoRecordatorio(lead, advisor) {
   const fh = formatCitaFechaHora(lead.cita.fecha_hora);
   const cuando = fh ? `${fh.fecha} a las ${fh.hora}` : lead.cita.descripcion || "sin fecha";
   const saludo = advisor && advisor.name ? advisor.name.split(/\s+/)[0] : null;
-  const quien = lead.nombre || `+${lead.phone}`;
+  const quien = require("../lib/quien-lead").quienDe(lead);
   const cuerpo = `tenes una cita PROPUESTA con ${quien} para ${cuando} que todavia no confirmaste.`;
   return [
     saludo ? `${saludo}, ${cuerpo}` : cuerpo.charAt(0).toUpperCase() + cuerpo.slice(1),

@@ -97,7 +97,7 @@ test("a las 2 h: vuelve a Sofi, le escribe al cliente con el alias, lo guarda y 
   assert.deepEqual(log.modos, [{ id: "conv-1", modo: "bot" }]);
   assert.equal(log.envios.length, 1);
   assert.equal(log.envios[0].tel, lead.phone);
-  assert.equal(log.envios[0].texto, "Sigo pendiente de ti mientras Asesor 1 se desocupa. ¿En qué te puedo ayudar mientras tanto?");
+  assert.equal(log.envios[0].texto, "Sigo pendiente de ti mientras un asesor de nuestro equipo se desocupa. ¿En qué te puedo ayudar mientras tanto?");
   const guardado = log.mensajes.find((m) => m.role === "assistant");
   assert.equal(guardado.content, log.envios[0].texto);
   assert.equal(guardado.extras.wa_message_id, "wamid.S");

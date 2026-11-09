@@ -5,6 +5,7 @@
 // (avisar-asesor.js). La confirmacion se hace en la tarjeta del chat; el boton
 // de la plantilla vieja cita_por_confirmar y "OK CONFIRMADA" siguen sirviendo.
 const { formatCitaFechaHora } = require("./advisor");
+const { quienDe, sinCelular, AVISO_SIN_CELULAR } = require("../lib/quien-lead");
 
 function cuando(iso) {
   const fh = formatCitaFechaHora(iso);
@@ -13,8 +14,9 @@ function cuando(iso) {
 
 async function avisarCitaPorConfirmar({ org, advisor, lead, cita, deps = {} }) {
   const avisar = deps.avisar || ((...a) => require("./avisar-asesor").avisarAsesor(...a));
-  const quien = `${lead.nombre || `+${lead.phone}`}${lead.source === "colega" ? " (colega)" : ""}`;
-  const cuerpo = `Ref ${cita.ref || "sin ref"} · ${cuando(cita.fecha_hora)} · ${quien} · Confirmar antes de ${cuando(cita.corte_at)}`;
+  const quien = `${quienDe(lead)}${lead.source === "colega" ? " (colega)" : ""}`;
+  const oculto = sinCelular(lead.phone) ? ` · ${AVISO_SIN_CELULAR}` : "";
+  const cuerpo = `Ref ${cita.ref || "sin ref"} · ${cuando(cita.fecha_hora)} · ${quien} · Confirmar antes de ${cuando(cita.corte_at)}${oculto}`;
   const r = await avisar({ org, advisor, motivo: "visita", lead, titulo: "Nueva visita por confirmar", cuerpo }).catch((e) => ({
     ok: false,
     error: e.message,

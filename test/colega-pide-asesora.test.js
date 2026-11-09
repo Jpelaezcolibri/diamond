@@ -61,7 +61,9 @@ test("un colega pide hablar con alguien: queda en su chat, asignado a la asesora
   assert.match(a.cuerpo, /Para qué: coordinar una visita/);
   assert.match(a.cuerpo, /Busco apto en Laureles/);
   assert.match(a.cuerpo, /Ref 9921137, Ref 10129664/);
-  assert.match(out, /^Listo: ya le avisé a Asesor 1/);
+  // Juan (2026-11-09): sin "Asesor N", sin prometer hora.
+  assert.match(out, /^Listo: el aviso quedó hecho y un asesor de nuestro equipo/);
+  assert.doesNotMatch(out, /Asesor \d/);
   assert.match(out, /por este mismo chat/);
   assert.doesNotMatch(out, /Daiana|301 188 0668|573011880668/, "Sofi no recibe nombre real ni celular");
   assert.match(out, /NO le des ningún número/);
@@ -72,7 +74,8 @@ test("si lo vuelve a pedir en 30 minutos no sale un segundo aviso", async (t) =>
   await executeTool("pedir_contacto_asesora", {}, ctxColega());
   const out = await executeTool("pedir_contacto_asesora", {}, ctxColega());
   assert.strictEqual(avisos.length, 1);
-  assert.match(out, /^Ya le avisé a Asesor 1 hace un rato/);
+  assert.match(out, /^El aviso ya está hecho desde hace un rato/);
+  assert.doesNotMatch(out, /Asesor \d/);
   assert.doesNotMatch(out, /301 188 0668/);
 });
 
@@ -86,7 +89,7 @@ test("un colega 'solo llamada': la asesora lo ve en el aviso con el número para
 test("si el aviso no sale, Sofi NO puede decir que aviso, y el pedido no queda marcado como repetido", async (t) => {
   mocks(t, { avisoOk: false });
   const out = await executeTool("pedir_contacto_asesora", {}, ctxColega());
-  assert.match(out, /^NO le llegó el aviso a Asesor 1/);
+  assert.match(out, /^NO le llegó el aviso a nadie/);
   assert.doesNotMatch(out, /301 188 0668|573011880668/, "ni siquiera cuando falla se le da el celular");
   assert.match(out, /el equipo le va a escribir/);
   assert.match(out, /NO le digas al colega que ya le avisaste/);

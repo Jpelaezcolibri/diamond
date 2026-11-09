@@ -2,15 +2,18 @@
 // Lo usan el boton de la plantilla cita_por_confirmar (procesarBotonCita) y la
 // tool confirmar_cita ("OK CONFIRMADA" escrito). La cita queda de quien
 // confirma, aunque ya haya rotado: cualquiera del ciclo puede confirmar.
-// Hacia el cliente/colega va el alias (identidad-publica.js), nunca el nombre
-// real ni el celular; hacia adentro (confirmada_por, avisos) el nombre real.
+// Hacia el cliente/colega no se nombra al asesor (identidad-publica.js); hacia
+// adentro (confirmada_por, avisos) el alias interno o el nombre real.
+// El mensaje de confirmacion queda guardado en su chat: sin eso Sofi no lo
+// veia y le decia "solicitada" a quien ya tenia "CONFIRMADA" (caso Norha).
 const leads = require("../data/leads");
 const advisors = require("../data/advisors");
 const colegas = require("../data/colegas");
 const citasData = require("../data/citas");
 const { formatCitaFechaHora } = require("../notifications/advisor");
 const { VENTANA_CERRADA } = require("./mensaje-asesor");
-const { textoCitaConfirmada, aliasPublico } = require("./identidad-publica");
+const { textoCitaConfirmada, asesorPublico, aliasInterno } = require("./identidad-publica");
+const { quienDe } = require("./quien-lead");
 
 // Requires tardios del canal: whatsapp.js -> engine.js -> tools.js -> este archivo.
 function canal(deps) {
@@ -19,6 +22,11 @@ function canal(deps) {
     plantilla: deps.plantilla || ((...a) => require("../channels/whatsapp").sendWhatsAppTemplate(...a)),
     soloLlamada: deps.soloLlamada || ((orgId, tel) => colegas.esSoloLlamada(orgId, { telefono: tel })),
     notificar: deps.notificar || ((...a) => require("../notifications/notificar").notificar(...a)),
+    registrar: deps.registrar || (async (lead, texto) => {
+      const conversations = require("../data/conversations");
+      const conv = await conversations.findOrCreate(lead.org_id, lead.id);
+      if (conv && conv.id) await conversations.appendMessage(conv.id, "assistant", texto);
+    }),
   };
 }
 
@@ -44,7 +52,7 @@ async function confirmar({ org, lead, advisor, deps = {} }) {
   await leads.update(lead.id, { cita, ...(lead.atencion_pendiente === "visita" ? { atencion_pendiente: null, atencion_desde: null } : {}) });
   lead.cita = cita;
 
-  const quien = lead.nombre || `+${lead.phone}`;
+  const quien = quienDe(lead);
   const cuando = cuandoDe(cita);
   const refLinea = cita.ref ? ` a la ref ${cita.ref}` : "";
   // Un colega "solo llamada" no recibe nada por escrito (2026-09-10); si la
@@ -58,10 +66,12 @@ async function confirmar({ org, lead, advisor, deps = {} }) {
   }
   let avisado = false;
   if (solo === false) {
+    const textoConfirmada = textoCitaConfirmada({ cuando, ref: cita.ref });
     const r = await c
-      .texto(org, lead.phone, textoCitaConfirmada({ cuando, ref: cita.ref, advisor, org }))
+      .texto(org, lead.phone, textoConfirmada)
       .catch((e) => ({ ok: false, error: e.message }));
     avisado = Boolean(r && r.ok);
+    if (avisado) await c.registrar({ ...lead, org_id: lead.org_id || org.id }, textoConfirmada).catch((e) => console.warn("[confirmar-cita] no se guardó en el chat:", e.message));
     // Ventana de 24 h cerrada: la plantilla cita_confirmada llega igual.
     const nombrePlantilla = process.env.SOFI_CITA_CONFIRMADA_PLANTILLA;
     if (!avisado && nombrePlantilla && cita.ref && VENTANA_CERRADA.test((r && r.error) || "")) {
@@ -70,7 +80,7 @@ async function confirmar({ org, lead, advisor, deps = {} }) {
       const r2 = await c
         .plantilla(org, lead.phone, {
           name: nombrePlantilla,
-          bodyParams: [String(lead.nombre || "").trim().split(/\s+/)[0] || "cliente", diaHora, String(cita.ref), aliasPublico(advisor, org) || "tu asesor"],
+          bodyParams: [String(lead.nombre || "").trim().split(/\s+/)[0] || "cliente", diaHora, String(cita.ref), asesorPublico()],
         })
         .catch((e) => ({ ok: false, error: e.message }));
       avisado = Boolean(r2 && r2.ok);
@@ -83,7 +93,7 @@ async function confirmar({ org, lead, advisor, deps = {} }) {
     const a = await advisors.findById(org.id, id).catch(() => null);
     if (a) {
       await c.notificar({
-        orgId: org.id, advisor: a, tipo: "cita_confirmada", titulo: `La confirmó ${aliasPublico(advisor, org)}`,
+        orgId: org.id, advisor: a, tipo: "cita_confirmada", titulo: `La confirmó ${aliasInterno(advisor)}`,
         cuerpo: `${quien} ${cuando}${refLinea}`, link: "/calendario", leadId: lead.id,
       }).catch(() => {});
     }

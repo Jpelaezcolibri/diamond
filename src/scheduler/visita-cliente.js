@@ -35,7 +35,7 @@ function saludo(lead) {
   return n ? `Hola ${n}` : "Hola";
 }
 
-function textoRecordatorio({ lead, hora, ref, zona, alias }) {
+function textoRecordatorio({ lead, hora, ref, zona, alias = "un asesor de nuestro equipo" }) {
   const donde = ref ? ` a la Ref ${ref}${zona ? ` en ${zona}` : ""}` : "";
   return `${saludo(lead)}, te recuerdo tu visita de hoy a las ${hora}${donde}. Te recibe ${alias}. Si necesitas moverla, respóndeme aquí y la reagendamos.`;
 }
@@ -125,7 +125,7 @@ async function runOnce({ ahora = new Date(), deps = null } = {}) {
   if (require("../lib/agenda-reglas").enSilencio(ahora)) return { enviados: 0, quiet: true };
   const { ventanaAbierta } = require("./followups");
   const { formatCitaFechaHora } = require("../notifications/advisor");
-  const { aliasPublico } = require("../lib/identidad-publica");
+  const { asesorPublico } = require("../lib/identidad-publica");
   const d = deps || depsPorDefecto();
   let enviados = 0;
   for (const org of await d.orgs()) {
@@ -162,11 +162,11 @@ async function runOnce({ ahora = new Date(), deps = null } = {}) {
         const hora = fh ? fh.hora : "la hora acordada";
         let texto, params;
         if (paso === "recordatorio") {
-          const asesor = await d.asesor(org, lead.cita.asesor_id);
-          const alias = aliasPublico(asesor, org);
+          // Hacia el cliente no se nombra al asesor (Juan, 2026-11-09).
+          const alias = asesorPublico();
           const zona = ref ? await d.zona(org, ref) : null;
           texto = textoRecordatorio({ lead, hora, ref, zona, alias });
-          params = [primerNombre(lead) || "cliente", hora, String(ref), zona || "la zona acordada", alias || "tu asesor"];
+          params = [primerNombre(lead) || "cliente", hora, String(ref), zona || "la zona acordada", alias];
         } else {
           texto = textoPostvisita({ lead, ref });
           params = [primerNombre(lead) || "cliente", String(ref)];

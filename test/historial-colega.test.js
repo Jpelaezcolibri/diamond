@@ -36,7 +36,8 @@ test("el prompt con historial trae LO QUE YA HABLAMOS con las refs", () => {
   const volatil = bloques[bloques.length - 1].text;
   assert.match(volatil, /LO QUE YA HABLAMOS/);
   assert.match(volatil, /casa venta en Envigado — le mandamos refs 10077063, 10031500/);
-  assert.match(volatil, /Cita: propuesta .*ref 10012722/);
+  // Desde 2026-11-09 (caso Norha) el estado va en SU VISITA, sin ambigüedad.
+  assert.match(volatil, /SU VISITA a la Ref 10012722: VISITA SOLICITADA, todavía NO confirmada/);
 });
 
 test("sin historial no aparece el bloque", () => {

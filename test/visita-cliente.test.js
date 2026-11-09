@@ -56,7 +56,7 @@ test("2 h antes sale el recordatorio por texto, con hora, ref, zona y alias, y q
   const r = await vc.runOnce({ ahora: ANTES, deps });
   assert.strictEqual(r.enviados, 1);
   assert.strictEqual(log.texto.length, 1);
-  assert.match(log.texto[0].texto, /^Hola Ana, te recuerdo tu visita de hoy a las 3:00.*p\. ?m\. a la Ref 10414675 en Laureles\. Te recibe Asesor 2\./);
+  assert.match(log.texto[0].texto, /^Hola Ana, te recuerdo tu visita de hoy a las 3:00.*p\. ?m\. a la Ref 10414675 en Laureles\. Te recibe un asesor de nuestro equipo\./); // Juan, 2026-11-09: sin "Asesor N"
   assert.match(log.texto[0].texto, /reagendamos\.$/);
   assert.strictEqual(log.registrado.length, 1);
   assert.ok(l.cita.recordatorio_cliente_at);

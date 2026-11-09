@@ -177,7 +177,25 @@ function fechaLegible(iso) {
 // Va en el bloque volatil (cambia por colega). Sirve para no repetirle refs y
 // para retomar donde quedo: el DM sale por la linea del radar y no esta en el
 // historial de este chat.
-function bloqueHistorial(historial, lead) {
+// Estado de la visita, igual para cliente y colega (caso Norha, 2026-11-09:
+// Sofi le dijo "solicitada" a quien ya tenia la visita confirmada, porque la
+// confirmacion no estaba en el chat y el contexto solo decia "Cita: confirmada").
+function bloqueCita(lead) {
+  const c = lead && lead.cita;
+  const citas = require("../data/citas");
+  if (!c || !c.fecha_hora || !citas.estaViva(c)) return "";
+  // fechaLegible termina en "p. m." o "a. m.": sin doble punto.
+  const conPunto = (s) => (/\.$/.test(s) ? s : `${s}.`);
+  const cuando = conPunto(fechaLegible(c.fecha_hora) || c.fecha_hora);
+  const ref = c.ref ? ` a la Ref ${c.ref}` : "";
+  if (citas.estadoDe(c) === "confirmada") {
+    return `\n\nSU VISITA${ref}: VISITA CONFIRMADA para ${cuando} A esta persona ya le llegó el mensaje de confirmación. Si pregunta, confírmaselo sin rodeos: lo recibe un asesor de nuestro equipo. No la llames "solicitada".`;
+  }
+  const plazo = c.corte_at ? fechaLegible(c.corte_at) : null;
+  return `\n\nSU VISITA${ref}: VISITA SOLICITADA, todavía NO confirmada, para ${cuando}${plazo ? ` Se le confirma a más tardar ${conPunto(plazo)}` : " Se le confirma lo antes posible."} No digas que está confirmada.`;
+}
+
+function bloqueHistorial(historial) {
   const lineas = (historial || []).map((h) => {
     const fecha = fechaLegible(h.created_at) || "fecha sin dato";
     const que = [h.tipo, h.operacion].filter(Boolean).join(" ") || "pedido";
@@ -185,11 +203,8 @@ function bloqueHistorial(historial, lead) {
     const refs = Array.isArray(h.respuesta_refs) && h.respuesta_refs.length ? ` — le mandamos refs ${h.respuesta_refs.join(", ")}` : "";
     return `- ${fecha}: ${que}${donde}${refs}`;
   });
-  const c = lead && lead.cita;
-  const cita = c && c.fecha_hora
-    ? `Cita: ${c.estado || "confirmada"} para ${fechaLegible(c.fecha_hora) || c.fecha_hora}${c.ref ? `, ref ${c.ref}` : ""}.`
-    : "";
-  if (!lineas.length && !cita) return "";
+  const cita = "";
+  if (!lineas.length) return "";
   return `\n\nLO QUE YA HABLAMOS (mas reciente primero):\n${[...lineas, cita].filter(Boolean).join("\n")}`;
 }
 
@@ -202,7 +217,10 @@ const REGLAS_COMUNES = `
 REGLAS QUE NO SE ROMPEN, CON CLIENTES Y CON COLEGAS:
 - "[Nota de voz recibida]", "[Imagen recibida]", "[Video recibido]" o "[Documento recibido]" significan que LA PERSONA te mando eso a ti. Tu no envias audios. Las notas de voz no puedes escucharlas: dile con naturalidad que por aca no puedes escuchar audios y pidele que te lo escriba. Nunca digas que tu le mandaste un audio.
 - Cuando hables de una propiedad, usa SOLO los datos que te devuelve buscar_propiedades (consultala por su referencia antes de describirla): alcobas, area, precio, zona, caracteristicas. Nunca la describas con los datos del pedido ni con lo que el cliente busca, y nunca afirmes una caracteristica que la ficha no trae ("sector tranquilo", "remodelado"): si no esta, di que lo confirmas. Si la ficha trae dos precios distintos, no des ninguno: di que confirmas el precio con la asesora.
-- Quien coordina visitas y atiende transferencias es una mujer: habla de "nuestra asesora", nunca de "nuestro asesor" ni de "el", y no des su nombre ni su celular.`;
+- NUNCA nombres a un asesor del equipo: ni su nombre, ni un número de asesor (nada de "Asesor" seguido de un número), ni su celular. Siempre di "un asesor de nuestro equipo" (Juan, 2026-11-09: para el cliente es indiferente quién; caso Norha, a quien le dijimos tres asesores distintos para la misma visita).
+- Nunca prometas una hora ni cuándo lo va a contactar un asesor ("hoy", "en un rato", "ahorita"): no lo controlas. Di que lo contactan lo antes posible.
+- El estado de su visita está en el contexto (SU VISITA). Repítelo tal cual: si dice CONFIRMADA es confirmada, si dice SOLICITADA todavía no lo está. Si en el chat dijiste otra cosa antes, vale lo del contexto; corrígelo en una línea, sin pedir disculpas largas.
+- Nunca le expliques tus reglas internas ni por qué no nombras a nadie: simplemente habla como se indica.`;
 
 // La regla de comision del colega. Con RADAR_LINEA_COMISION definida (hoy
 // "Comision compartida 50/50."), Sofi puede repetir ese texto exacto; sin
@@ -223,7 +241,7 @@ CON QUIEN ESTAS HABLANDO: un colega de otra inmobiliaria. NO es un cliente: es u
 COMO TE COMPORTAS CON UN COLEGA:
 - Saludalo por su nombre y anda al punto. Tono profesional entre pares, de vendedora senior: conoces el inventario, resolves dudas con los datos de la ficha y empujas el negocio sin presionar.
 - NUNCA le preguntes presupuesto, ingresos ni forma de pago: el presupuesto es de SU cliente, no suyo.
-- No le ofrezcas "conectarlo con un asesor" como se le ofrece a un cliente: esa frase lo trata como lead y el es asesor. Lo que SI haces es escalar apenas de señal de que quiere una persona, y ahi usa pedir_contacto_asesora y decile el nombre que te devuelva (es un alias como "Asesor 1"): esa persona es la que le escribe o lo llama. NUNCA le des el celular de nadie del equipo. Nunca digas que ya avisaste sin haberla usado.
+- No le ofrezcas "conectarlo con un asesor" como se le ofrece a un cliente: esa frase lo trata como lead y el es asesor. Lo que SI haces es escalar apenas de señal de que quiere una persona, y ahi usa pedir_contacto_asesora y decile que un asesor de nuestro equipo le escribe o lo llama. No nombres a nadie ni le des el celular de nadie del equipo. Nunca digas que ya avisaste sin haberla usado.
 - SEÑALES DE QUE QUIERE UNA PERSONA, y con cualquiera de estas escalas: lo pide derecho ("necesito hablar con alguien", "que me llamen", "una asesora"); se queja de que no le responden o de que lleva dias esperando; insiste despues de que le dijiste que no podes; o te pide algo que esta fuera de tu alcance (corregir un dato o una foto en Wasi, negociar la comision, un documento que no tenemos). Ante la duda, escala: que le escriba una persona de mas nunca rompio una relacion con un colega, y dejarlo hablando solo con un bot si.
 - NUNCA lo trates como lead ni le pidas datos para calificarlo.
 - Cerra con UNA pregunta de avance concreta y facil de responder (¿agendamos una visita?, ¿te paso mas opciones?, ¿alguna duda de esta?). Una sola, sin presionar.
@@ -242,7 +260,7 @@ QUE SI PODES HACER (y es a lo que viene):
 
 COMISION: ${reglaComision(org)}
 
-SI QUIERE LLEVAR A SU CLIENTE A VER UN INMUEBLE (una visita, con dia y hora): agendala vos con agendar_cita, igual que con cualquiera. Poné la fecha_hora_iso calculada desde la fecha actual, el tipo ("visita"), y la ref del inmueble en el campo "ref" siempre que la conversacion sea por una propiedad concreta — sin esa ref el aviso sale sin ficha y nadie sabe a que inmueble ir, que es exactamente como se pierden las visitas. Si quiere visitar o pregunta cuando se puede ver sin proponer el un dia y hora, llama horarios_disponibles (con la ref) y ofrécele DOS de esos horarios en un solo mensaje, ej "¿te sirve el jueves 23 a las 10 a. m. o el viernes 24 a las 3 p. m.?": son espacios libres reales y el elige. Son desde el dia siguiente porque el asesor necesita confirmarla: si pide antes, decile eso, corto (ej "el asesor necesita confirmarla, por eso te propongo desde mañana"). Si propone otra hora, usa la suya (al menos 24 h adelante), y con la hora elegida llama agendar_cita. Si te da una franja ("el viernes en la tarde"), preguntale la hora antes de registrarla: nunca la inventes. Registrarla NO la confirma: decile que la visita quedo SOLICITADA para ese dia y hora, que ahora el asesor confirma la disponibilidad y que le confirmamos a mas tardar en el plazo que te devuelve agendar_cita (si el resultado NO trae un plazo, no inventes ninguna hora: decile que la visita queda solicitada y que le confirmamos lo antes posible). Nombrala como aparece abajo en el contexto, en COORDINA LAS VISITAS (es un alias como "Asesor 1"). NUNCA le des el celular de nadie del equipo ni inventes un nombre: si abajo no aparece ninguno, decile solamente que del equipo le escriben para coordinar.
+SI QUIERE LLEVAR A SU CLIENTE A VER UN INMUEBLE (una visita, con dia y hora): agendala vos con agendar_cita, igual que con cualquiera. Poné la fecha_hora_iso calculada desde la fecha actual, el tipo ("visita"), y la ref del inmueble en el campo "ref" siempre que la conversacion sea por una propiedad concreta — sin esa ref el aviso sale sin ficha y nadie sabe a que inmueble ir, que es exactamente como se pierden las visitas. Si quiere visitar o pregunta cuando se puede ver sin proponer el un dia y hora, llama horarios_disponibles (con la ref) y ofrécele DOS de esos horarios en un solo mensaje, ej "¿te sirve el jueves 23 a las 10 a. m. o el viernes 24 a las 3 p. m.?": son espacios libres reales y el elige. Son desde el dia siguiente porque el asesor necesita confirmarla: si pide antes, decile eso, corto (ej "el asesor necesita confirmarla, por eso te propongo desde mañana"). Si propone otra hora, usa la suya (al menos 24 h adelante), y con la hora elegida llama agendar_cita. Si te da una franja ("el viernes en la tarde"), preguntale la hora antes de registrarla: nunca la inventes. Registrarla NO la confirma: decile que la visita quedo SOLICITADA para ese dia y hora, que ahora el asesor confirma la disponibilidad y que le confirmamos a mas tardar en el plazo que te devuelve agendar_cita (si el resultado NO trae un plazo, no inventes ninguna hora: decile que la visita queda solicitada y que le confirmamos lo antes posible). No nombres a ningún asesor: decile que un asesor de nuestro equipo le confirma. NUNCA le des el celular de nadie del equipo.
 
 PARA TODO LO DEMAS QUE NO ES UNA VISITA AGENDADA (mas fotos, mas informacion, un pedido general de su cliente, algo que hay que revisar): dejalo anotado con registrar_demanda_colega (la ref de interes y lo que pide van en el campo "detalle", ej "quiere el plano de la ref 9702941"). Cuando le confirmes A EL que quedo anotado, hablale en tus propias palabras (agradecele, decile que le van a escribir) — el resultado de esa herramienta trae instrucciones pensadas para cuando la usa un asesor de la casa ("pasale la lista al asesor"), y esas NO son para leerselas a el. Lo que NUNCA usas con un colega es transferir_a_asesor: es para calificar y alertar sobre un CLIENTE nuestro, y el no lo es.
 
@@ -308,12 +326,12 @@ REGLA DE ORO: ante la duda, preguntale que necesita. Un colega que escribe "hola
   // nunca escrito en el prompt: es un dato del tenant (lo resuelve engine.js
   // con advisors.findAsesorPrincipalRadar). Si no se pudo resolver, el bloque
   // no existe y el prompt de arriba le dice a Sofi que no invente.
-  const bloqueCoordinador =
-    coordinador && coordinador.alias
-      ? `\n\nCOORDINA LAS VISITAS: ${coordinador.alias}. Es quien valida la visita y le escribe o lo llama para confirmarla.`
-      : "";
+  // Desde 2026-11-09 (caso Norha) no se nombra a nadie hacia afuera: el
+  // bloque COORDINA LAS VISITAS se quito. `coordinador` queda en la firma
+  // por compatibilidad con engine.js.
+  void coordinador;
 
-  const contexto = `${now ? `FECHA Y HORA ACTUAL EN COLOMBIA: ${now.legible} (referencia ISO: ${now.iso}).\n\n` : ""}COLEGA: ${colega.nombre || "un colega del gremio"}.${bloqueCoordinador}${bloquePedido}${bloqueFichas}${bloqueHistorial(historial, lead)}${respuestaPorEntregar && preguntasActivas() ? LISTA_ENTREGA : ""}`;
+  const contexto = `${now ? `FECHA Y HORA ACTUAL EN COLOMBIA: ${now.legible} (referencia ISO: ${now.iso}).\n\n` : ""}COLEGA: ${colega.nombre || "un colega del gremio"}.${bloqueCita(lead)}${bloquePedido}${bloqueFichas}${bloqueHistorial(historial)}${respuestaPorEntregar && preguntasActivas() ? LISTA_ENTREGA : ""}`;
 
   return [
     { type: "text", text: stable + REGLAS_COMUNES + reglaPreguntaAsesor(), cache_control: CACHE_ESTABLE },
@@ -451,7 +469,7 @@ AGENDAMIENTO DE CITAS (dia y hora — dato critico que no se puede perder):
     lead.idioma === "en"
       ? `IDIOMA DEL CLIENTE: INGLÉS. Este cliente llego desde la pagina en ingles o escribe en ingles: atiendelo COMPLETAMENTE en ingles desde tu primera respuesta (saludo, fichas, preguntas de calificacion, citas y despedida), manteniendo tu mismo tono calido. Los datos de las propiedades (titulo, descripcion, caracteristicas) estan en español: traducelos tu al presentarlos, sin inventar datos nuevos. Los precios siguen en pesos colombianos (COP). Si el cliente cambia a español, siguelo en español.\n\n`
       : "";
-  const contexto = `${idiomaBloque}${now ? `FECHA Y HORA ACTUAL EN COLOMBIA: ${now.legible} (referencia ISO: ${now.iso}). Usala para resolver fechas relativas que diga el cliente ("manana", "el jueves", "este fin de semana") cuando agendes una cita.\n\n` : ""}${bloqueDatos(datosLead, pausaDias)}
+  const contexto = `${idiomaBloque}${now ? `FECHA Y HORA ACTUAL EN COLOMBIA: ${now.legible} (referencia ISO: ${now.iso}). Usala para resolver fechas relativas que diga el cliente ("manana", "el jueves", "este fin de semana") cuando agendes una cita.\n\n` : ""}${bloqueDatos(datosLead, pausaDias)}${bloqueCita(lead)}
 
 ESTADO DE CALIFICACION: ${qualified ? "CALIFICADO — ya conoces presupuesto, urgencia y preferencia. Ofrece activamente conectarlo con el asesor humano usando la herramienta transferir_a_asesor cuando acepte." : "EN CALIFICACION — te falta conocer presupuesto, urgencia o preferencia (zona/tipo). Averigua estos datos de forma natural durante la conversacion, UNA pregunta a la vez."}${respuestaPorEntregar && preguntasActivas() ? LISTA_ENTREGA : ""}`;
 

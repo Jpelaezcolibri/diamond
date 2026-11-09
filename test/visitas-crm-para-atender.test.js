@@ -23,9 +23,10 @@ test("el chat y Para atender comparten el mismo componente de acciones", () => {
   assert.match(comp, /accion\("otro"\)/);
 });
 
-test("el motor le pasa a Sofi las visitas pendientes del asesor y el coordinador real", () => {
+test("el motor le pasa a Sofi las visitas pendientes del asesor (el coordinador ya no va al prompt)", () => {
   const engine = leer("src", "agent", "engine.js");
   assert.match(engine, /citasPendientesDeConfirmar\(org\.id, advisor\)/);
   assert.match(engine, /citasPendientes,/);
-  assert.match(engine, /resolverCoordinador\(/);
+  // Juan (2026-11-09, caso Norha): hacia afuera no se nombra a ningún asesor.
+  assert.doesNotMatch(engine, /resolverCoordinador\(/);
 });

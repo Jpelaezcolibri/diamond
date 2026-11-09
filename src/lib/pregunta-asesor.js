@@ -30,7 +30,7 @@ function depsPorDefecto() {
 const conDeps = (deps) => ({ ...depsPorDefecto(), ...(deps || {}) });
 
 const primerNombre = (lead) => String((lead && lead.nombre) || "").trim().split(/\s+/)[0] || "";
-const quienDe = (lead) => (lead && (lead.nombre || `+${lead.phone}`)) || "alguien";
+const { quienDe } = require("./quien-lead");
 
 function textoParaAsesor(p) {
   return `Pregunta de un colega${p.ref ? ` — Ref ${p.ref}` : ""}: ${p.pregunta}\nRespóndeme este mensaje con el dato y se lo paso.`;

@@ -28,7 +28,26 @@ Equipo: 1 dev (Juan) + Claude Code. Idioma de la app: español (Colombia).
 Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
 `docs:`, `config:`).
 
-## 2. Estado actual (2026-11-06)
+## 2. Estado actual (2026-11-09)
+
+- **Sofi no nombra asesores (2026-11-09, desplegado).** Caso Norha Vélez
+  (colega, Ref 10505674, martes 10-nov 10 a. m.): la visita rotó Daiana →
+  Claudia → Catherine y Sofi le dijo "Asesor 1", "Asesor 3" y otra vez
+  "Asesor 1"; le dijo "solicitada" a una visita ya confirmada y prometió que
+  la llamaban "hoy". Nadie le escribió en 3 días.
+  - **Regla de Juan:** hacia el cliente o colega nunca "Asesor N", ni nombre,
+    ni celular: siempre "un asesor de nuestro equipo"
+    (`identidad-publica.asesorPublico`). `aliasInterno` es solo para rótulos
+    del CRM. Reemplaza el alias del 2026-10-07 y "nuestra asesora".
+  - La confirmación de la cita queda guardada en el chat (`confirmar-cita`),
+    y el prompt trae el bloque SU VISITA (CONFIRMADA o SOLICITADA con plazo)
+    para cliente y colega. Sofi no promete hora ni "hoy".
+  - `pedir_contacto_asesora` avisa a quien tiene la visita viva, no a la
+    asesora principal.
+  - Colega sin celular visible (BSUID `CO.…`): los avisos dicen "sin celular
+    visible" en vez de "+CO.…" (`lib/quien-lead.js`) y Sofi le pide un número.
+  - Probado con la clave de producción sobre el chat real de Norha y 4 chats
+    limpios (`replay`, solo lectura): sin alias ni promesas de tiempo.
 
 - **Visita sin relevo (2026-11-06, rama `visitas-sin-relevo`, SIN desplegar).**
   Caso Nancy David (colega, ref 10031500, sábado 7-nov 10 a. m.): la cita
@@ -353,10 +372,11 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
 - **Sofi vendedora + agenda con rotación (desplegado 2026-10-07, commits
   `aa6c5f2`…`9b2d4ec`).** Spec `docs/superpowers/specs/2026-10-07-sofi-vendedora-y-agenda-design.md`,
   planes 1–4 en `docs/superpowers/plans/2026-10-07-plan-*.md`.
-  - **Identidad pública:** hacia colegas/clientes los asesores son "Asesor N"
-    (`advisors.alias_publico`), nunca nombre ni celular; todo en
-    `src/lib/identidad-publica.js`. Rotación: Asesor 1 Daiana, 2 Claudia,
-    3 Catherine; el 8024 es respaldo de entrega de Asesor 1.
+  - **Identidad pública:** (reemplazada el 2026-11-09: hacia afuera ya no
+    va "Asesor N" sino "un asesor de nuestro equipo"; ver arriba.) El alias
+    (`advisors.alias_publico`) queda para uso interno; todo en
+    `src/lib/identidad-publica.js`. Rotación interna: Asesor 1 Daiana,
+    2 Claudia, 3 Catherine; el 8024 es respaldo de entrega de Asesor 1.
   - **Puente colega→Sofi:** el primer mensaje del DM lleva dos links a Sofi
     con código (`group_signals.codigo_colega`); las fichas NO (se reenvían
     al cliente final). Sofi reconoce el código y amarra el teléfono al colega.

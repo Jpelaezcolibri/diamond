@@ -7,7 +7,7 @@ const appointments = require("../data/appointments");
 const { computeScore, isQualified } = require("./qualification");
 const propertyOwnerAlerts = require("../data/property-owner-alerts");
 const { buildAllyClientMatchAlert, buildAppointmentAlert, buildColegaAppointmentAlert, buildCaptadorInterestAlert, formatCitaFechaHora } = require("../notifications/advisor");
-const { instruccionTransferencia, aliasPublico } = require("../lib/identidad-publica");
+const { instruccionTransferencia, asesorPublico } = require("../lib/identidad-publica");
 const { LEGAL_TOPICS, LEGAL_DISCLAIMER } = require("./knowledge");
 const crypto = require("node:crypto");
 const formato = require("../lib/formato");
@@ -1097,16 +1097,13 @@ async function executeTool(name, input, ctx) {
     // al cliente/colega NUNCA puede sonar a confirmada: la confirma la asesora
     // respondiendo "OK CONFIRMADA" (confirmar_cita). Ver
     // docs/superpowers/specs/2026-09-10-confirmacion-de-visitas-design.md.
-    // Al colega se le pasa el contacto de quien coordina: el MISMO asesor que
-    // quedo estampado en la cita y al que se le aviso arriba.
-    const coordinador = ctx.appointmentAlert && ctx.colega ? advisor : null;
+    // Hacia el colega o cliente nunca se nombra al asesor (Juan, 2026-11-09,
+    // caso Norha): "un asesor de nuestro equipo" y nada mas.
     const notificado = ctx.appointmentAlert
       ? " El asesor ya fue notificado, pero TODAVIA NO CONFIRMO la cita."
       : " Cuando transfieras al asesor la vera en la alerta.";
     const comoDecirlo = ctx.colega
-      ? `Decile al colega que la visita quedo SOLICITADA${cita.fecha_hora ? ` para ${cita.fecha_hora}` : ""}, que ${
-          aliasPublico(coordinador, ctx.org)
-        } revisa la disponibilidad y le escribe para confirmarla. NO le des ningún número. Nunca digas "confirmada".${plazoTxt}`
+      ? `Decile al colega que la visita quedo SOLICITADA${cita.fecha_hora ? ` para ${cita.fecha_hora}` : ""}, que ${asesorPublico()} revisa la disponibilidad y le confirma. NO nombres al asesor (ni su nombre ni un número de asesor) y NO le des ningún número. Nunca digas "confirmada".${plazoTxt}`
       : `Decile al cliente que la visita quedo SOLICITADA${cita.fecha_hora ? ` para ${cita.fecha_hora}` : ""}, que el asesor revisa la disponibilidad y le escribe para confirmarla. Nunca digas que ya quedo en firme ni que "queda lista": todavia falta que el asesor la revise.${plazoTxt}`;
     return `Cita registrada: ${cita.descripcion}${cita.fecha_hora ? ` (${cita.fecha_hora})` : ""} — tipo ${cita.tipo}.${notificado} ${comoDecirlo}`;
   }
@@ -1300,7 +1297,7 @@ async function executeTool(name, input, ctx) {
     const lead = pendientes[0];
     // Confirmar vive en src/lib/confirmar-cita.js (2026-10-07): lo comparten
     // esta tool ("OK CONFIRMADA") y el boton Confirmar de la plantilla. Avisa
-    // al cliente/colega con el alias, respeta "solo llamada" y le avisa a los
+    // al cliente/colega sin nombrar al asesor, respeta "solo llamada" y le avisa a los
     // otros asesores que tuvieron la cita en la rotacion.
     const r = await require("../lib/confirmar-cita")
       .confirmar({ org: ctx.org, lead, advisor: ctx.advisor })
@@ -1957,23 +1954,34 @@ async function pedirContactoAsesora(input, ctx) {
   if (!ctx.colega) {
     return "No aplica: esta herramienta es solo para un colega de otra inmobiliaria. Con un cliente se usa transferir_a_asesor.";
   }
-  const asesora = await advisors.findAsesorPrincipalRadar(ctx.org).catch(() => null);
+  // Con una visita viva, el aviso va a quien la tiene (caso Norha,
+  // 2026-11-09: la visita era de Catherine y los 7 avisos fueron a Daiana).
+  // Sin visita, a la asesora principal del radar.
+  const { resolverCoordinador } = require("../lib/coordinador-visitas");
+  const deLaVisita = await resolverCoordinador({ org: ctx.org, lead: ctx.lead }).catch(() => null);
+  const asesora = (deLaVisita && deLaVisita.advisor) || await advisors.findAsesorPrincipalRadar(ctx.org).catch(() => null);
   if (!asesora || !asesora.phone) {
     return "NO pude avisarle a nadie: no hay una asesora configurada para los colegas. NO le digas que ya le avisaste; decile que el equipo le escribe apenas pueda.";
   }
   const nombreAsesora = asesora.name || "la asesora";
-  // Hacia el colega va el alias y nunca el celular (Juan, 2026-10-07): el
-  // contacto lo inicia la asesora. El nombre real queda solo para el log.
-  const { aliasPublico } = require("../lib/identidad-publica");
-  const alias = aliasPublico(asesora, ctx.org);
+  // Hacia el colega nunca se nombra al asesor (Juan, 2026-11-09): ni nombre,
+  // ni celular, ni "Asesor 1/2/3". El nombre real queda solo para el log.
+  const quien = asesorPublico();
+  const { sinCelular, AVISO_SIN_CELULAR } = require("../lib/quien-lead");
+  const oculto = sinCelular(ctx.lead.phone);
+  // Sin celular visible no hay a donde llamarlo: Sofi se lo pide.
+  const pideNumero = oculto
+    ? " No tenemos su celular (WhatsApp lo oculta): pídele un número de celular por si prefiere que lo llamen."
+    : "";
+  const sinPromesas = " NO nombres al asesor (ni su nombre ni un número de asesor), NO le des ningún número y NO prometas una hora ni un día: di que lo contactan lo antes posible.";
 
   const clave = `${ctx.org.id}:${ctx.lead.id}`;
   const antes = pedidosContactoRecientes.get(clave);
   if (antes && Date.now() - antes < VENTANA_REPETIDO_CONTACTO_MS) {
-    return `Ya le avisé a ${alias} hace un rato; no hace falta otro aviso. Decile al colega que ya tiene el aviso y que ${alias} le va a escribir o llamar. NO le des ningún número.`;
+    return `El aviso ya está hecho desde hace un rato; no hace falta otro. Dile al colega que ya tiene el aviso y que ${quien} le va a escribir o llamar.${sinPromesas}${pideNumero}`;
   }
 
-  const telColega = String(ctx.lead.phone || "").replace(/\D/g, "");
+  const telColega = oculto ? "" : String(ctx.lead.phone || "").replace(/\D/g, "");
   const nombreColega = ctx.colega.nombre || ctx.lead.nombre || "Un colega";
   // Solo `true` cambia el texto: es informacion para la asesora, no un envio
   // al colega, asi que una consulta fallida no justifica afirmar que pidio
@@ -1989,7 +1997,8 @@ async function pedirContactoAsesora(input, ctx) {
   // al texto completo a su celular y a la copia al escalado.
   const cuerpo = [
     input && input.motivo ? `Para qué: ${String(input.motivo).trim()}` : null,
-    soloLlamada === true ? `Pidió contacto solo por llamada: ${celularLegible(telColega)}` : null,
+    oculto ? AVISO_SIN_CELULAR : null,
+    soloLlamada === true && telColega ? `Pidió contacto solo por llamada: ${celularLegible(telColega)}` : null,
     pedido && pedido.texto_original ? `Su último pedido: "${String(pedido.texto_original).replace(/\s+/g, " ").slice(0, 120)}"` : null,
     refs.length ? `Le respondimos: ${refs.map((r) => `Ref ${r}`).join(", ")}` : null,
   ].filter(Boolean).join(" · ") || null;
@@ -2002,11 +2011,11 @@ async function pedirContactoAsesora(input, ctx) {
 
   if (!aviso || !aviso.ok) {
     console.warn(`[tools] No se pudo dejar el pedido de contacto para ${nombreAsesora}:`, aviso && aviso.error);
-    return `NO le llegó el aviso a ${alias}. NO le digas al colega que ya le avisaste ni le des ningún número: decile que quedó registrado y que el equipo le va a escribir apenas pueda.`;
+    return `NO le llegó el aviso a nadie. NO le digas al colega que ya le avisaste ni le des ningún número: dile que quedó registrado y que el equipo le va a escribir apenas pueda.${pideNumero}`;
   }
 
   pedidosContactoRecientes.set(clave, Date.now());
-  return `Listo: ya le avisé a ${alias} y se va a comunicar con el colega por este mismo chat. Decíselo así, con ese nombre (${alias}). NO le des ningún número: el contacto lo inicia ${alias}.`;
+  return `Listo: el aviso quedó hecho y ${quien} se va a comunicar con el colega por este mismo chat. Díselo así, con esas palabras.${sinPromesas}${pideNumero}`;
 }
 
 function _resetPedidosContacto() {

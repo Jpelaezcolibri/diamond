@@ -1,21 +1,32 @@
-// Identidad publica del asesor (Juan, 2026-10-07): hacia colegas y clientes los
-// asesores no se identifican por nombre sino como "Asesor 1", "Asesor 2"...
-// (advisors.alias_publico), y nadie recibe el celular de una asesora: si
-// alguien pide una persona, Sofi le avisa a la asesora y es ella quien escribe
-// o llama. Todo texto hacia afuera que nombre a un asesor sale de aca, para
-// que la regla viva en un solo lugar. Hacia adentro (avisos a la asesora,
-// CRM) se sigue usando el nombre real.
-// Spec: docs/superpowers/specs/2026-10-07-sofi-vendedora-y-agenda-design.md §2.
+// Identidad publica del asesor. Hacia colegas y clientes NO se nombra a ningun
+// asesor: ni nombre real, ni celular, ni "Asesor 1/2/3". Siempre "un asesor de
+// nuestro equipo", y es el asesor quien inicia el contacto.
+//
+// Historia: desde 2026-10-07 se usaba el alias ("Asesor 1"). Caso Norha Velez
+// (2026-11-07 al 09): la visita rotó entre asesoras y Sofi le dijo "Asesor 1",
+// "Asesor 3" y otra vez "Asesor 1"; la colega no supo con quién coordinaba.
+// Juan (2026-11-09): "internamente tenemos los asesores 1 2 y 3 pero para el
+// cliente debe de ser indiferente... solo decirle que un asesor lo va a
+// contactar es más que suficiente".
+//
+// Todo texto hacia afuera que hable de un asesor sale de aca. Hacia adentro
+// (avisos a la asesora, CRM) se usa aliasInterno o el nombre real.
 
-function aliasPublico(advisor, org) {
-  const alias = advisor && String(advisor.alias_publico || "").trim();
-  if (alias) return alias;
-  return `un asesor de ${(org && org.name) || "la inmobiliaria"}`;
+const ASESOR_PUBLICO = "un asesor de nuestro equipo";
+
+function asesorPublico() {
+  return ASESOR_PUBLICO;
 }
 
-function textoCitaConfirmada({ cuando, ref, advisor, org }) {
+// Rotulo interno (campanas, CRM): el alias si lo tiene, si no el nombre.
+function aliasInterno(advisor) {
+  if (!advisor) return "una asesora";
+  return String(advisor.alias_publico || "").trim() || advisor.name || "una asesora";
+}
+
+function textoCitaConfirmada({ cuando, ref }) {
   const refLinea = ref ? ` a la ref ${ref}` : "";
-  return `Tu visita ${cuando}${refLinea} quedó CONFIRMADA. Te recibe ${aliasPublico(advisor, org)}.`;
+  return `Tu visita ${cuando}${refLinea} quedó CONFIRMADA. Te recibe ${ASESOR_PUBLICO}.`;
 }
 
 // Una asesora de verdad es una fila de advisors (con id): a ella le llega la
@@ -25,7 +36,7 @@ function hayAsesoraParaAvisar(advisor) {
   return Boolean(advisor && advisor.id);
 }
 
-function instruccionTransferencia({ especialidad, advisor, org }) {
+function instruccionTransferencia({ especialidad, advisor }) {
   if (!hayAsesoraParaAvisar(advisor)) {
     // Sin nadie a quien avisar en el momento: Sofi no puede decir "ya fue
     // alertado". El lead queda en "Para atender" y Juan recibe alerta tecnica.
@@ -35,12 +46,12 @@ function instruccionTransferencia({ especialidad, advisor, org }) {
       `NO digas que ya le avisaste a un asesor ni nombres a nadie, y NO le des ningún link ni número de teléfono.`
     );
   }
-  const alias = aliasPublico(advisor, org);
   return (
-    `Transferencia registrada al asesor de ${especialidad} (${alias}). Ya fue alertado con el resumen del cliente. ` +
-    `En tu respuesta despídete brevemente y dile que ${alias} lo va a contactar por este medio o por llamada. ` +
+    `Transferencia registrada al asesor de ${especialidad}. Ya fue alertado con el resumen del cliente. ` +
+    `En tu respuesta despídete brevemente y dile que ${ASESOR_PUBLICO} lo va a contactar por este medio o por llamada. ` +
+    `NO nombres al asesor (ni su nombre ni un número de asesor) y NO prometas una hora. ` +
     `NO le des ningún link ni número de teléfono: el contacto lo inicia el asesor.`
   );
 }
 
-module.exports = { aliasPublico, textoCitaConfirmada, instruccionTransferencia, hayAsesoraParaAvisar };
+module.exports = { asesorPublico, aliasInterno, textoCitaConfirmada, instruccionTransferencia, hayAsesoraParaAvisar, ASESOR_PUBLICO };

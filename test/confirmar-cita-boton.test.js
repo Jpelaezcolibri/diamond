@@ -41,7 +41,7 @@ test("confirmar: queda de quien confirma, el colega recibe el alias y el anterio
   assert.strictEqual(c.asesor_id, "a1");
   assert.strictEqual(c.advisor_id, "u1");
   const alColega = enviados.find((e) => e.to === "573125550000");
-  assert.match(alColega.t, /Te recibe Asesor 1\./);
+  assert.match(alColega.t, /Te recibe un asesor de nuestro equipo\./); // Juan, 2026-11-09: sin "Asesor N"
   assert.doesNotMatch(alColega.t, /Daiana|573011880668/);
   assert.ok(!enviados.find((e) => e.to === "573000008113" && e.t), "sin WhatsApp al celular de Claudia (plan 6)");
   assert.ok(enviados.find((e) => e.nota === "cita_confirmada" && e.a === "a2"), "y lo ve en la campana");

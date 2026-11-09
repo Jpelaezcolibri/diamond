@@ -12,16 +12,16 @@ const data = { findById: async (_o, id) => (id === "a3" ? A3 : null), findAsesor
 
 test("con la cita propuesta, el coordinador es quien la tiene", async () => {
   const c = await resolverCoordinador({ org: ORG, lead: { cita: { estado: "propuesta", asesor_id: "a3" } }, data });
-  assert.deepStrictEqual(c, { alias: "Asesor 3" });
+  assert.deepStrictEqual(c, { advisor: A3 });
 });
 
 test("sin cita, o cancelada, es la asesora principal", async () => {
-  assert.deepStrictEqual(await resolverCoordinador({ org: ORG, lead: { cita: null }, data }), { alias: "Asesor 1" });
-  assert.deepStrictEqual(await resolverCoordinador({ org: ORG, lead: { cita: { estado: "cancelada", asesor_id: "a3" } }, data }), { alias: "Asesor 1" });
+  assert.deepStrictEqual(await resolverCoordinador({ org: ORG, lead: { cita: null }, data }), { advisor: A1 });
+  assert.deepStrictEqual(await resolverCoordinador({ org: ORG, lead: { cita: { estado: "cancelada", asesor_id: "a3" } }, data }), { advisor: A1 });
 });
 
 test("si la asesora de la cita no se encuentra cae a la principal; si nada se resuelve, null", async () => {
-  assert.deepStrictEqual(await resolverCoordinador({ org: ORG, lead: { cita: { estado: "propuesta", asesor_id: "zz" } }, data }), { alias: "Asesor 1" });
+  assert.deepStrictEqual(await resolverCoordinador({ org: ORG, lead: { cita: { estado: "propuesta", asesor_id: "zz" } }, data }), { advisor: A1 });
   const vacio = {
     findById: async () => null,
     findAsesorPrincipalRadar: async () => {
