@@ -32,7 +32,7 @@ const primerNombre = (n: string) => {
   return p.charAt(0).toUpperCase() + p.slice(1).toLowerCase();
 };
 
-const ESTADO: Record<DetalleCita["estado"], { texto: string; clase: string }> = {
+const ESTADO: Record<NonNullable<DetalleCita["estado"]>, { texto: string; clase: string }> = {
   confirmada: { texto: "✓ CONFIRMADA", clase: "bg-emerald-500 text-white" },
   propuesta: { texto: "⏳ POR CONFIRMAR", clase: "bg-amber-400 text-slate-900" },
   reprogramada: { texto: "⏳ POR CONFIRMAR", clase: "bg-amber-400 text-slate-900" },
@@ -52,7 +52,9 @@ function Tarjeta({ titulo, extra, children, id, destacada = false }: { titulo: s
   );
 }
 
-export default function PanelDetalleCita({ detalle: d, cerrarHref }: { detalle: DetalleCita; cerrarHref: string }) {
+// Sirve igual para una alerta de "Para atender" sin cita (Juan, 2026-11-09):
+// entonces la cabecera dice POR ATENDER y el motivo de la alerta.
+export default function PanelDetalleCita({ detalle: d, cerrarHref, motivo = null }: { detalle: DetalleCita; cerrarHref: string; motivo?: string | null }) {
   const router = useRouter();
   const cajaRef = useRef<HTMLTextAreaElement>(null);
   const [texto, setTexto] = useState("");
@@ -77,7 +79,7 @@ export default function PanelDetalleCita({ detalle: d, cerrarHref }: { detalle: 
   const refTxt = d.propiedad?.ref || d.refSinFicha;
   const porConfirmar = d.estado === "propuesta" || d.estado === "reprogramada";
   const puedeEscribir = Boolean(d.conversationId && d.ventanaHasta);
-  const est = ESTADO[d.estado];
+  const est = d.estado ? ESTADO[d.estado] : { texto: "POR ATENDER", clase: "bg-amber-400 text-slate-900" };
 
   const chips = [
     d.fechaHora && refTxt ? `Hola ${corto}, te confirmo la visita del ${fechaLarga(d.fechaHora).replace(/ de \d{4}$/, "")} a las ${hora(d.fechaHora)} a la Ref ${refTxt}.` : null,
@@ -139,7 +141,7 @@ export default function PanelDetalleCita({ detalle: d, cerrarHref }: { detalle: 
   }
 
   return (
-    <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={`Detalle de la visita de ${nombre}`}>
+    <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={`Detalle de ${nombre}`}>
       <button type="button" aria-label="Cerrar" onClick={cerrar} className="absolute inset-0 h-full w-full cursor-default bg-slate-900/40" />
       <div className="absolute inset-x-0 bottom-0 flex h-[92vh] flex-col overflow-hidden rounded-t-3xl bg-slate-100 shadow-2xl sm:inset-y-0 sm:left-auto sm:right-0 sm:h-full sm:w-[500px] sm:rounded-none">
         <div className="flex-1 overflow-y-auto overscroll-contain">
@@ -150,7 +152,7 @@ export default function PanelDetalleCita({ detalle: d, cerrarHref }: { detalle: 
             </button>
             <div className="flex flex-wrap items-center gap-2 pr-12">
               <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${est.clase}`}>{est.texto}</span>
-              <span className="rounded-full px-2.5 py-1 text-xs font-medium capitalize text-[#c9a24b] ring-1 ring-[#c9a24b]/60">{d.tipo}</span>
+              {d.tipo && <span className="rounded-full px-2.5 py-1 text-xs font-medium capitalize text-[#c9a24b] ring-1 ring-[#c9a24b]/60">{d.tipo}</span>}
             </div>
             {d.fechaHora ? (
               <>
@@ -158,7 +160,7 @@ export default function PanelDetalleCita({ detalle: d, cerrarHref }: { detalle: 
                 <p className="text-4xl font-bold text-[#c9a24b]">{hora(d.fechaHora)}</p>
               </>
             ) : (
-              <p className="mt-3 text-xl font-semibold">Sin fecha</p>
+              motivo && <p className="mt-3 text-lg font-semibold leading-snug text-white">{motivo}</p>
             )}
             {refTxt && (
               <div className="mt-4">

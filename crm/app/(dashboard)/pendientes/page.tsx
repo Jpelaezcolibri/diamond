@@ -21,13 +21,17 @@ import DescartarCita from "@/components/descartar-cita";
 import AccionesCita from "@/components/acciones-cita";
 import PreguntaPendiente, { type Pregunta } from "@/components/pregunta-pendiente";
 import { enlazarWasiPublico } from "@/lib/wasi-link";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getDetalleLead, type DetalleCita } from "@/lib/cita-detalle";
+import ContextoLead from "@/components/contexto-lead";
+import PanelDetalleCita from "@/components/panel-detalle-cita";
 
 export const dynamic = "force-dynamic";
 
 type Cita = { estado?: string; fecha_hora?: string; ref?: string; asesor_id?: string; advisor_id?: string; corte_at?: string; asignada_at?: string; sin_relevo_at?: string | null; descripcion?: string };
 type LeadCita = { id: string; nombre: string | null; phone: string; source: string | null; cita: Cita | null };
 type LeadQuieto = { id: string; nombre: string | null; phone: string; updated_at: string; estado: string };
-type Nota = { id: string; titulo: string; cuerpo: string | null; link: string | null; created_at: string };
+type Nota = { id: string; titulo: string; cuerpo: string | null; link: string | null; created_at: string; lead_id: string | null };
 
 const fmt = (iso?: string) =>
   iso
@@ -72,7 +76,8 @@ async function propiedadesPorRenovar(supabase: Awaited<ReturnType<typeof createC
   }));
 }
 
-export default async function PendientesPage() {
+export default async function PendientesPage({ searchParams }: { searchParams: Promise<{ detalle?: string; ref?: string }> }) {
+  const { detalle: detalleId, ref: detalleRef } = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -156,7 +161,7 @@ export default async function PendientesPage() {
   const { data: notas } = asesor
     ? await supabase
         .from("notificaciones")
-        .select("id, titulo, cuerpo, link, created_at")
+        .select("id, titulo, cuerpo, link, created_at, lead_id")
         .eq("advisor_id", asesor.id)
         .eq("tipo", "asesor_solicitado")
         .is("leida_at", null)
@@ -177,6 +182,30 @@ export default async function PendientesPage() {
       .limit(20);
     quietos = (data as LeadQuieto[]) || [];
   }
+
+  // Contexto de cada alerta (Juan, 2026-11-09): lo mismo que el panel del
+  // calendario, para poder contactar a quien espera. Con el cliente admin y
+  // solo para las alertas que esta persona ya ve en esta página.
+  const adminDb = createAdminClient();
+  const pedidos = new Map<string, string | null>();
+  for (const q of preguntas) if (q.lead?.id) pedidos.set(`${q.lead.id}|${q.ref || ""}`, q.ref);
+  for (const l of porConfirmar) pedidos.set(`${l.id}|`, null);
+  for (const n of ((notas as Nota[]) || [])) if (n.lead_id) pedidos.set(`${n.lead_id}|`, null);
+  const detalles = new Map<string, DetalleCita>();
+  await Promise.all(
+    [...pedidos.entries()].map(async ([clave, ref]) => {
+      const leadId = clave.split("|")[0];
+      const d = await getDetalleLead(adminDb, leadId, { ref }).catch(() => null);
+      if (d) detalles.set(clave, d);
+    }),
+  );
+  const hrefDetalle = (leadId: string, ref?: string | null) => `?detalle=${leadId}${ref ? `&ref=${encodeURIComponent(ref)}` : ""}`;
+  const panel = detalleId && /^[0-9a-f-]{36}$/i.test(detalleId) ? await getDetalleLead(adminDb, detalleId, { ref: detalleRef || null }).catch(() => null) : null;
+  const motivoPanel = panel
+    ? preguntas.find((q) => q.lead?.id === detalleId && (!detalleRef || q.ref === detalleRef))?.pregunta ||
+      ((notas as Nota[]) || []).find((n) => n.lead_id === detalleId)?.titulo ||
+      null
+    : null;
 
   const vacio = porRenovar.length === 0 && preguntas.length === 0 && porConfirmar.length === 0 && (notas || []).length === 0 && quietos.length === 0;
 
@@ -207,7 +236,16 @@ export default async function PendientesPage() {
           <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">Preguntas de colegas ({preguntas.length})</h2>
           <ul className="space-y-2">
             {preguntas.map((p) => (
-              <PreguntaPendiente key={p.id} p={p} />
+              <PreguntaPendiente
+                key={p.id}
+                p={p}
+                quienVisible={p.lead?.id ? detalles.get(`${p.lead.id}|${p.ref || ""}`)?.persona.nombre : undefined}
+                contexto={
+                  p.lead?.id && detalles.get(`${p.lead.id}|${p.ref || ""}`) ? (
+                    <ContextoLead d={detalles.get(`${p.lead.id}|${p.ref || ""}`) as DetalleCita} detalleHref={hrefDetalle(p.lead.id, p.ref)} />
+                  ) : null
+                }
+              />
             ))}
           </ul>
         </section>
@@ -220,7 +258,7 @@ export default async function PendientesPage() {
             {porConfirmar.map((l) => (
               <li key={l.id} className="rounded-xl border border-amber-200 bg-amber-50 p-4">
                 <div className="font-medium text-slate-900">
-                  {l.nombre || `+${l.phone}`} {l.source === "colega" && <span className="text-xs text-slate-500">(colega)</span>}
+                  {detalles.get(`${l.id}|`)?.persona.nombre || l.nombre || `+${l.phone}`} {l.source === "colega" && <span className="text-xs text-slate-500">(colega)</span>}
                 </div>
                 <div className="text-sm text-slate-700">
                   {fmt(l.cita?.fecha_hora)}
@@ -228,6 +266,7 @@ export default async function PendientesPage() {
                 </div>
                 {l.cita?.corte_at && <div className="mt-1 text-xs text-amber-800">Confírmala antes de {fmt(l.cita.corte_at)} o se cancela</div>}
                 <TiempoCita cita={l.cita} />
+                {detalles.get(`${l.id}|`) && <ContextoLead d={detalles.get(`${l.id}|`) as DetalleCita} detalleHref={hrefDetalle(l.id)} />}
                 <AccionesCita leadId={l.id} />
                 {chatDe.get(l.id) && (
                   <Link href={`/inbox/${chatDe.get(l.id)}`} className="mt-1 inline-block text-xs font-medium text-[#8a6a1f] hover:underline">
@@ -276,6 +315,7 @@ export default async function PendientesPage() {
                 </Link>
                 {n.cuerpo && <div className="text-sm text-slate-600">{n.cuerpo}</div>}
                 <div className="text-xs text-slate-400">{fmt(n.created_at)}</div>
+                {n.lead_id && detalles.get(`${n.lead_id}|`) && <ContextoLead d={detalles.get(`${n.lead_id}|`) as DetalleCita} detalleHref={hrefDetalle(n.lead_id)} />}
               </li>
             ))}
           </ul>
@@ -288,13 +328,16 @@ export default async function PendientesPage() {
           <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white">
             {quietos.map((l) => (
               <li key={l.id} className="flex items-center justify-between gap-3 p-3 text-sm">
-                <span className="font-medium text-slate-800">{l.nombre || `+${l.phone}`}</span>
+                <Link href={hrefDetalle(l.id)} scroll={false} className="font-medium text-slate-800 hover:underline">
+                  {l.nombre || `+${l.phone}`} <span className="text-xs font-semibold text-[#8a6a1f]">ver todo →</span>
+                </Link>
                 <span className="text-xs text-slate-500">{fmt(l.updated_at)}</span>
               </li>
             ))}
           </ul>
         </section>
       )}
+      {panel && <PanelDetalleCita detalle={panel} cerrarHref="/pendientes" motivo={motivoPanel} />}
     </div>
   );
 }

@@ -49,13 +49,15 @@ function Cabecera({ p, quien }: { p: Pregunta; quien: string }) {
   );
 }
 
-export default function PreguntaPendiente({ p }: { p: Pregunta }) {
+// quienVisible y contexto (Juan, 2026-11-09): el nombre real en vez de
+// "+CO.…" y el resumen para contactar (components/contexto-lead.tsx).
+export default function PreguntaPendiente({ p, quienVisible, contexto }: { p: Pregunta; quienVisible?: string; contexto?: React.ReactNode }) {
   const router = useRouter();
   const [respuesta, setRespuesta] = useState("");
   const [enviando, setEnviando] = useState<"responder" | "descartar" | "entregada" | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const quien = p.lead ? p.lead.nombre || `+${p.lead.phone}` : "Alguien";
+  const quien = quienVisible || (p.lead ? p.lead.nombre || `+${p.lead.phone}` : "Alguien");
 
   async function enviar(accion: "responder" | "descartar" | "entregada") {
     setEnviando(accion);
@@ -81,6 +83,7 @@ export default function PreguntaPendiente({ p }: { p: Pregunta }) {
     return (
       <li className="rounded-xl border border-amber-200 bg-amber-50 p-4">
         <Cabecera p={p} quien={quien} />
+        {contexto}
         <div className="mt-1.5 break-words text-sm text-slate-800">
           Respondida por {p.respondida_por || "el equipo"}: <span className="italic">«{p.respuesta}»</span>
         </div>
@@ -113,6 +116,7 @@ export default function PreguntaPendiente({ p }: { p: Pregunta }) {
   return (
     <li className="rounded-xl border border-sky-200 bg-sky-50 p-4">
       <Cabecera p={p} quien={quien} />
+        {contexto}
       {mensaje ? (
         <div className="mt-2 text-[13.5px] font-semibold text-emerald-700">✓ {mensaje}</div>
       ) : (

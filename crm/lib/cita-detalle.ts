@@ -17,8 +17,9 @@ export type DetalleCita = {
   leadId: string;
   conversationId: string | null;
   modo: "bot" | "humano";
-  estado: "propuesta" | "confirmada" | "reprogramada" | "vencida" | "cancelada";
-  tipo: string;
+  /** null = no hay cita (alerta de Para atender: pregunta, pide asesor…). */
+  estado: "propuesta" | "confirmada" | "reprogramada" | "vencida" | "cancelada" | null;
+  tipo: string | null;
   fechaHora: string | null;
   corteAt: string | null;
   asesora: { nombre: string; alias: string | null } | null;
@@ -67,7 +68,16 @@ function estadoDe(e: string | null | undefined): DetalleCita["estado"] {
 
 const VENTANA_MS = 24 * 60 * 60 * 1000;
 
+// Solo si tiene cita (calendario).
 export async function getDetalleCita(admin: Admin, leadId: string): Promise<DetalleCita | null> {
+  const d = await getDetalleLead(admin, leadId);
+  return d && d.estado ? d : null;
+}
+
+// Cualquier lead, con o sin cita (Juan, 2026-11-09: "esa misma cantidad de
+// detalle que se puso en el calendario necesito que lo pongamos en estas
+// alertas de por atender"). `ref` = la propiedad de la alerta (una pregunta).
+export async function getDetalleLead(admin: Admin, leadId: string, opts: { ref?: string | null } = {}): Promise<DetalleCita | null> {
   const { data: lead } = await admin
     .from("leads")
     // "*" y no una lista: leads.celular puede no existir todavía (migración
@@ -75,9 +85,10 @@ export async function getDetalleCita(admin: Admin, leadId: string): Promise<Deta
     .select("*")
     .eq("id", leadId)
     .maybeSingle();
-  if (!lead || !lead.cita) return null;
-  const cita = lead.cita;
-  const ref: string | null = cita.ref || lead.property_ref_origen || null;
+  if (!lead) return null;
+  const tieneCita = Boolean(lead.cita && lead.cita.fecha_hora);
+  const cita = lead.cita || {};
+  const ref: string | null = opts.ref || cita.ref || lead.property_ref_origen || null;
   const esColega = lead.source === "colega";
   // El celular que dejó en el chat (el bot lo guarda en leads.celular y en
   // cita.celular_contacto) manda sobre el de su WhatsApp. Caso Norha.
@@ -85,7 +96,7 @@ export async function getDetalleCita(admin: Admin, leadId: string): Promise<Deta
   const sinCelularVisible = !celularGuardado && ID_DE_USUARIO.test(String(lead.phone || "").trim());
 
   // Asesoras: la que tiene la cita y las de la rotación (advisors.id).
-  const idsAsesoras = [cita.asesor_id, ...((cita.historial || []) as { asesor_id?: string }[]).map((h) => h.asesor_id)].filter(Boolean);
+  const idsAsesoras = [cita.asesor_id || lead.transferido_advisor_id, ...((cita.historial || []) as { asesor_id?: string }[]).map((h) => h.asesor_id)].filter(Boolean);
   const { data: asesoras } = idsAsesoras.length
     ? await admin.from("advisors").select("id, name, alias_publico").in("id", idsAsesoras)
     : { data: [] };
@@ -124,15 +135,21 @@ export async function getDetalleCita(admin: Admin, leadId: string): Promise<Deta
 
   const colega = colegaRes.data && colegaRes.data[0];
   let pedido: DetalleCita["pedido"] = null;
-  if (colega && colega.lid) {
-    const lid = String(colega.lid).replace(/@lid$/, "");
-    const { data: señales } = await admin
-      .from("group_signals")
-      .select("texto_original, created_at, group_id, respondida_at, respuesta_refs")
-      .eq("org_id", lead.org_id)
-      .in("respuesta_destino_lid", [`${lid}@lid`, lid])
-      .order("created_at", { ascending: false })
-      .limit(1);
+  if (esColega) {
+    // Su último pedido en los grupos: por el lid del colega o por su teléfono
+    // (unos quedaron con uno, otros con el otro).
+    const lid = colega && colega.lid ? String(colega.lid).replace(/@lid$/, "") : null;
+    const tel = String(lead.phone || "").replace(/\D/g, "");
+    const filtros = [lid ? `respuesta_destino_lid.in.(${lid}@lid,${lid})` : null, tel.length >= 10 ? `autor_telefono.eq.${tel}` : null].filter(Boolean).join(",");
+    const { data: señales } = filtros
+      ? await admin
+          .from("group_signals")
+          .select("texto_original, created_at, group_id, respondida_at, respuesta_refs")
+          .eq("org_id", lead.org_id)
+          .or(filtros)
+          .order("created_at", { ascending: false })
+          .limit(1)
+      : { data: null };
     const s = señales && señales[0];
     if (s && s.texto_original) {
       const { data: g } = s.group_id ? await admin.from("whatsapp_groups").select("nombre").eq("id", s.group_id).maybeSingle() : { data: null };
@@ -181,14 +198,15 @@ export async function getDetalleCita(admin: Admin, leadId: string): Promise<Deta
   if (lead.atencion_pendiente === "pide_asesor" && lead.atencion_desde) historial.push({ fecha: lead.atencion_desde, texto: "Pidió hablar con una persona" });
   historial.sort((a, b) => a.fecha.localeCompare(b.fecha));
 
-  const asesora = cita.asesor_id ? nombreDe.get(cita.asesor_id) || null : null;
+  const idAsesora = cita.asesor_id || lead.transferido_advisor_id || null;
+  const asesora = idAsesora ? nombreDe.get(idAsesora) || null : null;
   const d = celularGuardado || (sinCelularVisible ? "" : String(lead.phone || "").replace(/\D/g, ""));
   return {
     leadId,
     conversationId: conv?.id || null,
     modo: conv?.modo === "humano" ? "humano" : "bot",
-    estado: estadoDe(cita.estado),
-    tipo: cita.tipo || "visita",
+    estado: tieneCita ? estadoDe(cita.estado) : null,
+    tipo: tieneCita ? cita.tipo || "visita" : null,
     fechaHora: cita.fecha_hora || null,
     corteAt: cita.corte_at || null,
     asesora,
