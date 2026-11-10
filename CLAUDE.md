@@ -55,9 +55,9 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
     entrar el mensaje (`lib/celular-contacto.js`) en `leads.celular` y en
     `cita.celular_contacto`, y la asesora de la visita recibe un WhatsApp con
     el número y la ficha. Todo lo lee de `quien-lead.celularDe`.
-    **Pendiente (Juan):** correr `db/migrations/2026-11-09_lead_celular.sql`
-    (columna + el número de Norha, 310 510 0165). Sin ella el número queda
-    solo en la cita.
+    Migración `2026-11-09_lead_celular.sql` **corrida por Juan y verificada
+    por REST el 2026-11-09** (columna y filtro responden; Norha con
+    573105100165 en `celular` y en la cita).
   - CRM: al tocar una cita del calendario o "Ver todo y responder" en Para
     atender se abre el mismo panel (`components/panel-detalle-cita.tsx`,
     datos en `lib/cita-detalle.getDetalleLead`), con contacto, propiedad,
