@@ -64,6 +64,17 @@ export default function PanelDetalleCita({ detalle: d, cerrarHref, motivo = null
   const [modo, setModo] = useState(d.modo);
 
   const cerrar = () => router.replace(cerrarHref, { scroll: false });
+  // El panel aparece casi al instante: el final del mismo toque que lo abrió
+  // caía sobre el fondo y lo cerraba (visto en producción el 2026-11-09).
+  // El fondo ignora los toques del primer medio segundo.
+  const abiertoEn = useRef(0);
+  useEffect(() => {
+    abiertoEn.current = Date.now();
+  }, []);
+  const cerrarPorFondo = () => {
+    if (Date.now() - abiertoEn.current < 500) return;
+    cerrar();
+  };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && router.replace(cerrarHref, { scroll: false });
     window.addEventListener("keydown", onKey);
@@ -142,7 +153,7 @@ export default function PanelDetalleCita({ detalle: d, cerrarHref, motivo = null
 
   return (
     <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={`Detalle de ${nombre}`}>
-      <button type="button" aria-label="Cerrar" onClick={cerrar} className="absolute inset-0 h-full w-full cursor-default bg-slate-900/40" />
+      <button type="button" aria-label="Cerrar" onClick={cerrarPorFondo} className="absolute inset-0 h-full w-full cursor-default bg-slate-900/40" />
       <div className="absolute inset-x-0 bottom-0 flex h-[92vh] flex-col overflow-hidden rounded-t-3xl bg-slate-100 shadow-2xl sm:inset-y-0 sm:left-auto sm:right-0 sm:h-full sm:w-[500px] sm:rounded-none">
         <div className="flex-1 overflow-y-auto overscroll-contain">
           {/* Isla oscura: lo esencial de un vistazo */}
