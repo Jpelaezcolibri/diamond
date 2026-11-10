@@ -115,6 +115,14 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
     }
   }
 
+  // El celular que deja en el chat queda guardado y la asesora se entera
+  // (caso Norha, 2026-11-09: lo escribió y quedó solo en el texto). Best-effort.
+  if (!advisor) {
+    await require("../lib/celular-contacto").capturar({ org, lead, texto: text }).catch((e) => {
+      console.warn("[engine] No se pudo guardar el celular de contacto:", e.message);
+    });
+  }
+
   // Todo este bloque describe a un CLIENTE: de que anuncio vino, en que idioma
   // habla, por donde va en el kanban. Un asesor no tiene nada de eso, y
   // aplicarselo lo mete en el embudo como si fuera una oportunidad de venta.

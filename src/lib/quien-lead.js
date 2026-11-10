@@ -11,14 +11,36 @@ function sinCelular(phone) {
   return ID_DE_USUARIO.test(String(phone || "").trim());
 }
 
+const digitos = (x) => String(x || "").replace(/\D/g, "");
+
+// El numero para contactar a esta persona: el que dejo en el chat
+// (leads.celular o cita.celular_contacto, ver celular-contacto.js) o el de su
+// WhatsApp. Nunca el identificador "CO.…". En digitos, o null.
+function celularDe(lead) {
+  if (!lead) return null;
+  const guardado = digitos(lead.celular) || digitos(lead.cita && lead.cita.celular_contacto);
+  if (guardado) return guardado;
+  if (sinCelular(lead.phone)) return null;
+  const d = digitos(lead.phone);
+  return d.length >= 8 ? d : null;
+}
+
+function legible(cel) {
+  const d = digitos(cel);
+  if (d.length === 12 && d.startsWith("57")) return `+57 ${d.slice(2, 5)} ${d.slice(5, 8)} ${d.slice(8)}`;
+  return d ? `+${d}` : null;
+}
+
 function quienDe(lead) {
   if (!lead) return "alguien";
   const nombre = String(lead.nombre || "").trim();
   if (nombre) return nombre;
+  const cel = celularDe(lead);
+  if (cel && digitos(lead.celular || (lead.cita && lead.cita.celular_contacto))) return legible(cel);
   if (sinCelular(lead.phone)) return "contacto sin celular visible";
   return lead.phone ? `+${lead.phone}` : "alguien";
 }
 
 const AVISO_SIN_CELULAR = "Sin celular visible (WhatsApp lo oculta): escríbele desde su chat en el CRM y pídele un número";
 
-module.exports = { quienDe, sinCelular, AVISO_SIN_CELULAR };
+module.exports = { quienDe, sinCelular, celularDe, legible, AVISO_SIN_CELULAR };

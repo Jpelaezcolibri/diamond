@@ -51,6 +51,7 @@ create table if not exists leads (
   id uuid primary key default gen_random_uuid(),
   org_id uuid not null references organizations(id) on delete cascade,
   phone text not null,
+  celular text, -- celular de contacto que dejó en el chat (2026-11-09_lead_celular.sql)
   nombre text,
   presupuesto text,
   zona_interes text,

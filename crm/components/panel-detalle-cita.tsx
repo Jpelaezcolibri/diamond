@@ -19,6 +19,10 @@ import { BotonCancelarCita } from "@/components/cancelar-cita";
 const TZ = "America/Bogota";
 const fechaLarga = (iso: string) =>
   new Intl.DateTimeFormat("es-CO", { timeZone: TZ, weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(new Date(iso));
+// Solo la primera letra en mayúscula ("Martes, 10 de noviembre de 2026").
+const conMayuscula = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+// Sin el punto final de "p. m." cuando la frase sigue con otro punto.
+const sinPuntoFinal = (s: string) => s.replace(/\.$/, "");
 const hora = (iso: string) => new Intl.DateTimeFormat("es-CO", { timeZone: TZ, hour: "numeric", minute: "2-digit" }).format(new Date(iso));
 const corta = (iso: string) =>
   new Intl.DateTimeFormat("es-CO", { timeZone: TZ, weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }).format(new Date(iso));
@@ -150,7 +154,7 @@ export default function PanelDetalleCita({ detalle: d, cerrarHref }: { detalle: 
             </div>
             {d.fechaHora ? (
               <>
-                <p className="mt-3 text-[15px] font-medium capitalize text-slate-200">{fechaLarga(d.fechaHora)}</p>
+                <p className="mt-3 text-[15px] font-medium text-slate-200">{conMayuscula(fechaLarga(d.fechaHora))}</p>
                 <p className="text-4xl font-bold text-[#c9a24b]">{hora(d.fechaHora)}</p>
               </>
             ) : (
@@ -267,7 +271,7 @@ export default function PanelDetalleCita({ detalle: d, cerrarHref }: { detalle: 
 
                 {puedeEscribir ? (
                   <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-[14px] text-emerald-800">
-                    Puedes escribirle: ventana abierta hasta el {corta(d.ventanaHasta as string)}. Sale por la línea de Sofi y queda en el chat del CRM.
+                    Puedes escribirle: ventana abierta hasta el {sinPuntoFinal(corta(d.ventanaHasta as string))}. Sale por la línea de Sofi y queda en el chat del CRM.
                   </p>
                 ) : (
                   <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-[14px] text-amber-900">
@@ -284,7 +288,7 @@ export default function PanelDetalleCita({ detalle: d, cerrarHref }: { detalle: 
                         </button>
                       ))}
                     </div>
-                    <div className="sticky bottom-0 mt-3 rounded-xl bg-white pb-1">
+                    <div className="mt-3 rounded-xl bg-white pb-1">
                       <textarea
                         ref={cajaRef}
                         value={texto}

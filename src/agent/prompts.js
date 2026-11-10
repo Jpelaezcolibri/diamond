@@ -215,6 +215,15 @@ function bloqueCita(lead) {
   return `\n\nSU VISITA${ref}: VISITA SOLICITADA, todavía NO confirmada, para ${cuando}${plazo ? ` Se le confirma a más tardar ${conPunto(plazo)}` : " Se le confirma lo antes posible."} No digas que está confirmada.`;
 }
 
+// El celular que dejó en el chat (caso Norha, 2026-11-09): Sofi se lo pidió
+// cuatro veces porque no sabía que ya lo tenía.
+function bloqueCelular(lead) {
+  const ql = require("../lib/quien-lead");
+  const guardado = lead && (lead.celular || (lead.cita && lead.cita.celular_contacto));
+  if (!guardado) return "";
+  return `\n\nSU CELULAR DE CONTACTO: ${ql.legible(guardado)} (ya lo tenemos y el equipo lo ve; no se lo vuelvas a pedir).`;
+}
+
 function bloqueHistorial(historial) {
   const lineas = (historial || []).map((h) => {
     const fecha = fechaLegible(h.created_at) || "fecha sin dato";
@@ -351,7 +360,7 @@ REGLA DE ORO: ante la duda, preguntale que necesita. Un colega que escribe "hola
   // por compatibilidad con engine.js.
   void coordinador;
 
-  const contexto = `${now ? `FECHA Y HORA ACTUAL EN COLOMBIA: ${now.legible} (referencia ISO: ${now.iso}).\n\n` : ""}COLEGA: ${colega.nombre || "un colega del gremio"}.${bloqueCita(lead)}${bloquePedido}${bloqueFichas}${bloqueHistorial(historial)}${respuestaPorEntregar && preguntasActivas() ? LISTA_ENTREGA : ""}`;
+  const contexto = `${now ? `FECHA Y HORA ACTUAL EN COLOMBIA: ${now.legible} (referencia ISO: ${now.iso}).\n\n` : ""}COLEGA: ${colega.nombre || "un colega del gremio"}.${bloqueCelular(lead)}${bloqueCita(lead)}${bloquePedido}${bloqueFichas}${bloqueHistorial(historial)}${respuestaPorEntregar && preguntasActivas() ? LISTA_ENTREGA : ""}`;
 
   return [
     { type: "text", text: stable + REGLAS_COMUNES + reglaPreguntaAsesor(), cache_control: CACHE_ESTABLE },
@@ -489,7 +498,7 @@ AGENDAMIENTO DE CITAS (dia y hora — dato critico que no se puede perder):
     lead.idioma === "en"
       ? `IDIOMA DEL CLIENTE: INGLÉS. Este cliente llego desde la pagina en ingles o escribe en ingles: atiendelo COMPLETAMENTE en ingles desde tu primera respuesta (saludo, fichas, preguntas de calificacion, citas y despedida), manteniendo tu mismo tono calido. Los datos de las propiedades (titulo, descripcion, caracteristicas) estan en español: traducelos tu al presentarlos, sin inventar datos nuevos. Los precios siguen en pesos colombianos (COP). Si el cliente cambia a español, siguelo en español.\n\n`
       : "";
-  const contexto = `${idiomaBloque}${now ? `FECHA Y HORA ACTUAL EN COLOMBIA: ${now.legible} (referencia ISO: ${now.iso}). Usala para resolver fechas relativas que diga el cliente ("manana", "el jueves", "este fin de semana") cuando agendes una cita.\n\n` : ""}${bloqueDatos(datosLead, pausaDias)}${bloqueCita(lead)}
+  const contexto = `${idiomaBloque}${now ? `FECHA Y HORA ACTUAL EN COLOMBIA: ${now.legible} (referencia ISO: ${now.iso}). Usala para resolver fechas relativas que diga el cliente ("manana", "el jueves", "este fin de semana") cuando agendes una cita.\n\n` : ""}${bloqueDatos(datosLead, pausaDias)}${bloqueCelular(lead)}${bloqueCita(lead)}
 
 ESTADO DE CALIFICACION: ${qualified ? "CALIFICADO — ya conoces presupuesto, urgencia y preferencia. Ofrece activamente conectarlo con el asesor humano usando la herramienta transferir_a_asesor cuando acepte." : "EN CALIFICACION — te falta conocer presupuesto, urgencia o preferencia (zona/tipo). Averigua estos datos de forma natural durante la conversacion, UNA pregunta a la vez."}${respuestaPorEntregar && preguntasActivas() ? LISTA_ENTREGA : ""}`;
 

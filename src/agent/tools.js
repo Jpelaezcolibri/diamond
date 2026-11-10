@@ -1978,8 +1978,8 @@ async function pedirContactoAsesora(input, ctx) {
   // Hacia el colega nunca se nombra al asesor (Juan, 2026-11-09): ni nombre,
   // ni celular, ni "Asesor 1/2/3". El nombre real queda solo para el log.
   const quien = asesorPublico();
-  const { sinCelular, AVISO_SIN_CELULAR } = require("../lib/quien-lead");
-  const oculto = sinCelular(ctx.lead.phone);
+  const { celularDe, AVISO_SIN_CELULAR } = require("../lib/quien-lead");
+  const oculto = !celularDe(ctx.lead);
   // Sin celular visible no hay a donde llamarlo: Sofi se lo pide.
   const pideNumero = oculto
     ? " No tenemos su celular (WhatsApp lo oculta): pídele un número de celular por si prefiere que lo llamen."
@@ -1992,7 +1992,7 @@ async function pedirContactoAsesora(input, ctx) {
     return `El aviso ya está hecho desde hace un rato; no hace falta otro. Dile al colega que ya tiene el aviso y que ${quien} le va a escribir o llamar.${sinPromesas}${pideNumero}`;
   }
 
-  const telColega = oculto ? "" : String(ctx.lead.phone || "").replace(/\D/g, "");
+  const telColega = celularDe(ctx.lead) || "";
   const nombreColega = ctx.colega.nombre || ctx.lead.nombre || "Un colega";
   // Solo `true` cambia el texto: es informacion para la asesora, no un envio
   // al colega, asi que una consulta fallida no justifica afirmar que pidio

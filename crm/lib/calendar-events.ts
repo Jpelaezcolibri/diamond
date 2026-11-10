@@ -168,8 +168,14 @@ export async function getCalendarEvents(supabase: any): Promise<{
     ((asesoras as { id: string; name: string; alias_publico: string | null }[]) || []).map((a) => [a.id, a.alias_publico ? `${a.alias_publico} · ${a.name}` : a.name]),
   );
   // WhatsApp puede ocultar el número ("CO.1622…"): eso no es un teléfono.
-  const nombreVisible = (l: LeadConCita) =>
-    l.nombre || (/^[A-Z]{2}\.[A-Za-z0-9.]+$/.test(String(l.phone || "")) ? (l.source === "colega" ? "Colega sin celular visible" : "Contacto sin celular visible") : `+${l.phone}`);
+  // Si dejó su celular en el chat, el bot lo guarda en cita.celular_contacto.
+  const nombreVisible = (l: LeadConCita) => {
+    if (l.nombre) return l.nombre;
+    const cel = String((l.cita as { celular_contacto?: string } | null)?.celular_contacto || "").replace(/\D/g, "");
+    if (cel.length === 12) return `${l.source === "colega" ? "Colega" : "Cliente"} +57 ${cel.slice(2, 5)} ${cel.slice(5, 8)} ${cel.slice(8)}`;
+    if (/^[A-Z]{2}\.[A-Za-z0-9.]+$/.test(String(l.phone || ""))) return l.source === "colega" ? "Colega sin celular visible" : "Contacto sin celular visible";
+    return `+${l.phone}`;
+  };
 
   if (citasRes.error) console.error("[calendario:leads]", citasRes.error.message);
   if (remindersRes.error) console.error("[calendario:advisor_reminders]", remindersRes.error.message);

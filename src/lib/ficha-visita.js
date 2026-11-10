@@ -9,7 +9,7 @@
 // datos (propiedad, pedido del colega, preguntas abiertas, link al chat) y
 // nunca lanza: lo que no encuentra, no sale.
 const { formatCitaFechaHora } = require("../notifications/advisor");
-const { sinCelular } = require("./quien-lead");
+const { celularDe } = require("./quien-lead");
 
 function celularLegible(phone) {
   const d = String(phone || "").replace(/\D/g, "");
@@ -51,14 +51,11 @@ function textoVisitaAsesora({ lead, cita, propiedad = null, pedido = null, coleg
   const nombre = String((lead && lead.nombre) || (colega && colega.nombre) || "").trim() || (esColega ? "Colega sin nombre registrado" : "Cliente sin nombre registrado");
   const quien = `*Quién va:* ${nombre} — ${esColega ? "colega de otra inmobiliaria, viene con un cliente suyo" : "cliente directo"}`;
 
-  let contacto;
-  if (lead && sinCelular(lead.phone)) {
-    contacto = "*Contacto:* Sin celular visible (WhatsApp lo oculta). Escríbele desde el chat del CRM y pídele un número de celular para poder llamar.";
-  } else {
-    const cel = celularLegible(lead && lead.phone);
-    const d = String((lead && lead.phone) || "").replace(/\D/g, "");
-    contacto = cel ? `*Contacto:* ${cel} · WhatsApp: wa.me/${d}` : "*Contacto:* sin teléfono registrado. Escríbele desde el chat del CRM.";
-  }
+  // El celular que dejó en el chat cuenta igual que el de su WhatsApp (caso Norha).
+  const d = celularDe(lead);
+  const contacto = d
+    ? `*Contacto:* ${celularLegible(d)} · WhatsApp: wa.me/${d}`
+    : "*Contacto:* Sin celular visible (WhatsApp lo oculta). Escríbele desde el chat del CRM y pídele un número de celular para poder llamar.";
 
   const partes = [estado, "", ...lineaPropiedad(propiedad, c.ref), "", quien, contacto];
   if (pedido && pedido.texto_original) {

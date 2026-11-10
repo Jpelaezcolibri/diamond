@@ -70,14 +70,19 @@ const VENTANA_MS = 24 * 60 * 60 * 1000;
 export async function getDetalleCita(admin: Admin, leadId: string): Promise<DetalleCita | null> {
   const { data: lead } = await admin
     .from("leads")
-    .select("id, org_id, nombre, phone, source, cita, atencion_pendiente, atencion_desde, property_ref_origen")
+    // "*" y no una lista: leads.celular puede no existir todavía (migración
+    // 2026-11-09_lead_celular.sql) y pedirla por nombre rompería la consulta.
+    .select("*")
     .eq("id", leadId)
     .maybeSingle();
   if (!lead || !lead.cita) return null;
   const cita = lead.cita;
   const ref: string | null = cita.ref || lead.property_ref_origen || null;
   const esColega = lead.source === "colega";
-  const sinCelularVisible = ID_DE_USUARIO.test(String(lead.phone || "").trim());
+  // El celular que dejó en el chat (el bot lo guarda en leads.celular y en
+  // cita.celular_contacto) manda sobre el de su WhatsApp. Caso Norha.
+  const celularGuardado = String(lead.celular || cita.celular_contacto || "").replace(/\D/g, "");
+  const sinCelularVisible = !celularGuardado && ID_DE_USUARIO.test(String(lead.phone || "").trim());
 
   // Asesoras: la que tiene la cita y las de la rotación (advisors.id).
   const idsAsesoras = [cita.asesor_id, ...((cita.historial || []) as { asesor_id?: string }[]).map((h) => h.asesor_id)].filter(Boolean);
@@ -177,7 +182,7 @@ export async function getDetalleCita(admin: Admin, leadId: string): Promise<Deta
   historial.sort((a, b) => a.fecha.localeCompare(b.fecha));
 
   const asesora = cita.asesor_id ? nombreDe.get(cita.asesor_id) || null : null;
-  const d = String(lead.phone || "").replace(/\D/g, "");
+  const d = celularGuardado || (sinCelularVisible ? "" : String(lead.phone || "").replace(/\D/g, ""));
   return {
     leadId,
     conversationId: conv?.id || null,
@@ -192,8 +197,8 @@ export async function getDetalleCita(admin: Admin, leadId: string): Promise<Deta
     persona: {
       nombre: lead.nombre || colega?.nombre || (esColega ? "Colega sin nombre registrado" : "Cliente sin nombre registrado"),
       esColega,
-      celular: sinCelularVisible ? null : celularLegible(lead.phone),
-      whatsapp: sinCelularVisible || d.length < 8 ? null : d,
+      celular: d.length >= 8 ? celularLegible(d) : null,
+      whatsapp: d.length >= 8 ? d : null,
       sinCelularVisible,
       grupos: Array.isArray(colega?.grupos) ? colega.grupos : [],
     },

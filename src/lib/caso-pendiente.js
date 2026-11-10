@@ -95,7 +95,8 @@ async function armarCaso({ org, pendiente, lead, mensajes, crmUrl = null, deps =
   const { leerCodigo } = require("../groups/codigo-colega");
   const deLaPersona = (mensajes || []).filter((m) => m.role === "user");
   const deSofi = (mensajes || []).filter((m) => m.role === "assistant");
-  const tel = String(lead.phone || "");
+  // El celular que dejó en el chat manda sobre el de su WhatsApp (caso Norha).
+  const tel = require("./quien-lead").celularDe(lead) || String(lead.phone || "");
   const esColega = lead.source === "colega";
   const colega = esColega ? await d.colega(org.id, tel).catch(() => null) : null;
   const nombre = lead.nombre || (colega && colega.nombre) || null;
