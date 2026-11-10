@@ -49,8 +49,25 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
   - Probado con la clave de producción sobre el chat real de Norha y 4 chats
     limpios (`replay`, solo lectura): sin alias ni promesas de tiempo.
 
-- **Avisos completos a la asesora (2026-11-09, rama `avisos-asesora-completos`,
-  SIN desplegar).** Catherine confirmó la visita de Norha con un WhatsApp que
+- **Celular de contacto y Para atender con contexto (2026-11-09, desplegado,
+  `07cb173`…`cb21e27`).**
+  - El celular que deja un colega o cliente en el chat se guarda solo al
+    entrar el mensaje (`lib/celular-contacto.js`) en `leads.celular` y en
+    `cita.celular_contacto`, y la asesora de la visita recibe un WhatsApp con
+    el número y la ficha. Todo lo lee de `quien-lead.celularDe`.
+    **Pendiente (Juan):** correr `db/migrations/2026-11-09_lead_celular.sql`
+    (columna + el número de Norha, 310 510 0165). Sin ella el número queda
+    solo en la cita.
+  - CRM: al tocar una cita del calendario o "Ver todo y responder" en Para
+    atender se abre el mismo panel (`components/panel-detalle-cita.tsx`,
+    datos en `lib/cita-detalle.getDetalleLead`), con contacto, propiedad,
+    pedido, pendientes, historial y respuesta desde ahí (pasa el chat a modo
+    humano). Cada alerta de Para atender trae el resumen
+    (`components/contexto-lead.tsx`). Verificado en producción en el Chrome
+    de Juan.
+
+- **Avisos completos a la asesora (2026-11-09, desplegado `840463a`).**
+  Catherine confirmó la visita de Norha con un WhatsApp que
   solo decía "una visita por confirmar"; después Sofi le dijo que la visita no
   existía (confirmar_cita respondió "no tienes pendientes" sobre una ya
   confirmada). Se le reenvió el caso completo a mano el 9-nov 5:57 p. m.
@@ -66,9 +83,7 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
     devuelve la ficha de las confirmadas.
   - Excel: hoja "Fichas" vertical primero (se lee en el celular); la
     devolución sigue leyendo "Pendientes".
-  - Calendario del CRM: mockup del panel de detalle en
-    `Claude outputs/mockup-calendario-detalle-cita.html`, **pendiente de
-    aprobación de Juan** (pidió poder responder desde el panel).
+  - Calendario del CRM: mockup aprobado por Juan y desplegado (`774eda0`).
 
 - **Visita sin relevo (2026-11-06, rama `visitas-sin-relevo`, SIN desplegar).**
   Caso Nancy David (colega, ref 10031500, sábado 7-nov 10 a. m.): la cita
