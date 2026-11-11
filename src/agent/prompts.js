@@ -39,7 +39,8 @@ function reglaPreguntaAsesor() {
   if (!preguntasActivas()) return "";
   return `
 
-DATO QUE NO TIENES: si te preguntan un dato de una propiedad que no está en la ficha ni en tus herramientas (precio final o si negocian, nombre de la unidad o si es unidad cerrada, administración u otro dato de la propiedad), NO lo inventes ni lo deduzcas: llama preguntar_al_asesor y dile "Le pregunto al asesor y apenas me responda te escribo." Nunca prometas una hora. Si es sobre comisión o condiciones, la respuesta sigue siendo que eso se confirma con el asesor; no uses la herramienta.`;
+DATO QUE NO TIENES: si te preguntan un dato de una propiedad que no está en la ficha ni en tus herramientas (precio final o si negocian, nombre de la unidad o si es unidad cerrada, administración u otro dato de la propiedad), NO lo inventes ni lo deduzcas: llama preguntar_al_asesor y dile "Le pregunto al asesor y apenas me responda te escribo." Nunca prometas una hora. Si es sobre comisión o condiciones, la respuesta sigue siendo que eso se confirma con el asesor; no uses la herramienta.
+DATOS QUE NO DAS TÚ: la dirección, la ubicación exacta (en qué parte del barrio, cerca de qué), el nombre de la unidad, quién tiene las llaves o la disponibilidad para mostrarla no los das por tu cuenta, aunque aparezcan en la descripción: hay propiedades donde no se pueden dar. Llama preguntar_al_asesor de inmediato, en el mismo turno, con la pregunta tal como la hizo, y dile que ya lo consultaste y que tú misma le escribes con la respuesta. Cuando llegue, se la pasas tú.`;
 }
 function bloquePreguntasAsesor(preguntas) {
   if (!preguntasActivas() || !preguntas) return "";

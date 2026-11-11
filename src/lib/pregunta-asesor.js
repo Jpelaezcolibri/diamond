@@ -32,8 +32,24 @@ const conDeps = (deps) => ({ ...depsPorDefecto(), ...(deps || {}) });
 const primerNombre = (lead) => String((lead && lead.nombre) || "").trim().split(/\s+/)[0] || "";
 const { quienDe } = require("./quien-lead");
 
-function textoParaAsesor(p) {
-  return `Pregunta de un colega${p.ref ? ` — Ref ${p.ref}` : ""}: ${p.pregunta}\nRespóndeme este mensaje con el dato y se lo paso.`;
+function textoParaAsesor(p, lead = null) {
+  const quien = lead ? `${quienDe(lead)}${lead.source === "colega" ? " (colega)" : " (cliente)"}` : "un colega";
+  return `Pregunta de ${quien}${p.ref ? ` — Ref ${p.ref}` : ""}: ${p.pregunta}\nRespóndeme este mensaje con el dato y se lo paso.`;
+}
+
+// Quién recibe primero las preguntas (Juan, 2026-11-11: "que Sofi le copie
+// inmediatamente a Claudia la pregunta"). PREGUNTAS_ASESORA = nombre o alias
+// interno ("Claudia", "Asesor 2"). Sin variable, o si no está en el ciclo,
+// la primera del ciclo, como siempre. La escalera sigue de respaldo.
+const plano = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+function asesoraDePreguntas(ciclo) {
+  const lista = ciclo || [];
+  const buscada = plano(process.env.PREGUNTAS_ASESORA);
+  if (buscada) {
+    const a = lista.find((x) => plano(x.alias_publico) === buscada || plano(x.name) === buscada || plano(String(x.name || "").split(/\s+/)[0]) === buscada);
+    if (a) return a;
+  }
+  return lista[0] || null;
 }
 
 function textoRespuesta({ lead, pregunta }) {
@@ -58,7 +74,7 @@ async function avisar({ org, pregunta, lead, advisor, reaviso = false, sinTexto 
     pregunta.wamids_aviso = [...(pregunta.wamids_aviso || []).filter((w) => w !== marca), marca];
     return { ok: Boolean(a && a.ok) };
   }
-  let r = await d.mensaje(org, advisor.phone, textoParaAsesor(pregunta), { permitirRepetido: reaviso }).catch((e) => ({ ok: false, error: e.message }));
+  let r = await d.mensaje(org, advisor.phone, textoParaAsesor(pregunta, lead), { permitirRepetido: reaviso }).catch((e) => ({ ok: false, error: e.message }));
   const nombrePlantilla = process.env.SOFI_PREGUNTA_ASESOR_PLANTILLA;
   if (!(r && r.ok) && nombrePlantilla && VENTANA_CERRADA.test((r && r.error) || "")) {
     r = await d
@@ -84,7 +100,7 @@ async function registrar({ ctx, input, deps }) {
   if (texto.length < 3) return "Falta la pregunta: escríbela corta, ej \"¿Precio final de la ref 10013037?\".";
   const tipo = TIPOS.includes(input.tipo) ? input.tipo : "otro";
   const ciclo = await d.ciclo(ctx.org.id).catch(() => []);
-  const asesor = ciclo[0] || null;
+  const asesor = asesoraDePreguntas(ciclo);
   let creada;
   try {
     creada = await d.datos.crear({ orgId: ctx.org.id, leadId: ctx.lead.id, ref: input.ref || null, tipo, pregunta: texto, asesorId: asesor ? asesor.id : null });
@@ -249,4 +265,4 @@ async function preguntaCitada(contextId) {
   }
 }
 
-module.exports = { preguntaCitada, activo, TIPOS, registrar, avisar, responder, descartar, marcarEntregadaAMano, textoRespuesta, entregarRespuesta, entregarPendientesDe, contextoAsesor, hayPorEntregar };
+module.exports = { preguntaCitada, activo, TIPOS, asesoraDePreguntas, registrar, avisar, responder, descartar, marcarEntregadaAMano, textoRespuesta, entregarRespuesta, entregarPendientesDe, contextoAsesor, hayPorEntregar };
