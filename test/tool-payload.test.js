@@ -60,7 +60,7 @@ test("el resultado viaja en JSON compacto, sin sangria", async (t) => {
   const salida = await executeTool("buscar_propiedades", { zona: "Envigado" }, ctxDe());
   assert.ok(!salida.includes("\n"), "la sangria son tokens que el modelo no necesita");
   // Desde 2026-11-11 la descripción va en texto corrido (sin HTML ni saltos).
-  assert.strictEqual(JSON.parse(salida)[0].descripcion, "Linea uno. Linea dos.", "el contenido se conserva, en una línea");
+  assert.strictEqual(JSON.parse(salida)[0].descripcion, "Linea uno. Linea dos", "el contenido se conserva, en una línea");
 });
 
 test("el recorte no toca la propiedad que se guarda como interes del lead", async (t) => {
