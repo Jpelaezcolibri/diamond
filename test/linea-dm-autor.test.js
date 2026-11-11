@@ -71,3 +71,18 @@ test("el saludo automático de nuestra línea no cuenta como persona", async () 
   e = await lineaDm.estadoConversacion(ORG, id, { desdeIso: "2000-01-01T00:00:00Z" });
   assert.strictEqual(e.humano, true);
 });
+
+// Juan (2026-11-11): Sofi solo calla mientras una persona está atendiendo; se
+// necesita saber cuándo escribió la persona por última vez.
+test("ultimoHumanoAt: la hora de la última salida de una persona (no del saludo automático ni de Sofi)", async () => {
+  memory.lineaDm = [];
+  const id = { lid: "888@lid" };
+  await fila(id, {});
+  await fila(id, { direccion: "salida", autor: "humano", texto: "Hola, te habla Claudia" });
+  const humana = memory.lineaDm[memory.lineaDm.length - 1].created_at;
+  await fila(id, { direccion: "salida", autor: "sofi", texto: "Soy Sofi" });
+  await fila(id, { direccion: "salida", autor: "humano", texto: "Gracias por comunicarte con Diamond Inversiones SAS" });
+  const e = await lineaDm.estadoConversacion(ORG, id, { desdeIso: "2000-01-01T00:00:00Z" });
+  assert.ok(humana, "la fila guarda su hora");
+  assert.strictEqual(e.ultimoHumanoAt, humana);
+});

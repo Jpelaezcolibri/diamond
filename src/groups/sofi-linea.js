@@ -8,11 +8,15 @@
 // la otra linea para agendamientos, pero si puedes atender los primeros
 // mensajes para no quedar tan groseros".
 //
-// Lo que hace, a cada mensaje de un colega a la linea del radar:
-//   1. Si una persona del equipo escribio alguna vez en ese chat, calla para
-//      siempre (aviso por la campana, como hoy).
-//   2. Si ya contesto 3 veces en 7 dias, calla y le avisa a la asesora.
-//   3. Si no, redacta con la IA una respuesta corta: se presenta como Sofi, la
+// Lo que hace, a cada mensaje de un colega a la linea del radar (reglas de
+// Juan del 2026-11-11: "Sofi no se puede callar si aún puede aportar en el
+// proceso de venta"):
+//   1. Si una persona del equipo escribio en ese chat en las ultimas 2 h, esta
+//      atendiendo: Sofi calla y avisa. Una prospeccion vieja ya no la calla.
+//   2. Si pide una persona, se avisa urgente a la asesora y Sofi le confirma
+//      que le escriben y le responde lo que pueda (antes callaba).
+//   3. Freno contra bucles: 20 respuestas por dia por colega (antes 3 en 7 dias).
+//   4. Si no, redacta con la IA una respuesta corta: se presenta como Sofi, la
 //      asistente virtual; contesta con el pedido y las fichas que ya le
 //      mandamos; y para mas opciones o agendar lleva a la linea oficial.
 // No busca inventario ni agenda por esta linea: es WAHA, la del baneo de
@@ -27,8 +31,9 @@ const { quitarLinksInventados } = require("../agent/links-verificados");
 const { primerNombre, lineaComision } = require("./redactar");
 const { SALUDA_A_SOFI } = require("./puente-sofi");
 
-const MAX_RESPUESTAS = 3;
-const VENTANA_MS = 7 * 24 * 60 * 60 * 1000;
+const MAX_RESPUESTAS = 20; // freno contra bucles, no un límite de conversación
+const VENTANA_MS = 24 * 60 * 60 * 1000;
+const HUMANO_ACTIVO_MS = 2 * 60 * 60 * 1000;
 const PAUSA_MIN_MS = 8000;
 const PAUSA_RANGO_MS = 12000;
 const VALORES_ENCENDIDO = new Set(["true", "1", "si", "sí", "on"]);
@@ -45,7 +50,7 @@ QUÉ HACES:
 - Explicas por qué existe la otra línea: por esta línea solo le enviamos las fichas de su pedido; en nuestra línea oficial le muestras más opciones y le agendas la visita con la asesora. Le das el LINK OFICIAL que viene en los datos, copiado tal cual.
 - Si pregunta algo de las fichas que le enviamos (precio, zona, alcobas, baños, parqueaderos, área, administración, disponibilidad), contestas con los DATOS REALES DE LAS FICHAS. Un dato que no está ahí no lo inventas: le dices que se lo confirmas en la línea oficial.
 - Si pide más opciones, fotos, visita, precio negociable o hablar con alguien, lo llevas a la línea oficial con el link. La visita la agendas TÚ en la línea oficial (le propones horarios ahí); no digas que la coordina con la asesora.
-- En las respuestas 2 y 3 no te vuelves a presentar, salvo que vuelva a preguntar quién eres. Repites el link solo si pide algo que se resuelve en la línea oficial; a un "gracias" o "mucho gusto" contestas corto y sin link.
+- Desde la segunda respuesta no te vuelves a presentar, salvo que vuelva a preguntar quién eres. Repites el link solo si pide algo que se resuelve en la línea oficial; a un "gracias" o "mucho gusto" contestas corto y sin link.
 
 REGLAS FIJAS:
 - Tuteas, en un registro profesional y cercano. Nunca voseo.
@@ -107,10 +112,12 @@ function lineaFicha(p) {
   return `- Ref ${p.ref}: ${datos}${estado}${p.linkWasi ? `\n  linkWasi: ${p.linkWasi}` : ""}`;
 }
 
-function armarUsuario({ numero, nombre, señal, fichas, hilo, link, org }) {
+function armarUsuario({ numero, nombre, señal, fichas, hilo, link, org, pidePersonaAhora = false, yaPidioPersona = false }) {
   const comision = String(process.env.RADAR_LINEA_COMISION || "").trim() ? lineaComision(org) : null;
   return [
-    `RESPUESTA ${numero} DE ${MAX_RESPUESTAS}.`,
+    `RESPUESTA ${numero}${numero === 1 ? " (la primera: te presentas)" : ""}.`,
+    pidePersonaAhora ? "PIDE UNA PERSONA: ya le avisamos al equipo. Confírmale que una persona del equipo le escribe por aquí lo antes posible, sin prometer hora, y si además preguntó algo que puedes contestar con los datos, contéstalo." : null,
+    yaPidioPersona ? "YA PIDIÓ UNA PERSONA ANTES: el equipo ya tiene el aviso. No lo vuelvas a decir salvo que pregunte; ayúdale con lo que pida." : null,
     `NOMBRE PARA SALUDAR: ${nombre || ""}`,
     `LINK OFICIAL: ${link}`,
     comision ? `COMISIÓN (si pregunta, repite exactamente): ${comision}` : null,
@@ -193,25 +200,29 @@ async function responder(org, { mensaje, señal, identidad }, deps = null, { aho
     };
     const dijo = `"${recortar(mensaje.texto, 200)}"`;
 
-    if (estado.humano) {
-      await avisar(`Respondió un colega: ${nombreAviso}`, `${dijo} · ya lo atiende una persona; Sofi no contesta en este chat.`);
+    // Calla solo mientras una persona está atendiendo ese chat (≤ 2 h).
+    const tHumano = estado.ultimoHumanoAt ? Date.parse(estado.ultimoHumanoAt) : NaN;
+    const humanoAtendiendo = Number.isNaN(tHumano) ? false : ahora.getTime() - tHumano < HUMANO_ACTIVO_MS;
+    if (humanoAtendiendo) {
+      await avisar(`Respondió un colega: ${nombreAviso}`, `${dijo} · lo está atendiendo una persona; Sofi no contesta mientras tanto.`);
       return { resultado: "humano_atiende" };
     }
     if (esAutorespuesta(mensaje.texto)) return { resultado: "autorespuesta" };
 
-    // Lo pidio ahora o antes en este chat: Sofi sigue callada.
-    const entradas = [mensaje.texto, ...(estado.hilo || []).filter((m) => m.direccion !== "salida").map((m) => m.texto)];
-    if (entradas.some(pidePersona)) {
+    // Pide una persona: aviso urgente y Sofi igual le contesta (Juan,
+    // 2026-11-11). Si ya lo había pedido antes, no se repite el aviso.
+    const pidePersonaAhora = pidePersona(mensaje.texto);
+    const yaPidioPersona = !pidePersonaAhora && (estado.hilo || []).filter((m) => m.direccion !== "salida").some((m) => pidePersona(m.texto));
+    if (pidePersonaAhora) {
       const asesor = await d.asesor(org).catch(() => null);
       if (asesor) {
         await d
-          .notificar({ orgId: org.id, advisor: asesor, tipo: "asesor_solicitado", titulo: `🔴 ${nombreAviso} pide hablar con una persona`, cuerpo: `${dijo} · Sofi no le contesta; escríbele tú por la línea del radar.`, link: "/grupos" })
+          .notificar({ orgId: org.id, advisor: asesor, tipo: "asesor_solicitado", titulo: `🔴 ${nombreAviso} pide hablar con una persona`, cuerpo: `${dijo} · Sofi le confirmó que le escriben: escríbele tú por la línea del radar.`, link: "/grupos" })
           .catch(() => {});
       }
-      return { resultado: "pide_persona" };
     }
     if (estado.respuestasSofi >= MAX_RESPUESTAS) {
-      await avisar(`${nombreAviso} sigue escribiendo: te toca`, `Sofi ya le contestó ${MAX_RESPUESTAS} veces por la línea del radar. Último mensaje: ${dijo}`);
+      await avisar(`${nombreAviso} sigue escribiendo: te toca`, `Sofi ya le contestó ${MAX_RESPUESTAS} veces hoy por la línea del radar (freno contra bucles). Último mensaje: ${dijo}`);
       return { resultado: "tope" };
     }
 
@@ -221,7 +232,7 @@ async function responder(org, { mensaje, señal, identidad }, deps = null, { aho
     const refs = señal && Array.isArray(señal.respuesta_refs) ? señal.respuesta_refs.filter(Boolean) : [];
     const fichas = refs.length ? await d.fichas(org, refs).catch(() => []) : [];
     const hilo = estado.hilo && estado.hilo.length ? estado.hilo : [{ direccion: "entrada", texto: mensaje.texto }];
-    const usuario = armarUsuario({ numero: estado.respuestasSofi + 1, nombre, señal, fichas, hilo, link, org });
+    const usuario = armarUsuario({ numero: estado.respuestasSofi + 1, nombre, señal, fichas, hilo, link, org, pidePersonaAhora, yaPidioPersona });
 
     let texto = await d.redactar({ sistema: SISTEMA, usuario }).catch((e) => {
       console.error("[sofi-linea] No se pudo redactar:", e.message);

@@ -236,12 +236,17 @@ async function estadoConversacion(orgId, identidad, { desdeIso } = {}) {
     filas = (data || []).reverse();
   }
   const salidas = filas.filter((m) => m.direccion === "salida");
+  // El saludo automatico de WhatsApp Business de la linea ("Gracias por
+  // comunicarte con Diamond Inversiones SAS…") entra como salida `humano`
+  // pero no lo escribio nadie: no calla a Sofi (caso Norha, 2026-11-09).
+  const deUnaPersona = salidas.filter((m) => m.autor !== "sofi" && !esAutorespuesta(m.texto));
   return {
     faltaAutor: false,
-    // El saludo automatico de WhatsApp Business de la linea ("Gracias por
-    // comunicarte con Diamond Inversiones SAS…") entra como salida `humano`
-    // pero no lo escribio nadie: no calla a Sofi (caso Norha, 2026-11-09).
-    humano: salidas.some((m) => m.autor !== "sofi" && !esAutorespuesta(m.texto)),
+    humano: deUnaPersona.length > 0,
+    // Cuándo escribió una persona por última vez (Juan, 2026-11-11: "Sofi no
+    // se puede callar si aún puede aportar"): solo calla mientras alguien está
+    // atendiendo, no por una prospección vieja.
+    ultimoHumanoAt: deUnaPersona.length ? deUnaPersona[deUnaPersona.length - 1].created_at || null : null,
     respuestasSofi: salidas.filter((m) => m.autor === "sofi" && (!desdeIso || m.created_at >= desdeIso)).length,
     hilo: filas.slice(-10),
   };

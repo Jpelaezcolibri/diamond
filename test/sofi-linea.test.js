@@ -68,16 +68,29 @@ test("sin la columna autor: falla cerrado al puente de siempre", async () => {
   assert.strictEqual(ll.enviados.length, 0);
 });
 
-test("si una persona del equipo escribio en el chat, Sofi calla y avisa", async () => {
-  const { d, ll } = deps({ estado: async () => ({ faltaAutor: false, humano: true, respuestasSofi: 1, hilo: [] }) });
-  const r = await sofiLinea.responder(ORG, { mensaje: mensaje(), señal: señal(), identidad }, d);
+// Juan (2026-11-11): "Sofi no se puede callar si aún puede aportar en el
+// proceso de venta". Solo calla mientras una persona está atendiendo (≤ 2 h).
+const AHORA = new Date("2026-11-11T15:00:00Z");
+test("si una persona del equipo escribió en las últimas 2 h, Sofi calla y avisa", async () => {
+  const { d, ll } = deps({ estado: async () => ({ faltaAutor: false, humano: true, ultimoHumanoAt: "2026-11-11T14:10:00Z", respuestasSofi: 1, hilo: [] }) });
+  const r = await sofiLinea.responder(ORG, { mensaje: mensaje(), señal: señal(), identidad }, d, { ahora: AHORA });
   assert.strictEqual(r.resultado, "humano_atiende");
   assert.strictEqual(ll.enviados.length, 0);
   assert.strictEqual(ll.avisos.length, 1);
 });
 
-test("a la cuarta, Sofi calla y le avisa a la asesora que le toca", async () => {
-  const { d, ll } = deps({ estado: async () => ({ faltaAutor: false, humano: false, respuestasSofi: 3, hilo: [] }) });
+test("si la persona escribió hace más de 2 h (una prospección vieja), Sofi contesta", async () => {
+  const { d, ll } = deps({ estado: async () => ({ faltaAutor: false, humano: true, ultimoHumanoAt: "2026-11-09T19:22:00Z", respuestasSofi: 0, hilo: [] }) });
+  const r = await sofiLinea.responder(ORG, { mensaje: mensaje(), señal: señal(), identidad }, d, { ahora: AHORA });
+  assert.strictEqual(r.resultado, "respondido");
+  assert.strictEqual(ll.enviados.length, 1);
+});
+
+test("ya no calla a la cuarta: el freno es de 20 por día, contra bucles", async () => {
+  const { d: d3, ll: ll3 } = deps({ estado: async () => ({ faltaAutor: false, humano: false, respuestasSofi: 3, hilo: [] }) });
+  assert.strictEqual((await sofiLinea.responder(ORG, { mensaje: mensaje(), señal: señal(), identidad }, d3)).resultado, "respondido");
+  assert.strictEqual(ll3.enviados.length, 1);
+  const { d, ll } = deps({ estado: async () => ({ faltaAutor: false, humano: false, respuestasSofi: 20, hilo: [] }) });
   const r = await sofiLinea.responder(ORG, { mensaje: mensaje(), señal: señal(), identidad }, d);
   assert.strictEqual(r.resultado, "tope");
   assert.strictEqual(ll.enviados.length, 0);
@@ -99,7 +112,7 @@ test("el prompt trae la ficha real, el numero de respuesta y el link oficial con
   const { d, ll } = deps({ estado: async () => ({ faltaAutor: false, humano: false, respuestasSofi: 1, hilo: [] }) });
   await sofiLinea.responder(ORG, { mensaje: mensaje(), señal: señal(), identidad }, d);
   const p = ll.prompts[0].usuario;
-  assert.match(p, /RESPUESTA 2 DE 3/);
+  assert.match(p, /RESPUESTA 2\./);
   assert.match(p, /\$700\.000\.000/);
   assert.ok(p.includes(LINK_WASI));
   assert.match(p, /PEDIDO%20\(c%C3%B3d\.%207S63\)/);
@@ -190,22 +203,24 @@ test("reconoce cuando piden una persona o rechazan el bot", () => {
   ]) assert.strictEqual(sofiLinea.pidePersona(t), false, t);
 });
 
-test("si pide una persona, Sofi no contesta y avisa urgente a la asesora", async () => {
+test("si pide una persona, avisa urgente a la asesora y Sofi igual le contesta", async () => {
   const { d, ll } = deps();
   const r = await sofiLinea.responder(ORG, { mensaje: mensaje({ texto: "no entiendo esta maquina, si de pronto un asesor se comunica" }), señal: señal(), identidad }, d);
-  assert.strictEqual(r.resultado, "pide_persona");
-  assert.strictEqual(ll.enviados.length, 0);
-  assert.strictEqual(ll.avisos.length, 1);
-  assert.strictEqual(ll.avisos[0].tipo, "asesor_solicitado");
-  assert.match(ll.avisos[0].titulo, /persona|asesor/i);
+  assert.strictEqual(r.resultado, "respondido");
+  assert.strictEqual(ll.enviados.length, 1);
+  const urgente = ll.avisos.find((a) => a.tipo === "asesor_solicitado");
+  assert.ok(urgente, "aviso urgente a la asesora");
+  assert.match(urgente.titulo, /persona|asesor/i);
+  assert.match(ll.prompts[0].usuario, /PIDE UNA PERSONA/);
 });
 
-test("si ya lo pidio antes en el chat, Sofi sigue callada", async () => {
+test("si ya lo pidió antes, no repite el aviso urgente y Sofi sigue ayudando", async () => {
   const hilo = [{ direccion: "entrada", texto: "prefiero que me llame un asesor" }, { direccion: "entrada", texto: "es para hoy" }];
   const { d, ll } = deps({ estado: async () => ({ faltaAutor: false, humano: false, respuestasSofi: 1, hilo }) });
   const r = await sofiLinea.responder(ORG, { mensaje: mensaje({ texto: "es para hoy" }), señal: señal(), identidad }, d);
-  assert.strictEqual(r.resultado, "pide_persona");
-  assert.strictEqual(ll.enviados.length, 0);
+  assert.strictEqual(r.resultado, "respondido");
+  assert.strictEqual(ll.avisos.filter((a) => a.tipo === "asesor_solicitado").length, 0);
+  assert.match(ll.prompts[0].usuario, /YA PIDIÓ UNA PERSONA/);
 });
 
 // RESPUESTAS AUTOMATICAS (2026-10-21, medido sobre los 594 mensajes reales de
