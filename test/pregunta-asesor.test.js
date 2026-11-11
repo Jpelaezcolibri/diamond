@@ -45,7 +45,8 @@ test("registrar crea la pregunta, avisa por la campana y por WhatsApp sin datos 
   const wa = envios.find((e) => e.wa);
   assert.strictEqual(wa.wa, A1.phone);
   assert.match(wa.texto, /Ref 10013037: ¿Precio final de la ref 10013037\?/);
-  assert.doesNotMatch(wa.texto, /Andrea|573125550000/);
+  assert.match(wa.texto, /Andrea/, "la asesora sabe quién pregunta (Juan, 2026-11-11)");
+  assert.doesNotMatch(wa.texto, /573125550000/);
   assert.strictEqual(envios.find((e) => e.campana).whatsapp, false, "la pregunta ya llego por WhatsApp: avisarAsesor no manda el suyo");
 });
 

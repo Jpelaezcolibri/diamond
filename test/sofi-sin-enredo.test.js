@@ -28,7 +28,9 @@ const { avisarCitaPorConfirmar } = require("../src/notifications/aviso-cita");
 const ORG = { id: "org-1", name: "Diamond" };
 const DAIANA = { id: "a1", name: "Daiana Zea", phone: "573011880668", alias_publico: "Asesor 1" };
 const CATHERINE = { id: "a3", name: "Catherine Uribe", phone: "573028536489", alias_publico: "Asesor 3" };
-const SIN_ALIAS = /Asesor\s*\d|Asesor N\b|Daiana|Catherine|Claudia/;
+// Desde el 2026-11-11 el nombre de pila sí sale cuando se sabe quién; lo que
+// nunca sale es el alias interno ni el apellido.
+const SIN_ALIAS = /Asesor\s*\d|Asesor N\b|Zea|Uribe|Valencia/;
 const NORHA_TEL = "CO.1622610936270244";
 const citaConfirmada = { tipo: "visita", ref: "10505674", estado: "confirmada", asesor_id: "a3", fecha_hora: "2026-11-10T10:00:00-05:00", confirmada_at: "2026-11-07T23:12:43Z" };
 const citaSolicitada = { tipo: "visita", ref: "10505674", estado: "propuesta", asesor_id: "a3", fecha_hora: "2026-11-10T10:00:00-05:00", corte_at: "2026-11-10T01:00:00Z" };
@@ -37,13 +39,13 @@ beforeEach(() => { tools._resetPedidosContacto(); });
 
 // ── 1. Nunca "Asesor N" hacia afuera ──────────────────────────────────────
 
-test("hacia afuera el asesor es siempre 'un asesor de nuestro equipo', tenga o no alias", () => {
+test("hacia afuera nunca el alias interno; sin asesora conocida, 'un asesor de nuestro equipo'", () => {
   assert.strictEqual(ip.asesorPublico(), "un asesor de nuestro equipo");
   const t = ip.textoCitaConfirmada({ cuando: "del martes 10 de noviembre a las 10:00 a. m.", ref: "10505674" });
   assert.strictEqual(t, "Tu visita del martes 10 de noviembre a las 10:00 a. m. a la ref 10505674 quedó CONFIRMADA. Te recibe un asesor de nuestro equipo.");
   const tr = ip.instruccionTransferencia({ especialidad: "venta", advisor: DAIANA, org: ORG });
   assert.doesNotMatch(tr, SIN_ALIAS);
-  assert.match(tr, /un asesor de nuestro equipo/);
+  assert.match(tr, /Daiana lo va a contactar/);
   assert.strictEqual(ip.aliasPublico, undefined, "ya no existe la función que sacaba el alias hacia afuera");
 });
 
@@ -60,7 +62,7 @@ test("el prompt del colega no le enseña a Sofi a nombrar asesores", () => {
   }).map((b) => b.text).join("\n");
   assert.doesNotMatch(texto, /Asesor\s*\d|alias como/);
   assert.match(texto, /un asesor de nuestro equipo/);
-  assert.match(texto, /NUNCA (nombres|digas) .*(número|nombre)/i);
+  assert.match(texto, /nunca un número de asesor/i);
 });
 
 test("el prompt del cliente tampoco nombra asesores", () => {
@@ -145,7 +147,7 @@ test("con una visita viva, el pedido de contacto le llega a quien tiene la visit
   assert.strictEqual(avisos.length, 1);
   assert.strictEqual(avisos[0].advisor, CATHERINE);
   assert.doesNotMatch(out, SIN_ALIAS);
-  assert.match(out, /un asesor de nuestro equipo/);
+  assert.match(out, /Catherine se va a comunicar/, "se sabe quién: la de la visita");
   assert.doesNotMatch(out, /\bhoy\b/);
 });
 

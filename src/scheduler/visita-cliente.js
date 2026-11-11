@@ -162,8 +162,9 @@ async function runOnce({ ahora = new Date(), deps = null } = {}) {
         const hora = fh ? fh.hora : "la hora acordada";
         let texto, params;
         if (paso === "recordatorio") {
-          // Hacia el cliente no se nombra al asesor (Juan, 2026-11-09).
-          const alias = asesorPublico();
+          // La recibe quien la tiene: su nombre de pila (Juan, 2026-11-11).
+          const asesor = await d.asesor(org, lead.cita.asesor_id).catch(() => null);
+          const alias = asesorPublico(asesor);
           const zona = ref ? await d.zona(org, ref) : null;
           texto = textoRecordatorio({ lead, hora, ref, zona, alias });
           params = [primerNombre(lead) || "cliente", hora, String(ref), zona || "la zona acordada", alias];

@@ -62,10 +62,10 @@ test("un colega pide hablar con alguien: queda en su chat, asignado a la asesora
   assert.match(a.cuerpo, /Busco apto en Laureles/);
   assert.match(a.cuerpo, /Ref 9921137, Ref 10129664/);
   // Juan (2026-11-09): sin "Asesor N", sin prometer hora.
-  assert.match(out, /^Listo: el aviso quedó hecho y un asesor de nuestro equipo/);
+  assert.match(out, /^Listo: el aviso quedó hecho y Daiana/); // Juan, 2026-11-11: nombre de pila cuando se sabe quién la atiende
   assert.doesNotMatch(out, /Asesor \d/);
   assert.match(out, /por este mismo chat/);
-  assert.doesNotMatch(out, /Daiana|301 188 0668|573011880668/, "Sofi no recibe nombre real ni celular");
+  assert.doesNotMatch(out, /Zea|301 188 0668|573011880668/, "Sofi recibe el nombre de pila, nunca el apellido ni el celular (2026-11-11)");
   assert.match(out, /NO le des ningún número/);
 });
 

@@ -22,10 +22,11 @@ for (const [quien, t] of Object.entries(textos)) {
   test(`${quien}: una propiedad se describe solo con los datos de la ficha`, () => {
     assert.match(t, /nunca la describas con los datos del pedido/i);
   });
-  // Juan (2026-11-09, caso Norha): "un asesor de nuestro equipo", sin nombres ni números.
-  test(`${quien}: el asesor es "un asesor de nuestro equipo", sin nombrarlo`, () => {
+  // Juan (2026-11-11): nombre de pila solo cuando se sabe quién; nunca "Asesor N".
+  test(`${quien}: nombres del equipo solo cuando se sabe quién, nunca el número de asesor`, () => {
     assert.match(t, /un asesor de nuestro equipo/i);
-    assert.match(t, /NUNCA nombres a un asesor del equipo/);
+    assert.match(t, /Claudia, Catherine o Daiana/);
+    assert.match(t, /nunca un número de asesor/i);
     assert.doesNotMatch(t, /Asesor \d/);
   });
 }

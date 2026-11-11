@@ -2,7 +2,8 @@
 // 2026-10-07): se nombra "Asesor N" y quien inicia el contacto es ella.
 const { test } = require("node:test");
 const assert = require("node:assert");
-// Juan (2026-11-09, caso Norha): hacia afuera nunca "Asesor N"; siempre "un asesor de nuestro equipo".
+// Juan (2026-11-11): hacia afuera nunca "Asesor N", apellido ni celular; el
+// nombre de pila cuando se sabe quién lo atiende, si no "un asesor de nuestro equipo".
 const { asesorPublico, aliasInterno, textoCitaConfirmada, instruccionTransferencia } = require("../src/lib/identidad-publica");
 
 const ORG = { id: "org-1", name: "Diamond" };
@@ -10,32 +11,35 @@ const REAL = { id: "a1", name: "ZZNombreReal Apellido", phone: "573000000000", a
 const SIN_ALIAS = { id: "a2", name: "ZZOtraReal", phone: "573111111111", alias_publico: null };
 
 const sinFiltrar = (texto) => {
-  assert.doesNotMatch(texto, /ZZNombreReal|ZZOtraReal/, "no lleva el nombre real");
+  assert.doesNotMatch(texto, /Apellido/, "no lleva el apellido");
+  assert.doesNotMatch(texto, /Asesor \d/, "no lleva el alias interno");
   assert.doesNotMatch(texto, /573000000000|573111111111|300 000 0000/, "no lleva el celular");
 };
 
-test("hacia afuera siempre 'un asesor de nuestro equipo'; adentro el alias o el nombre", () => {
+test("hacia afuera el nombre de pila si se sabe quién, si no 'un asesor de nuestro equipo'; adentro el alias", () => {
   assert.strictEqual(asesorPublico(), "un asesor de nuestro equipo");
+  assert.strictEqual(asesorPublico(REAL), "Zznombrereal");
   assert.strictEqual(aliasInterno(REAL), "Asesor 2");
   assert.strictEqual(aliasInterno(SIN_ALIAS), "ZZOtraReal");
 });
 
-test("la confirmación de visita no nombra al asesor ni da celular", () => {
+test("la confirmación de visita dice quién la recibe por su nombre de pila, sin celular", () => {
   const t = textoCitaConfirmada({ cuando: "del jueves 9 de octubre a las 3:00 p. m.", ref: "10012722", advisor: REAL, org: ORG });
-  assert.strictEqual(t, "Tu visita del jueves 9 de octubre a las 3:00 p. m. a la ref 10012722 quedó CONFIRMADA. Te recibe un asesor de nuestro equipo.");
+  assert.strictEqual(t, "Tu visita del jueves 9 de octubre a las 3:00 p. m. a la ref 10012722 quedó CONFIRMADA. Te recibe Zznombrereal.");
   assert.doesNotMatch(t, /Asesor \d/);
   sinFiltrar(t);
 });
 
 test("la confirmación sin ref no deja un hueco", () => {
   const t = textoCitaConfirmada({ cuando: "acordada", ref: null, advisor: SIN_ALIAS, org: ORG });
-  assert.strictEqual(t, "Tu visita acordada quedó CONFIRMADA. Te recibe un asesor de nuestro equipo.");
+  assert.strictEqual(t, "Tu visita acordada quedó CONFIRMADA. Te recibe Zzotrareal.");
+  assert.strictEqual(textoCitaConfirmada({ cuando: "acordada", ref: null }), "Tu visita acordada quedó CONFIRMADA. Te recibe un asesor de nuestro equipo.");
 });
 
 test("la transferencia no le da link ni celular al cliente: el asesor lo contacta", () => {
   const t = instruccionTransferencia({ especialidad: "venta", advisor: REAL, org: ORG });
   assert.doesNotMatch(t, /Asesor \d/);
-  assert.match(t, /un asesor de nuestro equipo lo va a contactar/);
+  assert.match(t, /Zznombrereal lo va a contactar/);
   assert.match(t, /NO le des ningún link ni número/);
   assert.doesNotMatch(t, /wa\.me/);
   sinFiltrar(t);

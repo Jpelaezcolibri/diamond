@@ -1981,14 +1981,15 @@ async function pedirContactoAsesora(input, ctx) {
   const nombreAsesora = asesora.name || "la asesora";
   // Hacia el colega nunca se nombra al asesor (Juan, 2026-11-09): ni nombre,
   // ni celular, ni "Asesor 1/2/3". El nombre real queda solo para el log.
-  const quien = asesorPublico();
+  // Se sabe quién llama: la asesora a la que le llegó el aviso (Juan, 2026-11-11).
+  const quien = asesorPublico(asesora);
   const { celularDe, AVISO_SIN_CELULAR } = require("../lib/quien-lead");
   const oculto = !celularDe(ctx.lead);
   // Sin celular visible no hay a donde llamarlo: Sofi se lo pide.
   const pideNumero = oculto
     ? " No tenemos su celular (WhatsApp lo oculta): pídele un número de celular por si prefiere que lo llamen."
     : "";
-  const sinPromesas = " NO nombres al asesor (ni su nombre ni un número de asesor), NO le des ningún número y NO prometas una hora ni un día: di que lo contactan lo antes posible.";
+  const sinPromesas = " Nombra solo así (nunca un número de asesor ni un apellido), NO le des ningún número y NO prometas una hora ni un día: di que lo contactan lo antes posible.";
 
   const clave = `${ctx.org.id}:${ctx.lead.id}`;
   const antes = pedidosContactoRecientes.get(clave);

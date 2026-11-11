@@ -70,8 +70,8 @@ function pasoPausa({ marca, modo, ultimoAsistente = null, ahora = new Date() }) 
   return "nada";
 }
 
-function textoDevolucion() {
-  return `Sigo pendiente de ti mientras ${asesorPublico()} se desocupa. ¿En qué te puedo ayudar mientras tanto?`;
+function textoDevolucion(asesora = null) {
+  return `Sigo pendiente de ti mientras ${asesorPublico(asesora)} se desocupa. ¿En qué te puedo ayudar mientras tanto?`;
 }
 
 function depsPorDefecto() {
@@ -178,7 +178,7 @@ async function atenderPausa({ org, c, ahora = new Date() }, deps = null) {
   if (seg) lead.seguimiento = seg;
   c.modo = "bot";
 
-  const texto = textoDevolucion();
+  const texto = textoDevolucion(asesora);
   const ultimoCliente = c.ultimoCliente;
   const enVentana = Boolean(ultimoCliente && ahora.getTime() - new Date(ultimoCliente.created_at).getTime() < VENTANA_24H_MS);
   let resultado = "fuera de la ventana de 24 h: no se le escribió al cliente";

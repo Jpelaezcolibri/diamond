@@ -66,7 +66,7 @@ async function confirmar({ org, lead, advisor, deps = {} }) {
   }
   let avisado = false;
   if (solo === false) {
-    const textoConfirmada = textoCitaConfirmada({ cuando, ref: cita.ref });
+    const textoConfirmada = textoCitaConfirmada({ cuando, ref: cita.ref, advisor });
     const r = await c
       .texto(org, lead.phone, textoConfirmada)
       .catch((e) => ({ ok: false, error: e.message }));
@@ -80,7 +80,7 @@ async function confirmar({ org, lead, advisor, deps = {} }) {
       const r2 = await c
         .plantilla(org, lead.phone, {
           name: nombrePlantilla,
-          bodyParams: [String(lead.nombre || "").trim().split(/\s+/)[0] || "cliente", diaHora, String(cita.ref), asesorPublico()],
+          bodyParams: [String(lead.nombre || "").trim().split(/\s+/)[0] || "cliente", diaHora, String(cita.ref), asesorPublico(advisor)],
         })
         .catch((e) => ({ ok: false, error: e.message }));
       avisado = Boolean(r2 && r2.ok);

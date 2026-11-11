@@ -53,8 +53,9 @@ test("confirmar_cita: una sola pendiente, la confirma y avisa al cliente por la 
   assert.strictEqual(updates[0].patch.cita.confirmada_por, "Catherine Uribe");
   assert.strictEqual(envios[0].phone, "573009998888");
   assert.match(envios[0].texto, /confirmada/i);
-  assert.match(envios[0].texto, /Te recibe un asesor de nuestro equipo\./); // Juan, 2026-11-09: sin "Asesor N"
-  assert.doesNotMatch(envios[0].texto, /Catherine|573028536489/, "al cliente no va el nombre real ni el celular (2026-10-07)");
+  assert.match(envios[0].texto, /Te recibe Catherine\./); // Juan, 2026-11-11: nombre de pila cuando se sabe quién la atiende
+  assert.doesNotMatch(envios[0].texto, /Asesor \d|Uribe/);
+  assert.doesNotMatch(envios[0].texto, /Uribe|573028536489/, "al cliente va el nombre de pila, nunca el apellido ni el celular (2026-11-11)");
   assert.match(r, /confirmada/i);
   assert.match(r, /ya le avis/i);
 });
@@ -95,7 +96,7 @@ test("confirmar: ventana cerrada y SOFI_CITA_CONFIRMADA_PLANTILLA, sale la plant
   assert.strictEqual(plantillas[0].bodyParams[0], "Ana");
   assert.match(plantillas[0].bodyParams[1], /viernes.*23 de octubre a las 10:00/);
   assert.strictEqual(plantillas[0].bodyParams[2], "9548121");
-  assert.strictEqual(plantillas[0].bodyParams[3], "un asesor de nuestro equipo");
+  assert.strictEqual(plantillas[0].bodyParams[3], "Catherine"); // Juan, 2026-11-11: nombre de pila cuando se sabe quién la atiende
   assert.match(r.texto, /ya le avis/i);
 
   // sin ref: no se usa la plantilla y se le pide al asesor avisar
