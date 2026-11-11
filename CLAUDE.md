@@ -28,9 +28,36 @@ Equipo: 1 dev (Juan) + Claude Code. Idioma de la app: español (Colombia).
 Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
 `docs:`, `config:`).
 
-## 2. Estado actual (2026-11-09)
+## 2. Estado actual (2026-11-11)
 
-- **Sofi no nombra asesores (2026-11-09, desplegado).** Caso Norha Vélez
+- **Por qué no hay visitas: análisis y decisiones (2026-11-11).** Informe en
+  `Claude outputs/analisis-visitas-2026-11/` (sin versionar; `04-diagnostico-y-plan.md`
+  resume). Embudo 30 días: 1.387 pedidos → 563 con ficha → 270 DM → 143
+  respuestas → 33 escriben a Sofi → 7 visitas → 2 confirmadas reales. El 76 %
+  de los colegas que preguntaron no recibió respuesta; la mitad de los
+  pedidos no tiene inventario que calce.
+  - **Decisiones de Juan:** NO se guardan ofertas de colegas (se vende solo lo
+    nuestro y lo que ingresen las asesoras); la zona cercana sigue; los DM no
+    se frenan; Sofi no se calla si puede aportar; varias visitas por colega sin
+    límite y nada se reprograma sin que confirme el colega o una asesora;
+    nombres: adentro "Asesor 1/2/3", afuera Claudia/Catherine/Daiana cuando se
+    sabe quién llama, si no "un asesor de nuestro equipo".
+  - **Rama `sofi-cierra-visitas`:** descripción de la ficha para Sofi y la
+    revalidación (`lib/texto-ficha.js`); preguntas a Claudia de inmediato
+    (`PREGUNTAS_ASESORA`, **poner `Claudia` en Railway**) y regla de no dar
+    dirección/ubicación/llaves por su cuenta; Sofi en la línea del radar calla
+    solo si una persona escribió en las últimas 2 h, sigue si piden persona,
+    freno de 20/día; nombre de pila cuando se sabe quién llama. Incluye la
+    rama `visita-linea-sin-duplicar` (no duplica la visita de un colega).
+  - **Pendiente:** varias visitas por colega (cambio de modelo: tabla de
+    visitas; hoy 28 archivos del bot y 11 del CRM asumen una sola).
+  - **Los 3 grupos de Natalia** (Pedidos Poblado/Envigado, PEDIDOS - BUSCANDO,
+    PEDIDOS -Buscando PEDIDOS) siguen activos en la base; están mudos desde el
+    10-sep porque la línea de Daiana no es miembro. Hay que agregar el
+    301 188 0668 o conseguir el link de invitación.
+
+- **Sofi no nombra asesores (2026-11-09, desplegado; reemplazado el 11-nov
+  por los nombres de pila, ver arriba).** Caso Norha Vélez
   (colega, Ref 10505674, martes 10-nov 10 a. m.): la visita rotó Daiana →
   Claudia → Catherine y Sofi le dijo "Asesor 1", "Asesor 3" y otra vez
   "Asesor 1"; le dijo "solicitada" a una visita ya confirmada y prometió que
