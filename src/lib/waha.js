@@ -193,7 +193,9 @@ async function estadoSesion(nombre) {
 // le diria al cortacircuitos que hay cuota de sobra justo cuando no sabemos si
 // la hay, que es el modo de falla exacto que este archivo evita en todos lados.
 async function cuotaDeLinea(nombre) {
-  const s = await estadoSesion(nombre);
+  // Una línea que solo escucha manda por otra (lineas-radar.js): el freno
+  // tiene que mirar el cupo de la línea por donde de verdad sale el DM.
+  const s = await estadoSesion(require("./lineas-radar").sesionDeSalida(nombre) || nombre);
   const cap = s && s.me && s.me.messageCapping;
   const total = Number(cap && cap.totalQuota);
   if (!(total > 0)) return null;
@@ -461,6 +463,8 @@ async function enviarTexto(sesion, chatId, texto, { replyTo = null } = {}) {
     // y escribirle por error al privado de un colega es peor que no enviar.
     return { ok: false, error: `Destino invalido para el radar: ${chatId}` };
   }
+  // Una línea que solo escucha nunca publica en un grupo (Juan, 2026-11-11).
+  if (require("./lineas-radar").esSoloEscucha(sesion)) return { ok: false, error: `linea solo escucha: ${sesion} no publica` };
   try {
     const body = { session: sesion, chatId, text: texto };
     if (replyTo) body.reply_to = replyTo;
@@ -539,14 +543,19 @@ async function enviarDm(sesion, telefono, texto, { lid = null, orgId = null } = 
   const marcado = await colegas.esSoloLlamada(orgId, lid ? { lid } : { telefono });
   if (marcado !== false) return { ok: false, error: "colega_solo_llamada", previoAlEnvio: false, destino: chatId };
 
+  // Línea que solo escucha (Juan, 2026-11-11): el DM sale por la línea de
+  // salida (RADAR_SESION_SALIDA). Sin salida, no sale nada.
+  const salida = require("./lineas-radar").sesionDeSalida(sesion);
+  if (!salida) return { ok: false, error: `linea solo escucha: ${sesion} no escribe y no hay RADAR_SESION_SALIDA`, previoAlEnvio: false, destino: chatId };
+
   try {
     const r = await pedir("/api/sendText", {
       metodo: "POST",
-      body: { session: sesion, chatId, text: texto },
+      body: { session: salida, chatId, text: texto },
     });
     const wamid = r?.id?._serialized || r?.id || r?.key?.id || null;
     _recordarEnvioPropio(wamid);
-    return { ok: true, wamid, destino: chatId };
+    return { ok: true, wamid, destino: chatId, sesion: salida };
   } catch (e) {
     console.error(`[waha] No se pudo mandar el DM a ${chatId}: ${e.message}`);
     // `previoAlEnvio` distingue los dos fallos que arriba se tratan igual, y

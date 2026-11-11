@@ -115,10 +115,13 @@ async function sesionPorNombre(orgId, nombre) {
 }
 
 async function listSessions(orgId) {
-  if (!supabase) return memory.whatsappSessions.filter((s) => s.org_id === orgId);
+  // Una línea que solo escucha (RADAR_SESIONES_SOLO_ESCUCHA) no cuenta como
+  // "activa" para lo que asume una sola línea: sale con estado "escucha".
+  const { vistaDeSesion } = require("../lib/lineas-radar");
+  if (!supabase) return memory.whatsappSessions.filter((s) => s.org_id === orgId).map(vistaDeSesion);
   const { data, error } = await supabase.from("whatsapp_sessions").select("*").eq("org_id", orgId).order("created_at");
   if (error) throw error;
-  return data;
+  return (data || []).map(vistaDeSesion);
 }
 
 async function touchSession(orgId, nombre) {

@@ -53,8 +53,20 @@ Código: inglés. Commits: español, prefijos convencionales (`feat:`, `fix:`,
     visitas; hoy 28 archivos del bot y 11 del CRM asumen una sola).
   - **Los 3 grupos de Natalia** (Pedidos Poblado/Envigado, PEDIDOS - BUSCANDO,
     PEDIDOS -Buscando PEDIDOS) siguen activos en la base; están mudos desde el
-    10-sep porque la línea de Daiana no es miembro. Hay que agregar el
-    301 188 0668 o conseguir el link de invitación.
+    10-sep porque la línea de Daiana no es miembro.
+  - **Línea de Natalia que solo escucha (rama `linea-natalia-solo-escucha`,
+    SIN desplegar).** Juan: "actívalos desde la línea de Natalia… que conteste
+    desde la línea de Sofi o de Daiana". `src/lib/lineas-radar.js`: una sesión
+    en `RADAR_SESIONES_SOLO_ESCUCHA` alimenta el radar pero nunca publica en
+    grupos; sus DM salen por `RADAR_SESION_SALIDA` (sin ella no sale nada) y
+    la cuota que frena es la de esa línea. `listSessions` la devuelve con
+    estado `escucha`, así que lo que exige una sola línea activa sigue viendo
+    a Daiana. **Para encender:** desplegar, poner
+    `RADAR_SESIONES_SOLO_ESCUCHA=RADA-NATALIA` y `RADAR_SESION_SALIDA=DaianaDiamond`
+    en Railway y re-vincular RADA-NATALIA con el botón **Volver a parear** (mueve
+    el corte a ese instante: sin eso entrarían 2 meses de pedidos viejos).
+    Ojo: un DM por lid desde la línea de Daiana solo llega si el colega comparte
+    un grupo con ella; si no, cae al aviso a la asesora.
 
 - **Sofi no nombra asesores (2026-11-09, desplegado; reemplazado el 11-nov
   por los nombres de pila, ver arriba).** Caso Norha Vélez
