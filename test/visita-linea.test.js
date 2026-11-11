@@ -126,3 +126,53 @@ test("una fecha que no se puede leer cuenta como sin fecha", async (t) => {
   await visitaLinea.avisar(ORG, d);
   assert.strictEqual(log.updates.length, 0);
 });
+
+// Caso Norha (2026-11-10): su visita de las 10:00 a la Ref 10505674 ya estaba
+// en el lead de la línea de Sofi (phone "CO.1622610936270244", confirmada por
+// Catherine). Al confirmarla con Claudia por la línea del radar (lid
+// 33449306005587) se creó OTRO lead con OTRA visita a la misma hora y con la
+// Ref del primer DM (10013129): el calendario mostraba dos visitas.
+const NORHA_SOFI = {
+  id: "lead-norha-sofi", nombre: null, phone: "CO.1622610936270244", source: "colega",
+  cita: { tipo: "visita", estado: "confirmada", ref: "10505674", fecha_hora: "2026-11-10T10:00:00-05:00", asesor_id: "a3" },
+};
+const datosNorha = (over = {}) => datos("cita_confirmada", {
+  mensaje: { sesion: "DaianaDiamond", remitenteNombre: "NORHA VELEZ M", remitenteTelefono: null, texto: "Listo. Nos vemos a las 10" },
+  veredicto: { hay_avance: true, tipo: "cita_confirmada", fecha_hora_iso: "2026-11-10T10:00:00-05:00", resumen: "Confirmó la visita de las 10", confianza: 0.9 },
+  señal: { id: "sig-norha", respuesta_refs: ["10013129"] },
+  identidad: { telefono: null, lid: "33449306005587@lid" },
+  ...over,
+});
+const depsNorha = (leadsConCita) => ({
+  leadsConCita: async () => leadsConCita,
+  colegaPorLid: async (_o, lid) => (String(lid).startsWith("33449306005587") ? { lid: "33449306005587", telefono: "1622610936270244", nombre: "NORHA VELEZ M" } : null),
+});
+
+test("si el colega ya tiene una visita viva a esa hora (por otra línea), no se crea otra ni se cambia la ref", async (t) => {
+  const log = escenario(t);
+  const r = await visitaLinea.avisar(ORG, datosNorha(), depsNorha([NORHA_SOFI]));
+  assert.strictEqual(r.leadId, "lead-norha-sofi");
+  assert.deepStrictEqual(log.creados, [], "no crea un lead nuevo");
+  assert.deepStrictEqual(log.updates, [], "no toca la visita que ya existe");
+  assert.match(log.notif[0].cuerpo, /ref 10505674/);
+  assert.doesNotMatch(log.notif[0].cuerpo, /10013129/);
+  assert.strictEqual(log.notif[0].leadId, "lead-norha-sofi");
+});
+
+test("también la reconoce por el celular que dejó o por el mismo número", async (t) => {
+  const conCelular = { ...NORHA_SOFI, id: "lead-cel", phone: "CO.999", cita: { ...NORHA_SOFI.cita, celular_contacto: "573105100165" } };
+  const log = escenario(t);
+  const r = await visitaLinea.avisar(ORG, datosNorha({ identidad: { telefono: "573105100165", lid: null } }), depsNorha([conCelular]));
+  assert.strictEqual(r.leadId, "lead-cel");
+  assert.deepStrictEqual(log.creados, []);
+});
+
+test("otra hora, cancelada u otra persona: sí crea su visita como siempre", async (t) => {
+  const otraHora = { ...NORHA_SOFI, cita: { ...NORHA_SOFI.cita, fecha_hora: "2026-11-12T15:00:00-05:00" } };
+  const cancelada = { ...NORHA_SOFI, id: "lead-canc", cita: { ...NORHA_SOFI.cita, estado: "cancelada" } };
+  const otraPersona = { ...NORHA_SOFI, id: "lead-otra", phone: "573000000000" };
+  const log = escenario(t);
+  await visitaLinea.avisar(ORG, datosNorha(), depsNorha([otraHora, cancelada, otraPersona]));
+  assert.strictEqual(log.creados.length, 1);
+  assert.strictEqual(log.updates[0].patch.cita.fecha_hora, "2026-11-10T10:00:00-05:00");
+});

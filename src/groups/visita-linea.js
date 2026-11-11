@@ -67,6 +67,51 @@ async function refDe(org, señal, textos = []) {
   return describe.length === 1 ? describe[0] : null;
 }
 
+// ¿Este colega ya tiene una visita viva a esa hora? (caso Norha, 2026-11-10).
+// Un colega habla por dos líneas con identificadores distintos: en la del
+// radar llega con su lid y en la de Sofi puede llegar como "CO.…" o con su
+// celular. Sin este cruce, la visita que ya estaba confirmada en la línea de
+// Sofi se duplicaba en un lead nuevo con la ref del primer DM.
+const VENTANA_MISMA_VISITA_MS = 3 * 60 * 60 * 1000;
+const digitos = (x) => String(x || "").replace(/\D/g, "");
+
+function depsPorDefecto() {
+  return {
+    leadsConCita: async (orgId) => {
+      const supabase = require("../data/supabase");
+      if (!supabase) return require("../data/memory").leads.filter((l) => l.org_id === orgId && l.cita);
+      const { data, error } = await supabase.from("leads").select("id, nombre, phone, source, cita").eq("org_id", orgId).not("cita", "is", null).limit(500);
+      if (error) throw error;
+      return data || [];
+    },
+    colegaPorLid: async (orgId, lid) => {
+      const supabase = require("../data/supabase");
+      if (!supabase || !lid) return null;
+      const { data } = await supabase.from("colegas_grupos").select("lid, telefono, nombre").eq("org_id", orgId).eq("lid", digitos(lid)).maybeSingle();
+      return data || null;
+    },
+  };
+}
+
+async function visitaVivaDelColega(org, { identidad, fechaIso }, d) {
+  const t = Date.parse(fechaIso || "");
+  if (Number.isNaN(t)) return null;
+  const lid = digitos(identidad && identidad.lid);
+  const colega = lid ? await d.colegaPorLid(org.id, lid).catch(() => null) : null;
+  const claves = new Set([lid, digitos(identidad && identidad.telefono), digitos(colega && colega.telefono)].filter((x) => x.length >= 8));
+  if (claves.size === 0) return null;
+  const { estaViva } = require("../data/citas");
+  const candidatas = await d.leadsConCita(org.id).catch(() => []);
+  return (
+    candidatas.find((l) => {
+      const c = l.cita;
+      if (!c || !c.fecha_hora || !estaViva(c)) return false;
+      if (Math.abs(Date.parse(c.fecha_hora) - t) > VENTANA_MISMA_VISITA_MS) return false;
+      return claves.has(digitos(l.phone)) || claves.has(digitos(l.celular)) || claves.has(digitos(c.celular_contacto));
+    }) || null
+  );
+}
+
 function cuandoDe(iso) {
   if (!iso) return null;
   const d = new Date(iso);
@@ -78,11 +123,12 @@ function cuandoDe(iso) {
  * @returns { ok, motivo?, leadId? } — ok=false con motivo "sin_asesora" si no
  *          hay a quien avisar. Nunca lanza.
  */
-async function avisar(org, { mensaje, veredicto, señal, identidad, hilo = [] }) {
+async function avisar(org, { mensaje, veredicto, señal, identidad, hilo = [] }, deps = null) {
+  const d = { ...depsPorDefecto(), ...(deps || {}) };
   const advisor = await asesoraDeLinea(org, mensaje.sesion);
   if (!advisor) return { ok: false, motivo: "sin_asesora" };
 
-  const ref = await refDe(org, señal, [...hilo.map((m) => m && m.texto), mensaje.texto]);
+  let ref = await refDe(org, señal, [...hilo.map((m) => m && m.texto), mensaje.texto]);
   const colega = mensaje.remitenteNombre || mensaje.remitenteTelefono || "Un colega";
   // Sin dia y hora no hay cita (Juan, 2026-10-28, caso elizabeth muriel): la
   // visita "por coordinar" llega como interes y la cita se arma cuando haya fecha.
@@ -90,7 +136,13 @@ async function avisar(org, { mensaje, veredicto, señal, identidad, hilo = [] })
   const esVisita = (veredicto.tipo === "cita_confirmada" || veredicto.tipo === "agendando") && !sinFecha;
 
   let leadId = null;
-  if (esVisita) {
+  // Si ya tiene esa visita (por la línea de Sofi u otra), es la misma: se
+  // avisa con su lead y su ref, y no se crea otra.
+  const existente = esVisita ? await visitaVivaDelColega(org, { identidad, fechaIso: veredicto.fecha_hora_iso }, d).catch(() => null) : null;
+  if (existente) {
+    leadId = existente.id;
+    if (existente.cita.ref) ref = String(existente.cita.ref);
+  } else if (esVisita) {
     try {
       const phone = identidad.telefono || identidad.lid;
       const lead = await leads.findOrCreate(org.id, phone, "colega");
