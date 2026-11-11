@@ -674,6 +674,10 @@ function evaluarCandidata(p, c, fuente) {
     // ficha de Sofi pueda confirmar en positivo lo que antes era siempre
     // "sin_confirmar". La ausencia sigue sin significar "no tiene".
     caracteristicas: fuente === "diamond" ? p.caracteristicas || null : null,
+    // La descripción de Wasi en texto corrido (Juan, 2026-11-11): la
+    // revalidación no la veía y el DM decía "no tengo confirmado" lo que ahí
+    // estaba escrito, o mandaba fichas que la descripción descalificaba.
+    descripcion: fuente === "diamond" ? require("../lib/texto-ficha").descripcionPlana(p.descripcion) : null,
     // Administracion (2026-09-13): va en la ficha del colega. Un colega la
     // pidio por DM ("Valor administracion de la opcion 2") y otro la puso
     // como exigencia del pedido ("no mayor a 700.000").

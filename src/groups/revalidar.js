@@ -232,6 +232,14 @@ QUE TE LLEGA
   que aparece ahi, CUMPLE: decilo en 'por_que' y no lo pongas en
   sin_confirmar. Si no aparece, sigue siendo "no lo sabemos": la ausencia
   nunca es un "no tiene", y una ficha sin esa linea no dice nada.
+- Algunas fichas traen "descripcion de la ficha" (el texto que escribio quien
+  la cargo). Lo que diga ahi es un DATO, igual que los campos: si confirma
+  algo del pedido (piso, ascensor, unidad cerrada, parqueadero, portería,
+  administración, para estrenar...), CUMPLE y no va en sin_confirmar. Si
+  contradice algo que el pedido exige (ej. "tercer piso por escalas" cuando
+  piden ascensor, "parte alta" cuando piden "parte baja", "sin parqueadero"
+  cuando piden uno), esa ficha NO le sirve: va en refs_dudosas y en el motivo
+  cita la frase de la descripcion.
 - El motor ya filtro operacion, tipo, zona (exacta o vecina), banda de precio
   y alcobas hacia abajo. Acepta hasta un ${PCT_PRECIO} % POR ENCIMA del presupuesto y
   hasta un ${PCT_AREA} % POR DEBAJO del area minima, y te lo dice en sus razones
@@ -444,11 +452,14 @@ function formatearCandidatas(matches) {
       // positivo en vez de mandarlo a sin_confirmar. Solo si hay: una linea
       // "caracteristicas: ninguna" se leeria como "no tiene nada".
       const caracteristicas = String(m.caracteristicas || "").trim();
+      // La descripción que escribió quien cargó la ficha (2026-11-11).
+      const descripcion = String(m.descripcion || "").trim();
       return [
         `${i + 1}. [puntaje ${m.puntaje}]${aliada ? " [DE UN ALIADO — no se le puede mandar al colega]" : ""} ${m.titulo || "Sin titulo"}`,
         `   ${datos}`,
         ubicacion ? `   ${ubicacion}` : null,
         caracteristicas ? `   caracteristicas registradas: ${caracteristicas}` : null,
+        descripcion ? `   descripcion de la ficha: ${descripcion}` : null,
         `   el motor dice: ${razones}`,
         cuenta,
       ]

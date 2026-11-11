@@ -920,8 +920,12 @@ async function executeTool(name, input, ctx) {
     // Sin sangria (2026-09-14): el modelo no la necesita para leer el JSON y
     // son tokens puros. Medido con count_tokens sobre 5 propiedades reales:
     // 3.002 con sangria contra 2.572 compacto.
+    // La descripción va en texto corrido, sin el HTML de Wasi (2026-11-11):
+    // se lee mejor y cuesta menos tokens.
+    const { descripcionPlana } = require("../lib/texto-ficha");
     const paraElModelo = results.map((p) => ({
       ...Object.fromEntries(Object.entries(p).filter(([campo]) => !NO_AL_MODELO.has(campo))),
+      ...(p.descripcion ? { descripcion: descripcionPlana(p.descripcion, 900) } : {}),
       precio_m2: precioPorM2(p),
     }));
     return JSON.stringify(paraElModelo);

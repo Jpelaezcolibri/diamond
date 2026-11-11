@@ -344,7 +344,9 @@ REGLA DE ORO: ante la duda, preguntale que necesita. Un colega que escribe "hola
             p.estrato ? `estrato ${p.estrato}` : null,
           ].filter(Boolean).join(" · ");
           const estado = p.disponible === false ? " · YA NO ESTA DISPONIBLE" : "";
-          return `- Ref ${p.ref}: ${datos}${estado}${p.linkWasi ? `\n  linkWasi: ${p.linkWasi}` : ""}`;
+          // La descripción de la ficha (2026-11-11): lo que trae ahí cuenta como dato.
+          const desc = require("../lib/texto-ficha").descripcionPlana(p.descripcion, 400);
+          return `- Ref ${p.ref}: ${datos}${estado}${p.linkWasi ? `\n  linkWasi: ${p.linkWasi}` : ""}${desc ? `\n  descripción: ${desc}` : ""}`;
         })
         .join("\n")}`
     : "";
