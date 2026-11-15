@@ -182,7 +182,12 @@ async function atenderPausa({ org, c, ahora = new Date() }, deps = null) {
   const ultimoCliente = c.ultimoCliente;
   const enVentana = Boolean(ultimoCliente && ahora.getTime() - new Date(ultimoCliente.created_at).getTime() < VENTANA_24H_MS);
   let resultado = "fuera de la ventana de 24 h: no se le escribió al cliente";
-  if (enVentana && lead.phone) {
+  // Al colega, un solo mensaje (Juan, 2026-11-15): ya le dijeron que un
+  // asesor se contacta; Sofi vuelve a contestar si escribe, pero no le
+  // escribe por su cuenta "sigo pendiente de ti".
+  const esColega = lead.source === "colega";
+  if (esColega) resultado = "colega: no se le escribe por su cuenta";
+  if (enVentana && lead.phone && !esColega) {
     const r = await Promise.resolve(d.enviar(org, lead.phone, texto, { fromPhoneId: c.whatsapp_phone_id || null })).catch((e) => ({ ok: false, error: e.message }));
     const ok = Boolean(r && r.ok);
     const msg = await Promise.resolve(d.guardarMensaje(c.id, "assistant", texto, { wa_message_id: (r && r.wamid) || null })).catch((e) => {

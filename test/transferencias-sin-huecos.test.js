@@ -177,7 +177,8 @@ test("sin asesora, Sofi no dice que ya alertaron a alguien", () => {
   assert.match(sin, /alguien del equipo/);
   const con = instruccionTransferencia({ especialidad: "venta", advisor: DAIANA, org: ORG });
   assert.match(con, /ya fue alertado/i);
-  assert.match(con, /Daiana lo va a contactar/); // Juan, 2026-11-11: nombre de pila cuando se sabe quién la atiende
+  assert.match(con, /un asesor de nuestro equipo lo va a contactar/); // Juan, 2026-11-15: nunca el nombre de la asesora
+  assert.doesNotMatch(con, /Daiana/);
   assert.doesNotMatch(con, /Asesor \d/);
 });
 

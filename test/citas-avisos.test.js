@@ -1,7 +1,7 @@
 // Citas a tiempo (brief citas-avisos, Juan 2026-10-21): las vencidas salen
 // solas, recordatorio 1 h antes a la asesora de la rotacion, aviso repetido a
 // los 15 min y el tiempo que le queda a cada cita en el CRM.
-const { test, beforeEach, describe } = require("node:test");
+const { test, beforeEach, before, after, describe } = require("node:test");
 const assert = require("node:assert");
 const memory = require("../src/data/memory");
 const cv = require("../src/lib/citas-vencidas");
@@ -180,7 +180,20 @@ describe("recordatorio a la asesora de la rotacion", () => {
 });
 
 // ---------- 3. Aviso repetido a los 15 min ----------
+// Desde 2026-11-15 (Juan, caso Juan Esteban Cardona) el aviso repetido de
+// 15 min a la misma asesora esta APAGADO salvo ESCALERA_REAVISO_ACTIVO=true.
+// Estos tests prenden la variable para seguir fijando su logica; los de abajo
+// fijan que sin ella no sale y el tope de avisos por visita.
 describe("aviso repetido a los 15 min", () => {
+  let reavisoAntes;
+  before(() => {
+    reavisoAntes = process.env.ESCALERA_REAVISO_ACTIVO;
+    process.env.ESCALERA_REAVISO_ACTIVO = "true";
+  });
+  after(() => {
+    if (reavisoAntes === undefined) delete process.env.ESCALERA_REAVISO_ACTIVO;
+    else process.env.ESCALERA_REAVISO_ACTIVO = reavisoAntes;
+  });
   const cita = (over = {}) => ({
     estado: "propuesta", fecha_hora: "2026-10-24T20:00:00Z", corte_at: "2026-10-24T16:00:00Z", ref: "777",
     creada_at: "2026-10-22T14:00:00Z", asignada_at: "2026-10-22T14:00:00Z", asesor_id: "a1",
@@ -234,6 +247,7 @@ describe("aviso repetido a los 15 min", () => {
     assert.match(avisos[0].titulo, /^Sigue pendiente: visita por confirmar \(Ref 777, /);
     assert.strictEqual(memory.leads[0].cita.asesor_id, "a1", "el paso de 60 min no cambia");
     assert.strictEqual(memory.leads[0].cita.reaviso_at, "2026-10-22T14:16:00.000Z");
+    assert.strictEqual(memory.leads[0].cita.reavisos, 1, "el aviso repetido cuenta para el tope");
   });
 
   test("al rotar se borra reaviso_at", async () => {
@@ -242,6 +256,90 @@ describe("aviso repetido a los 15 min", () => {
     await escalera.runOnce({ ahora: t("2026-10-22T15:01:00Z"), deps });
     assert.strictEqual(memory.leads[0].cita.asesor_id, "a2");
     assert.strictEqual(memory.leads[0].cita.reaviso_at, null);
+  });
+});
+
+// ---------- 3b. Sin la variable no hay aviso repetido; tope de avisos ----------
+describe("aviso repetido apagado y tope de avisos por visita (Juan, 2026-11-15)", () => {
+  const cita = (over = {}) => ({
+    estado: "propuesta", fecha_hora: "2026-10-24T20:00:00Z", corte_at: "2026-10-24T16:00:00Z", ref: "777",
+    creada_at: "2026-10-22T14:00:00Z", asignada_at: "2026-10-22T14:00:00Z", asesor_id: "a1",
+    historial: [{ asesor_id: "a1", desde: "2026-10-22T14:00:00Z" }], ...over,
+  });
+  const lead = (over = {}) => ({ id: "l1", org_id: ORG.id, nombre: "Laura", phone: "573125550000", source: "colega", cita: cita(over) });
+  const t = (iso) => new Date(iso);
+  let reavisoAntes;
+  before(() => {
+    reavisoAntes = process.env.ESCALERA_REAVISO_ACTIVO;
+    delete process.env.ESCALERA_REAVISO_ACTIVO;
+  });
+  after(() => {
+    if (reavisoAntes === undefined) delete process.env.ESCALERA_REAVISO_ACTIVO;
+    else process.env.ESCALERA_REAVISO_ACTIVO = reavisoAntes;
+  });
+
+  test("sin ESCALERA_REAVISO_ACTIVO no hay aviso repetido a los 15 min", async () => {
+    assert.strictEqual(escalera.tocaReaviso({ lead: lead(), ahora: t("2026-10-22T14:15:00Z") }), false);
+    assert.strictEqual(escalera.tocaReaviso({ lead: lead(), ahora: t("2026-10-22T14:40:00Z") }), false);
+    const avisos = [];
+    memory.leads.push(lead());
+    const deps = {
+      aviso: async () => { avisos.push("aviso-nuevo"); return { ok: true }; },
+      plantilla: async () => { avisos.push("plantilla"); return { ok: true }; },
+      org: async () => ORG,
+      notificar: async () => { avisos.push("nota"); return { ok: true }; },
+      reaviso: async () => { avisos.push("reaviso"); return { ok: true }; },
+    };
+    await escalera.runOnce({ ahora: t("2026-10-22T14:16:00Z"), deps });
+    await escalera.runOnce({ ahora: t("2026-10-22T14:40:00Z"), deps });
+    assert.deepStrictEqual(avisos, []);
+    assert.strictEqual(memory.leads[0].cita.asesor_id, "a1");
+    assert.ok(!memory.leads[0].cita.reaviso_at);
+  });
+
+  test("el reaviso sin relevo sigue saliendo sin la variable", () => {
+    assert.strictEqual(escalera.tocaReaviso({ lead: lead(), ahora: t("2026-10-22T16:00:00Z"), sinRelevo: true }), true);
+  });
+
+  test("avisosDe cuenta asignaciones (minimo 1) mas avisos repetidos", () => {
+    assert.strictEqual(escalera.avisosDe({}), 1);
+    assert.strictEqual(escalera.avisosDe({ historial: [{}, {}] }), 2);
+    assert.strictEqual(escalera.avisosDe({ historial: [{}, {}], reavisos: 1 }), 3);
+    assert.strictEqual(escalera.MAX_AVISOS, 3);
+  });
+
+  test("con 3 avisos (historial de 3) ya no rota ni reavisa", async () => {
+    const historial = [
+      { asesor_id: "a1", desde: "2026-10-22T12:00:00Z" },
+      { asesor_id: "a2", desde: "2026-10-22T13:00:00Z" },
+      { asesor_id: "a1", desde: "2026-10-22T14:00:00Z" },
+    ];
+    const l = lead({ historial });
+    const ciclo = [A1, A2];
+    assert.deepStrictEqual(escalera.pasoDeEscalera({ lead: l, ciclo, citasOrg: [], ahora: t("2026-10-22T15:01:00Z") }), { accion: "nada" });
+    assert.strictEqual(escalera.tocaReaviso({ lead: l, ahora: t("2026-10-22T16:00:00Z"), sinRelevo: true }), false, "ni el sin relevo");
+    const avisos = [];
+    memory.leads.push(l);
+    const deps = {
+      aviso: async () => { avisos.push("aviso-nuevo"); return { ok: true }; },
+      plantilla: async () => { avisos.push("plantilla"); return { ok: true }; },
+      org: async () => ORG,
+      notificar: async () => { avisos.push("nota"); return { ok: true }; },
+      reaviso: async () => { avisos.push("reaviso"); return { ok: true }; },
+    };
+    await escalera.runOnce({ ahora: t("2026-10-22T15:01:00Z"), deps });
+    assert.deepStrictEqual(avisos, []);
+    assert.strictEqual(memory.leads[0].cita.asesor_id, "a1", "no rota");
+    assert.strictEqual(memory.leads[0].cita.estado, "propuesta", "espera su corte");
+  });
+
+  test("con 2 asignaciones todavia rota (control)", async () => {
+    const historial = [
+      { asesor_id: "a2", desde: "2026-10-22T13:00:00Z" },
+      { asesor_id: "a1", desde: "2026-10-22T14:00:00Z" },
+    ];
+    const r = escalera.pasoDeEscalera({ lead: lead({ historial }), ciclo: [A1, A2], citasOrg: [], ahora: t("2026-10-22T15:01:00Z") });
+    assert.strictEqual(r.accion, "rotar");
   });
 });
 

@@ -154,6 +154,8 @@ app.listen(config.port, () => {
   if (config.supabaseUrl) require("./scheduler/citas-recordatorio").start();
   // La escalera horaria de las citas en rotacion (2026-10-07).
   if (config.supabaseUrl) require("./scheduler/citas-escalera").start();
+  // Plantilla diaria para que Claudia y Catherine abran su ventana de 24 h (2026-11-15).
+  if (config.supabaseUrl) require("./scheduler/abrir-canal-asesoras").start();
   if (config.supabaseUrl) require("./scheduler/preguntas-escalera").start();
   // Nadie queda sin contactar (Juan, 2026-10-29): lo que Sofi no retoma pasa a
   // una asesora. No lo apaga ASESORA_SOLO_VISITAS.

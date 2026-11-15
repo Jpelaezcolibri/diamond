@@ -1952,11 +1952,14 @@ async function marcarColegaSoloLlamada(input, ctx) {
 // armarAvisoCitaColega, y le devuelve a Sofi el nombre y el celular para que
 // se los pase. Si el aviso no salio, el texto le prohibe decir que aviso.
 //
-// Repetidos: un colega que insiste en el mismo rato no dispara un aviso por
-// mensaje. La marca vive en memoria del proceso (un reinicio la borra, y eso
-// solo puede costar un aviso de mas, nunca uno de menos) y se pone solo si el
-// aviso principal salio.
-const VENTANA_REPETIDO_CONTACTO_MS = 30 * 60 * 1000;
+// Repetidos: un colega que insiste no dispara un aviso por mensaje. La marca
+// vive en memoria del proceso (un reinicio la borra, y eso solo puede costar
+// un aviso de mas, nunca uno de menos) y se pone solo si el aviso principal
+// salio. Desde 2026-11-15 (Juan, caso Juan Esteban Cardona: tres asesoras
+// distintas en un día) la ventana es de 24 h y, con una visita por confirmar,
+// no se manda otro aviso: la asesora ya tiene la ficha completa por la
+// escalera de la visita.
+const VENTANA_REPETIDO_CONTACTO_MS = 24 * 60 * 60 * 1000;
 const pedidosContactoRecientes = new Map();
 
 function celularLegible(telefono) {
@@ -1993,8 +1996,12 @@ async function pedirContactoAsesora(input, ctx) {
 
   const clave = `${ctx.org.id}:${ctx.lead.id}`;
   const antes = pedidosContactoRecientes.get(clave);
-  if (antes && Date.now() - antes < VENTANA_REPETIDO_CONTACTO_MS) {
-    return `El aviso ya está hecho desde hace un rato; no hace falta otro. Dile al colega que ya tiene el aviso y que ${quien} le va a escribir o llamar.${sinPromesas}${pideNumero}`;
+  const yaAvisado = `El equipo ya tiene el aviso; NO se manda otro. Si todavía no se lo dijiste en esta conversación, dile una vez que ${quien} se contactará con él. Si ya se lo dijiste, no lo repitas: contesta lo que pregunte.${sinPromesas}${pideNumero}`;
+  if (antes && Date.now() - antes < VENTANA_REPETIDO_CONTACTO_MS) return yaAvisado;
+  const cita = ctx.lead.cita;
+  if (cita && cita.estado === "propuesta" && require("../data/citas").estaViva(cita)) {
+    pedidosContactoRecientes.set(clave, Date.now());
+    return yaAvisado;
   }
 
   const telColega = celularDe(ctx.lead) || "";
@@ -2039,7 +2046,7 @@ async function pedirContactoAsesora(input, ctx) {
   }
 
   pedidosContactoRecientes.set(clave, Date.now());
-  return `Listo: el aviso quedó hecho y ${quien} se va a comunicar con el colega por este mismo chat. Díselo así, con esas palabras.${sinPromesas}${pideNumero}`;
+  return `Listo: el aviso quedó hecho. Dile una sola vez que ${quien} se contactará con él.${sinPromesas}${pideNumero}`;
 }
 
 function _resetPedidosContacto() {

@@ -9,7 +9,8 @@
 // 1. Hacia el cliente o colega nunca sale "Asesor N" ni el nombre real.
 // 2. La confirmación que le llega queda guardada en su chat (Sofi la ve).
 // 3. El prompt dice sin ambigüedad si la cita está SOLICITADA o CONFIRMADA.
-// 4. "Quiero hablar con una persona" le llega a quien tiene la cita.
+// 4. "Quiero hablar con una persona" le llega a quien tiene la cita confirmada;
+//    con la visita por confirmar no se manda otro aviso (Juan, 2026-11-15).
 // 5. Un colega sin celular visible: los avisos lo dicen y Sofi le pide el número.
 const { test, beforeEach } = require("node:test");
 const assert = require("node:assert");
@@ -28,9 +29,9 @@ const { avisarCitaPorConfirmar } = require("../src/notifications/aviso-cita");
 const ORG = { id: "org-1", name: "Diamond" };
 const DAIANA = { id: "a1", name: "Daiana Zea", phone: "573011880668", alias_publico: "Asesor 1" };
 const CATHERINE = { id: "a3", name: "Catherine Uribe", phone: "573028536489", alias_publico: "Asesor 3" };
-// Desde el 2026-11-11 el nombre de pila sí sale cuando se sabe quién; lo que
-// nunca sale es el alias interno ni el apellido.
-const SIN_ALIAS = /Asesor\s*\d|Asesor N\b|Zea|Uribe|Valencia/;
+// Desde el 2026-11-15 (Juan) hacia afuera no sale ningún nombre: ni el de
+// pila, ni el alias interno, ni el apellido. Siempre "un asesor de nuestro equipo".
+const SIN_ALIAS = /Asesor\s*\d|Asesor N\b|Zea|Uribe|Valencia|Daiana|Catherine|Claudia/;
 const NORHA_TEL = "CO.1622610936270244";
 const citaConfirmada = { tipo: "visita", ref: "10505674", estado: "confirmada", asesor_id: "a3", fecha_hora: "2026-11-10T10:00:00-05:00", confirmada_at: "2026-11-07T23:12:43Z" };
 const citaSolicitada = { tipo: "visita", ref: "10505674", estado: "propuesta", asesor_id: "a3", fecha_hora: "2026-11-10T10:00:00-05:00", corte_at: "2026-11-10T01:00:00Z" };
@@ -39,13 +40,14 @@ beforeEach(() => { tools._resetPedidosContacto(); });
 
 // ── 1. Nunca "Asesor N" hacia afuera ──────────────────────────────────────
 
-test("hacia afuera nunca el alias interno; sin asesora conocida, 'un asesor de nuestro equipo'", () => {
+test("hacia afuera nunca el alias interno ni el nombre: siempre 'un asesor de nuestro equipo'", () => {
   assert.strictEqual(ip.asesorPublico(), "un asesor de nuestro equipo");
   const t = ip.textoCitaConfirmada({ cuando: "del martes 10 de noviembre a las 10:00 a. m.", ref: "10505674" });
   assert.strictEqual(t, "Tu visita del martes 10 de noviembre a las 10:00 a. m. a la ref 10505674 quedó CONFIRMADA. Te recibe un asesor de nuestro equipo.");
   const tr = ip.instruccionTransferencia({ especialidad: "venta", advisor: DAIANA, org: ORG });
   assert.doesNotMatch(tr, SIN_ALIAS);
-  assert.match(tr, /Daiana lo va a contactar/);
+  assert.match(tr, /un asesor de nuestro equipo lo va a contactar/);
+  assert.strictEqual(ip.asesorPublico(DAIANA), "un asesor de nuestro equipo");
   assert.strictEqual(ip.aliasPublico, undefined, "ya no existe la función que sacaba el alias hacia afuera");
 });
 
@@ -62,7 +64,8 @@ test("el prompt del colega no le enseña a Sofi a nombrar asesores", () => {
   }).map((b) => b.text).join("\n");
   assert.doesNotMatch(texto, /Asesor\s*\d|alias como/);
   assert.match(texto, /un asesor de nuestro equipo/);
-  assert.match(texto, /nunca un número de asesor/i);
+  assert.match(texto, /NUNCA nombres a una asesora, ni un número de asesor/);
+  assert.match(texto, /Aviso al equipo, una sola vez/);
 });
 
 test("el prompt del cliente tampoco nombra asesores", () => {
@@ -140,14 +143,14 @@ function mocksContacto(t) {
   return avisos;
 }
 
-test("con una visita viva, el pedido de contacto le llega a quien tiene la visita", async (t) => {
+test("con una visita confirmada, el pedido de contacto le llega a quien tiene la visita", async (t) => {
   const avisos = mocksContacto(t);
   const ctx = { org: ORG, lead: { id: "lead-norha", phone: "573125802350", nombre: null, cita: citaConfirmada }, colega: { nombre: "Norha Velez M", telefono: "573125802350" } };
   const out = await executeTool("pedir_contacto_asesora", { motivo: "aclarar la visita" }, ctx);
   assert.strictEqual(avisos.length, 1);
   assert.strictEqual(avisos[0].advisor, CATHERINE);
   assert.doesNotMatch(out, SIN_ALIAS);
-  assert.match(out, /Catherine se va a comunicar/, "se sabe quién: la de la visita");
+  assert.match(out, /^Listo: el aviso quedó hecho\. Dile una sola vez que un asesor de nuestro equipo se contactará con él\./, "hacia afuera sin nombre (2026-11-15)");
   assert.doesNotMatch(out, /\bhoy\b/);
 });
 
@@ -159,6 +162,16 @@ test("sin visita, va a la asesora principal y Sofi tampoco la nombra", async (t)
   assert.doesNotMatch(out, SIN_ALIAS);
   const repetido = await executeTool("pedir_contacto_asesora", {}, ctx);
   assert.doesNotMatch(repetido, SIN_ALIAS);
+});
+
+test("con una visita por confirmar (propuesta), no sale otro aviso: la asesora ya la tiene por la escalera", async (t) => {
+  const avisos = mocksContacto(t);
+  const ctx = { org: ORG, lead: { id: "lead-norha", phone: "573125802350", nombre: null, cita: citaSolicitada }, colega: { nombre: "Norha Velez M", telefono: "573125802350" } };
+  const out = await executeTool("pedir_contacto_asesora", { motivo: "aclarar la visita" }, ctx);
+  assert.strictEqual(avisos.length, 0);
+  assert.match(out, /^El equipo ya tiene el aviso; NO se manda otro\./);
+  assert.doesNotMatch(out, SIN_ALIAS);
+  assert.doesNotMatch(out, /\bhoy\b/);
 });
 
 // ── 5. Colega sin celular visible ─────────────────────────────────────────

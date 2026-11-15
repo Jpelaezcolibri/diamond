@@ -36,15 +36,10 @@ test("si 2 h antes ya pasó cuando llega el corte, se cancela directo", () => {
   assert.strictEqual(pasoDeEscalera({ lead: l, ciclo: [A1, A2], citasOrg: [], ahora: new Date("2026-10-09T19:00:00Z") }).accion, "cortar");
 });
 
-test("runOnce: extiende, avisa una sola vez al colega y no cancela", async () => {
-  memory.leads.length = 0;
-  memory.advisors.length = 0;
-  memory.advisors.push({ ...A1 }, { ...A2 });
-  const l = lead();
-  memory.leads.push(l);
-  const enviados = [];
-  const guardados = [];
-  const deps = {
+// Desde 2026-11-15 (Juan): al COLEGA no se le manda "seguimos confirmando"
+// (ya sabe que un asesor se contacta, un solo mensaje); al cliente si.
+function depsDe(enviados, guardados, registrar) {
+  return {
     aviso: async () => ({ ok: true }),
     texto: async (_o, to, t) => { enviados.push({ to, t }); return { ok: true }; },
     plantilla: async (_o, to, o) => { enviados.push({ to, plantilla: o.name }); return { ok: true }; },
@@ -53,8 +48,39 @@ test("runOnce: extiende, avisa una sola vez al colega y no cancela", async () =>
     reaviso: async () => ({ ok: true }),
     vencidas: async () => ({ vencidas: 0 }),
     soloLlamada: async () => false,
-    registrar: async (_o, l, t) => { guardados.push({ lead: l.id, t }); return {}; },
+    registrar: registrar || (async (_o, l, t) => { guardados.push({ lead: l.id, t }); return {}; }),
   };
+}
+
+function preparar(l) {
+  memory.leads.length = 0;
+  memory.advisors.length = 0;
+  memory.advisors.push({ ...A1 }, { ...A2 });
+  memory.leads.push(l);
+}
+
+test("runOnce con un colega: extiende y no cancela, pero no le escribe 'seguimos confirmando'", async () => {
+  preparar(lead());
+  const enviados = [];
+  const guardados = [];
+  const deps = depsDe(enviados, guardados);
+  await escalera.runOnce({ ahora: new Date("2026-10-09T16:00:00Z"), deps });
+  assert.strictEqual(memory.leads[0].cita.estado, "propuesta");
+  assert.strictEqual(memory.leads[0].cita.corte_at, "2026-10-09T18:00:00.000Z");
+  assert.strictEqual(memory.leads[0].cita.corte_original_at, "2026-10-09T16:00:00Z");
+  assert.ok(memory.leads[0].cita.aviso_espera_at, "la extension queda marcada");
+  assert.deepStrictEqual(enviados, [], "al colega no le sale nada");
+  assert.deepStrictEqual(guardados, [], "nada queda en su conversacion");
+  await escalera.runOnce({ ahora: new Date("2026-10-09T16:05:00Z"), deps });
+  assert.deepStrictEqual(enviados, []);
+});
+
+test("runOnce con un cliente: extiende, le avisa una sola vez y no cancela", async () => {
+  preparar(lead());
+  memory.leads[0].source = "web";
+  const enviados = [];
+  const guardados = [];
+  const deps = depsDe(enviados, guardados);
   await escalera.runOnce({ ahora: new Date("2026-10-09T16:00:00Z"), deps });
   assert.strictEqual(guardados.length, 1, "I1: el seguimos confirmando queda en la conversacion");
   assert.strictEqual(guardados[0].lead, "l1");
@@ -70,18 +96,12 @@ test("runOnce: extiende, avisa una sola vez al colega y no cancela", async () =>
 });
 
 test("I1: si guardar el seguimiento falla, el aviso igual salio y el plazo queda extendido", async () => {
-  memory.leads.length = 0;
-  memory.advisors.length = 0;
-  memory.advisors.push({ ...A1 }, { ...A2 });
-  memory.leads.push(lead());
+  preparar(lead());
+  memory.leads[0].source = "web";
   const enviados = [];
-  const deps = {
-    aviso: async () => ({ ok: true }), texto: async (_o, to, t) => { enviados.push(t); return { ok: true }; },
-    plantilla: async () => ({ ok: true }), org: async () => ({ id: "org-1", name: "Diamond" }),
-    notificar: async () => ({ ok: true }), reaviso: async () => ({ ok: true }), vencidas: async () => ({ vencidas: 0 }),
-    soloLlamada: async () => false, registrar: async () => { throw new Error("db caida"); },
-  };
+  const deps = depsDe(enviados, [], async () => { throw new Error("db caida"); });
   await escalera.runOnce({ ahora: new Date("2026-10-09T16:00:00Z"), deps });
   assert.strictEqual(enviados.length, 1);
   assert.strictEqual(memory.leads[0].cita.corte_at, "2026-10-09T18:00:00.000Z");
 });
+

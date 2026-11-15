@@ -375,6 +375,9 @@ router.post("/webhook", async (req, res) => {
           // Confirmar / Otro horario de la plantilla cita_por_confirmar.
           // Require tardio: confirmar-cita -> whatsapp (este archivo).
           await require("../lib/confirmar-cita").procesarBotonCita(org, userPhone, botonId);
+        } else if (String(botonId).startsWith("canal:")) {
+          // "Estoy disponible" de la plantilla abrir_canal_asesora (2026-11-15).
+          await require("../lib/canal-asesora").procesarBotonCanal(org, userPhone);
         } else if (String(botonId).startsWith("vig:")) {
           // Sigue disponible / Ya no está de la pregunta de vigencia (2026-10-19).
           await require("../lib/vigencia-asesor").procesarBotonVigencia(org, userPhone, botonId);

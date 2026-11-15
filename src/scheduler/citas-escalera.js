@@ -24,6 +24,19 @@ const INTERVALO_MIN = Number(process.env.ESCALERA_INTERVALO_MIN || 5);
 // en el plazo ya no se cancela; se avisa una vez "seguimos confirmando" y el
 // corte pasa a CITAS_CANCELAR_HORAS_ANTES (2) antes de la visita.
 const CANCELAR_HORAS_ANTES = Number(process.env.CITAS_CANCELAR_HORAS_ANTES || 2);
+// Tope de avisos por visita (Juan, 2026-11-15, caso Juan Esteban Cardona: la
+// visita rotó ~10 veces entre las tres en día y medio). Se cuentan las
+// asignaciones (una por asesora a la que le llegó) y los avisos repetidos;
+// con 3 se deja de avisar y la visita espera su corte. El aviso repetido de
+// 15 min a la misma asesora queda apagado salvo ESCALERA_REAVISO_ACTIVO=true:
+// los 3 avisos son uno para cada asesora.
+const MAX_AVISOS = Number(process.env.CITAS_MAX_AVISOS || 3);
+function avisosDe(c) {
+  return Math.max(1, ((c && c.historial) || []).length) + Number((c && c.reavisos) || 0);
+}
+function reavisoActivo() {
+  return /^(true|1|si|sí|on)$/i.test(String(process.env.ESCALERA_REAVISO_ACTIVO || ""));
+}
 function citasSinCorte() {
   return /^(true|1|si|sí|on)$/i.test(String(process.env.CITAS_SIN_CORTE || ""));
 }
@@ -47,6 +60,7 @@ function pasoDeEscalera({ lead, ciclo, citasOrg, ahora = new Date() }) {
     return { accion: "cortar" };
   }
   if (reglas.enPausa(ahora)) return { accion: "nada" };
+  if (avisosDe(c) >= MAX_AVISOS) return { accion: "nada" };
   const desde = new Date(c.asignada_at || c.creada_at || 0).getTime();
   if (isNaN(desde) || ahora.getTime() - desde < PASO_MIN * 60 * 1000) return { accion: "nada" };
   // La anticipacion de 24 h se midio al crearla: para elegir al siguiente solo
@@ -78,6 +92,8 @@ const REAVISO_SIN_RELEVO_MIN = Number(process.env.ESCALERA_REAVISO_SIN_RELEVO_MI
 function tocaReaviso({ lead, ahora = new Date(), sinRelevo = false }) {
   const c = lead && lead.cita;
   if (!c || !c.asesor_id || c.estado !== "propuesta") return false;
+  if (avisosDe(c) >= MAX_AVISOS) return false;
+  if (!sinRelevo && !reavisoActivo()) return false;
   if (c.corte_at && ahora.getTime() >= new Date(c.corte_at).getTime()) return false;
   if (reglas.enPausa(ahora)) return false;
   const desde = new Date(c.asignada_at || c.creada_at || 0).getTime();
@@ -164,8 +180,9 @@ async function extender({ org, lead, nuevoCorte, ahora, c }) {
   const cita = { ...lead.cita, corte_original_at: lead.cita.corte_at, corte_at: nuevoCorte, aviso_espera_at: ahora.toISOString() };
   await leads.update(lead.id, { cita });
   lead.cita = cita;
-  const solo = lead.source === "colega" ? await c.soloLlamada(org.id, lead.phone).catch(() => null) : false;
-  if (solo === false) {
+  // Al colega, un solo mensaje (Juan, 2026-11-15): no se le manda "seguimos
+  // confirmando"; ya sabe que un asesor se contacta.
+  if (lead.source !== "colega") {
     // Con la ventana cerrada no sale nada: no hay plantilla para esto (spec §6).
     const texto = `Seguimos confirmando tu visita ${cuandoDe(cita)} con el asesor. Te aviso apenas la confirme.`;
     const r = await c.texto(org, lead.phone, texto).catch((e) => {
@@ -191,7 +208,7 @@ async function reavisar({ org, lead, ciclo, ahora, c }) {
   const actual = ciclo.find((a) => a.id === lead.cita.asesor_id) || null;
   if (!actual) return false;
   // Se marca ANTES de avisar: un fallo de WhatsApp no repite la campana.
-  const cita = { ...lead.cita, reaviso_at: ahora.toISOString() };
+  const cita = { ...lead.cita, reaviso_at: ahora.toISOString(), reavisos: Number(lead.cita.reavisos || 0) + 1 };
   await leads.update(lead.id, { cita });
   lead.cita = cita;
   const quien = `${quienDe(lead)}${lead.source === "colega" ? " (colega)" : ""}`;
@@ -317,4 +334,4 @@ function stop() {
   timer = null;
 }
 
-module.exports = { citasSinCorte, pasoDeEscalera, tocaReaviso, runOnce, start, stop, REAVISO_MIN, REAVISO_SIN_RELEVO_MIN };
+module.exports = { MAX_AVISOS, avisosDe, citasSinCorte, pasoDeEscalera, tocaReaviso, runOnce, start, stop, REAVISO_MIN, REAVISO_SIN_RELEVO_MIN };

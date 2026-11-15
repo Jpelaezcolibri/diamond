@@ -55,8 +55,8 @@ test("pasoPausa: transferido a las 7:50 p. m., el reaviso no sale de noche sino 
 
 // ── Acciones ─────────────────────────────────────────────────────────────
 
-function mundo({ seguimiento, asesora = DAIANA, envioOk = true } = {}) {
-  const lead = { id: "lead-1", nombre: "Laura", phone: "573125550000", transferido_advisor_id: DAIANA.id, seguimiento };
+function mundo({ seguimiento, asesora = DAIANA, envioOk = true, source } = {}) {
+  const lead = { id: "lead-1", nombre: "Laura", phone: "573125550000", transferido_advisor_id: DAIANA.id, seguimiento, ...(source ? { source } : {}) };
   const log = { updates: [], avisos: [], modos: [], mensajes: [], envios: [], alertas: [], entregas: [] };
   const deps = {
     leerLead: async () => ({ ...lead, seguimiento: lead.seguimiento }),
@@ -90,14 +90,16 @@ test("a los 30 min: aviso repetido a la duena (campana + aviso_app) una sola vez
   assert.equal(log.modos.length, 0);
 });
 
-test("a las 2 h: vuelve a Sofi, le escribe al cliente con el alias, lo guarda y alerta a Juan una vez", async () => {
+test("a las 2 h: vuelve a Sofi, le escribe al cliente sin nombrar a la asesora, lo guarda y alerta a Juan una vez", async () => {
   const { lead, log, deps } = mundo({ seguimiento: { pausa_transferencia: { at: T0.toISOString(), advisor_id: DAIANA.id, reaviso_at: mas(30).toISOString() } } });
   const c = cand(lead);
   assert.equal(await p.atenderPausa({ org: ORG, c, ahora: mas(121) }, deps), "devuelta");
   assert.deepEqual(log.modos, [{ id: "conv-1", modo: "bot" }]);
   assert.equal(log.envios.length, 1);
   assert.equal(log.envios[0].tel, lead.phone);
-  assert.equal(log.envios[0].texto, "Sigo pendiente de ti mientras Daiana se desocupa. ¿En qué te puedo ayudar mientras tanto?"); // Juan, 2026-11-11: nombre de pila cuando se sabe quién la atiende
+  // Juan, 2026-11-15: hacia afuera nunca el nombre de la asesora.
+  assert.equal(log.envios[0].texto, "Sigo pendiente de ti mientras un asesor de nuestro equipo se desocupa. ¿En qué te puedo ayudar mientras tanto?");
+  assert.doesNotMatch(log.envios[0].texto, /Daiana|Asesor \d/);
   const guardado = log.mensajes.find((m) => m.role === "assistant");
   assert.equal(guardado.content, log.envios[0].texto);
   assert.equal(guardado.extras.wa_message_id, "wamid.S");
@@ -108,6 +110,20 @@ test("a las 2 h: vuelve a Sofi, le escribe al cliente con el alias, lo guarda y 
   assert.equal(lead.seguimiento.pausa_transferencia, undefined, "la marca se borra: no se repite");
   assert.equal(await p.atenderPausa({ org: ORG, c, ahora: mas(200) }, deps), "nada");
   assert.equal(log.alertas.length, 1);
+});
+
+test("a las 2 h con un colega: vuelve a Sofi y alerta, pero no le escribe por su cuenta (Juan, 2026-11-15)", async () => {
+  const { lead, log, deps } = mundo({ source: "colega", seguimiento: { pausa_transferencia: { at: T0.toISOString(), advisor_id: DAIANA.id, reaviso_at: mas(30).toISOString() } } });
+  const c = cand(lead);
+  assert.equal(await p.atenderPausa({ org: ORG, c, ahora: mas(121) }, deps), "devuelta");
+  assert.deepEqual(log.modos, [{ id: "conv-1", modo: "bot" }]);
+  assert.equal(log.envios.length, 0, "al colega no se le escribe 'sigo pendiente de ti'");
+  assert.equal(log.mensajes.filter((m) => m.role === "assistant").length, 0);
+  const nota = log.mensajes.find((m) => m.role === "system");
+  assert.match(nota.content, /colega: no se le escribe por su cuenta/);
+  assert.equal(log.alertas.length, 1);
+  assert.match(log.alertas[0], /colega: no se le escribe por su cuenta/);
+  assert.equal(lead.seguimiento.pausa_transferencia, undefined);
 });
 
 test("a las 2 h fuera de la ventana de 24 h: no le escribe al cliente, solo vuelve a Sofi y alerta", async () => {

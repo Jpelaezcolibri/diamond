@@ -22,11 +22,18 @@ for (const [quien, t] of Object.entries(textos)) {
   test(`${quien}: una propiedad se describe solo con los datos de la ficha`, () => {
     assert.match(t, /nunca la describas con los datos del pedido/i);
   });
-  // Juan (2026-11-11): nombre de pila solo cuando se sabe quién; nunca "Asesor N".
-  test(`${quien}: nombres del equipo solo cuando se sabe quién, nunca el número de asesor`, () => {
-    assert.match(t, /un asesor de nuestro equipo/i);
-    assert.match(t, /Claudia, Catherine o Daiana/);
-    assert.match(t, /nunca un número de asesor/i);
+  // Juan (2026-11-15): hacia afuera nunca se nombra a una asesora (antes, el
+  // 2026-11-11, el nombre de pila si se sabía quién); y el aviso al equipo se
+  // dice una sola vez.
+  test(`${quien}: nunca nombra a una asesora ni el número de asesor; siempre 'un asesor de nuestro equipo'`, () => {
+    assert.match(t, /NUNCA nombres a una asesora, ni un número de asesor/);
+    assert.match(t, /Siempre "un asesor de nuestro equipo"/);
+    assert.doesNotMatch(t, /Claudia, Catherine o Daiana|por su nombre de pila/);
     assert.doesNotMatch(t, /Asesor \d/);
+  });
+  test(`${quien}: el aviso al equipo se dice una sola vez`, () => {
+    assert.match(t, /Aviso al equipo, una sola vez/);
+    assert.match(t, /díselo UNA vez/);
+    assert.match(t, /No le repitas en cada mensaje que ya avisaste/);
   });
 }

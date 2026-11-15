@@ -13,6 +13,11 @@
 //   nombre cuando tengamos claro que una de ellas será quien lo llame, de
 //   resto decimos que un asesor se contactará". 7 colegas habían pedido un
 //   nombre ("no me gusta hablar con máquinas").
+// - 2026-11-15, Juan (caso Juan Esteban Cardona, lote 10550349): Sofi le
+//   nombró a Claudia, después a Daiana y después a Catherine, y él escribió
+//   "Me han hablado de 4 asesores". Regla nueva: al colega o cliente se le
+//   dice UNA vez "un asesor de nuestro equipo se contactará contigo", sin
+//   nombres. nombreDePila queda solo para uso interno.
 //
 // Todo texto hacia afuera que hable de un asesor sale de aca. Hacia adentro
 // (avisos a la asesora, CRM) se usa aliasInterno o el nombre real.
@@ -26,9 +31,11 @@ function nombreDePila(advisor) {
   return n.charAt(0).toUpperCase() + n.slice(1).toLowerCase();
 }
 
-// Con la asesora que lo va a contactar: su nombre de pila. Sin ella: genérico.
+// Hacia afuera siempre genérico (Juan, 2026-11-15). El parámetro se conserva
+// para no tocar a quienes la llaman.
+// eslint-disable-next-line no-unused-vars
 function asesorPublico(advisor = null) {
-  return nombreDePila(advisor) || ASESOR_PUBLICO;
+  return ASESOR_PUBLICO;
 }
 
 // Rotulo interno (campanas, CRM): el alias si lo tiene, si no el nombre.
@@ -63,7 +70,7 @@ function instruccionTransferencia({ especialidad, advisor }) {
   return (
     `Transferencia registrada al asesor de ${especialidad}. Ya fue alertado con el resumen del cliente. ` +
     `En tu respuesta despídete brevemente y dile que ${quien} lo va a contactar por este medio o por llamada. ` +
-    `Usa solo ese nombre: nunca un número de asesor ni un apellido, y NO prometas una hora. ` +
+    `Nunca nombres a una asesora ni un número de asesor, y NO prometas una hora. ` +
     `NO le des ningún link ni número de teléfono: el contacto lo inicia el asesor.`
   );
 }
