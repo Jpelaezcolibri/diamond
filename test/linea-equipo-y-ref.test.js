@@ -104,3 +104,20 @@ test("dm.procesarMensaje: si el hilo es de un agente automatico no se clasifica,
   assert.strictEqual(responder.mock.callCount(), 0);
   assert.strictEqual(tender.mock.callCount(), 0);
 });
+
+// 2026-11-14 (caso Claudia Valencia Chica): llegó solo con lid, sin teléfono
+// resoluble ni pedido, y Sofi le contestó 18 veces. Se reconoce por el nombre.
+test("equipo: una asesora sin teléfono resoluble se reconoce por su nombre de WhatsApp", async (t) => {
+  asesoras(t);
+  t.mock.method(advisors, "listAll", async () => [CATHERINE, { id: "adv-cla", name: "Claudia Valencia", activo: true }]);
+  const a = await equipo.esDelEquipo(ORG, { lid: "9@lid", nombre: "Claudia Valencia Chica" });
+  assert.strictEqual(a && a.id, "adv-cla");
+  assert.strictEqual(await equipo.esDelEquipo(ORG, { lid: "9@lid", nombre: "Claudia Gómez" }), null);
+  assert.strictEqual(await equipo.esDelEquipo(ORG, { lid: "9@lid", nombre: "Claudia" }), null);
+});
+
+test("equipo: el nombre calza sin tildes ni mayúsculas y sin lo que va entre paréntesis", () => {
+  assert.ok(equipo.nombreCoincide("CLAUDIA valencia chica", "Claudia Valéncia"));
+  assert.ok(equipo.nombreCoincide("Daiana Zea", "Daiana Zea (línea 2)"));
+  assert.ok(!equipo.nombreCoincide("Daiana", "Daiana Zea"));
+});

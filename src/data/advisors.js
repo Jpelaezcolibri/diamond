@@ -233,6 +233,15 @@ function destinatarioEnLista(lista, phone) {
   return a && a.activo !== false ? a : null;
 }
 
+// Todos los asesores de la org (activos o no), para reconocer a alguien del
+// equipo por el nombre con el que escribe (equipo-linea.js).
+async function listAll(orgId) {
+  if (!supabase) return memory.advisors.filter((a) => a.org_id === orgId);
+  const { data, error } = await supabase.from("advisors").select("*").eq("org_id", orgId);
+  if (error) throw error;
+  return data || [];
+}
+
 async function findByPhone(orgId, phone) {
   if (cola(phone).length < 10) return null;
 
@@ -287,4 +296,4 @@ async function searchByName(orgId, q) {
   return data || [];
 }
 
-module.exports = { findForTransfer, findAsesorPrincipalRadar, findByAuthUserId, findById, findByPhone, findDestinatarioByPhone, mismoTelefono, buscarEnLista, destinatarioEnLista, searchByName, rotationCandidates, nextInRotation, listElegibles, elegiblesEnLista };
+module.exports = { listAll, findForTransfer, findAsesorPrincipalRadar, findByAuthUserId, findById, findByPhone, findDestinatarioByPhone, mismoTelefono, buscarEnLista, destinatarioEnLista, searchByName, rotationCandidates, nextInRotation, listElegibles, elegiblesEnLista };

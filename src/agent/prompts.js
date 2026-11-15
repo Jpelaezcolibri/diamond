@@ -1,5 +1,5 @@
 const { GEOGRAFIA_MEDELLIN } = require("./geografia");
-const { CACHE_ESTABLE } = require("../lib/anthropic");
+const { CACHE_CONVERSACION: CACHE_ESTABLE } = require("../lib/anthropic");
 
 const FICHA_FORMAT = `✨ [Gancho de una linea con el beneficio principal, sacado SOLO de los datos de esta ficha: tipo, zona, area, habitaciones, parqueaderos, balcon, vista, zonas comunes. Ej "Duplex con balcon y 2 parqueaderos en Laureles". Sin adjetivos que no esten en los datos]
 

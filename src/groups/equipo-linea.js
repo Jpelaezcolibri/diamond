@@ -16,13 +16,32 @@
 const advisors = require("../data/advisors");
 const directorio = require("./directorio");
 
-async function esDelEquipo(org, { telefono = null, lid = null, señal = null } = {}) {
+// Por NOMBRE (2026-11-14, caso Claudia Valencia Chica): llega solo con lid,
+// el directorio no la resuelve y no responde a un pedido, así que ningún
+// teléfono la delata. Se reconoce si su nombre de WhatsApp trae TODAS las
+// palabras del nombre de una asesora (al menos nombre y apellido): "Claudia
+// Valencia" calza con "Claudia Valencia Chica"; un "Claudia" suelto, no.
+const normalizar = (t) =>
+  String(t || "").toLowerCase().normalize("NFD").replace(/\p{M}/gu, "").replace(/\([^)]*\)/g, " ").replace(/[^a-z0-9ñ ]+/g, " ").split(/\s+/).filter(Boolean);
+
+function nombreCoincide(remitente, nombreAsesor) {
+  const de = new Set(normalizar(remitente));
+  const del = normalizar(nombreAsesor).filter((p) => p.length >= 3);
+  return del.length >= 2 && del.every((p) => de.has(p));
+}
+
+async function esDelEquipo(org, { telefono = null, lid = null, señal = null, nombre = null } = {}) {
   try {
     const candidatos = [telefono];
     if (lid) candidatos.push(await directorio.telefonoDe(org.id, lid).catch(() => null));
     if (señal && señal.autor_telefono) candidatos.push(señal.autor_telefono);
     for (const t of candidatos.filter(Boolean)) {
       const a = await advisors.findByPhone(org.id, t).catch(() => null);
+      if (a) return a;
+    }
+    if (nombre) {
+      const lista = await advisors.listAll(org.id).catch(() => []);
+      const a = lista.find((x) => nombreCoincide(nombre, x.name));
       if (a) return a;
     }
     return null;
@@ -32,4 +51,4 @@ async function esDelEquipo(org, { telefono = null, lid = null, señal = null } =
   }
 }
 
-module.exports = { esDelEquipo };
+module.exports = { esDelEquipo, nombreCoincide };

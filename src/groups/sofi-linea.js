@@ -135,6 +135,7 @@ async function redactarConIA({ sistema, usuario }) {
     system: sistema,
     messages: [{ role: "user", content: usuario }],
   });
+  require("../lib/anthropic").registrarUso("sofi-linea", res.usage);
   const texto = res.content.find((b) => b.type === "text")?.text || "";
   return String(JSON.parse(texto).texto || "").trim() || null;
 }
@@ -176,12 +177,16 @@ function recortar(texto, max) {
 }
 
 /**
- * @returns {{ resultado: "apagado"|"sin_senal"|"falta_autor"|"humano_atiende"|"autorespuesta"|"pide_persona"|"tope"|"respondido"|"respondido_fijo"|"envio_fallido"|"error", error? }}
+ * @returns {{ resultado: "apagado"|"sin_senal"|"sin_texto"|"falta_autor"|"humano_atiende"|"autorespuesta"|"pide_persona"|"tope"|"respondido"|"respondido_fijo"|"envio_fallido"|"error", error? }}
  * Con "apagado" o "falta_autor", quien llama sigue con el puente de siempre.
  */
 async function responder(org, { mensaje, señal, identidad }, deps = null, { ahora = new Date() } = {}) {
   if (!activo()) return { resultado: "apagado" };
   if (!org) return { resultado: "sin_senal" };
+  // Mensaje sin texto (foto, sticker, audio): no hay nada que contestar. Caso
+  // 2026-11-13: Claudia mandó 18 fotos a la línea y Sofi le contestó 18 veces
+  // "tu mensaje llega en blanco".
+  if (!String(mensaje.texto || "").trim()) return { resultado: "sin_texto" };
   const d = deps || depsPorDefecto();
   try {
     const colega = señal ? null : await d.esColega(org.id, identidad).catch(() => null);

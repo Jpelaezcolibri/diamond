@@ -102,6 +102,19 @@ if (process.env.ANTHROPIC_CACHE_TTL && !TTL_VALIDOS.has(process.env.ANTHROPIC_CA
 
 const CACHE_ESTABLE = Object.freeze({ type: "ephemeral", ttl: TTL });
 
+// Sofi conversando (engine y Centro de Comando) va con su propio TTL desde el
+// 2026-11-14. Medido en 2,8 dias de produccion (11 al 14-nov, 49 llamadas de
+// engine): las 30 que llegaron a menos de 5 min de la anterior leyeron del
+// cache con cualquier TTL; de las 19 que llegaron despues, solo 2 aprovecharon
+// la hora (los prompts de cliente, colega y asesor no comparten prefijo) y 17
+// escribieron ~9.400 tokens pagando 2x en vez de 1,25x. Con 5 min la
+// escritura baja 37 % y se pierden esas 2 lecturas: ~US$0,15/dia menos.
+// El clasificador y revalidar SI aprovechan la hora (146 y 50 lecturas entre
+// 5 y 60 min) y siguen con CACHE_ESTABLE. ANTHROPIC_CACHE_TTL_SOFI=1h vuelve
+// a lo anterior sin desplegar.
+const TTL_SOFI = TTL_VALIDOS.has(process.env.ANTHROPIC_CACHE_TTL_SOFI) ? process.env.ANTHROPIC_CACHE_TTL_SOFI : "5m";
+const CACHE_CONVERSACION = Object.freeze({ type: "ephemeral", ttl: TTL_SOFI });
+
 // Deja en el log cuanto del prompt se leyo del cache y cuanto se pago entero.
 //
 // Existe porque el prompt caching es el unico ahorro del sistema que falla en
@@ -134,5 +147,5 @@ function registrarUso(ruta, usage) {
 }
 
 
-module.exports = { paramsDeModelo, getClient, _setClientForTests, CACHE_ESTABLE, registrarUso };
+module.exports = { paramsDeModelo, getClient, _setClientForTests, CACHE_ESTABLE, CACHE_CONVERSACION, registrarUso };
 

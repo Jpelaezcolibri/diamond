@@ -245,3 +245,23 @@ test("a una respuesta automatica Sofi no contesta ni manda aviso urgente", async
   assert.strictEqual(ll.enviados.length, 0);
   assert.strictEqual(ll.avisos.length, 0);
 });
+
+// 2026-11-13: 18 fotos seguidas y 18 respuestas "tu mensaje llega en blanco".
+test("mensaje sin texto (foto, sticker): Sofi no contesta ni llama a la IA", async () => {
+  const { d, ll } = deps();
+  for (const texto of ["", "   ", null]) {
+    const r = await sofiLinea.responder(ORG, { mensaje: mensaje({ texto }), señal: señal(), identidad }, d);
+    assert.strictEqual(r.resultado, "sin_texto");
+  }
+  assert.strictEqual(ll.enviados.length, 0);
+  assert.strictEqual(ll.prompts.length, 0);
+});
+
+test("saludos automáticos de otras inmobiliarias no se contestan (casos 12 y 13-nov)", () => {
+  for (const t of [
+    "¡Bienvenido! Estamos emocionados de ayudarte a encontrar tu hogar soñado. ¿Qué estás buscando hoy?",
+    "⭐️Holaaa! Cómo estás? Soy Katy de Martha Chavarriaga Propiedad Raíz. Que rico que te tenemos aquí!",
+    "Gracias por tu mensaje. En este momento no puedo responder, pero lo hare lo antes posible.",
+  ]) assert.ok(sofiLinea.esAutorespuesta(t), t);
+  for (const t of ["Tienes mas cerca al tesoro?", "Amoblado no me sirve", "Moderna"]) assert.ok(!sofiLinea.esAutorespuesta(t), t);
+});

@@ -27,7 +27,7 @@ const organizations = require("../data/organizations");
 const leads = require("../data/leads");
 const conversations = require("../data/conversations");
 const { sendWhatsApp } = require("../channels/whatsapp");
-const { getClient, paramsDeModelo } = require("../lib/anthropic");
+const { getClient, paramsDeModelo, registrarUso } = require("../lib/anthropic");
 const colegas = require("../data/colegas");
 const { esAutorespuesta } = require("../groups/rechaza-bot");
 
@@ -129,6 +129,7 @@ async function buildFollowupMessage(conversationId, org, lead = null) {
       },
     ],
   });
+  registrarUso("followups", response.usage);
   const text = (response.content || [])
     .filter((b) => b.type === "text")
     .map((b) => b.text)

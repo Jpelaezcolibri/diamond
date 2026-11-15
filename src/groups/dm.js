@@ -108,6 +108,7 @@ async function clasificarAvance(mensajes, ahora) {
       output_config: { format: { type: "json_schema", schema: ESQUEMA } },
       messages: [{ role: "user", content: `Hilo del remitente:\n${hilo}` }],
     });
+    require("../lib/anthropic").registrarUso("linea-dm", res.usage);
     const texto = res.content.find((b) => b.type === "text")?.text || "";
     return JSON.parse(texto);
   } catch (e) {
@@ -167,7 +168,7 @@ async function procesarMensaje(org, mensaje, { ahora = new Date() } = {}) {
 
   // Una asesora de la casa escribiendole a Daiana (2026-10-27, caso
   // Catherine): coordinacion interna, no un colega. Ver ./equipo-linea.js.
-  const delEquipo = await require("./equipo-linea").esDelEquipo(org, { ...identidad, señal });
+  const delEquipo = await require("./equipo-linea").esDelEquipo(org, { ...identidad, señal, nombre: mensaje.remitenteNombre });
   if (delEquipo) {
     console.log(`[linea-dm] mensaje de ${delEquipo.name} (equipo): no se registra como colega`);
     return { resultado: "equipo" };

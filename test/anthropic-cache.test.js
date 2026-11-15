@@ -5,7 +5,7 @@
 const test = require("node:test");
 const assert = require("node:assert");
 
-const { CACHE_ESTABLE } = require("../src/lib/anthropic");
+const { CACHE_ESTABLE, CACHE_CONVERSACION } = require("../src/lib/anthropic");
 const { buildSystemPrompt } = require("../src/agent/prompts");
 const { buildCommandSystemPrompt } = require("../src/agent/sofi-comando-prompts");
 const revalidar = require("../src/groups/revalidar");
@@ -38,7 +38,7 @@ for (const [rol, args] of roles) {
   test(`el prompt de ${rol} cachea su bloque estable con el TTL compartido`, () => {
     const bloques = buildSystemPrompt(args);
     assert.ok(Array.isArray(bloques), "el prompt tiene que venir en bloques para poder cachearse");
-    assert.deepStrictEqual(bloques[0].cache_control, CACHE_ESTABLE);
+    assert.deepStrictEqual(bloques[0].cache_control, CACHE_CONVERSACION);
   });
 
   test(`el prompt de ${rol} deja lo volatil FUERA del bloque cacheado`, () => {
@@ -56,7 +56,7 @@ for (const [rol, args] of roles) {
 
 test("el Centro de Comando cachea su bloque estable y deja la fecha afuera", () => {
   const bloques = buildCommandSystemPrompt({ scope: { isAdmin: true }, userName: "Juan", now });
-  assert.deepStrictEqual(bloques[0].cache_control, CACHE_ESTABLE);
+  assert.deepStrictEqual(bloques[0].cache_control, CACHE_CONVERSACION);
   assert.ok(!bloques[0].text.includes(now.legible));
   assert.ok(bloques.slice(1).some((b) => b.text.includes(now.legible)));
 });
@@ -114,4 +114,11 @@ test("el medidor no registra contenido, solo cuentas", () => {
     registrarUso("engine", { input_tokens: 100, output_tokens: 5, texto: "dato privado del cliente" })
   );
   assert.ok(!lineas.join("").includes("dato privado"), "el log no puede llevar contenido");
+});
+
+// 2026-11-14: Sofi conversando va con 5 min (solo 2 de 19 llamadas separadas
+// mas de 5 min aprovechaban la hora); el clasificador y revalidar siguen en 1 h.
+test("Sofi conversando cachea con 5 min por defecto; lo demas sigue en 1 h", () => {
+  assert.deepStrictEqual(CACHE_CONVERSACION, { type: "ephemeral", ttl: "5m" });
+  assert.strictEqual(CACHE_ESTABLE.ttl, "1h");
 });

@@ -18,9 +18,13 @@ const LLAMAME = /\bll[aá]m(ame|enme|arme|eme)\b/i;
 const SE_PRESENTA = /\b(soy|te habla|le habla|les habla|mi nombre es)\b/i;
 
 // RESPUESTA AUTOMATICA de otra inmobiliaria (Fenix, Colpropiedades, la misma
+// Propiedades Carva; 2026-11-14: Esteban Higuita "¡Bienvenido! Estamos
+// emocionados...", Katy "Que rico que te tenemos aquí!", Marsh "En este
+// momento no puedo responder").
+// (sigue la lista original:)
 // Propiedades Carva): 20 de 594 mensajes reales de colegas en la linea. Si se
 // le contesta, quedan dos bots en loop.
-const AUTORESPUESTA = /gracias por (contactar|contactarnos|comunicarte|comunicarse|escribir|escribirnos|tu mensaje|su mensaje)|horario de atenci[oó]n|mensaje autom[aá]tico|respuesta autom[aá]tica|en breve (te|le) (atender|responder|contactar)|(pasado|conectado|enviado|remitido) (este|tu|su) mensaje (a|con) nuestro equipo|accedas a nuestro cat[aá]logo|nuestro cat[aá]logo aqu[ií] en whatsapp|se pondr[aá] en contacto|lunes a viernes \d/i;
+const AUTORESPUESTA = /gracias por (contactar|contactarnos|comunicarte|comunicarse|escribir|escribirnos|tu mensaje|su mensaje)|horario de atenci[oó]n|mensaje autom[aá]tico|respuesta autom[aá]tica|en breve (te|le) (atender|responder|contactar)|(pasado|conectado|enviado|remitido) (este|tu|su) mensaje (a|con) nuestro equipo|accedas a nuestro cat[aá]logo|nuestro cat[aá]logo aqu[ií] en whatsapp|se pondr[aá] en contacto|lunes a viernes \d|en este momento no (puedo|podemos) (responder|atender|contestar)|estamos (emocionad[oa]s|felices|encantad[oa]s) de (ayudarte|atenderte)|qu[eé] (rico|bueno|alegr[ií]a) que (te|nos) (tenemos|tengamos|escribas) aqu[ií]|^\W*bienvenid[oa]s?/i;
 
 function esAutorespuesta(texto) {
   return AUTORESPUESTA.test(String(texto || ""));
