@@ -38,6 +38,7 @@ function conVigilancia(c) {
 }
 
 function getClient() {
+  if (require("./ia-apagada").iaApagada()) throw new (require("./ia-apagada").IaApagadaError)();
   if (testClient) return conVigilancia(testClient);
   if (!client) client = conVigilancia(new Anthropic({ apiKey: config.anthropicApiKey, timeout: DEFAULT_TIMEOUT_MS }));
   return client;

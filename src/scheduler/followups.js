@@ -140,6 +140,7 @@ async function buildFollowupMessage(conversationId, org, lead = null) {
 
 async function runOnce() {
   if (!config.followups.enabled || columnMissing) return { sent: 0 };
+  if (require("../lib/ia-apagada").iaApagada()) return { sent: 0, iaApagada: true };
   const hour = hourInBogota();
   if (inQuietHours(hour, config.followups)) return { sent: 0, quiet: true };
 

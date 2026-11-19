@@ -1,10 +1,11 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { env } from "../config/env.js";
-import { RetryableError } from "../lib/errors.js";
+import { FatalError, RetryableError } from "../lib/errors.js";
 
 let client: Anthropic | null = null;
 
 export function getClaudeClient(): Anthropic {
+  if (env.IA_APAGADA) throw new FatalError("IA apagada (IA_APAGADA=true): no se llama a Claude");
   client ??= new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
   return client;
 }
@@ -23,6 +24,7 @@ export interface ClaudeCallResult {
 
 /** Wrapper minimo sobre el SDK: extrae el texto y contabiliza tokens (ver content_generations). */
 export async function callClaude(input: ClaudeCallInput): Promise<ClaudeCallResult> {
+  if (env.IA_APAGADA) throw new FatalError("IA apagada (IA_APAGADA=true): no se llama a Claude");
   try {
     const response = await getClaudeClient().messages.create({
       model: env.CLAUDE_MODEL,

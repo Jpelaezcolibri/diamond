@@ -65,7 +65,8 @@ async function registrarRespuestaSofi(org, lead, phone, text) {
 // por un anuncio pago de los organicos, sin tocar `source` (canal).
 // Devuelve { reply, lead, transfer } — transfer: { motivo, advisorAlert } si aplico.
 async function procesarMensaje({ org, phone, text, source = "whatsapp", messageExtras = {}, phoneNumberId = null, adReferral = null, radarSignalId = null, preguntaId = null, preguntaCerrada = null }) {
-  const client = getClient();
+  // Perezoso: con la IA apagada getClient lanza, y el texto fijo sale antes.
+  let client = null;
 
   // ¿Escribe un asesor de la casa? Se resuelve ANTES de tocar el lead: casi
   // todo lo que sigue (calificacion, categoria, alerta al captador, intencion
@@ -226,6 +227,28 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
       });
     const msg = await conversations.appendMessage(conv.id, "assistant", reply);
     return { reply, lead, transfer: null, assistantMessageId: msg && msg.id };
+  }
+
+  // IA APAGADA (Juan, 2026-11-18): sin Claude. Al cliente o colega, un texto
+  // fijo y el chat pasa a una asesora (modo humano: lo que sigue lo atiende
+  // ella desde el CRM). A una asesora no se le contesta.
+  if (require("../lib/ia-apagada").iaApagada()) {
+    if (advisor) return { reply: null, lead, transfer: null, assistantMessageId: null };
+    const { RESPUESTA_FIJA } = require("../lib/ia-apagada");
+    // Si ya se le dio el texto fijo (la transferencia no pudo pausar el chat),
+    // no se repite: el mensaje queda en el CRM para la asesora.
+    const recientes = await conversations.getRecentMessages(conv.id, 10).catch(() => []);
+    if (recientes.some((m) => m.role === "assistant" && m.content === RESPUESTA_FIJA)) {
+      return { reply: null, lead, transfer: null, assistantMessageId: null };
+    }
+    const msg = await conversations.appendMessage(conv.id, "assistant", RESPUESTA_FIJA);
+    const asesora = await advisors.findForTransfer(org, "venta").catch(() => null);
+    const transfer = {
+      advisor: asesora,
+      conversationId: conv.id,
+      motivo: `${colega ? "Colega" : "Cliente"} escribió a la línea de Sofi (IA apagada): «${String(text).slice(0, 300)}»`,
+    };
+    return { reply: RESPUESTA_FIJA, lead, transfer, assistantMessageId: msg && msg.id };
   }
 
   const history = await conversations.getRecentMessages(conv.id, HISTORY_LIMIT);
@@ -407,6 +430,7 @@ async function procesarMensaje({ org, phone, text, source = "whatsapp", messageE
   const extractText = (r) =>
     r.content.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
 
+  client = getClient();
   let response = await client.messages.create({
     ...paramsDeModelo(config.claudeModel, { maxTokens: 2048 }),
     system,

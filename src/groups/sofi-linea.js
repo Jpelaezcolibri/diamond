@@ -39,6 +39,7 @@ const PAUSA_RANGO_MS = 12000;
 const VALORES_ENCENDIDO = new Set(["true", "1", "si", "sí", "on"]);
 
 function activo() {
+  if (require("../lib/ia-apagada").iaApagada()) return false;
   return VALORES_ENCENDIDO.has(String(process.env.RADAR_SOFI_LINEA ?? "").trim().toLowerCase());
 }
 

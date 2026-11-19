@@ -3,6 +3,7 @@ import { redisConnectionOptions } from "../connection.js";
 import { QUEUE_NAMES } from "../queues.js";
 import { buildPropertyContext, rebuildStaleContexts } from "../../cognitive/application/context-builder.service.js";
 import { logger } from "../../lib/logger.js";
+import { env } from "../../config/env.js";
 
 interface CognitiveJobData {
   orgId: string;
@@ -21,6 +22,8 @@ export function startCognitiveWorker(): Worker<CognitiveJobData> {
     QUEUE_NAMES.cognitive,
     async (job: Job<CognitiveJobData>) => {
       const { orgId, propertyId } = job.data;
+      // IA apagada (Juan, 2026-11-18): ni el batch nocturno ni builds sueltos.
+      if (env.IA_APAGADA) return { skipped: "ia_apagada" };
       if (job.name === "rebuild-stale") {
         logger.info({ orgId, jobId: job.id }, "cognitive.worker: batch de contextos stale");
         return rebuildStaleContexts(orgId);

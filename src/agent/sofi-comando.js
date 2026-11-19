@@ -227,6 +227,12 @@ async function historyPage(scope, { before }) {
 // Turno de chat: corre el loop tool-use con las tools de comando. Devuelve
 // { reply }.
 async function processMessage(scope, sessionId, text, { userName } = {}) {
+  if (require("../lib/ia-apagada").iaApagada()) {
+    const reply = "Sofi está apagada: la IA de este proyecto se desactivó.";
+    await command.appendCommandMessage(sessionId, "user", text);
+    await command.appendCommandMessage(sessionId, "assistant", reply);
+    return { reply };
+  }
   const client = getClient();
   await command.appendCommandMessage(sessionId, "user", text);
   const session = await command.getSession(sessionId);

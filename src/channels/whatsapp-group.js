@@ -334,6 +334,8 @@ async function procesar(org, ev, grupo, sesion) {
   // Etapa 0 antes de cualquier gasto: el texto de lo descartado no se guarda ni
   // se registra en logs, muere aca.
   if (motivoDescarte(mensaje) !== null) return contar("prefiltrados");
+  // IA apagada: el radar no clasifica (Juan, 2026-11-18).
+  if (require("../lib/ia-apagada").iaApagada()) return contar("ia_apagada");
   if (await yaDifundido(mensaje)) return contar("difundidos");
 
   contar("recibidos");

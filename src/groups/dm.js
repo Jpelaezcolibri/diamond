@@ -42,6 +42,7 @@ const MODELO = process.env.CLAUDE_MODEL_GRUPOS || "claude-haiku-5-5";
 // "true", "1", "si", "yes". Todo lo demas, incluida la ausencia, es apagado.
 const VALORES_PRENDIDO = new Set(["true", "1", "si", "yes"]);
 function clasificadorActivo() {
+  if (require("../lib/ia-apagada").iaApagada()) return false;
   const valor = String(process.env.RADAR_DM_CLASIFICAR ?? "").trim().toLowerCase();
   return VALORES_PRENDIDO.has(valor);
 }

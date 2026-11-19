@@ -19,6 +19,8 @@ const envSchema = z.object({
   SUPABASE_SERVICE_KEY: z.string().min(1),
 
   ANTHROPIC_API_KEY: z.string().min(1),
+  // IA apagada (Juan, 2026-11-18): ni Claude ni OpenAI. Ver src/ai/claude.ts.
+  IA_APAGADA: z.string().optional().transform((v) => ["1", "true", "si", "yes", "on"].includes(String(v ?? "").trim().toLowerCase())),
   CLAUDE_MODEL: z.string().default("claude-sonnet-4-5"),
 
   // Motor IA de creativos (Director de Arte = GPT Image). OPCIONAL: sin la

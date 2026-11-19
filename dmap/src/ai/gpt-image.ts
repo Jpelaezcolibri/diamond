@@ -33,11 +33,11 @@ export interface GptImageResult {
 }
 
 export function isGptImageConfigured(): boolean {
-  return Boolean(env.OPENAI_API_KEY);
+  return Boolean(env.OPENAI_API_KEY) && !env.IA_APAGADA;
 }
 
 export async function editImage(input: GptImageEditInput, fetchFn: typeof fetch = fetch): Promise<GptImageResult> {
-  if (!env.OPENAI_API_KEY) {
+  if (!env.OPENAI_API_KEY || env.IA_APAGADA) {
     throw new FatalError("OPENAI_API_KEY no configurada — motor IA no disponible");
   }
 

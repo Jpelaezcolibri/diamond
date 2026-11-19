@@ -214,7 +214,7 @@ const config = {
   },
 };
 
-if (!config.anthropicApiKey) {
+if (!config.anthropicApiKey && !require("./lib/ia-apagada").iaApagada()) {
   console.error("Falta ANTHROPIC_API_KEY en .env");
   process.exit(1);
 }
